@@ -1,0 +1,14 @@
+.cursor/
+pos-app/node_modules/
+pos-app/.next/
+pos-app/out/
+pos-app/build/
+pos-app/.env*
+!pos-app/.env.example
+pos-app/.vercel/
+pos-app/*.tsbuildinfo
+pos-app/npm-debug.log*
+pos-app/yarn-debug.log*
+pos-app/yarn-error.log*
+pos-app/.pnpm-debug.log*
+.DS_Store

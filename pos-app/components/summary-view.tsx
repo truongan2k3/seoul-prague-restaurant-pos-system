@@ -1,0 +1,353 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
+import { LiveClock } from "@/components/live-clock";
+import { useApp } from "@/contexts/app-context";
+import { formatPrice } from "@/lib/i18n/translations";
+import {
+  computeRevenueChange,
+  computeRevenueStats,
+  computeTopSellers,
+  filterSalesInRange,
+  formatSummaryDate,
+  getPeriodRange,
+  toDateInputValue,
+  type CategoryTopSellers,
+  type SummaryPeriod,
+  type TopSellerGroup,
+  type TopSellerRow,
+} from "@/lib/summary-analytics";
+import { filterButtonClass, segmentButtonClass } from "@/lib/theme-classes";
+import type { MenuItem, SaleRecord } from "@/lib/types";
+
+const PERIOD_OPTIONS: SummaryPeriod[] = ["today", "yesterday", "week", "month", "custom"];
+
+const PERIOD_LABEL_KEYS = {
+  today: "summaryToday",
+  yesterday: "summaryYesterday",
+  week: "summaryWeek",
+  month: "summaryMonth",
+  custom: "summaryPickDate",
+} as const;
+
+const GROUP_OPTIONS: TopSellerGroup[] = ["all", "food", "drink", "category"];
+
+const GROUP_LABEL_KEYS = {
+  all: "summaryAllItems",
+  food: "summaryFood",
+  drink: "summaryDrinks",
+  category: "summaryByCategory",
+} as const;
+
+function ChangeBadge({ change }: { change: number | null }) {
+  if (change === null) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+        <Minus className="h-3.5 w-3.5" />
+        new
+      </span>
+    );
+  }
+
+  const positive = change >= 0;
+  const Icon = positive ? ArrowUpRight : ArrowDownRight;
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
+        positive
+          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+          : "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
+      }`}
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {positive ? "+" : ""}
+      {change.toFixed(1)}%
+    </span>
+  );
+}
+
+function TopSellerList({ rows }: { rows: TopSellerRow[] }) {
+  const { translate } = useApp();
+
+  if (rows.length === 0) {
+    return <p className="text-sm text-gray-500 dark:text-gray-400">{translate("summaryNoSales")}</p>;
+  }
+
+  return (
+    <ul className="space-y-2">
+      {rows.map((row, index) => (
+        <li
+          key={row.key}
+          className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-900/50"
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-xs font-bold text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+              {index + 1}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{row.name}</p>
+              <p className="truncate text-xs text-gray-500 dark:text-gray-400">{row.category}</p>
+            </div>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="text-sm font-bold tabular-nums text-gray-900 dark:text-gray-100">{row.quantity}x</p>
+            <p className="text-xs tabular-nums text-gray-500 dark:text-gray-400">{formatPrice(row.revenue)}</p>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function CategoryTopSellerSections({ sections }: { sections: CategoryTopSellers[] }) {
+  const { translate } = useApp();
+
+  if (sections.length === 0) {
+    return <p className="text-sm text-gray-500 dark:text-gray-400">{translate("summaryNoSales")}</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {sections.map((section) => (
+        <div key={section.category}>
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{section.category}</h3>
+            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+              {section.totalQuantity}x
+            </span>
+          </div>
+          <TopSellerList rows={section.items} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function SummaryView({
+  sales,
+  menuItems,
+  onRefresh,
+}: {
+  sales: SaleRecord[];
+  menuItems: MenuItem[];
+  onRefresh: () => void;
+}) {
+  const { translate, language } = useApp();
+  const [period, setPeriod] = useState<SummaryPeriod>("today");
+  const [customDate, setCustomDate] = useState(() => toDateInputValue(new Date()));
+  const [sellerGroup, setSellerGroup] = useState<TopSellerGroup>("all");
+
+  const todayRange = useMemo(() => getPeriodRange("today"), []);
+  const yesterdayRange = useMemo(() => getPeriodRange("yesterday"), []);
+  const activeRange = useMemo(
+    () => getPeriodRange(period, period === "custom" ? customDate : undefined),
+    [period, customDate],
+  );
+
+  const filteredSales = useMemo(
+    () => filterSalesInRange(sales, activeRange),
+    [sales, activeRange],
+  );
+  const todaySales = useMemo(() => filterSalesInRange(sales, todayRange), [sales, todayRange]);
+  const yesterdaySales = useMemo(
+    () => filterSalesInRange(sales, yesterdayRange),
+    [sales, yesterdayRange],
+  );
+
+  const stats = useMemo(() => computeRevenueStats(filteredSales), [filteredSales]);
+  const todayStats = useMemo(() => computeRevenueStats(todaySales), [todaySales]);
+  const yesterdayStats = useMemo(() => computeRevenueStats(yesterdaySales), [yesterdaySales]);
+  const changeVsYesterday = useMemo(
+    () => computeRevenueChange(todayStats.grandTotal, yesterdayStats.grandTotal),
+    [todayStats.grandTotal, yesterdayStats.grandTotal],
+  );
+
+  const topSellers = useMemo(
+    () => computeTopSellers(filteredSales, menuItems, language, sellerGroup),
+    [filteredSales, menuItems, language, sellerGroup],
+  );
+
+  const periodLabel =
+    period === "custom"
+      ? formatSummaryDate(new Date(`${customDate}T12:00:00`), language)
+      : `${formatSummaryDate(activeRange.start, language)}${
+          period === "week" || period === "month"
+            ? ` – ${formatSummaryDate(activeRange.end, language)}`
+            : ""
+        }`;
+
+  return (
+    <div className="flex h-full flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
+        <div>
+          <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{translate("summary")}</h1>
+          <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{periodLabel}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 dark:border-gray-700 dark:text-gray-300"
+          >
+            Refresh
+          </button>
+          <LiveClock />
+        </div>
+      </header>
+
+      <div className="flex-1 overflow-auto p-6">
+        <div className="mx-auto max-w-6xl space-y-6">
+          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+            <div className="flex flex-wrap gap-2">
+              {PERIOD_OPTIONS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setPeriod(option)}
+                  className={filterButtonClass(period === option)}
+                >
+                  {translate(PERIOD_LABEL_KEYS[option])}
+                </button>
+              ))}
+            </div>
+            {period === "custom" && (
+              <div className="mt-3">
+                <input
+                  type="date"
+                  value={customDate}
+                  onChange={(event) => setCustomDate(event.target.value)}
+                  className="pos-input max-w-xs"
+                />
+              </div>
+            )}
+          </section>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    {period === "today" ? translate("summaryToday") : translate("summaryPeriodRevenue")}
+                  </h2>
+                  <p className="mt-2 text-4xl font-bold tabular-nums text-gray-900 dark:text-gray-100">
+                    {formatPrice(period === "today" ? todayStats.grandTotal : stats.grandTotal)}
+                  </p>
+                </div>
+                {period === "today" && <ChangeBadge change={changeVsYesterday} />}
+              </div>
+
+              {period === "today" && (
+                <div className="mt-4 rounded-lg border border-dashed border-gray-200 px-4 py-3 dark:border-gray-700">
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    {translate("summaryYesterday")}
+                  </p>
+                  <p className="mt-1 text-lg font-semibold tabular-nums text-gray-800 dark:text-gray-200">
+                    {formatPrice(yesterdayStats.grandTotal)}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {translate("summaryComparedToYesterday")}
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-900/50">
+                  <p className="text-gray-500 dark:text-gray-400">{translate("summaryOrders")}</p>
+                  <p className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                    {stats.orderCount}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-900/50">
+                  <p className="text-gray-500 dark:text-gray-400">{translate("cash")}</p>
+                  <p className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                    {formatPrice(stats.cash)}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-900/50">
+                  <p className="text-gray-500 dark:text-gray-400">{translate("card")}</p>
+                  <p className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                    {formatPrice(stats.card)}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-900/50">
+                  <p className="text-gray-500 dark:text-gray-400">{translate("tips")}</p>
+                  <p className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                    {formatPrice(stats.tips)}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  {translate("topItems")}
+                </h2>
+                <div className="pos-segment">
+                  {GROUP_OPTIONS.map((group) => (
+                    <button
+                      key={group}
+                      type="button"
+                      onClick={() => setSellerGroup(group)}
+                      className={segmentButtonClass(sellerGroup === group)}
+                    >
+                      {translate(GROUP_LABEL_KEYS[group])}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4 max-h-[420px] overflow-y-auto">
+                {sellerGroup === "category" ? (
+                  <CategoryTopSellerSections sections={topSellers as CategoryTopSellers[]} />
+                ) : (
+                  <TopSellerList rows={topSellers as TopSellerRow[]} />
+                )}
+              </div>
+            </section>
+          </div>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              {translate("zReport")}
+            </h2>
+            <div className="mt-4 overflow-x-auto">
+              {filteredSales.length === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-gray-400">{translate("summaryNoSales")}</p>
+              ) : (
+                <table className="w-full text-left text-sm text-gray-800 dark:text-gray-200">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                      <th className="py-2 pr-4">Time</th>
+                      <th className="py-2 pr-4">{translate("table")}</th>
+                      <th className="py-2 pr-4">{translate("staff")}</th>
+                      <th className="py-2 pr-4">{translate("payment")}</th>
+                      <th className="py-2 text-right">{translate("total")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSales.map((sale) => (
+                      <tr key={sale.id} className="border-b dark:border-gray-800/50">
+                        <td className="py-2 pr-4 tabular-nums">
+                          {sale.closedAt.toLocaleString(language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB")}
+                        </td>
+                        <td className="py-2 pr-4">{sale.tableLabel}</td>
+                        <td className="py-2 pr-4">{sale.staffName}</td>
+                        <td className="py-2 pr-4 capitalize">{sale.paymentMethod}</td>
+                        <td className="py-2 text-right font-medium tabular-nums">
+                          {formatPrice(sale.grandTotal)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}

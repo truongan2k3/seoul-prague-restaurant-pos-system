@@ -1,0 +1,223 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { MapView } from "@/components/map-view";
+import { OrderView } from "@/components/order-view";
+import { HistoryView } from "@/components/history-view";
+import { ReservationsView } from "@/components/reservations-view";
+import { SummaryView } from "@/components/summary-view";
+import { StorageView } from "@/components/storage-view";
+import { StaffView } from "@/components/staff-view";
+import { SettingsView } from "@/components/settings-view";
+import { ReadyNotificationListener } from "@/components/ready-notification-listener";
+import { Sidebar } from "@/components/sidebar";
+import { useTableOrderWorkflow } from "@/hooks/use-table-order-workflow";
+import { useApp } from "@/contexts/app-context";
+import { canAccessNavTab } from "@/lib/staff-roles";
+import {
+  fetchInventory,
+  fetchMenuItems,
+  fetchSales,
+  fetchTables,
+  mapInventoryResponse,
+  mapMenuItemsResponse,
+  mapOrderItemRow,
+  mapSalesResponse,
+  mapTablesResponse,
+  subscribeToMenuChanges,
+  subscribeToInventoryChanges,
+  subscribeToOrderItemChanges,
+  subscribeToTableChanges,
+  type SupabaseOrderItemRow,
+} from "@/src/lib/supabase-data";
+import { supabase } from "@/src/lib/supabase";
+import type { InventoryItem, MenuItem, RestaurantTable, SaleRecord, OrderItem, NavId } from "@/lib/types";
+
+function LoadingShell() {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <div className="text-center">
+        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900 dark:border-zinc-600 dark:border-t-zinc-100" />
+        <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">Loading POS...</p>
+      </div>
+    </div>
+  );
+}
+
+export function DashboardShell() {
+  const { currentStaffUser, refreshStaffList } = useApp();
+  const [activeTab, setActiveTab] = useState<NavId>("map");
+  const [tables, setTables] = useState<RestaurantTable[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+  const [sales, setSales] = useState<SaleRecord[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const reloadTables = useCallback(async () => {
+    const { data, error: err } = await fetchTables();
+    if (!err) setTables(mapTablesResponse(data));
+  }, []);
+
+  const reloadMenu = useCallback(async () => {
+    const { data, error: err } = await fetchMenuItems();
+    if (!err) setMenuItems(mapMenuItemsResponse(data));
+  }, []);
+
+  const reloadOrderItems = useCallback(async () => {
+    const { data, error: err } = await supabase
+      .from("order_items")
+      .select("*")
+      .order("created_at");
+    if (!err) setOrderItems((data as SupabaseOrderItemRow[] | null)?.map(mapOrderItemRow) ?? []);
+  }, []);
+
+  const reloadSales = useCallback(async () => {
+    const since = new Date();
+    since.setDate(since.getDate() - 90);
+    since.setHours(0, 0, 0, 0);
+    const { data, error: err } = await fetchSales(since);
+    if (!err) setSales(mapSalesResponse(data));
+  }, []);
+
+  const reloadInventory = useCallback(async () => {
+    const { data, error: err } = await fetchInventory();
+    if (!err) setInventory(mapInventoryResponse(data));
+  }, []);
+
+  useEffect(() => {
+    async function init() {
+      setLoading(true);
+      const [t, m, o, s, i] = await Promise.all([
+        fetchTables(),
+        fetchMenuItems(),
+        supabase.from("order_items").select("*").order("created_at"),
+        fetchSales((() => {
+          const since = new Date();
+          since.setDate(since.getDate() - 90);
+          since.setHours(0, 0, 0, 0);
+          return since;
+        })()),
+        fetchInventory(),
+      ]);
+      if (t.error) { setError(t.error.message); setLoading(false); return; }
+      if (m.error) { setError(m.error.message); setLoading(false); return; }
+      setTables(mapTablesResponse(t.data));
+      setMenuItems(mapMenuItemsResponse(m.data));
+      if (!o.error) {
+        setOrderItems((o.data as SupabaseOrderItemRow[] | null)?.map(mapOrderItemRow) ?? []);
+      }
+      if (!s.error) setSales(mapSalesResponse(s.data));
+      if (!i.error) setInventory(mapInventoryResponse(i.data));
+      setLoading(false);
+    }
+    init();
+  }, []);
+
+  useEffect(() => {
+    if (loading || error) return;
+    const unsubs = [
+      subscribeToTableChanges(() => void reloadTables()),
+      subscribeToOrderItemChanges(() => void reloadOrderItems()),
+      subscribeToMenuChanges(() => void reloadMenu()),
+      subscribeToInventoryChanges(() => void reloadInventory()),
+    ];
+    return () => unsubs.forEach((u) => u());
+  }, [loading, error, reloadTables, reloadOrderItems, reloadMenu]);
+
+  useEffect(() => {
+    if (!currentStaffUser) return;
+    if (!canAccessNavTab(currentStaffUser.role, activeTab)) {
+      setActiveTab("map");
+    }
+  }, [currentStaffUser, activeTab]);
+
+  const refreshPosData = useCallback(() => {
+    void reloadTables();
+    void reloadMenu();
+    void reloadOrderItems();
+  }, [reloadTables, reloadMenu, reloadOrderItems]);
+
+  const tableOrder = useTableOrderWorkflow({
+    tables,
+    setTables,
+    menuItems,
+    orderItems,
+    onRefresh: refreshPosData,
+  });
+
+  if (loading) return <LoadingShell />;
+  if (error) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center dark:border-red-900 dark:bg-red-950">
+          <p className="font-medium text-red-800 dark:text-red-200">Unable to load data</p>
+          <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const content = (() => {
+    switch (activeTab) {
+      case "map":
+        return (
+          <MapView
+            tables={tables}
+            setTables={setTables}
+            menuItems={menuItems}
+            orderItems={orderItems}
+            onRefresh={refreshPosData}
+            onTableClick={tableOrder.handleTableClick}
+            actionError={tableOrder.actionError}
+          />
+        );
+      case "order":
+        return (
+          <OrderView
+            tables={tables}
+            orderItems={orderItems}
+            menuItems={menuItems}
+            onRefresh={refreshPosData}
+            onOpenTable={tableOrder.openManageTable}
+            actionError={tableOrder.actionError}
+          />
+        );
+      case "reservations":
+        return <ReservationsView tables={tables} onRefreshTables={reloadTables} />;
+      case "history":
+        return <HistoryView menuItems={menuItems} />;
+      case "summary":
+        return <SummaryView sales={sales} menuItems={menuItems} onRefresh={reloadSales} />;
+      case "storage":
+        return (
+          <StorageView
+            inventory={inventory}
+            menuItems={menuItems}
+            onRefresh={() => {
+              void reloadInventory();
+              void reloadMenu();
+            }}
+          />
+        );
+      case "staff":
+        return <StaffView onRefresh={() => void refreshStaffList()} />;
+      case "settings":
+        return <SettingsView />;
+      default:
+        return null;
+    }
+  })();
+
+  return (
+    <div className="flex h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+      <ReadyNotificationListener tables={tables} menuItems={menuItems} />
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <main className="flex-1 overflow-hidden">{content}</main>
+      </div>
+      {tableOrder.tableOrderModals}
+    </div>
+  );
+}

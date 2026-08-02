@@ -1,0 +1,332 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --background: #f9fafb;
+  --foreground: #111827;
+  --card: #ffffff;
+  --card-foreground: #111827;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --input-bg: #ffffff;
+  --accent: #f3f4f6;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #030712;
+  --foreground: #f9fafb;
+  --card: #111827;
+  --card-foreground: #f9fafb;
+  --muted: #9ca3af;
+  --border: #374151;
+  --input-bg: #1f2937;
+  --accent: #1f2937;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+input,
+select,
+textarea {
+  color: var(--foreground);
+  background-color: var(--input-bg);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+select option {
+  background-color: #ffffff;
+  color: #111827;
+}
+
+.dark select option {
+  background-color: #1f2937;
+  color: #f9fafb;
+}
+
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"],
+input[type="number"],
+input[type="search"] {
+  color-scheme: light;
+}
+
+.dark input[type="date"],
+.dark input[type="datetime-local"],
+.dark input[type="time"],
+.dark input[type="number"],
+.dark input[type="search"] {
+  color-scheme: dark;
+}
+
+/* Shared surface tokens for panels & modals */
+.pos-surface {
+  @apply bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100;
+}
+
+.pos-muted {
+  @apply text-gray-500 dark:text-gray-400;
+}
+
+.pos-label {
+  @apply text-xs font-medium text-gray-500 dark:text-gray-400;
+}
+
+.pos-input {
+  @apply w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100;
+}
+
+/* Filter / period / payment toggle buttons */
+.pos-filter-btn {
+  @apply rounded-lg px-3 py-2 text-sm font-medium transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700;
+}
+
+.pos-filter-btn-active {
+  @apply rounded-lg px-3 py-2 text-sm font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-600 dark:text-white dark:hover:bg-blue-700;
+}
+
+/* Segmented control (compact tabs inside a pill track) */
+.pos-segment {
+  @apply flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800;
+}
+
+.pos-segment-btn {
+  @apply rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-gray-100;
+}
+
+.pos-segment-btn-active {
+  @apply rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors bg-blue-600 text-white font-medium shadow-sm dark:bg-blue-600 dark:text-white;
+}
+
+/* Sidebar navigation */
+.pos-nav-btn {
+  @apply flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white;
+}
+
+.pos-nav-btn-active {
+  @apply flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors bg-blue-600 text-white dark:bg-blue-600 dark:text-white;
+}
+
+/* ── Map SLA alert: 10+ min pending/preparing ─────────────────────────────── */
+
+@keyframes sla-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(239, 68, 68, 0.55),
+      0 0 14px 2px rgba(239, 68, 68, 0.35);
+    border-color: rgb(239, 68, 68);
+  }
+  50% {
+    box-shadow:
+      0 0 0 6px rgba(239, 68, 68, 0.2),
+      0 0 28px 10px rgba(239, 68, 68, 0.6);
+    border-color: rgb(220, 38, 38);
+  }
+}
+
+.sla-alert-pulse {
+  animation: sla-pulse 1.4s ease-in-out infinite;
+  border-width: 2px !important;
+  border-color: rgb(239, 68, 68) !important;
+}
+
+/* ── Hidden printable Czech receipt (thermal 80 mm) ─────────────────────── */
+
+.printable-receipt {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  width: 80mm;
+  pointer-events: none;
+  opacity: 0;
+  z-index: -1;
+}
+
+.receipt-inner {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #000;
+  background: #fff;
+  padding: 4mm 3mm;
+}
+
+.receipt-header {
+  text-align: center;
+}
+
+.receipt-header p {
+  margin: 0.15em 0;
+}
+
+.receipt-order {
+  font-size: 10px;
+}
+
+.receipt-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0.4em 0 0.2em;
+  letter-spacing: 0.05em;
+}
+
+.receipt-divider {
+  border-top: 1px dashed #000;
+  margin: 0.5em 0;
+}
+
+.receipt-item-line {
+  display: grid;
+  grid-template-columns: 7mm 1fr 5mm 16mm 4mm;
+  gap: 1mm;
+  align-items: start;
+  margin-bottom: 0.25em;
+  font-size: 10px;
+}
+
+.receipt-item-name {
+  word-break: break-word;
+}
+
+.receipt-item-qty,
+.receipt-item-price,
+.receipt-item-tax {
+  text-align: right;
+}
+
+.receipt-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 2mm;
+  margin-bottom: 0.15em;
+}
+
+.receipt-row--bold {
+  font-weight: 700;
+}
+
+.receipt-amount {
+  white-space: nowrap;
+}
+
+.receipt-celkem {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 700;
+  margin-top: 0.4em;
+  padding-top: 0.3em;
+  border-top: 1px solid #000;
+}
+
+.receipt-alt-currency {
+  margin: 0.2em 0 0;
+  text-align: right;
+  font-size: 10px;
+  color: #333;
+}
+
+.receipt-payment p {
+  margin: 0.15em 0;
+}
+
+.receipt-vat-title {
+  font-weight: 700;
+  text-align: center;
+  margin: 0 0 0.35em;
+}
+
+.receipt-vat-heading {
+  font-weight: 700;
+  margin: 0.35em 0 0.15em;
+  font-size: 10px;
+}
+
+.receipt-footer {
+  text-align: center;
+  font-size: 10px;
+  margin-top: 0.25em;
+}
+
+.receipt-footer p {
+  margin: 0;
+}
+
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  html,
+  body {
+    width: 80mm !important;
+    min-width: 80mm !important;
+    max-width: 80mm !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  body * {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .printable-receipt {
+    display: block !important;
+    visibility: visible !important;
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
+    min-width: 80mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    opacity: 1 !important;
+    pointer-events: none !important;
+    z-index: 2147483647 !important;
+    overflow: visible !important;
+    page-break-inside: avoid;
+  }
+
+  .printable-receipt * {
+    display: revert !important;
+    visibility: visible !important;
+  }
+
+  .receipt-inner {
+    width: 76mm !important;
+    max-width: 76mm !important;
+    padding: 2mm 2mm !important;
+    box-sizing: border-box;
+  }
+}

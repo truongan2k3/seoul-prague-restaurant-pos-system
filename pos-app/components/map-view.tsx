@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LiveClock } from "@/components/live-clock";
 import { NotificationBell } from "@/components/notification-bell";
 import { TableCard } from "@/components/table-card";
+import { TableEditModal } from "@/components/table-edit-modal";
 import { useApp } from "@/contexts/app-context";
 import { TABLE_CARD_WIDTH } from "@/lib/table-layout";
 import { tableIdsWithSlaBreach } from "@/lib/order-sla";
@@ -42,6 +43,7 @@ export function MapView({
   const mapRef = useRef<HTMLDivElement>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("opening");
   const [editMode, setEditMode] = useState(false);
+  const [editingTable, setEditingTable] = useState<RestaurantTable | null>(null);
   const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [slaClock, setSlaClock] = useState(() => Date.now());
@@ -130,7 +132,7 @@ export function MapView({
 
   return (
     <div className="flex h-full flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900 sm:px-6 sm:py-4">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             {translate("map")}
@@ -160,7 +162,7 @@ export function MapView({
           </button>
           {editMode && (
             <span className="text-xs text-gray-500 dark:text-gray-400">
-              Drag tables anywhere on the floor plan
+              {translate("editLayoutHint")}
             </span>
           )}
         </div>
@@ -176,10 +178,41 @@ export function MapView({
         </div>
       )}
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-3 sm:p-4 md:p-6">
+        {/* Responsive grid — mobile, tablet, smaller desktops */}
+        <div className="xl:hidden">
+          {editMode && (
+            <p className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200">
+              {translate("editLayoutHint")} (drag layout: desktop XL+)
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 md:gap-4 lg:grid-cols-6">
+            {[...tables]
+              .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }))
+              .map((table) => {
+                const tableOrderItems = orderItems.filter((item) => item.tableId === table.id);
+                return (
+                  <TableCard
+                    key={table.id}
+                    table={table}
+                    menuItems={menuItems}
+                    orderItems={tableOrderItems}
+                    dimmed={!matchesFilter(table.status)}
+                    slaAlert={slaAlertTableIds.has(table.id)}
+                    compact
+                    editMode={editMode}
+                    onEdit={() => setEditingTable(table)}
+                    onClick={() => !editMode && onTableClick(table)}
+                  />
+                );
+              })}
+          </div>
+        </div>
+
+        {/* Free-position floor plan — large desktop */}
         <div
           ref={mapRef}
-          className="relative mx-auto min-w-[960px] rounded-2xl border border-dashed border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900/40"
+          className="relative mx-auto hidden rounded-2xl border border-dashed border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900/40 xl:block"
           style={{ height: mapHeight, width: "100%", maxWidth: 1200 }}
         >
           {tables.map((table) => {
@@ -205,6 +238,7 @@ export function MapView({
                     dimmed={!matchesFilter(table.status)}
                     slaAlert={slaAlertTableIds.has(table.id)}
                     editMode
+                    onEdit={() => setEditingTable(table)}
                     onPointerDown={(event) => handlePointerDown(table.id, event)}
                   />
                 ) : (
@@ -222,6 +256,13 @@ export function MapView({
           })}
         </div>
       </div>
+
+      <TableEditModal
+        open={editingTable != null}
+        table={editingTable}
+        onClose={() => setEditingTable(null)}
+        onSaved={onRefresh}
+      />
     </div>
   );
 }

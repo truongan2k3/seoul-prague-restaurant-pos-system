@@ -1,5 +1,6 @@
 import type {
   InventoryItem,
+  MenuCategoryRecord,
   MenuItem,
   OrderItem,
   OrderLogEntry,
@@ -36,16 +37,26 @@ interface SupabaseMenuItemRow {
   name_zh?: string | null;
   price: number;
   category: string;
+  category_id?: string | null;
   station?: "kitchen" | "bar";
   item_type?: "food" | "drink";
   sold_out?: boolean;
   is_available?: boolean;
   sort_order?: number;
+  display_order?: number;
   image_url?: string | null;
   description?: string | null;
   description_en?: string | null;
   description_cz?: string | null;
   description_zh?: string | null;
+}
+
+interface SupabaseCategoryRow {
+  id: string;
+  name: string;
+  type: "dish" | "drink";
+  display_order: number;
+  created_at?: string;
 }
 
 export interface SupabaseOrderItemRow {
@@ -100,12 +111,22 @@ export function mapMenuItemRow(row: SupabaseMenuItemRow): MenuItem {
     descriptionCz: row.description_cz?.trim() || undefined,
     descriptionZh: row.description_zh?.trim() || undefined,
     category: row.category,
+    categoryId: row.category_id ?? undefined,
     price: Number(row.price),
     station: row.station ?? resolveStation(row.category, itemType),
     itemType,
     isAvailable,
-    sortOrder: row.sort_order ?? 0,
+    sortOrder: row.display_order ?? row.sort_order ?? 0,
     imageUrl: row.image_url ?? undefined,
+  };
+}
+
+export function mapCategoryRow(row: SupabaseCategoryRow): MenuCategoryRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    displayOrder: row.display_order ?? 0,
   };
 }
 
@@ -131,7 +152,42 @@ export async function fetchTables() {
 }
 
 export async function fetchMenuItems() {
-  return supabase.from("menu_items").select("*").order("name");
+  const ordered = await supabase
+    .from("menu_items")
+    .select("*")
+    .order("display_order", { ascending: true })
+    .order("name_en", { ascending: true });
+
+  if (!ordered.error) return ordered;
+
+  return supabase
+    .from("menu_items")
+    .select("*")
+    .order("sort_order", { ascending: true })
+    .order("name_en", { ascending: true });
+}
+
+export async function fetchCategories() {
+  const result = await supabase
+    .from("categories")
+    .select("*")
+    .order("display_order", { ascending: true })
+    .order("name", { ascending: true });
+
+  if (
+    result.error &&
+    (result.error.code === "42P01" || result.error.message.toLowerCase().includes("categories"))
+  ) {
+    return { data: [], error: null };
+  }
+
+  return result;
+}
+
+export function mapCategoriesResponse(data: SupabaseCategoryRow[] | null) {
+  return (data ?? [])
+    .map(mapCategoryRow)
+    .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name));
 }
 
 export function mapMenuItemsResponse(data: SupabaseMenuItemRow[] | null) {
@@ -349,6 +405,16 @@ export function subscribeToMenuChanges(onChange: () => void) {
   };
 }
 
+export function subscribeToCategoryChanges(onChange: () => void) {
+  const channel = supabase
+    .channel(`categories-realtime-${Date.now()}`)
+    .on("postgres_changes", { event: "*", schema: "public", table: "categories" }, onChange)
+    .subscribe();
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}
+
 export async function updateTableLayout(
   tableId: string,
   gridColumn: string,
@@ -368,6 +434,24 @@ export async function updateTablePosition(tableId: string, posX: number, posY: n
       pos_y: Math.round(posY),
     })
     .eq("id", tableId);
+}
+
+export async function updateTableMetadata(
+  tableId: string,
+  updates: {
+    label?: string;
+    type?: "regular" | "special";
+    shape?: "square" | "round";
+  },
+) {
+  const payload: Record<string, string> = {};
+  if (updates.label !== undefined) payload.label = updates.label.trim();
+  if (updates.type !== undefined) payload.type = updates.type;
+  if (updates.shape !== undefined) payload.shape = updates.shape;
+  if (Object.keys(payload).length === 0) {
+    return { data: null, error: null };
+  }
+  return supabase.from("tables").update(payload).eq("id", tableId);
 }
 
 export function subscribeToInventoryChanges(onChange: () => void) {

@@ -4,12 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 import { Providers } from "@/components/providers";
 import { useApp } from "@/contexts/app-context";
 import { NewOrderModal } from "@/components/new-order-modal";
-import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
+import type { MenuCategoryRecord, MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
 import {
+  fetchCategories,
   fetchMenuItems,
   fetchTables,
+  mapCategoriesResponse,
   mapMenuItemsResponse,
   mapTablesResponse,
+  subscribeToCategoryChanges,
   subscribeToMenuChanges,
   subscribeToTableChanges,
 } from "@/src/lib/supabase-data";
@@ -24,20 +27,23 @@ function ServerApp() {
   const { translate, staff, logAction } = useApp();
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [categories, setCategories] = useState<MenuCategoryRecord[]>([]);
   const [orderModal, setOrderModal] = useState<OrderModalState>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const reload = useCallback(async () => {
-    const [t, m] = await Promise.all([fetchTables(), fetchMenuItems()]);
+    const [t, m, c] = await Promise.all([fetchTables(), fetchMenuItems(), fetchCategories()]);
     if (!t.error) setTables(mapTablesResponse(t.data));
     if (!m.error) setMenuItems(mapMenuItemsResponse(m.data));
+    if (!c.error) setCategories(mapCategoriesResponse(c.data));
   }, []);
 
   useEffect(() => {
     void reload();
     const u1 = subscribeToTableChanges(() => void reload());
     const u2 = subscribeToMenuChanges(() => void reload());
-    return () => { u1(); u2(); };
+    const u3 = subscribeToCategoryChanges(() => void reload());
+    return () => { u1(); u2(); u3(); };
   }, [reload]);
 
   const handleTableClick = (table: RestaurantTable) => {
@@ -72,7 +78,7 @@ function ServerApp() {
         </p>
         <p className="font-semibold text-zinc-900 dark:text-zinc-100">{staff?.name}</p>
       </header>
-      <div className="grid grid-cols-3 gap-3 p-4 sm:grid-cols-4 md:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 sm:gap-3 md:grid-cols-4 md:gap-4 lg:grid-cols-6">
         {tables.map((table) => (
           <button
             key={table.id}
@@ -103,6 +109,7 @@ function ServerApp() {
           open
           tableLabel={orderModal.table.label}
           menuItems={menuItems.filter((m) => m.isAvailable)}
+          categories={categories}
           mode={orderModal.mode}
           onClose={() => setOrderModal(null)}
           onSendToKitchen={handleSend}

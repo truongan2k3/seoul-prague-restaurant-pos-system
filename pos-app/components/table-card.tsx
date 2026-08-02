@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { Pencil } from "lucide-react";
 import { ElapsedTimer } from "@/components/live-clock";
 import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
 import { orderItemDisplayName } from "@/lib/menu-display";
@@ -33,8 +34,10 @@ interface TableCardProps {
   dimmed?: boolean;
   slaAlert?: boolean;
   editMode?: boolean;
+  compact?: boolean;
   style?: CSSProperties;
   onClick?: () => void;
+  onEdit?: () => void;
   onPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void;
 }
 
@@ -45,8 +48,10 @@ export function TableCard({
   dimmed = false,
   slaAlert = false,
   editMode = false,
+  compact = false,
   style,
   onClick,
+  onEdit,
   onPointerDown,
 }: TableCardProps) {
   const { translate, language } = useApp();
@@ -60,9 +65,9 @@ export function TableCard({
     )[0];
   const showTimer = oldestActiveItem?.createdAt;
 
-  const cardClassName = `flex h-full min-h-[120px] max-h-[176px] w-full flex-col border p-3 text-left shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 ${
-    isRound ? "rounded-full aspect-square max-h-[140px] items-center justify-center text-center" : "rounded-xl"
-  } ${statusStyles[table.status]} ${slaAlert ? "sla-alert-pulse" : ""} ${dimmed ? "opacity-30" : "opacity-100"} ${
+  const cardClassName = `flex h-full w-full flex-col border p-2.5 text-left shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 sm:p-3 ${
+    compact ? "min-h-[100px] max-h-none rounded-xl" : "min-h-[120px] max-h-[176px] rounded-xl"
+  } ${isRound && !compact ? "aspect-square max-h-[140px] items-center justify-center text-center rounded-full" : ""} ${statusStyles[table.status]} ${slaAlert ? "sla-alert-pulse" : ""} ${dimmed ? "opacity-30" : "opacity-100"} ${
     editMode ? "cursor-grab ring-2 ring-blue-400 ring-offset-2 active:cursor-grabbing" : "hover:shadow-md"
   } ${table.type === "special" ? "ring-1 ring-inset ring-gray-300/60 dark:ring-gray-600/60" : ""}`;
 
@@ -70,11 +75,11 @@ export function TableCard({
     <>
       <div className={`flex w-full shrink-0 items-start justify-between gap-2 ${isRound ? "flex-col items-center" : ""}`}>
         <div>
-          <span className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
+          <span className={`font-bold tracking-tight text-gray-900 dark:text-gray-100 ${compact ? "text-lg sm:text-xl" : "text-xl sm:text-2xl"}`}>
             {table.label}
           </span>
           {table.type === "special" && (
-            <span className="ml-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+            <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-gray-500 sm:px-2 sm:text-[10px] dark:bg-gray-800 dark:text-gray-400">
               VIP
             </span>
           )}
@@ -131,19 +136,41 @@ export function TableCard({
   if (editMode) {
     return (
       <div
-        style={{ width: TABLE_CARD_WIDTH, ...style }}
-        onPointerDown={onPointerDown}
-        className="touch-none select-none"
+        style={compact ? undefined : { width: TABLE_CARD_WIDTH, ...style }}
+        onPointerDown={compact ? undefined : onPointerDown}
+        className={`relative ${compact ? "" : "touch-none select-none"}`}
       >
+        {onEdit && (
+          <button
+            type="button"
+            aria-label={translate("editTableSettings")}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onEdit();
+            }}
+            className="absolute -right-2 -top-2 z-30 flex h-8 w-8 items-center justify-center rounded-full border border-blue-200 bg-white text-blue-600 shadow-md hover:bg-blue-50 dark:border-blue-800 dark:bg-gray-900 dark:text-blue-300 dark:hover:bg-blue-950"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        )}
         <div className={cardClassName}>{content}</div>
       </div>
+    );
+  }
+
+  if (compact && onClick) {
+    return (
+      <button type="button" onClick={onClick} className={cardClassName}>
+        {content}
+      </button>
     );
   }
 
   return (
     <button
       type="button"
-      style={{ width: TABLE_CARD_WIDTH, ...style }}
+      style={compact ? undefined : { width: TABLE_CARD_WIDTH, ...style }}
       onClick={onClick}
       className={cardClassName}
     >

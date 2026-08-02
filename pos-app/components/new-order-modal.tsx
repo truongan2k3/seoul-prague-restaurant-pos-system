@@ -1,18 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Minus, Plus, Search, ShoppingCart, X } from "lucide-react";
+import { ChevronRight, Minus, Plus, Search, X } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { useApp } from "@/contexts/app-context";
+import { categoriesForOrdering } from "@/lib/category-utils";
 import { formatPrice } from "@/lib/i18n/translations";
-import { MENU_CATEGORIES } from "@/lib/menu-categories";
 import {
   cartLineDisplayName,
   menuItemDisplayDescription,
   menuItemDisplayName,
 } from "@/lib/menu-display";
 import { resolveStation } from "@/lib/order-routing";
-import type { MenuItem, OrderItem } from "@/lib/types";
+import type { MenuCategoryRecord, MenuItem, OrderItem } from "@/lib/types";
 import { filterButtonClass } from "@/lib/theme-classes";
 import { translateNoteToChinese } from "@/src/lib/translator";
 
@@ -34,6 +34,7 @@ interface NewOrderModalProps {
   open: boolean;
   tableLabel: string;
   menuItems: MenuItem[];
+  categories?: MenuCategoryRecord[];
   mode?: "new" | "append";
   onClose: () => void;
   onSendToKitchen: (orders: OrderItem[]) => void | Promise<void>;
@@ -98,6 +99,7 @@ export function NewOrderModal({
   open,
   tableLabel,
   menuItems,
+  categories = [],
   mode = "new",
   onClose,
   onSendToKitchen,
@@ -165,7 +167,7 @@ export function NewOrderModal({
     };
   }, [detailsNote]);
 
-  const categories = MENU_CATEGORIES;
+  const categoryOptions = useMemo(() => categoriesForOrdering(categories), [categories]);
 
   const menuById = useMemo(
     () => new Map(menuItems.map((item) => [item.id, item])),
@@ -176,7 +178,10 @@ export function NewOrderModal({
     const query = search.trim().toLowerCase();
     return menuItems.filter((item) => {
       const matchesCategory =
-        activeCategory === "__all__" || item.category === activeCategory;
+        activeCategory === "__all__" ||
+        item.categoryId === activeCategory ||
+        item.category === activeCategory ||
+        categoryOptions.find((c) => c.id === activeCategory)?.name === item.category;
       const label = menuItemDisplayName(item, language);
       const matchesSearch =
         !query ||
@@ -187,7 +192,7 @@ export function NewOrderModal({
         item.id.toLowerCase().includes(query);
       return matchesCategory && matchesSearch;
     });
-  }, [menuItems, activeCategory, search, language]);
+  }, [menuItems, activeCategory, search, language, categoryOptions]);
 
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   const cartTotal = cart.reduce((sum, line) => sum + line.price * line.quantity, 0);
@@ -347,6 +352,127 @@ export function NewOrderModal({
     onClose();
   };
 
+  const renderCartPanel = (showCloseButton: boolean) => (
+    <>
+      <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-4 dark:border-gray-700">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          {translate("cart")}
+        </h3>
+        {showCloseButton && (
+          <button
+            type="button"
+            onClick={() => setCartOpen(false)}
+            className="touch-target flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+          >
+            <X className="h-6 w-6" />
+          </button>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4">
+        {cart.length === 0 ? (
+          <p className="text-center text-sm text-gray-500 dark:text-gray-400">Cart is empty</p>
+        ) : (
+          <ul className="space-y-3">
+            {cart.map((line) => {
+              const lineLabel = cartLineDisplayName(line, menuItems, language);
+              return (
+                <li
+                  key={line.lineId}
+                  className="rounded-xl border border-gray-200 p-3 dark:border-gray-700"
+                >
+                  <div className="flex gap-3">
+                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
+                      {line.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={line.imageUrl}
+                          alt={lineLabel}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-gray-400">
+                          {lineLabel.charAt(0)}
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        {lineLabel}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {formatPrice(line.price)} · {resolveStation(line.category, line.itemType)}
+                      </p>
+                      {line.note && (
+                        <p className="mt-1 text-xs italic text-gray-500 dark:text-gray-400">
+                          {line.noteTranslated &&
+                          line.noteTranslated.toLowerCase() !== line.note.toLowerCase()
+                            ? `${line.noteTranslated} · ${line.note}`
+                            : line.note}
+                        </p>
+                      )}
+                      {line.isPrintedNote && (
+                        <p className="mt-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
+                          {translate("printOnReceipt")}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeCartLine(line.lineId)}
+                      className="touch-target flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => updateCartQty(line.lineId, -1)}
+                        className="touch-target flex items-center justify-center rounded-lg border dark:border-gray-600"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </button>
+                      <span className="w-8 text-center text-base font-semibold">{line.quantity}</span>
+                      <button
+                        type="button"
+                        onClick={() => updateCartQty(line.lineId, 1)}
+                        className="touch-target flex items-center justify-center rounded-lg border dark:border-gray-600"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <span className="text-sm font-semibold">
+                      {formatPrice(line.price * line.quantity)}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      <div className="shrink-0 border-t border-gray-200 p-4 dark:border-gray-700">
+        <div className="mb-4 flex items-center justify-between">
+          <span className="text-sm text-gray-500 dark:text-gray-400">{translate("total")}</span>
+          <span className="text-xl font-bold text-gray-900 dark:text-gray-100">
+            {formatPrice(cartTotal)}
+          </span>
+        </div>
+        <button
+          type="button"
+          disabled={cart.length === 0 || isSaving}
+          onClick={() => void handleSend()}
+          className="min-h-[52px] w-full rounded-xl bg-emerald-600 py-3.5 text-base font-semibold text-white disabled:opacity-40"
+        >
+          {isSaving ? "..." : translate("sendToKitchen")}
+        </button>
+      </div>
+    </>
+  );
+
   if (!open) return null;
 
   return (
@@ -386,33 +512,56 @@ export function NewOrderModal({
             </button>
           </div>
 
-          <div className="relative flex min-h-0 flex-1">
-            <aside className="flex w-36 shrink-0 flex-col border-r border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-950/50 sm:w-48 md:w-52">
-              <p className="px-3 py-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
-                Categories
-              </p>
-              <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-4">
+        <div className="relative flex min-h-0 flex-1 flex-col md:flex-row">
+          <aside className="hidden w-36 shrink-0 flex-col border-r border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-950/50 md:flex sm:w-44 lg:w-52">
+            <p className="px-3 py-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+              Categories
+            </p>
+            <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-4">
+              <button
+                type="button"
+                onClick={() => setActiveCategory("__all__")}
+                className={`min-h-[44px] w-full text-left ${filterButtonClass(activeCategory === "__all__")}`}
+              >
+                {translate("allCategories")}
+              </button>
+              {categoryOptions.map((category) => (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => setActiveCategory(category.id)}
+                  className={`min-h-[44px] w-full text-left ${filterButtonClass(activeCategory === category.id)}`}
+                >
+                  {category.name}
+                </button>
+              ))}
+            </nav>
+          </aside>
+
+          <div className="flex min-w-0 flex-1 flex-col md:max-w-[68%]">
+            <div className="shrink-0 border-b border-gray-200 md:hidden dark:border-gray-700">
+              <div className="flex gap-2 overflow-x-auto px-3 py-2 no-scrollbar">
                 <button
                   type="button"
                   onClick={() => setActiveCategory("__all__")}
-                  className={`min-h-[44px] w-full text-left ${filterButtonClass(activeCategory === "__all__")}`}
+                  className={`shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-xs font-semibold ${filterButtonClass(activeCategory === "__all__")}`}
                 >
                   {translate("allCategories")}
                 </button>
-                {categories.map((category) => (
+                {categoryOptions.map((category) => (
                   <button
-                    key={category}
+                    key={category.id}
                     type="button"
-                    onClick={() => setActiveCategory(category)}
-                    className={`min-h-[44px] w-full text-left ${filterButtonClass(activeCategory === category)}`}
+                    onClick={() => setActiveCategory(category.id)}
+                    className={`shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-xs font-semibold ${filterButtonClass(activeCategory === category.id)}`}
                   >
-                    {category}
+                    {category.name}
                   </button>
                 ))}
-              </nav>
-            </aside>
+              </div>
+            </div>
 
-            <main className="flex min-w-0 flex-1 flex-col">
+            <main className="flex min-h-0 flex-1 flex-col">
               <div className="shrink-0 border-b border-gray-200 px-3 py-3 dark:border-gray-700 sm:px-4">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
@@ -426,13 +575,13 @@ export function NewOrderModal({
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+              <div className="flex-1 overflow-y-auto p-3 pb-24 sm:p-4 md:pb-4">
                 {filteredItems.length === 0 ? (
                   <div className="flex h-full min-h-[200px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                     No items match your search
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4">
                     {filteredItems.map((item) => {
                       const defaultQty = getDefaultQty(item.id);
                       const station = resolveStation(item.category, item.itemType);
@@ -510,146 +659,30 @@ export function NewOrderModal({
                 )}
               </div>
             </main>
-
-            <div
-              className={`absolute inset-y-0 right-0 z-20 flex w-full max-w-sm flex-col border-l border-gray-200 bg-white shadow-2xl transition-transform duration-300 ease-out dark:border-gray-700 dark:bg-gray-900 ${
-                cartOpen ? "translate-x-0" : "translate-x-full"
-              }`}
-            >
-              <div className="flex items-center justify-between border-b border-gray-200 px-4 py-4 dark:border-gray-700">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                  {translate("cart")}
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setCartOpen(false)}
-                  className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                >
-                  <X className="h-6 w-6" />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-4">
-                {cart.length === 0 ? (
-                  <p className="text-center text-sm text-gray-500 dark:text-gray-400">Cart is empty</p>
-                ) : (
-                  <ul className="space-y-3">
-                    {cart.map((line) => {
-                      const lineLabel = cartLineDisplayName(line, menuItems, language);
-                      return (
-                      <li
-                        key={line.lineId}
-                        className="rounded-xl border border-gray-200 p-3 dark:border-gray-700"
-                      >
-                        <div className="flex gap-3">
-                          <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
-                            {line.imageUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={line.imageUrl}
-                                alt={lineLabel}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-gray-400">
-                                {lineLabel.charAt(0)}
-                              </div>
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                              {lineLabel}
-                            </p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              {formatPrice(line.price)} ·{" "}
-                              {resolveStation(line.category, line.itemType)}
-                            </p>
-                            {line.note && (
-                              <p className="mt-1 text-xs italic text-gray-500 dark:text-gray-400">
-                                {line.noteTranslated &&
-                                line.noteTranslated.toLowerCase() !== line.note.toLowerCase()
-                                  ? `${line.noteTranslated} · ${line.note}`
-                                  : line.note}
-                              </p>
-                            )}
-                            {line.isPrintedNote && (
-                              <p className="mt-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
-                                {translate("printOnReceipt")}
-                              </p>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeCartLine(line.lineId)}
-                            className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 hover:text-red-500"
-                          >
-                            <X className="h-5 w-5" />
-                          </button>
-                        </div>
-                        <div className="mt-3 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => updateCartQty(line.lineId, -1)}
-                              className="flex h-10 w-10 items-center justify-center rounded-lg border dark:border-gray-600"
-                            >
-                              <Minus className="h-4 w-4" />
-                            </button>
-                            <span className="w-8 text-center text-base font-semibold">
-                              {line.quantity}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => updateCartQty(line.lineId, 1)}
-                              className="flex h-10 w-10 items-center justify-center rounded-lg border dark:border-gray-600"
-                            >
-                              <Plus className="h-4 w-4" />
-                            </button>
-                          </div>
-                          <span className="text-sm font-semibold">
-                            {formatPrice(line.price * line.quantity)}
-                          </span>
-                        </div>
-                      </li>
-                    );
-                    })}
-                  </ul>
-                )}
-              </div>
-
-              <div className="shrink-0 border-t border-gray-200 p-4 dark:border-gray-700">
-                <div className="mb-4 flex items-center justify-between">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">{translate("total")}</span>
-                  <span className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                    {formatPrice(cartTotal)}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  disabled={cart.length === 0 || isSaving}
-                  onClick={() => void handleSend()}
-                  className="min-h-[52px] w-full rounded-xl bg-emerald-600 py-3.5 text-base font-semibold text-white disabled:opacity-40"
-                >
-                  {isSaving ? "..." : translate("sendToKitchen")}
-                </button>
-              </div>
-            </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setCartOpen((value) => !value)}
-            className="absolute bottom-5 right-5 z-30 flex h-16 w-16 items-center justify-center rounded-full bg-gray-900 text-white shadow-lg active:scale-95 dark:bg-gray-100 dark:text-gray-900"
-            aria-label={translate("cart")}
-          >
-            <ShoppingCart className="h-7 w-7" />
-            {cartCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-7 min-w-7 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-sm font-bold text-white">
-                {cartCount}
-              </span>
-            )}
-          </button>
+          <aside className="hidden w-[32%] min-w-[280px] max-w-md shrink-0 flex-col border-l border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 md:flex md:min-h-0">
+            {renderCartPanel(false)}
+          </aside>
+
+          {cartOpen && (
+            <div className="fixed inset-0 z-40 flex min-h-0 flex-col bg-white dark:bg-gray-900 md:hidden">
+              {renderCartPanel(true)}
+            </div>
+          )}
         </div>
+
+        <button
+          type="button"
+          onClick={() => setCartOpen(true)}
+          className="pos-mobile-sticky-bar fixed bottom-0 left-0 right-0 z-30 flex min-h-[56px] items-center justify-between border-t border-gray-200 bg-gray-900 px-4 py-3 text-left text-white shadow-lg md:hidden dark:border-gray-700 dark:bg-gray-100 dark:text-gray-900"
+        >
+          <span className="text-sm font-medium">
+            {translate("cart")} ({cartCount} {cartCount === 1 ? "item" : "items"}) · {formatPrice(cartTotal)}
+          </span>
+          <ChevronRight className="h-5 w-5 shrink-0" />
+        </button>
+      </div>
       </div>
 
       {detailsItem && (

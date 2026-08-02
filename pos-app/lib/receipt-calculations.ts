@@ -27,6 +27,8 @@ export interface ReceiptData {
   items: ReceiptLineItem[];
   subtotal: number;
   discountAmount: number;
+  discountLabel?: string;
+  discountPercent?: number;
   tip: number;
   grandTotal: number;
   paymentMethod: PaymentMethod;
@@ -38,6 +40,16 @@ export interface ReceiptData {
   showUsd?: boolean;
   eurRate?: number;
   usdRate?: number;
+  business?: {
+    brandName: string;
+    brandAddress: string;
+    legalName: string;
+    companyAddress: string;
+    ico: string;
+    dic: string;
+    phone: string;
+    footerLines: string[];
+  };
 }
 
 /** Czech receipt amount: 1 398,00 */
@@ -56,6 +68,13 @@ export function formatReceiptDate(date: Date): string {
 export function formatReceiptTime(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+/** Short daily receipt index shown large at top (e.g. 019). */
+export function formatReceiptDisplayIndex(orderNumber: string): string {
+  const digits = orderNumber.replace(/\D/g, "");
+  const tail = digits.slice(-3);
+  return tail.padStart(3, "0");
 }
 
 export function generateOrderNumber(closedAt: Date): string {
@@ -142,6 +161,7 @@ export function buildReceiptData(input: {
   showUsd?: boolean;
   eurRate?: number;
   usdRate?: number;
+  business?: ReceiptData["business"];
 }): ReceiptData {
   const closedAt = input.closedAt ?? new Date();
   const menuById = new Map(input.menuItems.map((m) => [m.id, m]));
@@ -156,6 +176,18 @@ export function buildReceiptData(input: {
   const discountAmount = input.payment.discountAmount * ratio;
   const tip = input.payment.tip * ratio;
   const grandTotal = input.payment.amountDueNow;
+
+  const discountLabel =
+    input.payment.discountAmount > 0
+      ? input.payment.discountType === "percent"
+        ? `Sleva (${input.payment.discountValue}%):`
+        : "Sleva:"
+      : undefined;
+
+  const discountPercent =
+    input.payment.discountAmount > 0 && input.payment.discountType === "percent"
+      ? input.payment.discountValue
+      : undefined;
 
   const taxGroups = calcReceiptTaxGroups(
     items,
@@ -179,6 +211,8 @@ export function buildReceiptData(input: {
     items,
     subtotal,
     discountAmount,
+    discountLabel,
+    discountPercent,
     tip,
     grandTotal,
     paymentMethod: input.payment.paymentMethod,
@@ -190,6 +224,47 @@ export function buildReceiptData(input: {
     showUsd: input.showUsd,
     eurRate: input.eurRate,
     usdRate: input.usdRate,
+    business: input.business,
+  };
+}
+
+export function buildTestReceiptData(business: ReceiptData["business"]): ReceiptData {
+  const closedAt = new Date();
+  return {
+    orderNumber: generateOrderNumber(closedAt),
+    tableLabel: "T5",
+    staffName: "Master Liu",
+    items: [
+      {
+        code: "P1",
+        name: "Signature Hotpot Broth",
+        quantity: 2,
+        unitPrice: 189,
+        lineTotal: 378,
+        taxGroup: "B",
+      },
+      {
+        code: "D1",
+        name: "Plum Juice",
+        quantity: 2,
+        unitPrice: 59,
+        lineTotal: 118,
+        taxGroup: "A",
+      },
+    ],
+    subtotal: 496,
+    discountAmount: 49.6,
+    discountLabel: "Sleva (10%):",
+    discountPercent: 10,
+    tip: 50,
+    grandTotal: 496.4,
+    paymentMethod: "card",
+    closedAt,
+    taxGroups: [
+      { group: "A", rate: 21, gross: 106.2, base: 87.77, vat: 18.43 },
+      { group: "B", rate: 12, gross: 340.2, base: 303.75, vat: 36.45 },
+    ],
+    business,
   };
 }
 

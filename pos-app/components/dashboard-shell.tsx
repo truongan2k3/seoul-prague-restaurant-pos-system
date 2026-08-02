@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Menu } from "lucide-react";
 import { MapView } from "@/components/map-view";
 import { OrderView } from "@/components/order-view";
 import { HistoryView } from "@/components/history-view";
@@ -15,15 +16,18 @@ import { useTableOrderWorkflow } from "@/hooks/use-table-order-workflow";
 import { useApp } from "@/contexts/app-context";
 import { canAccessNavTab } from "@/lib/staff-roles";
 import {
+  fetchCategories,
   fetchInventory,
   fetchMenuItems,
   fetchSales,
   fetchTables,
+  mapCategoriesResponse,
   mapInventoryResponse,
   mapMenuItemsResponse,
   mapOrderItemRow,
   mapSalesResponse,
   mapTablesResponse,
+  subscribeToCategoryChanges,
   subscribeToMenuChanges,
   subscribeToInventoryChanges,
   subscribeToOrderItemChanges,
@@ -31,7 +35,7 @@ import {
   type SupabaseOrderItemRow,
 } from "@/src/lib/supabase-data";
 import { supabase } from "@/src/lib/supabase";
-import type { InventoryItem, MenuItem, RestaurantTable, SaleRecord, OrderItem, NavId } from "@/lib/types";
+import type { InventoryItem, MenuCategoryRecord, MenuItem, RestaurantTable, SaleRecord, OrderItem, NavId } from "@/lib/types";
 
 function LoadingShell() {
   return (
@@ -49,11 +53,13 @@ export function DashboardShell() {
   const [activeTab, setActiveTab] = useState<NavId>("map");
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [categories, setCategories] = useState<MenuCategoryRecord[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const reloadTables = useCallback(async () => {
     const { data, error: err } = await fetchTables();
@@ -63,6 +69,11 @@ export function DashboardShell() {
   const reloadMenu = useCallback(async () => {
     const { data, error: err } = await fetchMenuItems();
     if (!err) setMenuItems(mapMenuItemsResponse(data));
+  }, []);
+
+  const reloadCategories = useCallback(async () => {
+    const { data, error: err } = await fetchCategories();
+    if (!err) setCategories(mapCategoriesResponse(data));
   }, []);
 
   const reloadOrderItems = useCallback(async () => {
@@ -89,9 +100,10 @@ export function DashboardShell() {
   useEffect(() => {
     async function init() {
       setLoading(true);
-      const [t, m, o, s, i] = await Promise.all([
+      const [t, m, c, o, s, i] = await Promise.all([
         fetchTables(),
         fetchMenuItems(),
+        fetchCategories(),
         supabase.from("order_items").select("*").order("created_at"),
         fetchSales((() => {
           const since = new Date();
@@ -105,6 +117,7 @@ export function DashboardShell() {
       if (m.error) { setError(m.error.message); setLoading(false); return; }
       setTables(mapTablesResponse(t.data));
       setMenuItems(mapMenuItemsResponse(m.data));
+      if (!c.error) setCategories(mapCategoriesResponse(c.data));
       if (!o.error) {
         setOrderItems((o.data as SupabaseOrderItemRow[] | null)?.map(mapOrderItemRow) ?? []);
       }
@@ -121,10 +134,14 @@ export function DashboardShell() {
       subscribeToTableChanges(() => void reloadTables()),
       subscribeToOrderItemChanges(() => void reloadOrderItems()),
       subscribeToMenuChanges(() => void reloadMenu()),
+      subscribeToCategoryChanges(() => {
+        void reloadCategories();
+        void reloadMenu();
+      }),
       subscribeToInventoryChanges(() => void reloadInventory()),
     ];
     return () => unsubs.forEach((u) => u());
-  }, [loading, error, reloadTables, reloadOrderItems, reloadMenu]);
+  }, [loading, error, reloadTables, reloadOrderItems, reloadMenu, reloadCategories, reloadInventory]);
 
   useEffect(() => {
     if (!currentStaffUser) return;
@@ -136,13 +153,15 @@ export function DashboardShell() {
   const refreshPosData = useCallback(() => {
     void reloadTables();
     void reloadMenu();
+    void reloadCategories();
     void reloadOrderItems();
-  }, [reloadTables, reloadMenu, reloadOrderItems]);
+  }, [reloadTables, reloadMenu, reloadCategories, reloadOrderItems]);
 
   const tableOrder = useTableOrderWorkflow({
     tables,
     setTables,
     menuItems,
+    categories,
     orderItems,
     onRefresh: refreshPosData,
   });
@@ -195,9 +214,11 @@ export function DashboardShell() {
           <StorageView
             inventory={inventory}
             menuItems={menuItems}
+            categories={categories}
             onRefresh={() => {
               void reloadInventory();
               void reloadMenu();
+              void reloadCategories();
             }}
           />
         );
@@ -211,10 +232,28 @@ export function DashboardShell() {
   })();
 
   return (
-    <div className="flex h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+    <div className="flex h-[100dvh] bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <ReadyNotificationListener tables={tables} menuItems={menuItems} />
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+      <Sidebar
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        mobileOpen={sidebarOpen}
+        onMobileClose={() => setSidebarOpen(false)}
+      />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-4 py-3 lg:hidden dark:border-gray-800 dark:bg-gray-900">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="touch-target flex items-center justify-center rounded-lg border border-gray-200 text-gray-700 dark:border-gray-700 dark:text-gray-200"
+            aria-label="Open menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <span className="truncate text-sm font-semibold capitalize text-gray-900 dark:text-gray-100">
+            {activeTab}
+          </span>
+        </div>
         <main className="flex-1 overflow-hidden">{content}</main>
       </div>
       {tableOrder.tableOrderModals}

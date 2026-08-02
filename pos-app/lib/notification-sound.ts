@@ -31,6 +31,30 @@ export function playNewOrderBell() {
   window.setTimeout(() => playBellTone([880, 1320, 1760], 0.55), 220);
 }
 
+const DEFAULT_SOUND_URL = "/sounds/default-bell.mp3";
+
+export function playCustomAlertSound(
+  url: string,
+  variant: "ready" | "newOrder" = "ready",
+) {
+  if (!url || url === DEFAULT_SOUND_URL || url.endsWith(DEFAULT_SOUND_URL)) {
+    if (variant === "newOrder") playNewOrderBell();
+    else playReadyBell();
+    return;
+  }
+
+  const audio = new Audio(url);
+  audio.volume = 0.85;
+  void audio.play().catch(() => {
+    if (variant === "newOrder") playNewOrderBell();
+    else playReadyBell();
+  });
+}
+
+export function playTestAlertSound(url: string) {
+  playCustomAlertSound(url, "newOrder");
+}
+
 function playBellTone(frequencies: number[], durationSec: number) {
   const ctx = getAudioContext();
   if (!ctx) return;

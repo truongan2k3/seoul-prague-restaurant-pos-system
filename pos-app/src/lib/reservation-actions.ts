@@ -245,8 +245,9 @@ export function subscribeToReservationChanges(handlers: ReservationChangeHandler
   const normalized: ReservationChangeHandlers =
     typeof handlers === "function" ? { onChange: handlers } : handlers;
 
+  const channelName = `reservations-realtime-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const channel = supabase
-    .channel("reservations-realtime")
+    .channel(channelName)
     .on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "reservations" },

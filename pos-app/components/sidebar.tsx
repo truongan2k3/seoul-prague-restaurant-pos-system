@@ -13,10 +13,11 @@ import {
   Sun,
   User,
   Users,
+  X,
 } from "lucide-react";
 import { LanguageSelector } from "@/components/language-selector";
 import { useApp } from "@/contexts/app-context";
-import { canManageStaff } from "@/lib/staff-roles";
+import { usePendingReservationCount } from "@/hooks/use-pending-reservation-count";
 import { navButtonClass } from "@/lib/theme-classes";
 import type { NavId } from "@/lib/types";
 
@@ -34,11 +35,14 @@ export const navItems = [
 interface SidebarProps {
   activeTab: NavId;
   onTabChange: (tab: NavId) => void;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
-export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
+export function Sidebar({ activeTab, onTabChange, mobileOpen = false, onMobileClose }: SidebarProps) {
   const { theme, setTheme, currentStaffUser, setStaff, staffList, translate, canManageStaff } =
     useApp();
+  const pendingReservationCount = usePendingReservationCount();
 
   const visibleNavItems = navItems.filter(
     (item) => !("adminOnly" in item && item.adminOnly) || canManageStaff,
@@ -46,26 +50,48 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
 
   const activeStaffOptions = staffList.filter((member) => member.active);
 
-  return (
+  const handleTabChange = (tab: NavId) => {
+    onTabChange(tab);
+    onMobileClose?.();
+  };
+
+  const panel = (
     <aside className="flex h-full w-64 shrink-0 flex-col border-r border-gray-200 bg-white text-gray-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
-      <div className="border-b border-gray-200 px-4 py-4 dark:border-zinc-800">
-        <p className="text-xs font-semibold uppercase tracking-widest text-gray-500 dark:text-zinc-500">
-          Windows POS
-        </p>
-        <p className="mt-1 text-sm font-medium text-gray-800 dark:text-zinc-200">Cashier & Floor</p>
+      <div className="flex items-center justify-between border-b border-gray-200 px-4 py-4 dark:border-zinc-800 lg:block">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-gray-500 dark:text-zinc-500">
+            Windows POS
+          </p>
+          <p className="mt-1 text-sm font-medium text-gray-800 dark:text-zinc-200">Cashier & Floor</p>
+        </div>
+        {onMobileClose && (
+          <button
+            type="button"
+            onClick={onMobileClose}
+            className="touch-target flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 lg:hidden dark:hover:bg-zinc-800"
+            aria-label="Close menu"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
-      <nav className="flex-1 px-3 py-4">
+      <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="space-y-1">
           {visibleNavItems.map(({ id, labelKey, icon: Icon }) => (
             <li key={id}>
               <button
                 type="button"
-                onClick={() => onTabChange(id)}
-                className={navButtonClass(activeTab === id)}
+                onClick={() => handleTabChange(id)}
+                className={`${navButtonClass(activeTab === id)} relative min-h-[44px]`}
               >
                 <Icon className="h-5 w-5 shrink-0" />
-                {translate(labelKey)}
+                <span className="flex-1 text-left">{translate(labelKey)}</span>
+                {id === "reservations" && pendingReservationCount > 0 && (
+                  <span className="min-w-[1.25rem] rounded-full bg-red-500 px-2 py-0.5 text-center text-xs font-bold text-white">
+                    {pendingReservationCount > 99 ? "99+" : pendingReservationCount}
+                  </span>
+                )}
               </button>
             </li>
           ))}
@@ -84,7 +110,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         <button
           type="button"
           onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-          className="flex w-full items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+          className="flex min-h-[44px] w-full items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
         >
           {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
           {theme === "light" ? translate("darkMode") : translate("lightMode")}
@@ -100,7 +126,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
               const member = staffList.find((s) => s.id === e.target.value);
               if (member) setStaff(member);
             }}
-            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+            className="min-h-[44px] w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
           >
             {activeStaffOptions.map((s) => (
               <option key={s.id} value={s.id}>
@@ -125,5 +151,23 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         </div>
       </div>
     </aside>
+  );
+
+  return (
+    <>
+      <div className="hidden h-full shrink-0 lg:flex">{panel}</div>
+
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button
+            type="button"
+            aria-label="Close menu overlay"
+            onClick={onMobileClose}
+            className="absolute inset-0 bg-black/50"
+          />
+          <div className="relative z-10 h-full w-[min(100%,16rem)] shadow-2xl">{panel}</div>
+        </div>
+      )}
+    </>
   );
 }

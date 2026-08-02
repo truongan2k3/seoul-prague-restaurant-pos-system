@@ -9,7 +9,7 @@ interface ModalProps {
   title: string;
   children: ReactNode;
   footer?: ReactNode;
-  size?: "default" | "lg" | "xl";
+  size?: "default" | "md" | "lg" | "xl";
   bodyClassName?: string;
   scrollBody?: boolean;
 }
@@ -44,7 +44,7 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
@@ -56,8 +56,14 @@ export function Modal({
         className="absolute inset-0 bg-black/60"
       />
       <div
-        className={`relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800 ${
-          size === "xl" ? "max-w-4xl" : size === "lg" ? "max-w-2xl" : "max-w-lg"
+        className={`relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800 sm:max-h-[92vh] sm:rounded-xl ${
+          size === "xl"
+            ? "sm:max-w-4xl"
+            : size === "lg"
+              ? "sm:max-w-2xl"
+              : size === "md"
+                ? "sm:max-w-md"
+                : "sm:max-w-lg"
         }`}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">

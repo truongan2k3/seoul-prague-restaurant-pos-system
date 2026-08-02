@@ -5,13 +5,13 @@ import { Clock, Mail, MapPin, Phone, UtensilsCrossed } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { createOnlineReservation } from "@/src/lib/reservation-actions";
 
-const RESTAURANT_NAME = "SEOUL PRAGUE 镇堂子火锅";
+const RESTAURANT_NAME = "SEOUL PRAGUE Korean BBQ";
 const ADDRESS = "Václavské nám. 819/43, 110 00 Praha";
 const MAPS_URL = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ADDRESS)}`;
-const PHONE = "+420 222 240 429";
-const EMAIL = "info@jincheng.cz";
-const PHONE_HREF = "tel:+420222240429";
-const EMAIL_HREF = "mailto:info@jincheng.cz";
+const PHONE = "+420 123 456 789";
+const EMAIL = "info@seoulprague.cz";
+const PHONE_HREF = "tel:+420123456789";
+const EMAIL_HREF = "mailto:info@seoulprague.cz";
 
 function buildTimeSlots(): string[] {
   const slots: string[] = [];
@@ -97,7 +97,7 @@ export function ReservationBookingView() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-zinc-950 via-zinc-900 to-zinc-950 text-zinc-100">
-      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 p-4 lg:grid-cols-3">
+      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 px-4 py-6 md:py-10 lg:grid-cols-3">
         <aside className="space-y-4 lg:col-span-1">
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-6 shadow-xl">
             <div className="mb-4 inline-flex rounded-full bg-red-600/20 p-3 text-red-400">
@@ -105,7 +105,9 @@ export function ReservationBookingView() {
             </div>
             <h1 className="text-2xl font-bold leading-tight text-white">{RESTAURANT_NAME}</h1>
             <p className="mt-2 text-sm text-zinc-400">
-              Authentic hotpot dining in the heart of Prague.
+              Wanna try some authentic Korean vibes?
+              <br />
+              Book your table now!
             </p>
           </div>
 

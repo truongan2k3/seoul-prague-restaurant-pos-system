@@ -11,7 +11,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { playNewOrderBell, playReadyBell, unlockNotificationAudio } from "@/lib/notification-sound";
+import { playCustomAlertSound, unlockNotificationAudio } from "@/lib/notification-sound";
+import { useSettings } from "@/contexts/settings-context";
 
 const TOAST_DURATION_MS = 10_000;
 const MAX_HISTORY = 100;
@@ -171,6 +172,7 @@ function NotificationDrawer({
 }
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
+  const { settings } = useSettings();
   const [history, setHistory] = useState<SessionNotification[]>([]);
   const [toasts, setToasts] = useState<ActiveToast[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -217,12 +219,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       );
 
       if (playSound === "newOrder") {
-        playNewOrderBell();
+        playCustomAlertSound(settings.customAlertSoundUrl, "newOrder");
       } else if (playSound !== false) {
-        playReadyBell();
+        playCustomAlertSound(settings.customAlertSoundUrl, "ready");
       }
     },
-    [dismissToast],
+    [dismissToast, settings.customAlertSoundUrl],
   );
 
   const pushToast = useCallback(

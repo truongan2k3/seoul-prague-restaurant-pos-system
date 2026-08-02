@@ -77,7 +77,7 @@ function TicketCard({
 
   return (
     <article
-      className={`mb-5 break-inside-avoid rounded-2xl border-4 bg-white p-5 shadow-xl dark:bg-gray-900 ${
+      className={`flex h-full min-h-[360px] max-h-[70vh] flex-col rounded-2xl border-4 bg-white p-4 shadow-xl sm:p-5 dark:bg-gray-900 ${
         hasLate
           ? "border-red-500 ring-2 ring-red-500/30"
           : ticketHasOpenKitchenWork(ticket.items)
@@ -85,12 +85,12 @@ function TicketCard({
             : "border-emerald-500 ring-2 ring-emerald-500/20 opacity-90"
       }`}
     >
-      <header className="flex items-start justify-between gap-4 border-b-2 border-gray-200 pb-4 dark:border-gray-700">
+      <header className="flex shrink-0 items-start justify-between gap-4 border-b-2 border-gray-200 pb-3 dark:border-gray-700 sm:pb-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-500 dark:text-gray-400">
             {translate("table")}
           </p>
-          <p className="text-4xl font-black leading-none tracking-tight text-gray-950 dark:text-gray-100">
+          <p className="text-3xl font-black leading-none tracking-tight text-gray-950 sm:text-4xl dark:text-gray-100">
             {ticket.table.label}
           </p>
         </div>
@@ -99,8 +99,9 @@ function TicketCard({
         </div>
       </header>
 
-      <div className="mt-4">
-        <OrderItemChecklist
+      <div className="mt-3 min-h-0 flex-1 overflow-y-auto sm:mt-4">
+        <div className="max-h-60 overflow-y-auto pr-1">
+          <OrderItemChecklist
           items={ticket.items}
           menuItems={menuItems}
           language={language}
@@ -111,9 +112,10 @@ function TicketCard({
           onToggleAll={() => onToggleAll(ticket.table.id, ticket.items)}
           variant="kitchen"
         />
+        </div>
       </div>
 
-      <footer className="mt-4 border-t-2 border-gray-100 pt-4 dark:border-gray-800">
+      <footer className="mt-3 shrink-0 border-t-2 border-gray-100 pt-3 dark:border-gray-800 sm:mt-4 sm:pt-4">
         <TicketActionBar
           translate={translate}
           disabled={busy || ticket.items.length === 0}
@@ -331,7 +333,7 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
             {translate("noOrders")}
           </div>
         ) : (
-          <div className="mx-auto max-w-[1800px] columns-1 gap-5 sm:columns-2 lg:columns-3 2xl:columns-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {tickets.map((ticket) => (
               <TicketCard
                 key={ticket.table.id}

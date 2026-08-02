@@ -4,6 +4,7 @@ import { AppProvider, useApp } from "@/contexts/app-context";
 import { PinGateProvider } from "@/contexts/pin-gate-context";
 import { ReceiptPrintProvider } from "@/contexts/receipt-print-context";
 import { NotificationProvider } from "@/contexts/notification-context";
+import { SettingsProvider } from "@/contexts/settings-context";
 import { ManagerPinModal } from "@/components/manager-pin-modal";
 
 function PinGateWrapper({ children }: { children: React.ReactNode }) {
@@ -19,11 +20,13 @@ function PinGateWrapper({ children }: { children: React.ReactNode }) {
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <AppProvider>
-      <NotificationProvider>
-        <ReceiptPrintProvider>
-          <PinGateWrapper>{children}</PinGateWrapper>
-        </ReceiptPrintProvider>
-      </NotificationProvider>
+      <SettingsProvider>
+        <NotificationProvider>
+          <ReceiptPrintProvider>
+            <PinGateWrapper>{children}</PinGateWrapper>
+          </ReceiptPrintProvider>
+        </NotificationProvider>
+      </SettingsProvider>
     </AppProvider>
   );
 }

@@ -11,6 +11,21 @@ export type LanguageCode = "en" | "cs" | "zh";
 export type ThemeMode = "light" | "dark";
 export type NavId = "map" | "order" | "reservations" | "history" | "summary" | "storage" | "staff" | "settings";
 
+export interface AppSettings {
+  printerIp: string;
+  printerPort: string;
+  autoPrintOnPayment: boolean;
+  receiptHeaderTitle: string;
+  receiptLegalName: string;
+  receiptAddress: string;
+  receiptCompanyAddress: string;
+  receiptIco: string;
+  receiptDic: string;
+  receiptPhone: string;
+  receiptFooterNote: string;
+  customAlertSoundUrl: string;
+}
+
 export type StaffRole = "admin" | "manager" | "server" | "kitchen" | "bar";
 
 export interface OrderItem {
@@ -42,6 +57,13 @@ export interface RestaurantTable {
   orders?: OrderItem[];
 }
 
+export interface MenuCategoryRecord {
+  id: string;
+  name: string;
+  type: "dish" | "drink";
+  displayOrder: number;
+}
+
 export interface MenuItem {
   id: string;
   nameEn: string;
@@ -51,6 +73,7 @@ export interface MenuItem {
   descriptionCz?: string;
   descriptionZh?: string;
   category: MenuCategory | string;
+  categoryId?: string | null;
   price: number;
   imageUrl?: string;
   isAvailable: boolean;

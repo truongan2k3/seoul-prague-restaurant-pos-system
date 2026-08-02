@@ -11,6 +11,7 @@ export type MenuItemInput = {
   descriptionCz?: string;
   descriptionZh?: string;
   category: MenuCategory | string;
+  categoryId?: string | null;
   price: number;
   imageUrl?: string;
   isAvailable: boolean;
@@ -19,13 +20,14 @@ export type MenuItemInput = {
   itemType?: MenuItem["itemType"];
 };
 
-function deriveRouting(category: string) {
-  const itemType = deriveItemType(category);
-  return { station: resolveStation(category, itemType), itemType };
+function deriveRouting(category: string, itemType?: MenuItem["itemType"]) {
+  const resolvedType = itemType ?? deriveItemType(category);
+  return { station: resolveStation(category, resolvedType), itemType: resolvedType };
 }
 
 function toDbRow(input: MenuItemInput) {
-  const routing = deriveRouting(input.category);
+  const routing = deriveRouting(input.category, input.itemType);
+  const displayOrder = input.sortOrder ?? 0;
   return {
     name_en: input.nameEn.trim(),
     name_cz: input.nameCz.trim() || null,
@@ -35,12 +37,14 @@ function toDbRow(input: MenuItemInput) {
     description_zh: input.descriptionZh?.trim() || null,
     name: input.nameEn.trim(),
     category: input.category,
+    category_id: input.categoryId ?? null,
     price: input.price,
     station: input.station ?? routing.station,
     item_type: input.itemType ?? routing.itemType,
     is_available: input.isAvailable,
     sold_out: !input.isAvailable,
-    sort_order: input.sortOrder ?? 0,
+    sort_order: displayOrder,
+    display_order: displayOrder,
     image_url: input.imageUrl?.trim() || null,
     description: input.descriptionEn?.trim() || null,
   };
@@ -68,7 +72,10 @@ export async function deleteMenuItem(id: string) {
 export async function updateMenuSortOrders(items: { id: string; sortOrder: number }[]) {
   const results = await Promise.all(
     items.map(({ id, sortOrder }) =>
-      supabase.from("menu_items").update({ sort_order: sortOrder }).eq("id", id),
+      supabase
+        .from("menu_items")
+        .update({ display_order: sortOrder, sort_order: sortOrder })
+        .eq("id", id),
     ),
   );
   const error = results.find((r) => r.error)?.error ?? null;
@@ -83,6 +90,7 @@ export const emptyMenuItemInput: MenuItemInput = {
   descriptionCz: "",
   descriptionZh: "",
   category: DEFAULT_MENU_CATEGORY,
+  categoryId: null,
   price: 0,
   imageUrl: "",
   isAvailable: true,

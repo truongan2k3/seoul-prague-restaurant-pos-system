@@ -176,7 +176,7 @@ export function TicketActionBar({
           type="button"
           disabled={disabled}
           onClick={onDone}
-          className="min-h-[44px] flex-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold uppercase tracking-wide text-white disabled:opacity-40"
+          className="min-h-[48px] flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-base font-bold uppercase tracking-wide text-white disabled:opacity-40"
         >
           {translate(variant === "floor" ? "markDone" : "done")}
         </button>
@@ -186,7 +186,7 @@ export function TicketActionBar({
           type="button"
           disabled={disabled}
           onClick={onLate}
-          className="min-h-[44px] flex-1 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-bold uppercase tracking-wide text-amber-950 disabled:opacity-40"
+          className="min-h-[48px] flex-1 rounded-xl bg-amber-500 px-4 py-3 text-base font-bold uppercase tracking-wide text-amber-950 disabled:opacity-40"
         >
           {translate("delay")}
         </button>

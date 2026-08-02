@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/modal";
-import { DEFAULT_MENU_CATEGORY, MENU_CATEGORIES } from "@/lib/menu-categories";
+import { DEFAULT_MENU_CATEGORY } from "@/lib/menu-categories";
 import { resolveStation } from "@/lib/order-routing";
 import { segmentButtonClass } from "@/lib/theme-classes";
-import type { MenuItem } from "@/lib/types";
+import type { MenuCategoryRecord, MenuItem } from "@/lib/types";
 import { emptyMenuItemInput, type MenuItemInput } from "@/src/lib/menu-actions";
 
 type LocaleTab = "en" | "cz" | "zh";
@@ -19,6 +19,7 @@ const localeTabs: { id: LocaleTab; label: string }[] = [
 interface MenuItemFormModalProps {
   open: boolean;
   item?: MenuItem | null;
+  categories: MenuCategoryRecord[];
   onClose: () => void;
   onSave: (input: MenuItemInput) => Promise<void>;
   isSaving?: boolean;
@@ -27,6 +28,7 @@ interface MenuItemFormModalProps {
 export function MenuItemFormModal({
   open,
   item,
+  categories,
   onClose,
   onSave,
   isSaving = false,
@@ -48,6 +50,7 @@ export function MenuItemFormModal({
         descriptionCz: item.descriptionCz ?? "",
         descriptionZh: item.descriptionZh ?? "",
         category: item.category,
+        categoryId: item.categoryId ?? null,
         price: item.price,
         imageUrl: item.imageUrl ?? "",
         isAvailable: item.isAvailable,
@@ -56,9 +59,15 @@ export function MenuItemFormModal({
         itemType: item.itemType,
       });
     } else {
-      setForm(emptyMenuItemInput);
+      const defaultCategory = categories[0];
+      setForm({
+        ...emptyMenuItemInput,
+        category: defaultCategory?.name ?? DEFAULT_MENU_CATEGORY,
+        categoryId: defaultCategory?.id ?? null,
+        itemType: defaultCategory?.type === "drink" ? "drink" : "food",
+      });
     }
-  }, [open, item]);
+  }, [open, item, categories]);
 
   const handleSubmit = async () => {
     if (!form.nameEn.trim()) {
@@ -78,7 +87,12 @@ export function MenuItemFormModal({
     await onSave(form);
   };
 
-  const stationPreview = resolveStation(form.category);
+  const selectedCategoryId =
+    form.categoryId ??
+    categories.find((category) => category.name === form.category)?.id ??
+    null;
+
+  const stationPreview = resolveStation(form.category, form.itemType);
 
   const nameKey = activeTab === "en" ? "nameEn" : activeTab === "cz" ? "nameCz" : "nameZh";
   const descriptionKey =
@@ -135,7 +149,7 @@ export function MenuItemFormModal({
           <input
             value={form[nameKey]}
             onChange={(e) => setForm((f) => ({ ...f, [nameKey]: e.target.value }))}
-                        className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100"
+            className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100"
           />
         </label>
 
@@ -161,20 +175,28 @@ export function MenuItemFormModal({
             <label className="block">
               <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Category</span>
               <select
-                value={form.category}
-                onChange={(e) =>
+                value={selectedCategoryId ?? ""}
+                onChange={(e) => {
+                  const category = categories.find((entry) => entry.id === e.target.value);
+                  if (!category) return;
                   setForm((f) => ({
                     ...f,
-                    category: e.target.value || DEFAULT_MENU_CATEGORY,
-                  }))
-                }
-                            className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100"
+                    categoryId: category.id,
+                    category: category.name,
+                    itemType: category.type === "drink" ? "drink" : "food",
+                  }));
+                }}
+                className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100"
               >
-                {MENU_CATEGORIES.map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
+                {categories.length === 0 ? (
+                  <option value="">{DEFAULT_MENU_CATEGORY}</option>
+                ) : (
+                  categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))
+                )}
               </select>
             </label>
 
@@ -186,7 +208,7 @@ export function MenuItemFormModal({
                 step={1}
                 value={form.price}
                 onChange={(e) => setForm((f) => ({ ...f, price: Number(e.target.value) }))}
-                            className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100"
+                className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100"
               />
             </label>
 
@@ -197,7 +219,7 @@ export function MenuItemFormModal({
                 value={form.imageUrl ?? ""}
                 onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
                 placeholder="https://..."
-                            className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100"
+                className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100"
               />
             </label>
 

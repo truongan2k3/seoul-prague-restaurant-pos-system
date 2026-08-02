@@ -7,10 +7,11 @@ import { PaymentModal } from "@/components/payment-modal";
 import type { CheckoutSubmitPayload } from "@/components/checkout-panel";
 import { useApp } from "@/contexts/app-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
+import { useSettings } from "@/contexts/settings-context";
 import { ordersFromLines } from "@/lib/checkout-calculations";
 import { filterItemsForBoard } from "@/lib/order-board";
 import { sendCfdEvent } from "@/lib/cfd-display";
-import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
+import type { MenuCategoryRecord, MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
 import {
   appendOrdersToTable,
   checkoutTable,
@@ -45,6 +46,7 @@ interface UseTableOrderWorkflowOptions {
   tables: RestaurantTable[];
   setTables: React.Dispatch<React.SetStateAction<RestaurantTable[]>>;
   menuItems: MenuItem[];
+  categories: MenuCategoryRecord[];
   orderItems: OrderItem[];
   onRefresh: () => void;
 }
@@ -53,10 +55,12 @@ export function useTableOrderWorkflow({
   tables,
   setTables,
   menuItems,
+  categories,
   orderItems,
   onRefresh,
 }: UseTableOrderWorkflowOptions) {
   const { staff, logAction } = useApp();
+  const { settings } = useSettings();
   const { printReceipt } = useReceiptPrint();
   const [modal, setModal] = useState<TableOrderModalState>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -193,13 +197,15 @@ export function useTableOrderWorkflow({
       `Table ${selectedTable.label} · ${payload.payment.paymentMethod} · ${payload.payment.amountDueNow.toFixed(2)} Kč`,
     );
 
-    printReceipt({
-      tableLabel: selectedTable.label,
-      staffName: staff?.name,
-      orders: payload.paidOrders,
-      payment: payload.payment,
-      menuItems,
-    });
+    if (settings.autoPrintOnPayment) {
+      printReceipt({
+        tableLabel: selectedTable.label,
+        staffName: staff?.name,
+        orders: payload.paidOrders,
+        payment: payload.payment,
+        menuItems,
+      });
+    }
 
     void sendCfdEvent("PAYMENT_SUCCESS", { tableNumber: selectedTable.label });
 
@@ -290,6 +296,7 @@ export function useTableOrderWorkflow({
           open
           tableLabel={selectedTable.label}
           menuItems={menuItems}
+          categories={categories}
           mode={modal.mode}
           onClose={() => setModal(null)}
           onSendToKitchen={handleSendToKitchen}

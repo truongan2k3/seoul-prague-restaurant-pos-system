@@ -55,6 +55,11 @@ export function playTestAlertSound(url: string) {
   playCustomAlertSound(url, "newOrder");
 }
 
+/** Ascending success chime for approved card payments. */
+export function playPaymentSuccessSound() {
+  playBellTone([523, 659, 784, 1047], 0.65);
+}
+
 function playBellTone(frequencies: number[], durationSec: number) {
   const ctx = getAudioContext();
   if (!ctx) return;

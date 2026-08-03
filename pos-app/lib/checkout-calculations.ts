@@ -24,6 +24,9 @@ export interface CheckoutPaymentRecord {
   tipFromChange?: number;
   splitMode: SplitMode;
   splitCount: number;
+  cardAuthCode?: string;
+  cardLast4?: string;
+  cardBrand?: string;
 }
 
 export function lineTotal(line: OrderItem) {
@@ -60,6 +63,7 @@ export function buildCheckoutTotals(input: {
   splitCount: number;
   selectedLineIds?: string[];
   allLines?: CheckoutLine[];
+  enablePriceRounding?: boolean;
 }) {
   const payableLines =
     input.splitMode === "items" && input.allLines && input.selectedLineIds
@@ -76,13 +80,16 @@ export function buildCheckoutTotals(input: {
     amountDueNow = grandTotal / input.splitCount;
   }
 
+  const round = (value: number) =>
+    input.enablePriceRounding ? Math.round(value) : value;
+
   return {
     payableLines,
-    subtotal,
-    discountAmount,
-    afterDiscount,
-    grandTotal,
-    amountDueNow,
+    subtotal: round(subtotal),
+    discountAmount: round(discountAmount),
+    afterDiscount: round(afterDiscount),
+    grandTotal: round(grandTotal),
+    amountDueNow: round(amountDueNow),
   };
 }
 

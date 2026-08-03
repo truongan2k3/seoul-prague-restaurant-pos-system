@@ -2,6 +2,7 @@
 
 import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
+import { formatEurFromCzk } from "@/lib/currency";
 import {
   formatReceiptAmount,
   formatReceiptDate,
@@ -92,6 +93,30 @@ function paymentMethodLabel(method: ReceiptData["paymentMethod"]): string {
   return method === "cash" ? "hotovost" : "debetní karta";
 }
 
+function formatCardMask(last4: string): string {
+  return `**** **** **** ${last4}`;
+}
+
+function CardPaymentReceiptSection({ data }: { data: ReceiptData }) {
+  if (data.paymentMethod !== "card" || !data.cardLast4) return null;
+
+  return (
+    <>
+      <p className="receipt-dash">{DASH_LINE}</p>
+      <section className="receipt-card-payment">
+        <p className="receipt-center receipt-card-payment-title">PLATBA KARTOU / CARD PAYMENT</p>
+        <p className="receipt-center">
+          Karta: {data.cardBrand ?? "Card"} ({formatCardMask(data.cardLast4)})
+        </p>
+        {data.cardAuthCode && (
+          <p className="receipt-center">Auth Code: {data.cardAuthCode}</p>
+        )}
+        <p className="receipt-center">Trans. Status: SCHVÁLENO / APPROVED</p>
+      </section>
+    </>
+  );
+}
+
 export function ReceiptBodyContent({
   data,
   template,
@@ -163,6 +188,11 @@ export function ReceiptBodyContent({
           <span>CELKEM</span>
           <span className="receipt-total-value">{formatReceiptAmount(data.grandTotal)} CZK</span>
         </div>
+        {data.showEur && (
+          <p className="receipt-center">
+            ≈ {formatEurFromCzk(data.grandTotal, data.eurRate)}
+          </p>
+        )}
         <p className="receipt-payment-line">{paymentMethodLabel(data.paymentMethod)}</p>
         {data.paymentMethod === "cash" && data.amountGiven != null && (
           <>
@@ -177,6 +207,8 @@ export function ReceiptBodyContent({
           </>
         )}
       </section>
+
+      <CardPaymentReceiptSection data={data} />
 
       <p className="receipt-dash">{DASH_LINE}</p>
 
@@ -219,66 +251,6 @@ function ReceiptPrintGlobalStyles() {
         opacity: 0;
         pointer-events: none;
         z-index: -1;
-      }
-
-      @media print {
-        @page {
-          size: 80mm auto;
-          margin: 0mm !important;
-        }
-        html,
-        body {
-          width: 80mm !important;
-          margin: 0 !important;
-          padding: 0 !important;
-          background: #ffffff !important;
-        }
-        body > *:not(#print-portal) {
-          display: none !important;
-        }
-        #print-portal {
-          display: block !important;
-          position: static !important;
-          left: auto !important;
-          top: auto !important;
-          width: 78mm !important;
-          max-width: 78mm !important;
-          margin: 0 auto !important;
-          padding: 4mm !important;
-          box-sizing: border-box !important;
-          opacity: 1 !important;
-          pointer-events: none !important;
-        }
-        #print-portal .receipt-sheet {
-          width: 100% !important;
-          max-width: 100% !important;
-          margin: 0 !important;
-          padding: 0 !important;
-          box-sizing: border-box !important;
-          font-family: "Courier New", Courier, monospace !important;
-          font-size: 12px !important;
-          line-height: 1.2 !important;
-          color: #000 !important;
-          background: #fff !important;
-        }
-        #print-portal .receipt-vat-grid {
-          display: table !important;
-          width: 100% !important;
-          table-layout: fixed !important;
-        }
-        #print-portal .receipt-vat-grid thead {
-          display: table-header-group !important;
-        }
-        #print-portal .receipt-vat-grid tbody {
-          display: table-row-group !important;
-        }
-        #print-portal .receipt-vat-grid tr {
-          display: table-row !important;
-        }
-        #print-portal .receipt-vat-grid th,
-        #print-portal .receipt-vat-grid td {
-          display: table-cell !important;
-        }
       }
     `}</style>
   );

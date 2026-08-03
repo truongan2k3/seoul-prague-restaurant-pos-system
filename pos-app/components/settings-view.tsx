@@ -10,55 +10,91 @@ import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { useSettings } from "@/contexts/settings-context";
 import { playTestAlertSound } from "@/lib/notification-sound";
 import {
-  pickPrinterBillDraft,
-  type PrinterBillSettingsDraft,
+  pickSettingsPageDraft,
+  type SettingsPageDraft,
 } from "@/src/lib/settings-actions";
-import { Monitor, Save, Tablet, Tv } from "lucide-react";
+import { WEEKDAY_KEYS } from "@/lib/reservation-slots";
+import { RECEIPT_FONT_OPTIONS } from "@/lib/receipt-print-styles";
+import type { TranslationKey } from "@/lib/i18n/translations";
+import type { ReceiptFontFamily, WeekdayKey } from "@/lib/types";
+import { testTerminalConnection } from "@/src/lib/terminalApi";
+import { Monitor, Save, Tablet, Tv, CreditCard } from "lucide-react";
+
+const RECEIPT_FONT_LABEL_KEYS: Record<ReceiptFontFamily, TranslationKey> = {
+  consolas: "settingsReceiptFontConsolas",
+  courier: "settingsReceiptFontCourier",
+  arial: "settingsReceiptFontArial",
+  tahoma: "settingsReceiptFontTahoma",
+  lucida: "settingsReceiptFontLucida",
+  georgia: "settingsReceiptFontGeorgia",
+};
 
 export function SettingsView() {
   const {
     translate,
     theme,
     setTheme,
-    receiptShowEur,
     receiptShowUsd,
-    eurRate,
     usdRate,
-    setReceiptShowEur,
     setReceiptShowUsd,
-    setEurRate,
     setUsdRate,
     soundMainEnabled,
     soundKitchenEnabled,
     setSoundMainEnabled,
     setSoundKitchenEnabled,
   } = useApp();
-  const { settings, saving, error: settingsError, savePrinterBillSettings, uploadAlertSound } =
+  const { settings, saving, error: settingsError, saveSettingsPageDraft, uploadAlertSound } =
     useSettings();
   const { pushNotification } = useNotifications();
   const { printTestReceipt } = useReceiptPrint();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioPreviewRef = useRef<HTMLAudioElement>(null);
 
-  const [draft, setDraft] = useState<PrinterBillSettingsDraft>(() => pickPrinterBillDraft(settings));
+  const [draft, setDraft] = useState<SettingsPageDraft>(() => pickSettingsPageDraft(settings));
   const [dirty, setDirty] = useState(false);
+  const [terminalTestMessage, setTerminalTestMessage] = useState<string | null>(null);
+  const [terminalTesting, setTerminalTesting] = useState(false);
+
+  const weekdayLabels: Record<WeekdayKey, string> = {
+    monday: translate("settingsDayMonday"),
+    tuesday: translate("settingsDayTuesday"),
+    wednesday: translate("settingsDayWednesday"),
+    thursday: translate("settingsDayThursday"),
+    friday: translate("settingsDayFriday"),
+    saturday: translate("settingsDaySaturday"),
+    sunday: translate("settingsDaySunday"),
+  };
 
   useEffect(() => {
     if (!dirty) {
-      setDraft(pickPrinterBillDraft(settings));
+      setDraft(pickSettingsPageDraft(settings));
     }
   }, [settings, dirty]);
 
-  const updateDraft = <K extends keyof PrinterBillSettingsDraft>(
+  const updateDraft = <K extends keyof SettingsPageDraft>(
     key: K,
-    value: PrinterBillSettingsDraft[K],
+    value: SettingsPageDraft[K],
   ) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
     setDirty(true);
   };
 
-  const handleSavePrinterBill = async () => {
-    const ok = await savePrinterBillSettings(draft);
+  const updateOperatingHours = (
+    day: WeekdayKey,
+    patch: Partial<SettingsPageDraft["reservationOperatingHours"][WeekdayKey]>,
+  ) => {
+    setDraft((prev) => ({
+      ...prev,
+      reservationOperatingHours: {
+        ...prev.reservationOperatingHours,
+        [day]: { ...prev.reservationOperatingHours[day], ...patch },
+      },
+    }));
+    setDirty(true);
+  };
+
+  const handleSaveSettings = async () => {
+    const ok = await saveSettingsPageDraft(draft);
     if (ok) {
       setDirty(false);
       pushNotification({
@@ -74,6 +110,20 @@ export function SettingsView() {
     if (!file) return;
     await uploadAlertSound(file);
     event.target.value = "";
+  };
+
+  const handleTestTerminal = async () => {
+    setTerminalTesting(true);
+    setTerminalTestMessage(null);
+    const result = await testTerminalConnection({
+      terminalType: draft.terminalType,
+      terminalIp: draft.terminalIp,
+      terminalPort: draft.terminalPort,
+      terminalPosId: draft.terminalPosId,
+      terminalConnectionMode: draft.terminalConnectionMode,
+    });
+    setTerminalTesting(false);
+    setTerminalTestMessage(result.message);
   };
 
   const devices = [
@@ -147,6 +197,65 @@ export function SettingsView() {
                 className="h-4 w-4 rounded border-gray-300"
               />
             </label>
+
+            <h3 className="mt-6 text-sm font-semibold text-gray-900 dark:text-gray-100">
+              {translate("settingsReceiptPrintQuality")}
+            </h3>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {translate("settingsReceiptPrintQualityHint")}
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm sm:col-span-2">
+                <span className="text-gray-500 dark:text-gray-400">{translate("settingsReceiptFontFamily")}</span>
+                <select
+                  value={draft.receiptFontFamily}
+                  onChange={(event) =>
+                    updateDraft(
+                      "receiptFontFamily",
+                      event.target.value as SettingsPageDraft["receiptFontFamily"],
+                    )
+                  }
+                  className="pos-input mt-1"
+                >
+                  {RECEIPT_FONT_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id} style={{ fontFamily: option.stack }}>
+                      {translate(RECEIPT_FONT_LABEL_KEYS[option.id])}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">{translate("settingsReceiptFontSize")}</span>
+                <select
+                  value={draft.receiptFontSize}
+                  onChange={(event) =>
+                    updateDraft("receiptFontSize", event.target.value as SettingsPageDraft["receiptFontSize"])
+                  }
+                  className="pos-input mt-1"
+                >
+                  <option value="normal">{translate("settingsReceiptFontNormal")}</option>
+                  <option value="medium">{translate("settingsReceiptFontMedium")}</option>
+                  <option value="large">{translate("settingsReceiptFontLarge")}</option>
+                </select>
+              </label>
+              <label className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">{translate("settingsReceiptFontWeight")}</span>
+                <select
+                  value={draft.receiptFontWeight}
+                  onChange={(event) =>
+                    updateDraft(
+                      "receiptFontWeight",
+                      event.target.value as SettingsPageDraft["receiptFontWeight"],
+                    )
+                  }
+                  className="pos-input mt-1"
+                >
+                  <option value="normal">{translate("settingsReceiptWeightNormal")}</option>
+                  <option value="bold">{translate("settingsReceiptWeightBold")}</option>
+                  <option value="extrabold">{translate("settingsReceiptWeightExtraBold")}</option>
+                </select>
+              </label>
+            </div>
 
             <h3 className="mt-6 text-sm font-semibold text-gray-900 dark:text-gray-100">
               {translate("settingsBillTemplate")}
@@ -224,12 +333,182 @@ export function SettingsView() {
             <button
               type="button"
               disabled={saving || !dirty}
-              onClick={() => void handleSavePrinterBill()}
+              onClick={() => void handleSaveSettings()}
               className="mt-6 hidden w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3.5 text-base font-bold text-white shadow-md transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 md:flex"
             >
               <Save className="h-5 w-5" />
               💾 {translate("settingsSaveChanges")}
             </button>
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6 md:col-span-2">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">
+              {translate("settingsDisplayCurrency")}
+            </h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {translate("settingsDisplayCurrencyHint")}
+            </p>
+
+            <div className="mt-4 space-y-3">
+              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
+                <span className="text-sm text-gray-800 dark:text-gray-200">
+                  {translate("settingsShowPricesOnOrder")}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={draft.showPricesOnOrderScreen}
+                  onChange={(event) => updateDraft("showPricesOnOrderScreen", event.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+              </label>
+              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
+                <span className="text-sm text-gray-800 dark:text-gray-200">
+                  {translate("settingsRoundPrices")}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={draft.enablePriceRounding}
+                  onChange={(event) => updateDraft("enablePriceRounding", event.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+              </label>
+              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
+                <span className="text-sm text-gray-800 dark:text-gray-200">
+                  {translate("settingsShowEurCurrency")}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={draft.showEurCurrency}
+                  onChange={(event) => updateDraft("showEurCurrency", event.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+              </label>
+            </div>
+
+            {draft.showEurCurrency && (
+              <label className="mt-4 block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">
+                  {translate("settingsEurExchangeRate")}
+                </span>
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    step={0.01}
+                    value={draft.eurExchangeRate}
+                    onChange={(event) => updateDraft("eurExchangeRate", Number(event.target.value))}
+                    className="pos-input"
+                  />
+                  <span className="shrink-0 text-gray-600 dark:text-gray-300">Kč</span>
+                </div>
+              </label>
+            )}
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6 md:col-span-2">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">
+              {translate("settingsReservationSlots")}
+            </h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {translate("settingsReservationSlotsHint")}
+            </p>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <label className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">{translate("settingsSlotInterval")}</span>
+                <select
+                  value={draft.reservationTimeStep}
+                  onChange={(event) => updateDraft("reservationTimeStep", Number(event.target.value))}
+                  className="pos-input mt-1"
+                >
+                  <option value={15}>{translate("settingsSlot15")}</option>
+                  <option value={30}>{translate("settingsSlot30")}</option>
+                  <option value={60}>{translate("settingsSlot60")}</option>
+                </select>
+              </label>
+              <label className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">
+                  {translate("settingsTableHoldingTime")}
+                </span>
+                <input
+                  type="number"
+                  min={15}
+                  step={15}
+                  value={draft.reservationTableHoldingTime}
+                  onChange={(event) =>
+                    updateDraft("reservationTableHoldingTime", Number(event.target.value))
+                  }
+                  className="pos-input mt-1"
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">
+                  {translate("settingsMaxGuestsPerSlot")}
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={draft.reservationMaxGuestsPerSlot}
+                  onChange={(event) =>
+                    updateDraft("reservationMaxGuestsPerSlot", Number(event.target.value))
+                  }
+                  className="pos-input mt-1"
+                />
+              </label>
+            </div>
+
+            <h3 className="mt-6 text-sm font-semibold text-gray-900 dark:text-gray-100">
+              {translate("settingsOperatingHours")}
+            </h3>
+            <div className="mt-3 space-y-2">
+              {WEEKDAY_KEYS.map((day) => {
+                const dayConfig = draft.reservationOperatingHours[day];
+                return (
+                  <div
+                    key={day}
+                    className="grid gap-2 rounded-lg border border-gray-100 px-3 py-3 dark:border-gray-700 sm:grid-cols-[1.2fr_auto_auto_auto]"
+                  >
+                    <div className="flex items-center justify-between gap-3 sm:justify-start">
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        {weekdayLabels[day]}
+                      </span>
+                      <label className="flex cursor-pointer items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={dayConfig.enabled}
+                          onChange={(event) =>
+                            updateOperatingHours(day, { enabled: event.target.checked })
+                          }
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        {translate("settingsDayEnabled")}
+                      </label>
+                    </div>
+                    <label className="block text-xs">
+                      <span className="text-gray-500 dark:text-gray-400">{translate("settingsOpenTime")}</span>
+                      <input
+                        type="time"
+                        value={dayConfig.open}
+                        disabled={!dayConfig.enabled}
+                        onChange={(event) => updateOperatingHours(day, { open: event.target.value })}
+                        className="pos-input mt-1 disabled:opacity-50"
+                      />
+                    </label>
+                    <label className="block text-xs">
+                      <span className="text-gray-500 dark:text-gray-400">{translate("settingsCloseTime")}</span>
+                      <input
+                        type="time"
+                        value={dayConfig.close}
+                        disabled={!dayConfig.enabled}
+                        onChange={(event) => updateOperatingHours(day, { close: event.target.value })}
+                        className="pos-input mt-1 disabled:opacity-50"
+                      />
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
           </section>
 
           <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
@@ -297,18 +576,9 @@ export function SettingsView() {
           <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("receiptCurrency")}</h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              POS amounts are always in CZK. These options add reference lines on printed receipts only.
+              EUR display is configured in Display &amp; currency above. USD remains a receipt-only option on this device.
             </p>
             <div className="mt-4 space-y-3">
-              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
-                <span className="text-sm text-gray-800 dark:text-gray-200">{translate("showEurOnReceipt")}</span>
-                <input
-                  type="checkbox"
-                  checked={receiptShowEur}
-                  onChange={(event) => setReceiptShowEur(event.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300"
-                />
-              </label>
               <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
                 <span className="text-sm text-gray-800 dark:text-gray-200">{translate("showUsdOnReceipt")}</span>
                 <input
@@ -319,40 +589,22 @@ export function SettingsView() {
                 />
               </label>
             </div>
-            {(receiptShowEur || receiptShowUsd) && (
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {receiptShowEur && (
-                  <label className="block text-sm">
-                    <span className="text-gray-500 dark:text-gray-400">{translate("eurRate")}</span>
-                    <div className="mt-1 flex items-center gap-2">
-                      <input
-                        type="number"
-                        min={1}
-                        step={0.01}
-                        value={eurRate}
-                        onChange={(event) => setEurRate(Number(event.target.value))}
-                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-                      />
-                      <span className="shrink-0 text-gray-600 dark:text-gray-300">Kč</span>
-                    </div>
-                  </label>
-                )}
-                {receiptShowUsd && (
-                  <label className="block text-sm">
-                    <span className="text-gray-500 dark:text-gray-400">{translate("usdRate")}</span>
-                    <div className="mt-1 flex items-center gap-2">
-                      <input
-                        type="number"
-                        min={1}
-                        step={0.01}
-                        value={usdRate}
-                        onChange={(event) => setUsdRate(Number(event.target.value))}
-                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-                      />
-                      <span className="shrink-0 text-gray-600 dark:text-gray-300">Kč</span>
-                    </div>
-                  </label>
-                )}
+            {receiptShowUsd && (
+              <div className="mt-4">
+                <label className="block text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">{translate("usdRate")}</span>
+                  <div className="mt-1 flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      step={0.01}
+                      value={usdRate}
+                      onChange={(event) => setUsdRate(Number(event.target.value))}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                    />
+                    <span className="shrink-0 text-gray-600 dark:text-gray-300">Kč</span>
+                  </div>
+                </label>
               </div>
             )}
           </section>
@@ -398,9 +650,145 @@ export function SettingsView() {
           </section>
 
           <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30 sm:p-6 md:col-span-2">
-            <h2 className="font-semibold text-amber-900 dark:text-amber-200">{translate("managerPin")}</h2>
-            <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">
-              Demo PIN for Administrator: <strong>1234</strong>. Required for voiding items, discounts, and clearing tables with active orders.
+            <h2 className="font-semibold text-amber-900 dark:text-amber-200">
+              {translate("settingsAdminTerminal")}
+            </h2>
+            <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+              {translate("settingsAdminTerminalHint")}
+            </p>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <label className="block text-sm sm:col-span-2">
+                <span className="text-amber-900 dark:text-amber-200">
+                  {translate("settingsAdminDeletionPassword")}
+                </span>
+                <input
+                  type="password"
+                  value={draft.adminDeletionPassword}
+                  onChange={(event) => updateDraft("adminDeletionPassword", event.target.value)}
+                  className="pos-input mt-1"
+                  autoComplete="new-password"
+                />
+              </label>
+
+              <label className="block text-sm sm:col-span-2">
+                <span className="text-amber-900 dark:text-amber-200">
+                  {translate("settingsTerminalMode")}
+                </span>
+                <select
+                  value={draft.terminalType}
+                  onChange={(event) =>
+                    updateDraft(
+                      "terminalType",
+                      event.target.value as SettingsPageDraft["terminalType"],
+                    )
+                  }
+                  className="pos-input mt-1"
+                >
+                  <option value="mock">{translate("settingsTerminalMock")}</option>
+                  <option value="network">{translate("settingsTerminalNetwork")}</option>
+                </select>
+              </label>
+
+              {draft.terminalType === "network" && (
+                <>
+                  <label className="block text-sm sm:col-span-2">
+                    <span className="text-amber-900 dark:text-amber-200">
+                      {translate("settingsTerminalConnectionMode")}
+                    </span>
+                    <select
+                      value={draft.terminalConnectionMode}
+                      onChange={(event) =>
+                        updateDraft(
+                          "terminalConnectionMode",
+                          event.target.value as SettingsPageDraft["terminalConnectionMode"],
+                        )
+                      }
+                      className="pos-input mt-1"
+                    >
+                      <option value="inbound">{translate("settingsTerminalInbound")}</option>
+                      <option value="outbound">{translate("settingsTerminalOutbound")}</option>
+                    </select>
+                    <span className="mt-1 block text-xs text-amber-800 dark:text-amber-400">
+                      {translate("settingsTerminalInboundHint")}
+                    </span>
+                  </label>
+                  <label className="block text-sm">
+                    <span className="text-amber-900 dark:text-amber-200">
+                      {draft.terminalConnectionMode === "inbound"
+                        ? translate("settingsTerminalPcIp")
+                        : translate("settingsTerminalIp")}
+                    </span>
+                    {draft.terminalConnectionMode === "outbound" ? (
+                      <input
+                        type="text"
+                        value={draft.terminalIp}
+                        onChange={(event) => updateDraft("terminalIp", event.target.value)}
+                        className="pos-input mt-1"
+                        placeholder="192.168.1.105"
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        value="192.168.1.43"
+                        readOnly
+                        className="pos-input mt-1 bg-amber-100/50 dark:bg-amber-950/20"
+                      />
+                    )}
+                  </label>
+                  <label className="block text-sm">
+                    <span className="text-amber-900 dark:text-amber-200">
+                      {draft.terminalConnectionMode === "inbound"
+                        ? translate("settingsTerminalListenPort")
+                        : translate("settingsTerminalPort")}
+                    </span>
+                    <input
+                      type="text"
+                      value={draft.terminalPort}
+                      onChange={(event) => updateDraft("terminalPort", event.target.value)}
+                      className="pos-input mt-1"
+                      placeholder="2000"
+                    />
+                  </label>
+                  <label className="block text-sm sm:col-span-2">
+                    <span className="text-amber-900 dark:text-amber-200">
+                      {translate("settingsTerminalPosId")}
+                    </span>
+                    <input
+                      type="text"
+                      value={draft.terminalPosId}
+                      onChange={(event) => updateDraft("terminalPosId", event.target.value)}
+                      className="pos-input mt-1 font-mono uppercase"
+                      placeholder="PVTL9664"
+                      maxLength={16}
+                    />
+                    <span className="mt-1 block text-xs text-amber-800 dark:text-amber-400">
+                      {translate("settingsTerminalPosIdHint")}
+                    </span>
+                  </label>
+                </>
+              )}
+
+              <div className="sm:col-span-2">
+                <button
+                  type="button"
+                  disabled={terminalTesting}
+                  onClick={() => void handleTestTerminal()}
+                  className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-amber-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
+                >
+                  <CreditCard className="h-4 w-4" />
+                  {terminalTesting
+                    ? translate("settingsTerminalTesting")
+                    : translate("settingsTerminalTest")}
+                </button>
+                {terminalTestMessage && (
+                  <p className="mt-2 text-sm text-amber-900 dark:text-amber-200">{terminalTestMessage}</p>
+                )}
+              </div>
+            </div>
+
+            <p className="mt-4 text-xs text-amber-800 dark:text-amber-400">
+              {translate("managerPin")}: Demo PIN <strong>1234</strong> — voids, discounts, manual card override.
             </p>
           </section>
         </div>
@@ -411,7 +799,7 @@ export function SettingsView() {
           <button
             type="button"
             disabled={saving}
-            onClick={() => void handleSavePrinterBill()}
+            onClick={() => void handleSaveSettings()}
             className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-base font-bold text-white disabled:opacity-50"
           >
             <Save className="h-5 w-5" />

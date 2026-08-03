@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Eye, Pencil } from "lucide-react";
+import { Eye, Pencil, Trash2 } from "lucide-react";
 import { LiveClock } from "@/components/live-clock";
 import { OrderHistoryModal } from "@/components/order-history-modal";
+import { useAdminDeletionGate } from "@/contexts/admin-deletion-gate-context";
 import { useApp } from "@/contexts/app-context";
+import { useNotifications } from "@/contexts/notification-context";
 import { formatCzk } from "@/lib/currency";
 import { generateOrderNumber } from "@/lib/receipt-calculations";
 import { canManageStaff } from "@/lib/staff-roles";
@@ -19,6 +21,11 @@ import {
 } from "@/lib/summary-analytics";
 import { filterButtonClass, paymentFilterClass } from "@/lib/theme-classes";
 import type { MenuItem, SaleRecord } from "@/lib/types";
+import {
+  deleteSaleRecords,
+  deleteSalesByDate,
+  deleteSalesByMonth,
+} from "@/src/lib/sales-actions";
 import { fetchSales, mapSalesResponse } from "@/src/lib/supabase-data";
 
 interface HistoryViewProps {
@@ -53,8 +60,16 @@ function itemPreview(sale: SaleRecord, max = 2): string {
   return `${names.slice(0, max).join(", ")} +${names.length - max}`;
 }
 
+function toMonthInputValue(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
 export function HistoryView({ menuItems }: HistoryViewProps) {
-  const { translate, language, currentStaffUser } = useApp();
+  const { translate, language, currentStaffUser, logAction } = useApp();
+  const { pushNotification } = useNotifications();
+  const { requestDeletion } = useAdminDeletionGate();
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +78,10 @@ export function HistoryView({ menuItems }: HistoryViewProps) {
   const [paymentFilter, setPaymentFilter] = useState<HistoryPaymentFilter>("all");
   const [selectedSale, setSelectedSale] = useState<SaleRecord | null>(null);
   const [openInEditMode, setOpenInEditMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteDate, setDeleteDate] = useState(() => toDateInputValue(new Date()));
+  const [deleteMonth, setDeleteMonth] = useState(() => toMonthInputValue());
+  const [deleting, setDeleting] = useState(false);
 
   const canEdit = canManageStaff(currentStaffUser?.role);
 
@@ -91,6 +110,15 @@ export function HistoryView({ menuItems }: HistoryViewProps) {
     [sales, period, paymentFilter, customDate],
   );
 
+  const filteredIds = useMemo(() => new Set(filteredSales.map((sale) => sale.id)), [filteredSales]);
+
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const next = new Set([...prev].filter((id) => filteredIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [filteredIds]);
+
   const stats = useMemo(() => computeRevenueStats(filteredSales), [filteredSales]);
 
   const activeRange = useMemo(
@@ -106,6 +134,87 @@ export function HistoryView({ menuItems }: HistoryViewProps) {
             ? ` – ${formatSummaryDate(activeRange.end, language)}`
             : ""
         }`;
+
+  const allFilteredSelected =
+    filteredSales.length > 0 && filteredSales.every((sale) => selectedIds.has(sale.id));
+
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds(new Set());
+      return;
+    }
+    setSelectedIds(new Set(filteredSales.map((sale) => sale.id)));
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleDeleteResult = (deletedIds: string[] | undefined, detail: string) => {
+    if (!deletedIds || deletedIds.length === 0) {
+      pushNotification({ message: translate("historyDeleteFailed") });
+      return;
+    }
+    const idSet = new Set(deletedIds);
+    setSales((prev) => prev.filter((sale) => !idSet.has(sale.id)));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      deletedIds.forEach((id) => next.delete(id));
+      return next;
+    });
+    if (selectedSale && idSet.has(selectedSale.id)) {
+      setSelectedSale(null);
+      setOpenInEditMode(false);
+    }
+    logAction("delete_sale", detail);
+    pushNotification({ message: translate("historyDeleteSuccess") });
+  };
+
+  const runDelete = async (action: () => Promise<{ data: { id: string }[] | null; error: { message: string } | null }>, detail: string) => {
+    if (deleting) return;
+    setDeleting(true);
+    const { data, error: deleteError } = await action();
+    setDeleting(false);
+    if (deleteError) {
+      pushNotification({ message: translate("historyDeleteFailed") });
+      return;
+    }
+    handleDeleteResult(data?.map((row) => row.id), detail);
+  };
+
+  const confirmDeleteSelected = () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    requestDeletion(() =>
+      runDelete(() => deleteSaleRecords(ids), `Deleted ${ids.length} sale(s)`),
+    );
+  };
+
+  const confirmDeleteByDate = () => {
+    requestDeletion(() =>
+      runDelete(() => deleteSalesByDate(deleteDate), `Deleted sales on ${deleteDate}`),
+    );
+  };
+
+  const confirmDeleteMonth = () => {
+    requestDeletion(() =>
+      runDelete(() => deleteSalesByMonth(deleteMonth), `Deleted sales for ${deleteMonth}`),
+    );
+  };
+
+  const confirmDeleteOne = (sale: SaleRecord) => {
+    requestDeletion(() =>
+      runDelete(
+        () => deleteSaleRecords([sale.id]),
+        `Deleted sale ${generateOrderNumber(sale.closedAt)} (${sale.tableLabel})`,
+      ),
+    );
+  };
 
   const openSale = (sale: SaleRecord, edit = false) => {
     setSelectedSale(sale);
@@ -212,6 +321,61 @@ export function HistoryView({ menuItems }: HistoryViewProps) {
             </div>
           </section>
 
+          {canEdit && filteredSales.length > 0 && (
+            <section className="rounded-xl border border-red-200 bg-red-50/50 p-4 dark:border-red-900/50 dark:bg-red-950/20">
+              <div className="flex flex-wrap items-end gap-3">
+                <button
+                  type="button"
+                  disabled={selectedIds.size === 0 || deleting}
+                  onClick={confirmDeleteSelected}
+                  className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {translate("deleteSelected")}
+                  {selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}
+                </button>
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                    {translate("deleteByDate")}
+                    <input
+                      type="date"
+                      value={deleteDate}
+                      onChange={(event) => setDeleteDate(event.target.value)}
+                      className="pos-input mt-1 block min-w-[10rem]"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={deleting}
+                    onClick={confirmDeleteByDate}
+                    className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/40"
+                  >
+                    {translate("confirmDelete")}
+                  </button>
+                </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                    {translate("deleteEntireMonth")}
+                    <input
+                      type="month"
+                      value={deleteMonth}
+                      onChange={(event) => setDeleteMonth(event.target.value)}
+                      className="pos-input mt-1 block min-w-[10rem]"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={deleting}
+                    onClick={confirmDeleteMonth}
+                    className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/40"
+                  >
+                    {translate("confirmDelete")}
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+
           {loading ? (
             <p className="text-sm text-gray-500 dark:text-gray-400">{translate("loading")}</p>
           ) : error ? (
@@ -222,9 +386,20 @@ export function HistoryView({ menuItems }: HistoryViewProps) {
             </p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
-              <table className="w-full min-w-[880px] text-left text-sm">
+              <table className="w-full min-w-[960px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                    {canEdit && (
+                      <th className="px-4 py-3 font-semibold">
+                        <input
+                          type="checkbox"
+                          checked={allFilteredSelected}
+                          onChange={toggleSelectAll}
+                          aria-label={translate("selectAll")}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                      </th>
+                    )}
                     <th className="px-4 py-3 font-semibold">{translate("table")}</th>
                     <th className="px-4 py-3 font-semibold">{translate("orderId")}</th>
                     <th className="px-4 py-3 font-semibold">{translate("historyItems")}</th>
@@ -243,6 +418,17 @@ export function HistoryView({ menuItems }: HistoryViewProps) {
                         key={sale.id}
                         className="border-b border-gray-100 last:border-b-0 dark:border-gray-700/60"
                       >
+                        {canEdit && (
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(sale.id)}
+                              onChange={() => toggleSelect(sale.id)}
+                              aria-label={`${translate("selectAll")} ${orderId}`}
+                              className="h-4 w-4 rounded border-gray-300"
+                            />
+                          </td>
+                        )}
                         <td className="px-4 py-3">
                           <span className="inline-flex min-w-[3rem] items-center justify-center rounded-lg bg-gray-900 px-2.5 py-1 text-base font-bold text-white dark:bg-gray-100 dark:text-gray-900">
                             {sale.tableLabel}
@@ -297,14 +483,25 @@ export function HistoryView({ menuItems }: HistoryViewProps) {
                               {translate("historyViewBill")}
                             </button>
                             {canEdit && (
-                              <button
-                                type="button"
-                                onClick={() => openSale(sale, true)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-800 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                                {translate("editOrder")}
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => openSale(sale, true)}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-800 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                  {translate("editOrder")}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={deleting}
+                                  onClick={() => confirmDeleteOne(sale)}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  {translate("deleteOrder")}
+                                </button>
+                              </>
                             )}
                           </div>
                         </td>
@@ -327,6 +524,15 @@ export function HistoryView({ menuItems }: HistoryViewProps) {
           onUpdated={(updated) => {
             setSales((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
             setSelectedSale(updated);
+          }}
+          onDeleted={(deletedId) => {
+            setSales((prev) => prev.filter((row) => row.id !== deletedId));
+            setSelectedIds((prev) => {
+              const next = new Set(prev);
+              next.delete(deletedId);
+              return next;
+            });
+            closeModal();
           }}
         />
       )}

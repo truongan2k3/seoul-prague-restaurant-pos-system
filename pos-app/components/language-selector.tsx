@@ -6,10 +6,11 @@ import { filterButtonClass } from "@/lib/theme-classes";
 import type { LanguageCode } from "@/lib/types";
 
 interface LanguageSelectorProps {
-  variant?: "sidebar" | "segmented" | "dropdown";
+  variant?: "sidebar" | "segmented" | "dropdown" | "compact";
   className?: string;
   language?: LanguageCode;
   onLanguageChange?: (language: LanguageCode) => void;
+  compact?: boolean;
 }
 
 export function LanguageSelector({
@@ -17,6 +18,7 @@ export function LanguageSelector({
   className = "",
   language: languageProp,
   onLanguageChange,
+  compact = false,
 }: LanguageSelectorProps) {
   const app = useApp();
   const language = languageProp ?? app.language;
@@ -39,10 +41,13 @@ export function LanguageSelector({
     );
   }
 
-  if (variant === "sidebar") {
+  if (variant === "sidebar" || variant === "compact") {
+    const isCompact = variant === "compact" || compact;
     return (
       <div
-        className={`flex flex-col gap-1 rounded-lg border border-gray-200 bg-gray-100 p-1 dark:border-zinc-700 dark:bg-zinc-800 ${className}`}
+        className={`flex flex-row gap-1 rounded-lg border border-gray-200 bg-gray-100 p-1 dark:border-zinc-700 dark:bg-zinc-800 ${className}`}
+        role="group"
+        aria-label="Select language"
       >
         {LANGUAGE_OPTIONS.map(({ code, flag, label }) => {
           const active = language === code;
@@ -50,18 +55,24 @@ export function LanguageSelector({
             <button
               key={code}
               type="button"
+              title={label}
+              aria-label={label}
               aria-pressed={active}
               onClick={() => setLanguage(code)}
-              className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+              className={`flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md px-1.5 py-2 text-sm transition-colors ${
+                isCompact ? "px-1 py-1.5" : ""
+              } ${
                 active
                   ? "pos-filter-btn-active shadow-sm"
                   : "text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-white"
               }`}
             >
-              <span aria-hidden className="text-base leading-none">
+              <span aria-hidden className="shrink-0 text-base leading-none">
                 {flag}
               </span>
-              <span>{label}</span>
+              {!isCompact && (
+                <span className="truncate text-[11px] font-medium leading-tight">{label}</span>
+              )}
             </button>
           );
         })}
@@ -70,7 +81,7 @@ export function LanguageSelector({
   }
 
   return (
-    <div className={`flex flex-wrap gap-2 ${className}`}>
+    <div className={`flex flex-nowrap gap-2 overflow-x-auto ${className}`}>
       {LANGUAGE_OPTIONS.map(({ code, flag, label }) => {
         const active = language === code;
         return (

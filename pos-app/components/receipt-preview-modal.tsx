@@ -2,6 +2,11 @@
 
 import { Printer } from "lucide-react";
 import { Modal } from "@/components/modal";
+import { useSettings } from "@/contexts/settings-context";
+import {
+  receiptTypographyCssVars,
+  receiptTypographyFromSettings,
+} from "@/lib/receipt-print-styles";
 import { ReceiptBodyContent, type ReceiptTemplate } from "@/src/components/ReceiptPrint";
 import type { ReceiptData } from "@/lib/receipt-calculations";
 
@@ -20,7 +25,12 @@ export function ReceiptPreviewModal({
   onClose,
   onPrint,
 }: ReceiptPreviewModalProps) {
+  const { settings } = useSettings();
+
   if (!data) return null;
+
+  const typography = receiptTypographyFromSettings(settings);
+  const thermalStyle = receiptTypographyCssVars(typography);
 
   return (
     <Modal
@@ -50,11 +60,15 @@ export function ReceiptPreviewModal({
       }
     >
       <p className="mb-3 text-center text-xs text-gray-500 dark:text-gray-400">
-        Preview at true 80mm width. Use Print / Save PDF — set margins to None and disable headers/footers.
+        Preview at true 80mm width ({settings.receiptFontFamily} · {settings.receiptFontSize} ·{" "}
+        {settings.receiptFontWeight}). Use Print / Save PDF — set margins to None and disable headers/footers.
       </p>
       <div className="receipt-preview-stage mx-auto max-w-full">
         <div className="receipt-preview-frame mx-auto w-[280px] sm:w-[320px]">
-          <div className="receipt-inner receipt-czech receipt-sheet">
+          <div
+            className="receipt-inner receipt-czech receipt-sheet receipt-thermal"
+            style={thermalStyle as React.CSSProperties}
+          >
             <ReceiptBodyContent data={data} template={template} />
           </div>
         </div>

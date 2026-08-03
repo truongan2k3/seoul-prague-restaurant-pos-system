@@ -379,9 +379,102 @@ input[type="search"] {
 }
 
 .receipt-czech {
-  font-family: "Courier New", Courier, monospace;
+  font-family: "Courier New", Courier, "Lucida Console", monospace;
   font-size: 12px;
   line-height: 1.2;
+}
+
+.receipt-thermal {
+  --receipt-body-size: 13px;
+  --receipt-item-size: 13px;
+  --receipt-meta-size: 11px;
+  --receipt-table-size: 11px;
+  --receipt-title-size: 14px;
+  --receipt-index-size: 18px;
+  --receipt-celkem-size: 13px;
+  --receipt-body-weight: 700;
+  --receipt-item-weight: 700;
+  --receipt-line-height: 1.35;
+  font-family: var(--receipt-font-family, Consolas, "Lucida Console", "Courier New", monospace);
+  font-size: var(--receipt-body-size);
+  font-weight: var(--receipt-body-weight);
+  line-height: var(--receipt-line-height);
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+  text-rendering: optimizeLegibility;
+  color: #000;
+  background: #fff;
+}
+
+.receipt-thermal .receipt-index {
+  font-size: var(--receipt-index-size);
+  font-weight: var(--receipt-item-weight);
+}
+
+.receipt-thermal .receipt-title {
+  font-size: var(--receipt-title-size);
+  font-weight: var(--receipt-item-weight);
+}
+
+.receipt-thermal .receipt-meta-row,
+.receipt-thermal .receipt-bill-id,
+.receipt-thermal .receipt-payment-line,
+.receipt-thermal .receipt-footer-czech {
+  font-size: var(--receipt-meta-size);
+  font-weight: var(--receipt-body-weight);
+}
+
+.receipt-thermal .receipt-items-head {
+  font-size: var(--receipt-item-size);
+  font-weight: var(--receipt-item-weight);
+  border-bottom: 2px dashed #000;
+}
+
+.receipt-thermal .receipt-item-czech {
+  font-size: var(--receipt-item-size);
+  font-weight: var(--receipt-item-weight);
+}
+
+.receipt-thermal .receipt-item-left,
+.receipt-thermal .receipt-item-right {
+  font-weight: var(--receipt-item-weight);
+}
+
+.receipt-thermal .receipt-item-right {
+  font-variant-numeric: tabular-nums;
+}
+
+.receipt-thermal .receipt-total-row,
+.receipt-thermal .receipt-total-value {
+  font-weight: var(--receipt-item-weight);
+}
+
+.receipt-thermal .receipt-celkem-row {
+  font-size: var(--receipt-celkem-size);
+  font-weight: var(--receipt-item-weight);
+  border-top: 2px solid #000;
+}
+
+.receipt-thermal .receipt-vat-grid {
+  font-size: var(--receipt-table-size);
+  font-weight: var(--receipt-item-weight);
+}
+
+.receipt-thermal .receipt-card-payment-title,
+.receipt-thermal .receipt-card-payment {
+  font-size: var(--receipt-meta-size);
+  font-weight: var(--receipt-item-weight);
+}
+
+.receipt-thermal .receipt-dash {
+  border: 0;
+  border-bottom: 2px dashed #000;
+  margin: 8px 0;
+  height: 0;
+  font-size: 0;
+  letter-spacing: 0;
+  overflow: hidden;
+  color: transparent;
 }
 
 .receipt-index {

@@ -34,3 +34,19 @@ export function isLineEditable(status: OrderItem["status"] | undefined): boolean
   const normalized = normalizeOrderItemStatus(status);
   return normalized === "pending" || normalized === "held" || !status;
 }
+
+/** Manage-table screen: allow qty/delete while item is still in active prep. */
+export function isManageTableLineEditable(status: OrderItem["status"] | undefined): boolean {
+  const normalized = normalizeOrderItemStatus(status);
+  return (
+    normalized === "pending" ||
+    normalized === "held" ||
+    normalized === "preparing" ||
+    !status
+  );
+}
+
+export function isManageTablePriceEditable(status: OrderItem["status"] | undefined): boolean {
+  const normalized = normalizeOrderItemStatus(status);
+  return normalized !== "served";
+}

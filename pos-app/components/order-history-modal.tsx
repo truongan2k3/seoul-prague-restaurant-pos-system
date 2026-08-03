@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Printer, X } from "lucide-react";
+import { Printer, Trash2, X } from "lucide-react";
+import { useAdminDeletionGate } from "@/contexts/admin-deletion-gate-context";
 import { useApp } from "@/contexts/app-context";
+import { useNotifications } from "@/contexts/notification-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { canManageStaff } from "@/lib/staff-roles";
 import { sumLines } from "@/lib/checkout-calculations";
@@ -12,7 +14,7 @@ import type { TranslationKey } from "@/lib/i18n/translations";
 import { generateOrderNumber } from "@/lib/receipt-calculations";
 import type { MenuItem, OrderItem, OrderLogEntry, SaleRecord } from "@/lib/types";
 import { fetchOrderLogsForItems } from "@/src/lib/order-log-actions";
-import { updateSaleRecord } from "@/src/lib/sales-actions";
+import { deleteSaleRecords, updateSaleRecord } from "@/src/lib/sales-actions";
 
 const LOG_ACTION_KEYS: Record<string, TranslationKey> = {
   pending: "ordered",
@@ -51,6 +53,7 @@ interface OrderHistoryModalProps {
   menuItems: MenuItem[];
   onClose: () => void;
   onUpdated: (sale: SaleRecord) => void;
+  onDeleted?: (saleId: string) => void;
   initialEditMode?: boolean;
 }
 
@@ -59,10 +62,13 @@ export function OrderHistoryModal({
   menuItems,
   onClose,
   onUpdated,
+  onDeleted,
   initialEditMode = false,
 }: OrderHistoryModalProps) {
   const { translate, currentStaffUser, logAction } = useApp();
   const { printReceipt } = useReceiptPrint();
+  const { pushNotification } = useNotifications();
+  const { requestDeletion } = useAdminDeletionGate();
   const [logs, setLogs] = useState<OrderLogEntry[]>([]);
   const [logsLoading, setLogsLoading] = useState(true);
   const [editMode, setEditMode] = useState(initialEditMode);
@@ -156,6 +162,23 @@ export function OrderHistoryModal({
     onUpdated(updated);
     setEditMode(false);
     logAction("edit_sale", `Order ${generateOrderNumber(sale.closedAt)} · ${sale.tableLabel}`);
+  };
+
+  const handleDelete = () => {
+    requestDeletion(async () => {
+      const { data, error } = await deleteSaleRecords([sale.id]);
+      if (error) {
+        pushNotification({ message: translate("historyDeleteFailed") });
+        return;
+      }
+      if (!data?.length) {
+        pushNotification({ message: translate("historyDeleteFailed") });
+        return;
+      }
+      logAction("delete_sale", `Deleted sale ${generateOrderNumber(sale.closedAt)} · ${sale.tableLabel}`);
+      pushNotification({ message: translate("historyDeleteSuccess") });
+      onDeleted?.(sale.id);
+    });
   };
 
   const formatLogLabel = (action: string) => translateLogAction(action, translate);
@@ -382,13 +405,23 @@ export function OrderHistoryModal({
                 </button>
               </>
             ) : (
-              <button
-                type="button"
-                onClick={() => setEditMode(true)}
-                className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium dark:border-gray-700"
-              >
-                {translate("editOrder")}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setEditMode(true)}
+                  className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium dark:border-gray-700"
+                >
+                  {translate("editOrder")}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {translate("deleteOrder")}
+                </button>
+              </>
             )
           )}
         </div>

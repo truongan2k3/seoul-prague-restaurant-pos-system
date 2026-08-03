@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Menu } from "lucide-react";
 import { MapView } from "@/components/map-view";
 import { OrderView } from "@/components/order-view";
 import { HistoryView } from "@/components/history-view";
@@ -59,7 +58,6 @@ export function DashboardShell() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const reloadTables = useCallback(async () => {
     const { data, error: err } = await fetchTables();
@@ -234,26 +232,8 @@ export function DashboardShell() {
   return (
     <div className="flex h-[100dvh] bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <ReadyNotificationListener tables={tables} menuItems={menuItems} />
-      <Sidebar
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        mobileOpen={sidebarOpen}
-        onMobileClose={() => setSidebarOpen(false)}
-      />
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="flex shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-4 py-3 lg:hidden dark:border-gray-800 dark:bg-gray-900">
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(true)}
-            className="touch-target flex items-center justify-center rounded-lg border border-gray-200 text-gray-700 dark:border-gray-700 dark:text-gray-200"
-            aria-label="Open menu"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
-          <span className="truncate text-sm font-semibold capitalize text-gray-900 dark:text-gray-100">
-            {activeTab}
-          </span>
-        </div>
         <main className="flex-1 overflow-hidden">{content}</main>
       </div>
       {tableOrder.tableOrderModals}

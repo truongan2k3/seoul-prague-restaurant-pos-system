@@ -4,11 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, Minus, Plus, Search, X } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { useApp } from "@/contexts/app-context";
+import { useSettings } from "@/contexts/settings-context";
 import { categoriesForOrdering } from "@/lib/category-utils";
-import { formatPrice } from "@/lib/i18n/translations";
+import { formatPosPrice, priceDisplayOptionsFromSettings } from "@/lib/price-display";
 import {
   cartLineDisplayName,
-  menuItemDisplayDescription,
   menuItemDisplayName,
 } from "@/lib/menu-display";
 import { resolveStation } from "@/lib/order-routing";
@@ -46,6 +46,7 @@ function cartLinesToOrders(lines: CartLine[]): OrderItem[] {
     menuItemId: line.menuItemId,
     name: line.name,
     price: line.price,
+    originalPrice: line.price,
     quantity: line.quantity,
     notes: line.note.trim() || undefined,
     notesTranslated: line.noteTranslated?.trim() || undefined,
@@ -66,18 +67,17 @@ function findDefaultLine(cart: CartLine[], menuItemId: string) {
   );
 }
 
-function findMatchingLine(
-  cart: CartLine[],
-  menuItemId: string,
-  note: string,
-  isPrintedNote: boolean,
-) {
-  return cart.find(
-    (line) =>
-      line.menuItemId === menuItemId &&
-      line.note === note &&
-      line.isPrintedNote === isPrintedNote,
-  );
+const QUICK_NOTE_TAGS = ["Ít cay", "Không hành", "Mang về", "Ít đá"];
+
+function toggleTagInNote(note: string, tag: string): string {
+  const parts = note
+    .split(/[,;]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.includes(tag)) {
+    return parts.filter((part) => part !== tag).join(", ");
+  }
+  return parts.length > 0 ? `${parts.join(", ")}, ${tag}` : tag;
 }
 
 function MenuItemImage({ item, label }: { item: MenuItem; label: string }) {
@@ -106,15 +106,19 @@ export function NewOrderModal({
   isSaving = false,
 }: NewOrderModalProps) {
   const { translate, language } = useApp();
+  const { settings } = useSettings();
+  const priceOptions = priceDisplayOptionsFromSettings(settings);
+  const formatOrderPrice = (amount: number) => formatPosPrice(amount, priceOptions);
+  const showMenuPrices = settings.showPricesOnOrderScreen;
   const [cart, setCart] = useState<CartLine[]>([]);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("__all__");
   const [cartOpen, setCartOpen] = useState(false);
-  const [detailsItem, setDetailsItem] = useState<MenuItem | null>(null);
-  const [detailsNote, setDetailsNote] = useState("");
-  const [detailsNoteTranslated, setDetailsNoteTranslated] = useState("");
-  const [detailsTranslating, setDetailsTranslating] = useState(false);
-  const [detailsPrint, setDetailsPrint] = useState(false);
+  const [noteLineId, setNoteLineId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteDraftTranslated, setNoteDraftTranslated] = useState("");
+  const [noteTranslating, setNoteTranslating] = useState(false);
+  const [notePrintOnReceipt, setNotePrintOnReceipt] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -122,17 +126,17 @@ export function NewOrderModal({
     setSearch("");
     setActiveCategory("__all__");
     setCartOpen(false);
-    setDetailsItem(null);
-    setDetailsNote("");
-    setDetailsNoteTranslated("");
-    setDetailsTranslating(false);
-    setDetailsPrint(false);
+    setNoteLineId(null);
+    setNoteDraft("");
+    setNoteDraftTranslated("");
+    setNoteTranslating(false);
+    setNotePrintOnReceipt(false);
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !detailsItem) onClose();
+      if (event.key === "Escape" && !noteLineId) onClose();
     };
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", handleKeyDown);
@@ -140,23 +144,23 @@ export function NewOrderModal({
       document.body.style.overflow = "";
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open, onClose, detailsItem]);
+  }, [open, onClose, noteLineId]);
 
   useEffect(() => {
-    const note = detailsNote.trim();
+    const note = noteDraft.trim();
     if (!note) {
-      setDetailsNoteTranslated("");
-      setDetailsTranslating(false);
+      setNoteDraftTranslated("");
+      setNoteTranslating(false);
       return;
     }
 
-    setDetailsTranslating(true);
+    setNoteTranslating(true);
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void translateNoteToChinese(note).then((translated) => {
         if (!cancelled) {
-          setDetailsNoteTranslated(translated);
-          setDetailsTranslating(false);
+          setNoteDraftTranslated(translated);
+          setNoteTranslating(false);
         }
       });
     }, 400);
@@ -165,7 +169,7 @@ export function NewOrderModal({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [detailsNote]);
+  }, [noteDraft]);
 
   const categoryOptions = useMemo(() => categoriesForOrdering(categories), [categories]);
 
@@ -197,13 +201,20 @@ export function NewOrderModal({
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   const cartTotal = cart.reduce((sum, line) => sum + line.price * line.quantity, 0);
 
+  const cartQtyByMenuId = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const line of cart) {
+      totals.set(line.menuItemId, (totals.get(line.menuItemId) ?? 0) + line.quantity);
+    }
+    return totals;
+  }, [cart]);
+
+  const noteLine = noteLineId ? cart.find((line) => line.lineId === noteLineId) : undefined;
+
   const modalTitle =
     mode === "append"
       ? `${translate("addMoreItems")} — ${translate("table")} ${tableLabel}`
       : `${translate("newOrder")} — ${translate("table")} ${tableLabel}`;
-
-  const getDefaultQty = (menuItemId: string) =>
-    findDefaultLine(cart, menuItemId)?.quantity ?? 0;
 
   const quickAdd = (item: MenuItem) => {
     if (!item.isAvailable) return;
@@ -235,79 +246,43 @@ export function NewOrderModal({
     });
   };
 
-  const quickRemove = (item: MenuItem) => {
-    setCart((prev) => {
-      const existing = findDefaultLine(prev, item.id);
-      if (!existing) return prev;
-      if (existing.quantity <= 1) {
-        return prev.filter((line) => line.lineId !== existing.lineId);
-      }
-      return prev.map((line) =>
-        line.lineId === existing.lineId
-          ? { ...line, quantity: line.quantity - 1 }
-          : line,
-      );
-    });
+  const openNoteModal = (line: CartLine) => {
+    setNoteLineId(line.lineId);
+    setNoteDraft(line.note);
+    setNoteDraftTranslated(line.noteTranslated ?? "");
+    setNoteTranslating(false);
+    setNotePrintOnReceipt(line.isPrintedNote);
   };
 
-  const openItemDetails = (item: MenuItem) => {
-    if (!item.isAvailable) return;
-    setDetailsItem(item);
-    setDetailsNote("");
-    setDetailsNoteTranslated("");
-    setDetailsTranslating(false);
-    setDetailsPrint(false);
+  const closeNoteModal = () => {
+    setNoteLineId(null);
+    setNoteDraft("");
+    setNoteDraftTranslated("");
+    setNoteTranslating(false);
+    setNotePrintOnReceipt(false);
   };
 
-  const upsertCustomLine = (
-    item: MenuItem,
-    note: string,
-    isPrintedNote: boolean,
-    noteTranslated?: string,
-  ) => {
-    const label = menuItemDisplayName(item, language);
-    setCart((prev) => {
-      const existing = findMatchingLine(prev, item.id, note, isPrintedNote);
-      if (existing) {
-        return prev.map((line) =>
-          line.lineId === existing.lineId
-            ? { ...line, quantity: line.quantity + 1 }
-            : line,
-        );
-      }
-      return [
-        ...prev,
-        {
-          lineId: newLineId(),
-          menuItemId: item.id,
-          name: label,
-          price: item.price,
-          quantity: 1,
-          category: item.category,
-          itemType: item.itemType,
-          note,
-          noteTranslated: noteTranslated || undefined,
-          isPrintedNote,
-          imageUrl: item.imageUrl,
-        },
-      ];
-    });
-    setCartOpen(true);
-  };
-
-  const handleUpdateItem = async () => {
-    if (!detailsItem) return;
-    const note = detailsNote.trim();
-    let noteTranslated = detailsNoteTranslated.trim();
-    if (note && !noteTranslated) {
-      noteTranslated = await translateNoteToChinese(note);
+  const handleSaveNote = async () => {
+    if (!noteLineId) return;
+    const trimmed = noteDraft.trim();
+    let translated = noteDraftTranslated.trim();
+    if (trimmed && !translated) {
+      translated = await translateNoteToChinese(trimmed);
     }
-    upsertCustomLine(detailsItem, note, detailsPrint, noteTranslated || undefined);
-    setDetailsItem(null);
-    setDetailsNote("");
-    setDetailsNoteTranslated("");
-    setDetailsTranslating(false);
-    setDetailsPrint(false);
+
+    setCart((prev) =>
+      prev.map((line) =>
+        line.lineId === noteLineId
+          ? {
+              ...line,
+              note: trimmed,
+              noteTranslated: translated || undefined,
+              isPrintedNote: notePrintOnReceipt,
+            }
+          : line,
+      ),
+    );
+    closeNoteModal();
   };
 
   const updateCartQty = (lineId: string, delta: number) => {
@@ -320,10 +295,6 @@ export function NewOrderModal({
         )
         .filter((line) => line.quantity > 0),
     );
-  };
-
-  const removeCartLine = (lineId: string) => {
-    setCart((prev) => prev.filter((line) => line.lineId !== lineId));
   };
 
   const handleSend = async () => {
@@ -376,13 +347,18 @@ export function NewOrderModal({
           <ul className="space-y-3">
             {cart.map((line) => {
               const lineLabel = cartLineDisplayName(line, menuItems, language);
+              const noteText =
+                line.noteTranslated &&
+                line.noteTranslated.toLowerCase() !== line.note.toLowerCase()
+                  ? `${line.noteTranslated} · ${line.note}`
+                  : line.note;
               return (
                 <li
                   key={line.lineId}
                   className="rounded-xl border border-gray-200 p-3 dark:border-gray-700"
                 >
                   <div className="flex gap-3">
-                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
+                    <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
                       {line.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -391,24 +367,22 @@ export function NewOrderModal({
                           className="h-full w-full object-cover"
                         />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center text-gray-400">
+                        <div className="flex h-full w-full items-center justify-center text-sm text-gray-400">
                           {lineLabel.charAt(0)}
                         </div>
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      <button
+                        type="button"
+                        onClick={() => openNoteModal(line)}
+                        className="cursor-pointer text-left text-sm font-semibold text-gray-900 hover:text-blue-600 dark:text-gray-100 dark:hover:text-blue-400"
+                      >
                         {lineLabel}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {formatPrice(line.price)} · {resolveStation(line.category, line.itemType)}
-                      </p>
+                      </button>
                       {line.note && (
                         <p className="mt-1 text-xs italic text-gray-500 dark:text-gray-400">
-                          {line.noteTranslated &&
-                          line.noteTranslated.toLowerCase() !== line.note.toLowerCase()
-                            ? `${line.noteTranslated} · ${line.note}`
-                            : line.note}
+                          {translate("noteLabel")}: {noteText}
                         </p>
                       )}
                       {line.isPrintedNote && (
@@ -417,35 +391,32 @@ export function NewOrderModal({
                         </p>
                       )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => removeCartLine(line.lineId)}
-                      className="touch-target flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500"
-                    >
-                      <X className="h-5 w-5" />
-                    </button>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => updateCartQty(line.lineId, -1)}
-                        className="touch-target flex items-center justify-center rounded-lg border dark:border-gray-600"
-                      >
-                        <Minus className="h-4 w-4" />
-                      </button>
-                      <span className="w-8 text-center text-base font-semibold">{line.quantity}</span>
-                      <button
-                        type="button"
-                        onClick={() => updateCartQty(line.lineId, 1)}
-                        className="touch-target flex items-center justify-center rounded-lg border dark:border-gray-600"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                        {formatOrderPrice(line.price * line.quantity)}
+                      </span>
+                      <div className="inline-flex items-center overflow-hidden rounded-lg border border-gray-200 dark:border-gray-600">
+                        <button
+                          type="button"
+                          onClick={() => updateCartQty(line.lineId, -1)}
+                          className="touch-target flex h-8 w-8 items-center justify-center text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+                          aria-label={`Decrease ${lineLabel}`}
+                        >
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                        <span className="flex h-8 min-w-[2rem] items-center justify-center border-x border-gray-200 px-1 text-sm font-semibold tabular-nums dark:border-gray-600">
+                          {line.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => updateCartQty(line.lineId, 1)}
+                          className="touch-target flex h-8 w-8 items-center justify-center text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+                          aria-label={`Increase ${lineLabel}`}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
-                    <span className="text-sm font-semibold">
-                      {formatPrice(line.price * line.quantity)}
-                    </span>
                   </div>
                 </li>
               );
@@ -458,7 +429,7 @@ export function NewOrderModal({
         <div className="mb-4 flex items-center justify-between">
           <span className="text-sm text-gray-500 dark:text-gray-400">{translate("total")}</span>
           <span className="text-xl font-bold text-gray-900 dark:text-gray-100">
-            {formatPrice(cartTotal)}
+            {formatOrderPrice(cartTotal)}
           </span>
         </div>
         <button
@@ -500,7 +471,7 @@ export function NewOrderModal({
                 {modalTitle}
               </h2>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Tap +/− for quick add · Tap name or image for options
+                {translate("orderTapHint")}
               </p>
             </div>
             <button
@@ -583,68 +554,43 @@ export function NewOrderModal({
                 ) : (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4">
                     {filteredItems.map((item) => {
-                      const defaultQty = getDefaultQty(item.id);
+                      const inCartQty = cartQtyByMenuId.get(item.id) ?? 0;
                       const station = resolveStation(item.category, item.itemType);
                       const label = menuItemDisplayName(item, language);
 
                       return (
-                        <article
+                        <button
                           key={item.id}
-                          className={`flex flex-col overflow-hidden rounded-xl border bg-white dark:bg-gray-900 ${
+                          type="button"
+                          disabled={!item.isAvailable}
+                          onClick={() => quickAdd(item)}
+                          className={`flex flex-col overflow-hidden rounded-xl border bg-white text-left transition active:scale-[0.98] dark:bg-gray-900 ${
                             !item.isAvailable
                               ? "cursor-not-allowed opacity-50"
-                              : "border-gray-200 dark:border-gray-700"
+                              : "border-gray-200 hover:border-emerald-300 hover:shadow-md dark:border-gray-700 dark:hover:border-emerald-700"
                           }`}
                         >
-                          <button
-                            type="button"
-                            disabled={!item.isAvailable}
-                            onClick={() => openItemDetails(item)}
-                            className="block w-full text-left active:opacity-90"
-                          >
-                            <div className="aspect-[4/3] overflow-hidden bg-gray-100 dark:bg-gray-800">
-                              <MenuItemImage item={item} label={label} />
-                            </div>
-                            <div className="px-3 pt-3">
-                              <p className="line-clamp-2 text-sm font-semibold leading-snug text-gray-900 dark:text-gray-100">
-                                {label}
-                              </p>
-                              <p className="mt-1 text-[10px] text-gray-400">{station}</p>
-                            </div>
-                          </button>
-
-                          <div className="mt-auto px-3 pb-3 pt-2">
-                            <p className="mb-2 text-center text-base font-bold text-emerald-600 dark:text-emerald-400">
-                              {formatPrice(item.price)}
-                            </p>
-                            <div className="flex items-center justify-center gap-2">
-                              <button
-                                type="button"
-                                disabled={!item.isAvailable || defaultQty === 0}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  quickRemove(item);
-                                }}
-                                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border-2 border-gray-200 bg-gray-50 text-gray-800 transition-colors active:scale-95 disabled:opacity-30 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-                                aria-label={`Remove ${label}`}
-                              >
-                                <Minus className="h-6 w-6" />
-                              </button>
-                              <span className="flex h-12 min-w-[3rem] items-center justify-center rounded-xl bg-gray-100 text-lg font-bold tabular-nums text-gray-900 dark:bg-gray-800 dark:text-gray-100">
-                                {defaultQty}
+                          <div className="relative aspect-[4/3] overflow-hidden bg-gray-100 dark:bg-gray-800">
+                            <MenuItemImage item={item} label={label} />
+                            {inCartQty > 0 && (
+                              <span className="absolute right-1.5 top-1.5 rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white shadow">
+                                x{inCartQty}
                               </span>
-                              <button
-                                type="button"
-                                disabled={!item.isAvailable}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  quickAdd(item);
-                                }}
-                                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border-2 border-emerald-500 bg-emerald-500 text-white transition-colors active:scale-95 disabled:opacity-30"
-                                aria-label={`Add ${label}`}
-                              >
-                                <Plus className="h-6 w-6" />
-                              </button>
+                            )}
+                          </div>
+                          <div className="px-3 py-3">
+                            <p className="line-clamp-2 text-sm font-semibold leading-snug text-gray-900 dark:text-gray-100">
+                              {label}
+                            </p>
+                            <div className="mt-2 flex items-center justify-between gap-2">
+                              {showMenuPrices ? (
+                                <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">
+                                  {formatOrderPrice(item.price)}
+                                </p>
+                              ) : (
+                                <span />
+                              )}
+                              <p className="text-[10px] text-gray-400">{station}</p>
                             </div>
                             {!item.isAvailable && (
                               <p className="mt-2 text-center text-xs font-semibold text-red-500">
@@ -652,7 +598,7 @@ export function NewOrderModal({
                               </p>
                             )}
                           </div>
-                        </article>
+                        </button>
                       );
                     })}
                   </div>
@@ -678,89 +624,107 @@ export function NewOrderModal({
           className="pos-mobile-sticky-bar fixed bottom-0 left-0 right-0 z-30 flex min-h-[56px] items-center justify-between border-t border-gray-200 bg-gray-900 px-4 py-3 text-left text-white shadow-lg md:hidden dark:border-gray-700 dark:bg-gray-100 dark:text-gray-900"
         >
           <span className="text-sm font-medium">
-            {translate("cart")} ({cartCount} {cartCount === 1 ? "item" : "items"}) · {formatPrice(cartTotal)}
+            {translate("cart")} ({cartCount} {cartCount === 1 ? "item" : "items"}) · {formatOrderPrice(cartTotal)}
           </span>
           <ChevronRight className="h-5 w-5 shrink-0" />
         </button>
       </div>
       </div>
 
-      {detailsItem && (
+      {noteLine && (
         <div className="relative z-[60]">
-        <Modal
-          open
-          onClose={() => setDetailsItem(null)}
-          title={translate("itemDetails")}
-          footer={
-            <button
-              type="button"
-              onClick={() => void handleUpdateItem()}
-              className="min-h-[52px] w-full rounded-xl bg-gray-900 py-3.5 text-base font-semibold text-white dark:bg-gray-100 dark:text-gray-900"
-            >
-              {translate("updateItem")}
-            </button>
-          }
-        >
-          <div className="space-y-4">
-            <div className="flex gap-4">
-              <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-gray-100 dark:bg-gray-800">
-                <MenuItemImage item={detailsItem} label={menuItemDisplayName(detailsItem, language)} />
+          <Modal
+            open
+            onClose={closeNoteModal}
+            title={translate("itemNote")}
+            footer={
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={closeNoteModal}
+                  className="min-h-[44px] flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold dark:border-gray-700"
+                >
+                  {translate("cancel")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSaveNote()}
+                  className="min-h-[44px] flex-1 rounded-xl bg-gray-900 py-2.5 text-sm font-semibold text-white dark:bg-gray-100 dark:text-gray-900"
+                >
+                  {translate("saveNote")}
+                </button>
               </div>
+            }
+          >
+            <div className="space-y-4">
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {cartLineDisplayName(noteLine, menuItems, language)}
+              </p>
+
               <div>
-                <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                  {menuItemDisplayName(detailsItem, language)}
+                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  Quick tags
                 </p>
-                <p className="mt-1 text-lg font-semibold text-emerald-600 dark:text-emerald-400">
-                  {formatPrice(detailsItem.price)}
-                </p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {resolveStation(detailsItem.category, detailsItem.itemType)}
-                </p>
-                {menuItemDisplayDescription(detailsItem, language) && (
-                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                    {menuItemDisplayDescription(detailsItem, language)}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <label className="block">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                {translate("internalNote")}
-              </span>
-              <textarea
-                rows={3}
-                value={detailsNote}
-                onChange={(e) => setDetailsNote(e.target.value)}
-                placeholder='e.g. "no spicy", "no onion"'
-                className="mt-2 min-h-[96px] w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-base text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-              />
-              {detailsNote.trim() && (
-                <div className="mt-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 dark:border-orange-900 dark:bg-orange-950/40">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-700 dark:text-orange-300">
-                    Kitchen (中文)
-                  </p>
-                  <p className="mt-1 text-sm font-bold text-orange-700 dark:text-orange-300">
-                    {detailsTranslating ? "…" : detailsNoteTranslated || detailsNote.trim()}
-                  </p>
-                  <input type="hidden" value={detailsNoteTranslated} readOnly aria-hidden />
+                <div className="flex flex-wrap gap-2">
+                  {QUICK_NOTE_TAGS.map((tag) => {
+                    const active = noteDraft
+                      .split(/[,;]/)
+                      .map((part) => part.trim())
+                      .includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => setNoteDraft((prev) => toggleTagInNote(prev, tag))}
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                          active
+                            ? "bg-emerald-600 text-white"
+                            : "border border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
-            </label>
+              </div>
 
-            <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-xl border border-gray-200 px-4 py-3 dark:border-gray-700">
-              <input
-                type="checkbox"
-                checked={detailsPrint}
-                onChange={(e) => setDetailsPrint(e.target.checked)}
-                className="h-5 w-5 rounded border-gray-300"
-              />
-              <span className="text-base text-gray-800 dark:text-gray-200">
-                {translate("printOnReceipt")}
-              </span>
-            </label>
-          </div>
-        </Modal>
+              <label className="block">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {translate("internalNote")}
+                </span>
+                <textarea
+                  rows={3}
+                  value={noteDraft}
+                  onChange={(e) => setNoteDraft(e.target.value)}
+                  placeholder='e.g. "no spicy", "no onion"'
+                  className="mt-2 min-h-[96px] w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-base text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                />
+                {noteDraft.trim() && (
+                  <div className="mt-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 dark:border-orange-900 dark:bg-orange-950/40">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-700 dark:text-orange-300">
+                      Kitchen (中文)
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-orange-700 dark:text-orange-300">
+                      {noteTranslating ? "…" : noteDraftTranslated || noteDraft.trim()}
+                    </p>
+                  </div>
+                )}
+              </label>
+
+              <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-xl border border-gray-200 px-4 py-3 dark:border-gray-700">
+                <input
+                  type="checkbox"
+                  checked={notePrintOnReceipt}
+                  onChange={(e) => setNotePrintOnReceipt(e.target.checked)}
+                  className="h-5 w-5 rounded border-gray-300"
+                />
+                <span className="text-base text-gray-800 dark:text-gray-200">
+                  {translate("printOnReceipt")}
+                </span>
+              </label>
+            </div>
+          </Modal>
         </div>
       )}
     </>

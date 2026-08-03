@@ -19,28 +19,13 @@ import {
   transferTable,
   updateTableOrders,
 } from "@/src/lib/table-actions";
+import { mapTableRow } from "@/src/lib/supabase-data";
 
 export type TableOrderModalState =
   | { type: "new-order"; tableId: string; mode: "new" | "append" }
   | { type: "manage-table"; tableId: string }
   | { type: "checkout"; tableId: string; orders: OrderItem[] }
   | null;
-
-function mergeOrdersLocal(existing: OrderItem[], incoming: OrderItem[]) {
-  const merged = existing.map((item) => ({ ...item }));
-  for (const item of incoming) {
-    const match = merged.find(
-      (entry) =>
-        entry.name === item.name &&
-        entry.notes === item.notes &&
-        entry.notesTranslated === item.notesTranslated &&
-        entry.status === item.status,
-    );
-    if (match) match.quantity += item.quantity;
-    else merged.push({ ...item });
-  }
-  return merged;
-}
 
 interface UseTableOrderWorkflowOptions {
   tables: RestaurantTable[];
@@ -106,18 +91,8 @@ export function useTableOrderWorkflow({
 
     logAction(isAppend ? "add items" : "new order", `Table ${selectedTable?.label}`);
 
-    setTables((prev) =>
-      prev.map((t) => {
-        if (t.id !== modal.tableId) return t;
-        const updatedOrders = isAppend ? mergeOrdersLocal(t.orders ?? [], orders) : orders;
-        return {
-          ...t,
-          status: "waiting",
-          occupiedAt: t.occupiedAt ?? new Date(),
-          orders: updatedOrders,
-        };
-      }),
-    );
+    const updatedTable = mapTableRow(data);
+    setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
     setModal(null);
     onRefresh();
   };
@@ -126,22 +101,17 @@ export function useTableOrderWorkflow({
     if (!modal || modal.type !== "manage-table") return;
     setIsSaving(true);
     setActionError(null);
-    const { error } = await updateTableOrders(modal.tableId, orders);
+    const { data, error } = await updateTableOrders(modal.tableId, orders);
     setIsSaving(false);
     if (error) {
       setActionError(error.message);
       return;
     }
     logAction("update table order", `Table ${selectedTable?.label}`);
-    setTables((prev) =>
-      prev.map((t) => {
-        if (t.id !== modal.tableId) return t;
-        if (orders.length === 0) {
-          return { ...t, status: "empty" as const, occupiedAt: undefined, orders: undefined };
-        }
-        return { ...t, orders, status: t.status === "ready" ? "ready" : "waiting" };
-      }),
-    );
+    if (data) {
+      const updatedTable = mapTableRow(data);
+      setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
+    }
     onRefresh();
   };
 
@@ -151,7 +121,7 @@ export function useTableOrderWorkflow({
 
     setIsSaving(true);
     setActionError(null);
-    const { error } = await updateTableOrders(modal.tableId, orders);
+    const { data, error } = await updateTableOrders(modal.tableId, orders);
     setIsSaving(false);
 
     if (error) {
@@ -159,13 +129,10 @@ export function useTableOrderWorkflow({
       return;
     }
 
-    setTables((prev) =>
-      prev.map((t) =>
-        t.id === modal.tableId
-          ? { ...t, orders, status: t.status === "ready" ? "ready" : "waiting" }
-          : t,
-      ),
-    );
+    if (data) {
+      const updatedTable = mapTableRow(data);
+      setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
+    }
 
     setModal({ type: "checkout", tableId: modal.tableId, orders });
   };

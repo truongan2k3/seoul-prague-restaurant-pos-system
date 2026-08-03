@@ -23,6 +23,12 @@ function aggregateOrderItems(items: OrderItem[]): OrderItem[] {
 
     if (match) {
       match.quantity += item.quantity;
+      if (
+        item.createdAt &&
+        (!match.createdAt || item.createdAt < match.createdAt)
+      ) {
+        match.createdAt = item.createdAt;
+      }
     } else {
       merged.push({ ...item });
     }
@@ -31,11 +37,39 @@ function aggregateOrderItems(items: OrderItem[]): OrderItem[] {
   return merged;
 }
 
+function expandOrderToUnits(order: OrderItem): OrderItem[] {
+  const units: OrderItem[] = [];
+  for (let index = 0; index < order.quantity; index += 1) {
+    units.push({
+      ...order,
+      quantity: 1,
+      id: index === 0 ? order.id : undefined,
+      createdAt: index === 0 ? order.createdAt : undefined,
+    });
+  }
+  return units;
+}
+
+function orderItemRowUpdate(unit: OrderItem) {
+  return {
+    name: unit.name,
+    price: unit.price,
+    quantity: 1,
+    notes: unit.notes ?? null,
+    notes_translated: unit.notesTranslated ?? null,
+    is_printed_note: unit.isPrintedNote ?? false,
+    station: unit.station ?? "kitchen",
+    status: normalizeOrderItemStatus(unit.status ?? "preparing"),
+    menu_item_id: unit.menuItemId ?? null,
+  };
+}
+
 async function syncTableOrdersFromDb(tableId: string) {
   const { data: rows } = await supabase
     .from("order_items")
     .select("*")
-    .eq("table_id", tableId);
+    .eq("table_id", tableId)
+    .order("created_at", { ascending: true });
 
   if (!rows?.length) {
     const { data: table } = await supabase.from("tables").select("status").eq("id", tableId).single();
@@ -85,31 +119,6 @@ async function insertOrderRowsWithLogs(
   return { error: null as Error | null };
 }
 
-function mergeOrderItems(existing: OrderItem[], incoming: OrderItem[]): OrderItem[] {
-  const merged = existing.map((item) => ({ ...item }));
-
-  for (const item of incoming) {
-    const match = merged.find(
-      (entry) =>
-        entry.name === item.name &&
-        entry.notes === item.notes &&
-        entry.notesTranslated === item.notesTranslated &&
-        entry.isPrintedNote === item.isPrintedNote &&
-        entry.status === item.status &&
-        entry.price === item.price &&
-        entry.station === item.station,
-    );
-
-    if (match) {
-      match.quantity += item.quantity;
-    } else {
-      merged.push({ ...item });
-    }
-  }
-
-  return merged;
-}
-
 function buildOrderRows(tableId: string, orders: OrderItem[], staffId?: string) {
   return orders.flatMap((item) =>
     Array.from({ length: item.quantity }, () => ({
@@ -136,23 +145,23 @@ export async function occupyTable(
 ) {
   const occupiedAt = new Date().toISOString();
 
-  const { data, error } = await supabase
+  const { error: tableError } = await supabase
     .from("tables")
     .update({
       status: "waiting",
       occupied_at: occupiedAt,
       orders,
     })
-    .eq("id", tableId)
-    .select("*")
-    .single();
+    .eq("id", tableId);
 
-  if (error) return { data, error };
+  if (tableError) return { data: null, error: tableError };
 
   const { error: itemsError } = await insertOrderRowsWithLogs(tableId, orders, staffId, staffName);
   if (itemsError) return { data: null, error: itemsError };
 
-  return { data, error: null };
+  await syncTableOrdersFromDb(tableId);
+
+  return supabase.from("tables").select("*").eq("id", tableId).single();
 }
 
 export async function appendOrdersToTable(
@@ -163,27 +172,12 @@ export async function appendOrdersToTable(
 ) {
   const { data: table, error: fetchError } = await supabase
     .from("tables")
-    .select("*")
+    .select("id")
     .eq("id", tableId)
     .single();
 
   if (fetchError) return { data: null, error: fetchError };
   if (!table) return { data: null, error: new Error("Table not found") };
-
-  const existingOrders = (table.orders as OrderItem[] | null) ?? [];
-  const mergedOrders = mergeOrderItems(existingOrders, newOrders);
-
-  const { data, error } = await supabase
-    .from("tables")
-    .update({
-      status: "waiting",
-      orders: mergedOrders,
-    })
-    .eq("id", tableId)
-    .select("*")
-    .single();
-
-  if (error) return { data, error };
 
   const { error: itemsError } = await insertOrderRowsWithLogs(
     tableId,
@@ -193,7 +187,9 @@ export async function appendOrdersToTable(
   );
   if (itemsError) return { data: null, error: itemsError };
 
-  return { data, error: null };
+  await syncTableOrdersFromDb(tableId);
+
+  return supabase.from("tables").select("*").eq("id", tableId).single();
 }
 
 export async function updateTableOrders(tableId: string, orders: OrderItem[]) {
@@ -203,35 +199,44 @@ export async function updateTableOrders(tableId: string, orders: OrderItem[]) {
     return clearTable(tableId);
   }
 
-  const { data: table, error: fetchError } = await supabase
-    .from("tables")
-    .select("status")
-    .eq("id", tableId)
-    .single();
-
-  if (fetchError) return { data: null, error: fetchError };
-
-  const { data, error } = await supabase
-    .from("tables")
-    .update({
-      orders: activeOrders,
-      status: table?.status === "ready" ? "ready" : "waiting",
-    })
-    .eq("id", tableId)
+  const { data: existingRows, error: fetchItemsError } = await supabase
+    .from("order_items")
     .select("*")
-    .single();
+    .eq("table_id", tableId)
+    .order("created_at", { ascending: true });
 
-  if (error) return { data, error };
+  if (fetchItemsError) return { data: null, error: fetchItemsError };
 
-  await supabase.from("order_items").delete().eq("table_id", tableId);
+  const desiredUnits = activeOrders.flatMap(expandOrderToUnits);
+  const existingIds = new Set((existingRows ?? []).map((row) => row.id));
+  const desiredIds = new Set(
+    desiredUnits.map((unit) => unit.id).filter((id): id is string => Boolean(id)),
+  );
 
-  const orderRows = buildOrderRows(tableId, activeOrders);
-  if (orderRows.length > 0) {
-    const { error: itemsError } = await supabase.from("order_items").insert(orderRows);
+  const idsToDelete = [...existingIds].filter((id) => !desiredIds.has(id));
+  if (idsToDelete.length > 0) {
+    const { error: deleteError } = await supabase.from("order_items").delete().in("id", idsToDelete);
+    if (deleteError) return { data: null, error: deleteError };
+  }
+
+  for (const unit of desiredUnits) {
+    if (!unit.id) continue;
+    const { error: updateError } = await supabase
+      .from("order_items")
+      .update(orderItemRowUpdate(unit))
+      .eq("id", unit.id);
+    if (updateError) return { data: null, error: updateError };
+  }
+
+  const newUnits = desiredUnits.filter((unit) => !unit.id);
+  if (newUnits.length > 0) {
+    const { error: itemsError } = await insertOrderRowsWithLogs(tableId, newUnits);
     if (itemsError) return { data: null, error: itemsError };
   }
 
-  return { data, error: null };
+  await syncTableOrdersFromDb(tableId);
+
+  return supabase.from("tables").select("*").eq("id", tableId).single();
 }
 
 export async function clearTable(tableId: string) {
@@ -301,6 +306,9 @@ export async function checkoutTable(
     payment_method: payment.paymentMethod,
     amount_given: payment.amountGiven ?? null,
     change_due: payment.changeDue ?? null,
+    card_auth_code: payment.cardAuthCode ?? null,
+    card_last4: payment.cardLast4 ?? null,
+    card_brand: payment.cardBrand ?? null,
     split_mode: payment.splitMode,
     split_count: payment.splitCount,
     items: orders,

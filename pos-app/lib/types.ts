@@ -11,6 +11,44 @@ export type LanguageCode = "en" | "cs" | "zh";
 export type ThemeMode = "light" | "dark";
 export type NavId = "map" | "order" | "reservations" | "history" | "summary" | "storage" | "staff" | "settings";
 
+export type WeekdayKey =
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+  | "sunday";
+
+export interface DayOperatingHours {
+  enabled: boolean;
+  open: string;
+  close: string;
+}
+
+export type ReservationOperatingHours = Record<WeekdayKey, DayOperatingHours>;
+
+/** Thermal receipt font size preset (maps to px in receipt-print-styles). */
+export type ReceiptFontSize = "normal" | "medium" | "large";
+
+/** Thermal receipt ink density / boldness preset. */
+export type ReceiptFontWeight = "normal" | "semibold" | "bold" | "extrabold";
+
+/** Thermal receipt font family preset (system fonts for reliable printing). */
+export type ReceiptFontFamily =
+  | "courier"
+  | "consolas"
+  | "arial"
+  | "tahoma"
+  | "georgia"
+  | "lucida";
+
+/** Card terminal integration mode. */
+export type TerminalType = "mock" | "network";
+
+/** outbound = POS connects to terminal IP; inbound = POS listens, terminal connects to PC. */
+export type TerminalConnectionMode = "outbound" | "inbound";
+
 export interface AppSettings {
   printerIp: string;
   printerPort: string;
@@ -24,6 +62,23 @@ export interface AppSettings {
   receiptPhone: string;
   receiptFooterNote: string;
   customAlertSoundUrl: string;
+  showPricesOnOrderScreen: boolean;
+  enablePriceRounding: boolean;
+  showEurCurrency: boolean;
+  eurExchangeRate: number;
+  reservationTimeStep: number;
+  reservationMaxGuestsPerSlot: number;
+  reservationTableHoldingTime: number;
+  reservationOperatingHours: ReservationOperatingHours;
+  receiptFontSize: ReceiptFontSize;
+  receiptFontWeight: ReceiptFontWeight;
+  receiptFontFamily: ReceiptFontFamily;
+  adminDeletionPassword: string;
+  terminalType: TerminalType;
+  terminalIp: string;
+  terminalPort: string;
+  terminalPosId: string;
+  terminalConnectionMode: TerminalConnectionMode;
 }
 
 export type StaffRole = "admin" | "manager" | "server" | "kitchen" | "bar";
@@ -33,6 +88,8 @@ export interface OrderItem {
   name: string;
   quantity: number;
   price: number;
+  /** Menu list price before line-level override/discount */
+  originalPrice?: number;
   notes?: string;
   notesTranslated?: string;
   isPrintedNote?: boolean;

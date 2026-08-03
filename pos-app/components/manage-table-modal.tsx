@@ -1,17 +1,31 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRightLeft, Minus, Plus, Save, ShoppingBag, Trash2 } from "lucide-react";
+import { ArrowRightLeft, Minus, Percent, Plus, Save, ShoppingBag, Tag, Trash2 } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { useApp } from "@/contexts/app-context";
-import { formatPrice } from "@/lib/i18n/translations";
+import { usePinGate } from "@/contexts/pin-gate-context";
+import { useSettings } from "@/contexts/settings-context";
+import {
+  inferPercentDiscount,
+  isLinePriceAdjusted,
+  resolveOriginalUnitPrice,
+  withAdjustedLinePrice,
+  withResetLinePrice,
+  type LinePriceAdjustMode,
+} from "@/lib/order-line-pricing";
 import { orderItemDisplayName } from "@/lib/menu-display";
 import {
   normalizeOrderItemStatus,
   rowSurfaceClass,
   statusTranslationKey,
 } from "@/lib/order-status";
-import { isLineEditable } from "@/lib/order-sla";
+import {
+  isManageTableLineEditable,
+  isManageTablePriceEditable,
+} from "@/lib/order-sla";
+import { formatPosPrice, priceDisplayOptionsFromSettings } from "@/lib/price-display";
+import { filterButtonClass } from "@/lib/theme-classes";
 import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
 import { markItemsServed } from "@/src/lib/table-actions";
 
@@ -33,15 +47,24 @@ interface ManageTableModalProps {
   error?: string | null;
 }
 
-function toEditableLines(orderItems: OrderItem[], fallbackOrders: OrderItem[]): EditableLine[] {
+function toEditableLines(
+  orderItems: OrderItem[],
+  fallbackOrders: OrderItem[],
+  menuItems: MenuItem[],
+): EditableLine[] {
   const source = orderItems.length > 0 ? orderItems : fallbackOrders;
 
-  return source.map((item, index) => ({
-    ...item,
-    lineId: item.id
-      ? `${item.id}::${index}`
-      : `line-${index}-${item.menuItemId ?? "x"}-${item.name}-${item.notes ?? ""}-${item.price}-${item.station ?? ""}`,
-  }));
+  return source.map((item, index) => {
+    const originalPrice = resolveOriginalUnitPrice(item, menuItems);
+    return {
+      ...item,
+      originalPrice,
+      price: item.price,
+      lineId: item.id
+        ? `${item.id}::${index}`
+        : `line-${index}-${item.menuItemId ?? "x"}-${item.name}-${item.notes ?? ""}-${item.price}-${item.station ?? ""}`,
+    };
+  });
 }
 
 function Section({
@@ -61,6 +84,117 @@ function Section({
   );
 }
 
+function LinePriceEditor({
+  line,
+  menuItems,
+  translate,
+  formatOrderPrice,
+  onApply,
+  onReset,
+  onCancel,
+}: {
+  line: EditableLine;
+  menuItems: MenuItem[];
+  translate: ReturnType<typeof useApp>["translate"];
+  formatOrderPrice: (amount: number) => string;
+  onApply: (mode: LinePriceAdjustMode, value: number) => void;
+  onReset: () => void;
+  onCancel: () => void;
+}) {
+  const originalPrice = resolveOriginalUnitPrice(line, menuItems);
+  const adjusted = isLinePriceAdjusted(line, menuItems);
+  const [mode, setMode] = useState<LinePriceAdjustMode>(adjusted ? "custom" : "percent");
+  const [value, setValue] = useState(() => {
+    if (!adjusted) return "";
+    return String(
+      adjusted && inferPercentDiscount(originalPrice, line.price) > 0
+        ? inferPercentDiscount(originalPrice, line.price)
+        : line.price,
+    );
+  });
+
+  const previewPrice =
+    mode === "percent"
+      ? originalPrice * (1 - Math.min(100, Math.max(0, Number(value) || 0)) / 100)
+      : Math.max(0, Number(value) || 0);
+
+  return (
+    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/80 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+      <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">
+        {translate("editPrice")} — {line.name}
+      </p>
+      <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-300/80">
+        {translate("lineOriginalPrice")}: {formatOrderPrice(originalPrice)}
+      </p>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setMode("percent")}
+          className={filterButtonClass(mode === "percent")}
+        >
+          {translate("priceAdjustPercent")}
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("custom")}
+          className={filterButtonClass(mode === "custom")}
+        >
+          {translate("priceAdjustCustom")}
+        </button>
+      </div>
+
+      <label className="mt-3 block text-xs">
+        <span className="text-gray-600 dark:text-gray-300">
+          {mode === "percent" ? translate("priceAdjustPercent") : translate("priceAdjustCustom")}
+        </span>
+        <input
+          type="number"
+          min={0}
+          max={mode === "percent" ? 100 : undefined}
+          step={mode === "percent" ? 1 : 0.5}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          className="pos-input mt-1"
+          placeholder={mode === "percent" ? "10" : String(originalPrice)}
+        />
+      </label>
+
+      <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">
+        {translate("lineNewPrice")}:{" "}
+        <span className="font-semibold tabular-nums">{formatOrderPrice(previewPrice)}</span>
+      </p>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => onApply(mode, Number(value))}
+          disabled={value === "" || Number.isNaN(Number(value))}
+          className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+        >
+          {translate("applyPrice")}
+        </button>
+        {adjusted && (
+          <button
+            type="button"
+            onClick={onReset}
+            className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-900 dark:border-amber-800 dark:text-amber-200"
+          >
+            {translate("resetPrice")}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold dark:border-gray-700"
+        >
+          {translate("cancel")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function ManageTableModal({
   open,
   table,
@@ -77,20 +211,27 @@ export function ManageTableModal({
   error,
 }: ManageTableModalProps) {
   const { translate, language, currentStaffUser } = useApp();
+  const { requestPin } = usePinGate();
+  const { settings } = useSettings();
+  const priceOptions = priceDisplayOptionsFromSettings(settings);
+  const formatOrderPrice = (amount: number) => formatPosPrice(amount, priceOptions);
+
   const [lines, setLines] = useState<EditableLine[]>([]);
   const [transferTo, setTransferTo] = useState("");
   const [showTransfer, setShowTransfer] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [servingId, setServingId] = useState<string | null>(null);
+  const [priceEditLineId, setPriceEditLineId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setLines(toEditableLines(orderItems, table.orders ?? []));
+    setLines(toEditableLines(orderItems, table.orders ?? [], menuItems));
     setTransferTo("");
     setShowTransfer(false);
     setLocalError(null);
     setServingId(null);
-  }, [open, table, orderItems]);
+    setPriceEditLineId(null);
+  }, [open, table, orderItems, menuItems]);
 
   const emptyTables = allTables.filter((t) => t.status === "empty" && t.id !== table.id);
 
@@ -105,6 +246,7 @@ export function ManageTableModal({
   );
 
   const adjustQuantity = (lineId: string, delta: number) => {
+    setPriceEditLineId(null);
     setLines((prev) =>
       prev
         .map((line) =>
@@ -115,7 +257,32 @@ export function ManageTableModal({
   };
 
   const removeLine = (lineId: string) => {
+    setPriceEditLineId(null);
     setLines((prev) => prev.filter((line) => line.lineId !== lineId));
+  };
+
+  const openPriceEditor = (line: EditableLine) => {
+    requestPin(() => {
+      setPriceEditLineId((current) => (current === line.lineId ? null : line.lineId));
+    });
+  };
+
+  const applyPriceEdit = (lineId: string, mode: LinePriceAdjustMode, value: number) => {
+    setLines((prev) =>
+      prev.map((line) =>
+        line.lineId === lineId ? { ...line, ...withAdjustedLinePrice(line, menuItems, mode, value) } : line,
+      ),
+    );
+    setPriceEditLineId(null);
+  };
+
+  const resetLinePrice = (lineId: string) => {
+    setLines((prev) =>
+      prev.map((line) =>
+        line.lineId === lineId ? { ...line, ...withResetLinePrice(line, menuItems) } : line,
+      ),
+    );
+    setPriceEditLineId(null);
   };
 
   const markServed = async (line: EditableLine) => {
@@ -186,14 +353,17 @@ export function ManageTableModal({
               {lines.map((line) => {
                 const displayName = orderItemDisplayName(line, menuItems, language);
                 const status = normalizeOrderItemStatus(line.status);
-                const editable = isLineEditable(line.status);
+                const qtyEditable = isManageTableLineEditable(line.status);
+                const priceEditable = isManageTablePriceEditable(line.status);
                 const isReady = status === "ready";
                 const isServed = status === "served";
+                const originalPrice = resolveOriginalUnitPrice(line, menuItems);
+                const priceChanged = isLinePriceAdjusted(line, menuItems);
 
                 return (
                   <li
                     key={line.lineId}
-                    className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 ${
+                    className={`rounded-lg border px-3 py-2.5 ${
                       isServed
                         ? "border-slate-300 bg-slate-50 opacity-90 dark:border-slate-600 dark:bg-slate-900/60"
                         : isReady
@@ -201,87 +371,147 @@ export function ManageTableModal({
                           : `border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 ${rowSurfaceClass(status)}`
                     }`}
                   >
-                    <div className="min-w-0 flex-1">
-                      <p
-                        className={`text-sm font-medium ${
-                          isServed
-                            ? "text-slate-600 line-through opacity-80 dark:text-slate-300"
-                            : isReady
-                              ? "text-emerald-900 dark:text-emerald-100"
-                              : "text-gray-900 dark:text-gray-100"
-                        }`}
-                      >
-                        {displayName}
-                      </p>
-                      <p
-                        className={`text-xs ${
-                          isServed
-                            ? "text-slate-500 dark:text-slate-400"
-                            : isReady
-                              ? "text-emerald-700 dark:text-emerald-300"
-                              : "text-gray-500 dark:text-gray-400"
-                        }`}
-                      >
-                        {formatPrice(line.price)} each
-                        {line.notes && ` · ${line.notes}`}
-                        {line.station && ` · ${line.station}`}
-                        {" · "}
-                        <span className="font-semibold uppercase">
-                          {translate(statusTranslationKey(status))}
-                        </span>
-                      </p>
+                    <div className="flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={`text-sm font-medium ${
+                            isServed
+                              ? "text-slate-600 line-through opacity-80 dark:text-slate-300"
+                              : isReady
+                                ? "text-emerald-900 dark:text-emerald-100"
+                                : "text-gray-900 dark:text-gray-100"
+                          }`}
+                        >
+                          {displayName}
+                        </p>
+                        <p
+                          className={`text-xs ${
+                            isServed
+                              ? "text-slate-500 dark:text-slate-400"
+                              : isReady
+                                ? "text-emerald-700 dark:text-emerald-300"
+                                : "text-gray-500 dark:text-gray-400"
+                          }`}
+                        >
+                          {priceChanged ? (
+                            <>
+                              <span className="line-through opacity-70">
+                                {formatOrderPrice(originalPrice)}
+                              </span>{" "}
+                              <span className="font-semibold text-amber-700 dark:text-amber-300">
+                                {formatOrderPrice(line.price)}
+                              </span>
+                              <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                                {translate("priceAdjusted")}
+                              </span>
+                            </>
+                          ) : (
+                            <>{formatOrderPrice(line.price)} each</>
+                          )}
+                          {line.notes && ` · ${line.notes}`}
+                          {line.station && ` · ${line.station}`}
+                          {" · "}
+                          <span className="font-semibold uppercase">
+                            {translate(statusTranslationKey(status))}
+                          </span>
+                        </p>
+                      </div>
+
+                      {qtyEditable ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => adjustQuantity(line.lineId, -1)}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-700 dark:border-gray-600 dark:text-gray-200"
+                            aria-label="Decrease quantity"
+                          >
+                            <Minus className="h-4 w-4" />
+                          </button>
+                          <span className="w-8 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            {line.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => adjustQuantity(line.lineId, 1)}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-700 dark:border-gray-600 dark:text-gray-200"
+                            aria-label="Increase quantity"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </button>
+                          {priceEditable && (
+                            <button
+                              type="button"
+                              onClick={() => openPriceEditor(line)}
+                              className={`flex h-8 w-8 items-center justify-center rounded-lg border ${
+                                priceEditLineId === line.lineId
+                                  ? "border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+                                  : "border-gray-200 text-gray-700 dark:border-gray-600 dark:text-gray-200"
+                              }`}
+                              aria-label={translate("editPrice")}
+                              title={translate("editPrice")}
+                            >
+                              <Tag className="h-4 w-4" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => removeLine(line.lineId)}
+                            className="ml-1 flex h-8 w-8 items-center justify-center rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
+                            aria-label="Remove item"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-8 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            {line.quantity}
+                          </span>
+                          {priceEditable && (
+                            <button
+                              type="button"
+                              onClick={() => openPriceEditor(line)}
+                              className={`flex h-8 w-8 items-center justify-center rounded-lg border ${
+                                priceEditLineId === line.lineId
+                                  ? "border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+                                  : "border-gray-200 text-gray-700 dark:border-gray-600 dark:text-gray-200"
+                              }`}
+                              aria-label={translate("editPrice")}
+                              title={translate("editPrice")}
+                            >
+                              <Percent className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {isReady && line.id && (
+                        <button
+                          type="button"
+                          disabled={servingId === line.id}
+                          onClick={() => void markServed(line)}
+                          className="shrink-0 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-emerald-500 disabled:opacity-50"
+                        >
+                          {translate("served")}
+                        </button>
+                      )}
+
+                      <span className="w-20 text-right text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                        {formatOrderPrice(line.price * line.quantity)}
+                      </span>
                     </div>
 
-                    {editable ? (
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => adjustQuantity(line.lineId, -1)}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-700 dark:border-gray-600 dark:text-gray-200"
-                          aria-label="Decrease quantity"
-                        >
-                          <Minus className="h-4 w-4" />
-                        </button>
-                        <span className="w-8 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">
-                          {line.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => adjustQuantity(line.lineId, 1)}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-700 dark:border-gray-600 dark:text-gray-200"
-                          aria-label="Increase quantity"
-                        >
-                          <Plus className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeLine(line.lineId)}
-                          className="ml-1 flex h-8 w-8 items-center justify-center rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
-                          aria-label="Remove item"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="w-8 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        {line.quantity}
-                      </span>
+                    {priceEditLineId === line.lineId && (
+                      <LinePriceEditor
+                        line={line}
+                        menuItems={menuItems}
+                        translate={translate}
+                        formatOrderPrice={formatOrderPrice}
+                        onApply={(mode, value) => applyPriceEdit(line.lineId, mode, value)}
+                        onReset={() => resetLinePrice(line.lineId)}
+                        onCancel={() => setPriceEditLineId(null)}
+                      />
                     )}
-
-                    {isReady && line.id && (
-                      <button
-                        type="button"
-                        disabled={servingId === line.id}
-                        onClick={() => void markServed(line)}
-                        className="shrink-0 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-emerald-500 disabled:opacity-50"
-                      >
-                        {translate("served")}
-                      </button>
-                    )}
-
-                    <span className="w-16 text-right text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
-                      {formatPrice(line.price * line.quantity)}
-                    </span>
                   </li>
                 );
               })}
@@ -291,7 +521,7 @@ export function ManageTableModal({
           <div className="mt-4 flex items-center justify-between border-t border-gray-200 pt-3 dark:border-gray-700">
             <span className="text-sm text-gray-500 dark:text-gray-400">{translate("subtotal")}</span>
             <span className="font-semibold text-gray-900 dark:text-gray-100">
-              {formatPrice(subtotal)}
+              {formatOrderPrice(subtotal)}
             </span>
           </div>
         </Section>

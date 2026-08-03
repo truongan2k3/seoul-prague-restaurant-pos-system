@@ -5,6 +5,7 @@ import { MapPin, Plus, UserPlus } from "lucide-react";
 import { LiveClock } from "@/components/live-clock";
 import { Modal } from "@/components/modal";
 import { useApp } from "@/contexts/app-context";
+import { useSettings } from "@/contexts/settings-context";
 import { useNotifications } from "@/contexts/notification-context";
 import {
   canAssignTable,
@@ -62,6 +63,7 @@ interface ReservationsViewProps {
 
 export function ReservationsView({ tables, onRefreshTables }: ReservationsViewProps) {
   const { translate, language, currentStaffUser } = useApp();
+  const { settings } = useSettings();
   const { pushNotification } = useNotifications();
   const [reservations, setReservations] = useState<ReservationRecord[]>([]);
   const [period, setPeriod] = useState<ReservationPeriod>("today");
@@ -136,7 +138,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
   useEffect(() => {
     const runLateCheck = () => {
-      void markLateReservations().then(({ updated, error: lateError }) => {
+      void markLateReservations(settings.reservationTableHoldingTime).then(({ updated, error: lateError }) => {
         if (lateError) return;
         if (updated > 0) void loadReservations();
       });
@@ -145,7 +147,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     runLateCheck();
     const intervalId = window.setInterval(runLateCheck, LATE_SLA_INTERVAL_MS);
     return () => window.clearInterval(intervalId);
-  }, [loadReservations]);
+  }, [loadReservations, settings.reservationTableHoldingTime]);
 
   useEffect(() => {
     const now = new Date();

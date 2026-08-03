@@ -1,9 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Clock, Mail, MapPin, Phone, UtensilsCrossed } from "lucide-react";
 import { Modal } from "@/components/modal";
-import { createOnlineReservation } from "@/src/lib/reservation-actions";
+import {
+  buildTimeSlotsForDate,
+  filterPastTimeSlots,
+  filterSlotsByCapacity,
+  formatOperatingHoursSummary,
+  todayIsoDate,
+  type SlotCapacityRow,
+} from "@/lib/reservation-slots";
+import type { AppSettings } from "@/lib/types";
+import { DEFAULT_APP_SETTINGS, fetchAppSettings } from "@/src/lib/settings-actions";
+import {
+  createOnlineReservation,
+  fetchReservationsForDate,
+} from "@/src/lib/reservation-actions";
 
 const RESTAURANT_NAME = "SEOUL PRAGUE Korean BBQ";
 const ADDRESS = "Václavské nám. 819/43, 110 00 Praha";
@@ -13,27 +26,10 @@ const EMAIL = "info@seoulprague.cz";
 const PHONE_HREF = "tel:+420123456789";
 const EMAIL_HREF = "mailto:info@seoulprague.cz";
 
-function buildTimeSlots(): string[] {
-  const slots: string[] = [];
-  for (let hour = 10; hour <= 21; hour += 1) {
-    for (const minute of [0, 30]) {
-      if (hour === 21 && minute > 30) continue;
-      slots.push(`${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`);
-    }
-  }
-  return slots;
-}
-
-function todayIsoDate(): string {
-  const now = new Date();
-  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-  return now.toISOString().slice(0, 10);
-}
-
-const TIME_SLOTS = buildTimeSlots();
-const GUEST_OPTIONS = Array.from({ length: 20 }, (_, index) => index + 1);
-
 export function ReservationBookingView() {
+  const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [reservationsForDate, setReservationsForDate] = useState<SlotCapacityRow[]>([]);
+  const [settingsLoading, setSettingsLoading] = useState(true);
   const [guestName, setGuestName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("+420 ");
@@ -46,6 +42,77 @@ export function ReservationBookingView() {
   const [showSuccess, setShowSuccess] = useState(false);
 
   const minDate = useMemo(() => todayIsoDate(), []);
+
+  useEffect(() => {
+    void fetchAppSettings().then(({ data }) => {
+      setAppSettings(data);
+      setSettingsLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (guestCount > appSettings.reservationMaxGuestsPerSlot) {
+      setGuestCount(appSettings.reservationMaxGuestsPerSlot);
+    }
+  }, [appSettings.reservationMaxGuestsPerSlot, guestCount]);
+
+  useEffect(() => {
+    void fetchReservationsForDate(date).then(({ data, error }) => {
+      if (error || !data) {
+        setReservationsForDate([]);
+        return;
+      }
+      setReservationsForDate(
+        data.map((row) => ({
+          partySize: row.party_size,
+          reservedAt: row.reserved_at,
+          status: row.status,
+        })),
+      );
+    });
+  }, [date]);
+
+  const guestOptions = useMemo(
+    () =>
+      Array.from({ length: appSettings.reservationMaxGuestsPerSlot }, (_, index) => index + 1),
+    [appSettings.reservationMaxGuestsPerSlot],
+  );
+
+  const availableTimeSlots = useMemo(() => {
+    const baseSlots = buildTimeSlotsForDate(
+      date,
+      appSettings.reservationOperatingHours,
+      appSettings.reservationTimeStep,
+    );
+    const futureSlots = filterPastTimeSlots(baseSlots, date);
+    return filterSlotsByCapacity(
+      futureSlots,
+      reservationsForDate,
+      date,
+      appSettings.reservationTimeStep,
+      appSettings.reservationMaxGuestsPerSlot,
+      guestCount,
+    );
+  }, [
+    appSettings.reservationMaxGuestsPerSlot,
+    appSettings.reservationOperatingHours,
+    appSettings.reservationTimeStep,
+    date,
+    guestCount,
+    reservationsForDate,
+  ]);
+
+  useEffect(() => {
+    if (availableTimeSlots.length === 0) return;
+    if (!availableTimeSlots.includes(time)) {
+      setTime(availableTimeSlots[0]);
+    }
+  }, [availableTimeSlots, time]);
+
+  const openingHoursSummary = useMemo(
+    () => formatOperatingHoursSummary(appSettings.reservationOperatingHours),
+    [appSettings.reservationOperatingHours],
+  );
 
   const resetForm = () => {
     setGuestName("");
@@ -148,7 +215,7 @@ export function ReservationBookingView() {
               <Clock className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
               <div>
                 <p className="text-sm font-semibold text-white">Opening Hours</p>
-                <p className="mt-1 text-sm text-zinc-300">Monday – Sunday: 10:00 – 22:00</p>
+                <p className="mt-1 text-sm text-zinc-300 whitespace-pre-line">{openingHoursSummary}</p>
               </div>
             </div>
           </div>
@@ -212,7 +279,7 @@ export function ReservationBookingView() {
                     className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30"
                     required
                   >
-                    {GUEST_OPTIONS.map((count) => (
+                    {guestOptions.map((count) => (
                       <option key={count} value={count}>
                         {count} {count === 1 ? "guest" : "guests"}
                       </option>
@@ -242,11 +309,17 @@ export function ReservationBookingView() {
                     className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30"
                     required
                   >
-                    {TIME_SLOTS.map((slot) => (
-                      <option key={slot} value={slot}>
-                        {slot}
+                    {availableTimeSlots.length === 0 ? (
+                      <option value="">
+                        {settingsLoading ? "Loading…" : "No times available"}
                       </option>
-                    ))}
+                    ) : (
+                      availableTimeSlots.map((slot) => (
+                        <option key={slot} value={slot}>
+                          {slot}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </label>
               </div>
@@ -268,7 +341,7 @@ export function ReservationBookingView() {
 
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || availableTimeSlots.length === 0}
                 className="w-full rounded-xl bg-red-600 py-4 text-base font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {submitting ? "Submitting…" : "Submit Reservation →"}

@@ -6,7 +6,11 @@ export const CFD_CHANNEL = "cfd_display";
 
 export type CfdClientState = "idle" | "checkout" | "thankyou";
 
-export type CfdEventName = "START_CHECKOUT" | "PAYMENT_SUCCESS" | "CANCEL_CHECKOUT";
+export type CfdEventName =
+  | "START_CHECKOUT"
+  | "PAYMENT_SUCCESS"
+  | "CANCEL_CHECKOUT"
+  | "TERMINAL_PENDING";
 
 export interface CfdCheckoutItem {
   name: string;
@@ -29,6 +33,7 @@ export interface CfdEventPayload {
   START_CHECKOUT: CfdCheckoutPayload;
   PAYMENT_SUCCESS: { tableNumber?: string };
   CANCEL_CHECKOUT: Record<string, never>;
+  TERMINAL_PENDING: { amount: number };
 }
 
 const GOOGLE_REVIEW_URL =

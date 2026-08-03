@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { ArrowLeft, ArrowRight, ChevronDown, Printer, X } from "lucide-react";
+import { CardPaymentModal } from "@/components/card-payment-modal";
 import { useApp } from "@/contexts/app-context";
+import { usePinGate } from "@/contexts/pin-gate-context";
+import { useSettings } from "@/contexts/settings-context";
 import {
   buildCheckoutTotals,
   calcChangeDue,
   calcTipFromPercent,
-  formatCzk,
   lineTotal,
   ordersFromLines,
   remainingLines,
@@ -16,9 +18,12 @@ import {
   type DiscountType,
   type SplitMode,
 } from "@/lib/checkout-calculations";
+import { formatPosPrice, priceDisplayOptionsFromSettings } from "@/lib/price-display";
 import { buildReceiptLines } from "@/lib/receipt-calculations";
-import { buildCfdCheckoutPayload, type CfdCheckoutPayload } from "@/lib/cfd-display";
+import { buildCfdCheckoutPayload, sendCfdEvent, type CfdCheckoutPayload } from "@/lib/cfd-display";
+import { playPaymentSuccessSound } from "@/lib/notification-sound";
 import type { MenuItem, OrderItem, PaymentMethod } from "@/lib/types";
+import type { TerminalPaymentResponse } from "@/src/lib/terminalApi";
 import { filterButtonClass, paymentFilterClass } from "@/lib/theme-classes";
 
 const TIP_PRESETS = [5, 10, 15] as const;
@@ -116,6 +121,16 @@ export function CheckoutPanel({
   confirmLabel,
 }: CheckoutPanelProps) {
   const { translate } = useApp();
+  const { settings } = useSettings();
+  const { requestPin } = usePinGate();
+  const priceOptions = useMemo(
+    () => priceDisplayOptionsFromSettings(settings),
+    [settings],
+  );
+  const displayPrice = useCallback(
+    (amount: number) => formatPosPrice(amount, priceOptions),
+    [priceOptions],
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
   const accordionRefs = useRef<Partial<Record<AccordionPanel, HTMLDivElement | null>>>({});
 
@@ -132,6 +147,9 @@ export function CheckoutPanel({
   const [splitCount, setSplitCount] = useState(2);
   const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [cardTerminalOpen, setCardTerminalOpen] = useState(false);
+  const [pendingCheckout, setPendingCheckout] = useState<CheckoutSubmitPayload | null>(null);
+  const [terminalBusy, setTerminalBusy] = useState(false);
 
   const menuById = useMemo(() => new Map(menuItems.map((item) => [item.id, item])), [menuItems]);
 
@@ -196,6 +214,7 @@ export function CheckoutPanel({
               tip: 0,
               splitMode: "total",
               splitCount: 1,
+              enablePriceRounding: settings.enablePriceRounding,
             }).afterDiscount,
             tipPreset,
           )
@@ -210,6 +229,7 @@ export function CheckoutPanel({
       splitCount,
       selectedLineIds,
       allLines: lines,
+      enablePriceRounding: settings.enablePriceRounding,
     });
   }, [
     lines,
@@ -221,6 +241,7 @@ export function CheckoutPanel({
     splitMode,
     splitCount,
     selectedLineIds,
+    settings.enablePriceRounding,
   ]);
 
   const changeDue =
@@ -343,17 +364,72 @@ export function CheckoutPanel({
       splitMode === "total" ||
       (splitMode === "items" && (remaining?.length ?? 0) === 0);
 
-    await onCheckout({
+    const payload: CheckoutSubmitPayload = {
       paidOrders,
       payment,
       remainingLines: remaining,
       closeTable,
+    };
+
+    if (paymentMethod === "card") {
+      setPendingCheckout(payload);
+      setCardTerminalOpen(true);
+      setTerminalBusy(true);
+      void sendCfdEvent("TERMINAL_PENDING", { amount: totals.amountDueNow });
+      return;
+    }
+
+    await submitCheckout(payload);
+  };
+
+  const submitCheckout = async (
+    payload: CheckoutSubmitPayload,
+    cardResult?: TerminalPaymentResponse,
+  ) => {
+    const enriched: CheckoutSubmitPayload = cardResult
+      ? {
+          ...payload,
+          payment: {
+            ...payload.payment,
+            cardAuthCode: cardResult.authCode,
+            cardLast4: cardResult.last4,
+            cardBrand: cardResult.brand,
+          },
+        }
+      : payload;
+
+    try {
+      await onCheckout(enriched);
+    } finally {
+      setCardTerminalOpen(false);
+      setPendingCheckout(null);
+      setTerminalBusy(false);
+    }
+  };
+
+  const handleCardApproved = (result: TerminalPaymentResponse) => {
+    if (!pendingCheckout) return;
+    playPaymentSuccessSound();
+    void submitCheckout(pendingCheckout, result);
+  };
+
+  const handleCardCancel = () => {
+    setCardTerminalOpen(false);
+    setPendingCheckout(null);
+    setTerminalBusy(false);
+    void sendCfdEvent("CANCEL_CHECKOUT", {});
+  };
+
+  const handleCardManualOverride = () => {
+    requestPin(() => {
+      if (!pendingCheckout) return;
+      void submitCheckout(pendingCheckout);
     });
   };
 
   const submitLabel = confirmLabel
-    ? `${confirmLabel} · ${formatCzk(totals.amountDueNow)}`
-    : `${translate("checkout")} · ${formatCzk(totals.amountDueNow)}`;
+    ? `${confirmLabel} · ${displayPrice(totals.amountDueNow)}`
+    : `${translate("checkout")} · ${displayPrice(totals.amountDueNow)}`;
 
   const tipControls = (
     <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/80 p-3 dark:border-gray-700 dark:bg-gray-900/40">
@@ -422,7 +498,7 @@ export function CheckoutPanel({
                       {row.name}
                     </td>
                     <td className="px-3 py-1.5 text-center tabular-nums">{row.quantity}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">{formatCzk(row.lineTotal)}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">{displayPrice(row.lineTotal)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -433,7 +509,7 @@ export function CheckoutPanel({
               {translate("subtotal")}
             </span>
             <span className="text-lg font-bold tabular-nums text-gray-900 dark:text-gray-100">
-              {formatCzk(orderSubtotal)}
+              {displayPrice(orderSubtotal)}
             </span>
           </div>
         </section>
@@ -478,7 +554,7 @@ export function CheckoutPanel({
                       className="w-20 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                     />
                     <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                      {translate("perPerson")}: {formatCzk(totals.amountDueNow)}
+                      {translate("perPerson")}: {displayPrice(totals.amountDueNow)}
                     </span>
                   </div>
                 )}
@@ -504,7 +580,7 @@ export function CheckoutPanel({
                                   {line.name}
                                 </span>
                                 <span className="shrink-0 tabular-nums text-gray-500">
-                                  {formatCzk(lineTotal(line))}
+                                  {displayPrice(lineTotal(line))}
                                 </span>
                                 <ArrowRight className="h-3.5 w-3.5 shrink-0 text-blue-600" />
                               </button>
@@ -536,7 +612,7 @@ export function CheckoutPanel({
                                   {line.name}
                                 </span>
                                 <span className="shrink-0 tabular-nums text-gray-500">
-                                  {formatCzk(lineTotal(line))}
+                                  {displayPrice(lineTotal(line))}
                                 </span>
                               </button>
                             </li>
@@ -544,7 +620,7 @@ export function CheckoutPanel({
                         )}
                       </ul>
                       <div className="space-y-2 border-t border-blue-200 p-2 dark:border-blue-900">
-                        <SummaryRow label={translate("subtotal")} value={formatCzk(totals.subtotal)} />
+                        <SummaryRow label={translate("subtotal")} value={displayPrice(totals.subtotal)} />
                         {tipControls}
                       </div>
                     </div>
@@ -650,7 +726,7 @@ export function CheckoutPanel({
                 <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-800 dark:bg-emerald-950/40">
                   <SummaryRow
                     label={translate("changeDue")}
-                    value={formatCzk(changeReturned)}
+                    value={displayPrice(changeReturned)}
                     highlight
                   />
                 </div>
@@ -685,26 +761,26 @@ export function CheckoutPanel({
       <footer className="sticky bottom-0 z-10 shrink-0 border-t border-gray-200 bg-inherit p-4 dark:border-gray-700">
         <div className="mb-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-900/50">
           <div className="space-y-1">
-            <SummaryRow label={translate("subtotal")} value={formatCzk(totals.subtotal)} />
+            <SummaryRow label={translate("subtotal")} value={displayPrice(totals.subtotal)} />
             {totals.discountAmount > 0 && (
               <SummaryRow
                 label={translate("discount")}
-                value={`−${formatCzk(totals.discountAmount)}`}
+                value={`−${displayPrice(totals.discountAmount)}`}
               />
             )}
             {totalTip > 0 && (
-              <SummaryRow label={translate("tip")} value={formatCzk(totalTip)} />
+              <SummaryRow label={translate("tip")} value={displayPrice(totalTip)} />
             )}
             <SummaryRow
               label={translate("grandTotal")}
-              value={formatCzk(totals.grandTotal)}
+              value={displayPrice(totals.grandTotal)}
               emphasize
             />
             {(splitMode === "equal" && splitCount > 1) ||
             (splitMode !== "equal" && totals.amountDueNow !== totals.grandTotal) ? (
               <SummaryRow
                 label={translate("amountDueNow")}
-                value={formatCzk(totals.amountDueNow)}
+                value={displayPrice(totals.amountDueNow)}
                 highlight
               />
             ) : null}
@@ -713,14 +789,31 @@ export function CheckoutPanel({
 
         <button
           type="button"
-          disabled={isSaving || lines.length === 0 || insufficientCash}
+          disabled={isSaving || terminalBusy || lines.length === 0 || insufficientCash}
           onClick={() => void handleCheckout()}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-base font-bold text-white shadow-sm disabled:opacity-40"
         >
           <Printer className="h-5 w-5 shrink-0" />
-          <span className="truncate">{isSaving ? "..." : submitLabel}</span>
+          <span className="truncate">
+            {isSaving || terminalBusy ? "..." : submitLabel}
+          </span>
         </button>
       </footer>
+
+      <CardPaymentModal
+        open={cardTerminalOpen}
+        amount={pendingCheckout?.payment.amountDueNow ?? totals.amountDueNow}
+        terminalConfig={{
+          terminalType: settings.terminalType,
+          terminalIp: settings.terminalIp,
+          terminalPort: settings.terminalPort,
+          terminalPosId: settings.terminalPosId,
+          terminalConnectionMode: settings.terminalConnectionMode,
+        }}
+        onApproved={handleCardApproved}
+        onCancel={handleCardCancel}
+        onManualOverride={handleCardManualOverride}
+      />
     </div>
   );
 }

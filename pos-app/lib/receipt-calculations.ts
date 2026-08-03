@@ -36,6 +36,9 @@ export interface ReceiptData {
   changeDue?: number;
   closedAt: Date;
   taxGroups: ReceiptTaxGroupSummary[];
+  cardAuthCode?: string;
+  cardLast4?: string;
+  cardBrand?: string;
   showEur?: boolean;
   showUsd?: boolean;
   eurRate?: number;
@@ -218,6 +221,9 @@ export function buildReceiptData(input: {
     paymentMethod: input.payment.paymentMethod,
     amountGiven: input.payment.amountGiven,
     changeDue: input.payment.changeDue,
+    cardAuthCode: input.payment.cardAuthCode,
+    cardLast4: input.payment.cardLast4,
+    cardBrand: input.payment.cardBrand,
     closedAt,
     taxGroups,
     showEur: input.showEur,
@@ -259,6 +265,9 @@ export function buildTestReceiptData(business: ReceiptData["business"]): Receipt
     tip: 50,
     grandTotal: 496.4,
     paymentMethod: "card",
+    cardAuthCode: "A98765",
+    cardLast4: "4321",
+    cardBrand: "Mastercard",
     closedAt,
     taxGroups: [
       { group: "A", rate: 21, gross: 106.2, base: 87.77, vat: 18.43 },

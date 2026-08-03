@@ -8,7 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import { ReceiptPreviewModal } from "@/components/receipt-preview-modal";
-import { ReceiptPrint, settingsToReceiptBusiness, settingsToReceiptTemplate } from "@/src/components/ReceiptPrint";
+import { settingsToReceiptBusiness, settingsToReceiptTemplate } from "@/src/components/ReceiptPrint";
+import { printReceiptData } from "@/src/lib/printReceipt";
 import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
 import {
@@ -36,18 +37,10 @@ interface ReceiptPrintContextValue {
 
 const ReceiptPrintContext = createContext<ReceiptPrintContextValue | null>(null);
 
-function triggerBrowserPrint() {
-  requestAnimationFrame(() => {
-    setTimeout(() => {
-      window.print();
-    }, 200);
-  });
-}
-
 export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const { receiptShowEur, receiptShowUsd, eurRate, usdRate } = useApp();
+  const { receiptShowUsd, usdRate } = useApp();
   const { settings } = useSettings();
 
   const business = settingsToReceiptBusiness(settings);
@@ -67,16 +60,30 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
         payment: input.payment,
         menuItems: input.menuItems,
         closedAt: input.closedAt,
-        showEur: receiptShowEur,
+        showEur: settings.showEurCurrency,
         showUsd: receiptShowUsd,
-        eurRate,
+        eurRate: settings.eurExchangeRate,
         usdRate,
         business,
       });
       setReceiptData(data);
-      triggerBrowserPrint();
+      void printReceiptData(data, template, {
+        receiptFontSize: settings.receiptFontSize,
+        receiptFontWeight: settings.receiptFontWeight,
+        receiptFontFamily: settings.receiptFontFamily,
+      });
     },
-    [receiptShowEur, receiptShowUsd, eurRate, usdRate, business],
+    [
+      settings.showEurCurrency,
+      settings.eurExchangeRate,
+      settings.receiptFontSize,
+      settings.receiptFontWeight,
+      settings.receiptFontFamily,
+      receiptShowUsd,
+      usdRate,
+      business,
+      template,
+    ],
   );
 
   const printTestReceipt = useCallback(() => {
@@ -85,13 +92,24 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
 
   const handlePrintFromPreview = useCallback(() => {
     setPreviewOpen(false);
-    triggerBrowserPrint();
-  }, []);
+    if (receiptData) {
+      void printReceiptData(receiptData, template, {
+        receiptFontSize: settings.receiptFontSize,
+        receiptFontWeight: settings.receiptFontWeight,
+        receiptFontFamily: settings.receiptFontFamily,
+      });
+    }
+  }, [
+    receiptData,
+    template,
+    settings.receiptFontSize,
+    settings.receiptFontWeight,
+    settings.receiptFontFamily,
+  ]);
 
   return (
     <ReceiptPrintContext.Provider value={{ printReceipt, printTestReceipt, openReceiptPreview }}>
       {children}
-      <ReceiptPrint data={receiptData} template={template} />
       <ReceiptPreviewModal
         open={previewOpen}
         data={receiptData}

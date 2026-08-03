@@ -17,6 +17,7 @@ import {
   updateAppSettings,
   uploadCustomAlertSound,
   type PrinterBillSettingsDraft,
+  type SettingsPageDraft,
 } from "@/src/lib/settings-actions";
 
 interface SettingsContextValue {
@@ -26,6 +27,7 @@ interface SettingsContextValue {
   error: string | null;
   saveSettings: (partial: Partial<AppSettings>) => Promise<boolean>;
   savePrinterBillSettings: (draft: PrinterBillSettingsDraft) => Promise<boolean>;
+  saveSettingsPageDraft: (draft: SettingsPageDraft) => Promise<boolean>;
   uploadAlertSound: (file: File) => Promise<void>;
   refreshSettings: () => Promise<void>;
 }
@@ -75,6 +77,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [saveSettings],
   );
 
+  const saveSettingsPageDraft = useCallback(
+    async (draft: SettingsPageDraft) => saveSettings(draft),
+    [saveSettings],
+  );
+
   const uploadAlertSound = useCallback(async (file: File) => {
     setSaving(true);
     const { data, error: uploadError } = await uploadCustomAlertSound(file);
@@ -98,10 +105,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       error,
       saveSettings,
       savePrinterBillSettings,
+      saveSettingsPageDraft,
       uploadAlertSound,
       refreshSettings,
     }),
-    [settings, loading, saving, error, saveSettings, savePrinterBillSettings, uploadAlertSound, refreshSettings],
+    [settings, loading, saving, error, saveSettings, savePrinterBillSettings, saveSettingsPageDraft, uploadAlertSound, refreshSettings],
   );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;

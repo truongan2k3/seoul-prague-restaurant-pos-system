@@ -3,6 +3,13 @@ import type {
   ReservationStatus,
   VisitSource,
 } from "@/lib/types";
+import {
+  buildTimeSlotsForDate,
+  getWeekdayKey,
+  type SlotCapacityRow,
+  countGuestsInSlot,
+} from "@/lib/reservation-slots";
+import { fetchAppSettings } from "@/src/lib/settings-actions";
 import { supabase } from "@/src/lib/supabase";
 
 export interface CreateReservationInput {
@@ -128,12 +135,24 @@ export async function checkInReservationWithTable(reservationId: string, tableId
   return checkInReservation(reservationId, tableId);
 }
 
-const LATE_GRACE_MS = 30 * 60 * 1000;
+const DEFAULT_LATE_GRACE_MINUTES = 30;
 
-export async function markLateReservations() {
+export async function fetchReservationsForDate(dateIso: string) {
+  const start = `${dateIso}T00:00:00`;
+  const end = `${dateIso}T23:59:59`;
+
+  return supabase
+    .from("reservations")
+    .select("party_size, reserved_at, status")
+    .gte("reserved_at", start)
+    .lte("reserved_at", end);
+}
+
+export async function markLateReservations(holdingMinutes = DEFAULT_LATE_GRACE_MINUTES) {
   const now = Date.now();
   const lookback = new Date();
   lookback.setDate(lookback.getDate() - 1);
+  const graceMs = holdingMinutes * 60 * 1000;
 
   const { data, error } = await supabase
     .from("reservations")
@@ -144,7 +163,7 @@ export async function markLateReservations() {
   if (error) return { updated: 0, error };
 
   const overdueIds = (data ?? [])
-    .filter((row) => now > new Date(row.reserved_at).getTime() + LATE_GRACE_MS)
+    .filter((row) => now > new Date(row.reserved_at).getTime() + graceMs)
     .map((row) => row.id);
 
   if (overdueIds.length === 0) return { updated: 0, error: null };
@@ -166,13 +185,50 @@ export async function createOnlineReservation(input: {
   time: string;
   notes?: string;
 }) {
+  const { data: settings } = await fetchAppSettings();
   const reservedAt = new Date(`${input.date}T${input.time}:00`);
+  const dayKey = getWeekdayKey(reservedAt);
+  const dayConfig = settings.reservationOperatingHours[dayKey];
+
+  if (!dayConfig.enabled) {
+    return { data: null, error: new Error("Reservations are not accepted on this day.") };
+  }
+
+  const slots = buildTimeSlotsForDate(
+    input.date,
+    settings.reservationOperatingHours,
+    settings.reservationTimeStep,
+  );
+  if (!slots.includes(input.time)) {
+    return { data: null, error: new Error("Selected time is outside booking hours.") };
+  }
+
+  const guestCount = Math.max(1, Math.min(settings.reservationMaxGuestsPerSlot, input.guestCount));
+
+  const { data: existingRows, error: fetchError } = await fetchReservationsForDate(input.date);
+  if (fetchError) return { data: null, error: fetchError };
+
+  const capacityRows: SlotCapacityRow[] = (existingRows ?? []).map((row) => ({
+    partySize: row.party_size,
+    reservedAt: row.reserved_at,
+    status: row.status,
+  }));
+
+  const booked = countGuestsInSlot(
+    capacityRows,
+    input.date,
+    input.time,
+    settings.reservationTimeStep,
+  );
+  if (booked + guestCount > settings.reservationMaxGuestsPerSlot) {
+    return { data: null, error: new Error("This time slot is fully booked. Please choose another time.") };
+  }
 
   return createReservation({
     guestName: input.guestName.trim(),
     guestPhone: input.phone.trim(),
     guestEmail: input.email?.trim() || undefined,
-    partySize: Math.max(1, Math.min(20, input.guestCount)),
+    partySize: guestCount,
     reservedAt,
     notes: input.notes?.trim() || undefined,
     source: "reservation",

@@ -386,6 +386,37 @@ export function SettingsView() {
                   className="h-4 w-4 rounded border-gray-300"
                 />
               </label>
+
+              <div className="rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                  {translate("settingsMenuItemLayout")}
+                </p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {translate("settingsMenuItemLayoutHint")}
+                </p>
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {(
+                    [
+                      { value: "vertical", label: translate("settingsMenuLayoutVertical") },
+                      { value: "horizontal", label: translate("settingsMenuLayoutHorizontal") },
+                    ] as const
+                  ).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => updateDraft("menuItemLayout", option.value)}
+                      className={`min-h-[44px] rounded-lg border px-3 py-2.5 text-left text-sm font-semibold transition ${
+                        draft.menuItemLayout === option.value
+                          ? "border-emerald-500 bg-emerald-50 text-emerald-800 dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-200"
+                          : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
                 <span className="text-sm text-gray-800 dark:text-gray-200">
                   {translate("settingsRoundPrices")}
@@ -620,55 +651,48 @@ export function SettingsView() {
               </div>
 
               <div className="space-y-3">
-                <label className="block text-sm">
-                  <span className="font-medium text-gray-800 dark:text-gray-200">{translate("settingsCfdReviewUrl")}</span>
-                  <input
-                    value={draft.cfdReviewUrl}
-                    onChange={(event) => updateDraft("cfdReviewUrl", event.target.value)}
-                    placeholder="https://..."
-                    className="pos-input mt-1"
-                  />
-                </label>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{translate("settingsCfdReviewUrlHint")}</p>
-
                 <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{translate("settingsCfdReviewQr")}</p>
-                <div className="flex flex-wrap items-start gap-4">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={
-                      settings.cfdReviewQrImageUrl.trim() ||
-                      `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(draft.cfdReviewUrl || settings.cfdReviewUrl)}`
-                    }
-                    alt="Review QR preview"
-                    width={120}
-                    height={120}
-                    className="rounded-lg border border-gray-200 bg-white p-2 dark:border-gray-700"
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => cfdQrInputRef.current?.click()}
-                      className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold dark:border-gray-600"
-                    >
-                      {translate("settingsCfdUploadQr")}
-                    </button>
-                    {settings.cfdReviewQrImageUrl && (
-                      <button
-                        type="button"
-                        onClick={() => void clearCfdQrImage()}
-                        className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold dark:border-gray-600"
-                      >
-                        {translate("settingsCfdUseGeneratedQr")}
-                      </button>
-                    )}
-                    <input
-                      ref={cfdQrInputRef}
-                      type="file"
-                      accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
-                      className="hidden"
-                      onChange={(event) => void handleCfdQrUpload(event)}
+                <p className="text-xs text-gray-500 dark:text-gray-400">{translate("settingsCfdReviewQrHint")}</p>
+                {settings.cfdReviewQrImageUrl.trim() ? (
+                  <div className="mt-2 inline-block rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={settings.cfdReviewQrImageUrl}
+                      alt="Review QR"
+                      width={160}
+                      height={160}
+                      className="h-40 w-40 object-contain"
                     />
                   </div>
+                ) : (
+                  <p className="text-xs text-amber-700 dark:text-amber-300">{translate("settingsCfdNoQr")}</p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => cfdQrInputRef.current?.click()}
+                    className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+                  >
+                    {settings.cfdReviewQrImageUrl.trim()
+                      ? translate("settingsCfdChangeQr")
+                      : translate("settingsCfdUploadQr")}
+                  </button>
+                  {settings.cfdReviewQrImageUrl.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => void clearCfdQrImage()}
+                      className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold dark:border-gray-600"
+                    >
+                      {translate("settingsCfdRemoveQr")}
+                    </button>
+                  )}
+                  <input
+                    ref={cfdQrInputRef}
+                    type="file"
+                    accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={(event) => void handleCfdQrUpload(event)}
+                  />
                 </div>
               </div>
             </div>

@@ -46,6 +46,9 @@ export type ReceiptFontFamily =
 /** Card terminal integration mode. */
 export type TerminalType = "mock" | "network";
 
+/** Menu picker tile layout on order screen. */
+export type MenuItemLayout = "vertical" | "horizontal";
+
 /** outbound = POS connects to terminal IP; inbound = POS listens, terminal connects to PC. */
 export type TerminalConnectionMode = "outbound" | "inbound";
 
@@ -63,6 +66,8 @@ export interface AppSettings {
   receiptFooterNote: string;
   customAlertSoundUrl: string;
   showPricesOnOrderScreen: boolean;
+  /** Order screen menu tiles: image above text, or image + text on one row */
+  menuItemLayout: MenuItemLayout;
   enablePriceRounding: boolean;
   showEurCurrency: boolean;
   eurExchangeRate: number;

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import {
-  getCfdReviewQrUrl,
   subscribeCfdEvents,
   type CfdCheckoutPayload,
   type CfdClientState,
@@ -131,17 +130,14 @@ function CheckoutView({ checkout }: { checkout: CfdCheckoutPayload }) {
 
 function ThankYouView({
   secondsLeft,
-  reviewUrl,
   reviewQrImageUrl,
   hasAdVideo,
 }: {
   secondsLeft: number;
-  reviewUrl: string;
   reviewQrImageUrl: string;
   hasAdVideo: boolean;
 }) {
-  const qrSrc =
-    reviewQrImageUrl.trim() || getCfdReviewQrUrl(reviewUrl, 220);
+  const hasQr = reviewQrImageUrl.trim().length > 0;
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
@@ -152,17 +148,21 @@ function ThankYouView({
       <p className="mt-6 text-4xl tracking-widest text-amber-400" aria-label="5 star rating">
         ⭐⭐⭐⭐⭐
       </p>
-      <div className="mt-8 rounded-2xl bg-white p-4 shadow-lg">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={qrSrc}
-          alt="Scan to leave a review"
-          width={220}
-          height={220}
-          className="h-[220px] w-[220px] object-contain"
-        />
-      </div>
-      <p className="mt-4 text-sm text-zinc-500">Scan to review us</p>
+      {hasQr && (
+        <>
+          <div className="mt-8 rounded-2xl bg-white p-4 shadow-lg">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={reviewQrImageUrl}
+              alt="Scan to leave a review"
+              width={220}
+              height={220}
+              className="h-[220px] w-[220px] object-contain"
+            />
+          </div>
+          <p className="mt-4 text-sm text-zinc-500">Scan to review us</p>
+        </>
+      )}
       <p className="mt-8 text-xs text-zinc-600">
         {hasAdVideo
           ? `Starting promotional video in ${secondsLeft}s`
@@ -204,7 +204,6 @@ export function ClientDisplayView() {
   const [secondsLeft, setSecondsLeft] = useState(THANK_YOU_SECONDS);
 
   const adVideoUrl = settings.cfdAdVideoUrl.trim();
-  const reviewUrl = settings.cfdReviewUrl.trim();
   const reviewQrImageUrl = settings.cfdReviewQrImageUrl.trim();
 
   useEffect(() => {
@@ -260,7 +259,6 @@ export function ClientDisplayView() {
         <main className="flex flex-1 flex-col">
           <ThankYouView
             secondsLeft={secondsLeft}
-            reviewUrl={reviewUrl}
             reviewQrImageUrl={reviewQrImageUrl}
             hasAdVideo={Boolean(adVideoUrl)}
           />

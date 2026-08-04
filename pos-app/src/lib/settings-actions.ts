@@ -1,4 +1,4 @@
-import type { AppSettings, ReservationOperatingHours, TerminalConnectionMode, TerminalType } from "@/lib/types";
+import type { AppSettings, MenuItemLayout, ReservationOperatingHours, TerminalConnectionMode, TerminalType } from "@/lib/types";
 import { DEFAULT_RESERVATION_OPERATING_HOURS } from "@/lib/reservation-slots";
 import {
   parseReceiptFontFamily,
@@ -21,6 +21,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   receiptFooterNote: "Děkujeme za Vaši návštěvu!\nOtevírací doba: Po-Ne 10:00-22:00",
   customAlertSoundUrl: "/sounds/default-bell.mp3",
   showPricesOnOrderScreen: true,
+  menuItemLayout: "vertical",
   enablePriceRounding: true,
   showEurCurrency: false,
   eurExchangeRate: 25,
@@ -58,6 +59,7 @@ type SettingsRow = {
   receipt_footer_note: string;
   custom_alert_sound_url: string;
   show_prices_on_order_screen?: boolean | null;
+  menu_item_layout?: string | null;
   enable_price_rounding?: boolean | null;
   show_eur_currency?: boolean | null;
   eur_exchange_rate?: number | string | null;
@@ -114,6 +116,10 @@ function parseTerminalType(value: string | null | undefined): TerminalType {
   return value === "network" ? "network" : "mock";
 }
 
+function parseMenuItemLayout(value: string | null | undefined): MenuItemLayout {
+  return value === "horizontal" ? "horizontal" : "vertical";
+}
+
 function mapSettingsRow(row: SettingsRow): AppSettings {
   return {
     printerIp: row.printer_ip,
@@ -129,6 +135,7 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     receiptFooterNote: row.receipt_footer_note,
     customAlertSoundUrl: row.custom_alert_sound_url,
     showPricesOnOrderScreen: row.show_prices_on_order_screen ?? DEFAULT_APP_SETTINGS.showPricesOnOrderScreen,
+    menuItemLayout: parseMenuItemLayout(row.menu_item_layout),
     enablePriceRounding: row.enable_price_rounding ?? DEFAULT_APP_SETTINGS.enablePriceRounding,
     showEurCurrency: row.show_eur_currency ?? DEFAULT_APP_SETTINGS.showEurCurrency,
     eurExchangeRate: parseNumericSetting(row.eur_exchange_rate, DEFAULT_APP_SETTINGS.eurExchangeRate),
@@ -173,6 +180,7 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   if (partial.showPricesOnOrderScreen !== undefined) {
     payload.show_prices_on_order_screen = partial.showPricesOnOrderScreen;
   }
+  if (partial.menuItemLayout !== undefined) payload.menu_item_layout = partial.menuItemLayout;
   if (partial.enablePriceRounding !== undefined) payload.enable_price_rounding = partial.enablePriceRounding;
   if (partial.showEurCurrency !== undefined) payload.show_eur_currency = partial.showEurCurrency;
   if (partial.eurExchangeRate !== undefined) payload.eur_exchange_rate = partial.eurExchangeRate;
@@ -325,6 +333,7 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
   Pick<
     AppSettings,
     | "showPricesOnOrderScreen"
+    | "menuItemLayout"
     | "enablePriceRounding"
     | "showEurCurrency"
     | "eurExchangeRate"
@@ -341,7 +350,6 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "terminalPort"
     | "terminalPosId"
     | "terminalConnectionMode"
-    | "cfdReviewUrl"
   >;
 
 export function pickPrinterBillDraft(settings: AppSettings): PrinterBillSettingsDraft {
@@ -364,6 +372,7 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
   return {
     ...pickPrinterBillDraft(settings),
     showPricesOnOrderScreen: settings.showPricesOnOrderScreen,
+    menuItemLayout: settings.menuItemLayout,
     enablePriceRounding: settings.enablePriceRounding,
     showEurCurrency: settings.showEurCurrency,
     eurExchangeRate: settings.eurExchangeRate,
@@ -380,6 +389,5 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     terminalPort: settings.terminalPort,
     terminalPosId: settings.terminalPosId,
     terminalConnectionMode: settings.terminalConnectionMode,
-    cfdReviewUrl: settings.cfdReviewUrl,
   };
 }

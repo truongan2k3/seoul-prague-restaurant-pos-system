@@ -18,9 +18,10 @@ import {
   mergeNoteWithKitchenModifiers,
 } from "@/lib/menu-customization";
 import { finalizeNoteTranslation, presetLabel, togglePresetId } from "@/lib/note-presets";
-import type { LanguageCode, MenuCategoryRecord, MenuItem, NotePreset, OrderItem, SelectedMenuOption } from "@/lib/types";
+import type { LanguageCode, MenuCategoryRecord, MenuItem, MenuItemLayout, NotePreset, OrderItem, SelectedMenuOption } from "@/lib/types";
 import { filterButtonClass } from "@/lib/theme-classes";
 import { ItemCustomizeModal, type CustomizeResult } from "@/components/item-customize-modal";
+import { OnScreenKeyboard } from "@/components/on-screen-keyboard";
 import {
   fetchNotePresets,
   mapNotePresetsResponse,
@@ -140,6 +141,111 @@ function MenuItemImage({ item, label }: { item: MenuItem; label: string }) {
   );
 }
 
+function MenuOrderItemButton({
+  item,
+  label,
+  inCartQty,
+  station,
+  layout,
+  showMenuPrices,
+  formatOrderPrice,
+  soldOutLabel,
+  onAdd,
+}: {
+  item: MenuItem;
+  label: string;
+  inCartQty: number;
+  station: string;
+  layout: MenuItemLayout;
+  showMenuPrices: boolean;
+  formatOrderPrice: (amount: number) => string;
+  soldOutLabel: string;
+  onAdd: () => void;
+}) {
+  const unavailable = !item.isAvailable;
+  const buttonClass = `overflow-hidden rounded-xl border bg-white text-left transition active:scale-[0.98] dark:bg-gray-900 ${
+    unavailable
+      ? "cursor-not-allowed opacity-50"
+      : "border-gray-200 hover:border-emerald-300 hover:shadow-md dark:border-gray-700 dark:hover:border-emerald-700"
+  }`;
+
+  const qtyBadge =
+    inCartQty > 0 ? (
+      <span
+        className={`absolute rounded-full bg-emerald-600 font-bold text-white shadow ${
+          layout === "horizontal"
+            ? "right-0 top-0 px-1 py-px text-[9px] leading-none"
+            : "right-1.5 top-1.5 px-2 py-0.5 text-[11px]"
+        }`}
+      >
+        x{inCartQty}
+      </span>
+    ) : null;
+
+  const metaRow = (
+    <div className={`flex items-center justify-between gap-2 ${layout === "vertical" ? "mt-2" : "mt-1"}`}>
+      {showMenuPrices ? (
+        <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">
+          {formatOrderPrice(item.price)}
+        </p>
+      ) : (
+        <span />
+      )}
+      <p className="text-[10px] text-gray-400">{station}</p>
+    </div>
+  );
+
+  if (layout === "horizontal") {
+    return (
+      <button
+        type="button"
+        disabled={unavailable}
+        onClick={onAdd}
+        className={`flex w-full min-h-[52px] flex-row items-center gap-2.5 rounded-lg border px-2 py-1.5 ${buttonClass}`}
+      >
+        <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-md bg-gray-100 dark:bg-gray-800">
+          <MenuItemImage item={item} label={label} />
+          {qtyBadge}
+        </div>
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+          <p className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
+            {label}
+            {unavailable && (
+              <span className="ml-2 text-xs font-semibold text-red-500">({soldOutLabel})</span>
+            )}
+          </p>
+          <div className="flex shrink-0 items-center gap-2 text-right">
+            {showMenuPrices && (
+              <p className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                {formatOrderPrice(item.price)}
+              </p>
+            )}
+            <p className="hidden text-[10px] text-gray-400 sm:block">{station}</p>
+          </div>
+        </div>
+      </button>
+    );
+  }
+
+  return (
+    <button type="button" disabled={unavailable} onClick={onAdd} className={`flex flex-col ${buttonClass}`}>
+      <div className="relative aspect-[4/3] overflow-hidden bg-gray-100 dark:bg-gray-800">
+        <MenuItemImage item={item} label={label} />
+        {qtyBadge}
+      </div>
+      <div className="px-3 py-3">
+        <p className="line-clamp-2 text-sm font-semibold leading-snug text-gray-900 dark:text-gray-100">
+          {label}
+        </p>
+        {metaRow}
+        {unavailable && (
+          <p className="mt-2 text-center text-xs font-semibold text-red-500">{soldOutLabel}</p>
+        )}
+      </div>
+    </button>
+  );
+}
+
 export function NewOrderModal({
   open,
   tableLabel,
@@ -155,8 +261,10 @@ export function NewOrderModal({
   const priceOptions = priceDisplayOptionsFromSettings(settings);
   const formatOrderPrice = (amount: number) => formatPosPrice(amount, priceOptions);
   const showMenuPrices = settings.showPricesOnOrderScreen;
+  const menuItemLayout = settings.menuItemLayout;
   const [cart, setCart] = useState<CartLine[]>([]);
   const [search, setSearch] = useState("");
+  const [searchKeyboardOpen, setSearchKeyboardOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>("__all__");
   const [cartOpen, setCartOpen] = useState(false);
   const [noteLineId, setNoteLineId] = useState<string | null>(null);
@@ -179,6 +287,7 @@ export function NewOrderModal({
     if (!open) return;
     setCart([]);
     setSearch("");
+    setSearchKeyboardOpen(false);
     setActiveCategory("__all__");
     setCartOpen(false);
     setNoteLineId(null);
@@ -275,6 +384,7 @@ export function NewOrderModal({
 
   const quickAdd = (item: MenuItem) => {
     if (!item.isAvailable) return;
+    setSearch("");
     if (hasCustomization(item)) {
       setCustomizeItem(item);
       return;
@@ -699,65 +809,59 @@ export function NewOrderModal({
                     type="search"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
+                    onFocus={() => setSearchKeyboardOpen(true)}
+                    onClick={() => setSearchKeyboardOpen(true)}
+                    inputMode="none"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
                     placeholder={translate("searchMenu")}
                     className="min-h-[48px] w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-11 pr-4 text-base outline-none focus:ring-2 focus:ring-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                   />
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-3 pb-24 sm:p-4 md:pb-4">
+              {searchKeyboardOpen && (
+                <OnScreenKeyboard
+                  value={search}
+                  onChange={setSearch}
+                  onHide={() => setSearchKeyboardOpen(false)}
+                />
+              )}
+
+              <div
+                className={`flex-1 overflow-y-auto p-3 sm:p-4 md:pb-4 ${searchKeyboardOpen ? "pb-4" : "pb-24"}`}
+              >
                 {filteredItems.length === 0 ? (
                   <div className="flex h-full min-h-[200px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                     No items match your search
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4">
+                  <div
+                    className={
+                      menuItemLayout === "horizontal"
+                        ? "flex flex-col gap-1.5"
+                        : "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4"
+                    }
+                  >
                     {filteredItems.map((item) => {
                       const inCartQty = cartQtyByMenuId.get(item.id) ?? 0;
                       const station = resolveStation(item.category, item.itemType);
                       const label = menuItemDisplayName(item, language);
 
                       return (
-                        <button
+                        <MenuOrderItemButton
                           key={item.id}
-                          type="button"
-                          disabled={!item.isAvailable}
-                          onClick={() => quickAdd(item)}
-                          className={`flex flex-col overflow-hidden rounded-xl border bg-white text-left transition active:scale-[0.98] dark:bg-gray-900 ${
-                            !item.isAvailable
-                              ? "cursor-not-allowed opacity-50"
-                              : "border-gray-200 hover:border-emerald-300 hover:shadow-md dark:border-gray-700 dark:hover:border-emerald-700"
-                          }`}
-                        >
-                          <div className="relative aspect-[4/3] overflow-hidden bg-gray-100 dark:bg-gray-800">
-                            <MenuItemImage item={item} label={label} />
-                            {inCartQty > 0 && (
-                              <span className="absolute right-1.5 top-1.5 rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white shadow">
-                                x{inCartQty}
-                              </span>
-                            )}
-                          </div>
-                          <div className="px-3 py-3">
-                            <p className="line-clamp-2 text-sm font-semibold leading-snug text-gray-900 dark:text-gray-100">
-                              {label}
-                            </p>
-                            <div className="mt-2 flex items-center justify-between gap-2">
-                              {showMenuPrices ? (
-                                <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">
-                                  {formatOrderPrice(item.price)}
-                                </p>
-                              ) : (
-                                <span />
-                              )}
-                              <p className="text-[10px] text-gray-400">{station}</p>
-                            </div>
-                            {!item.isAvailable && (
-                              <p className="mt-2 text-center text-xs font-semibold text-red-500">
-                                {translate("soldOut")}
-                              </p>
-                            )}
-                          </div>
-                        </button>
+                          item={item}
+                          label={label}
+                          inCartQty={inCartQty}
+                          station={station}
+                          layout={menuItemLayout}
+                          showMenuPrices={showMenuPrices}
+                          formatOrderPrice={formatOrderPrice}
+                          soldOutLabel={translate("soldOut")}
+                          onAdd={() => quickAdd(item)}
+                        />
                       );
                     })}
                   </div>

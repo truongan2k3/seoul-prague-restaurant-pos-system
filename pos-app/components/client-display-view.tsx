@@ -175,31 +175,31 @@ function ThankYouView({
 
 function IdleDisplayView({ videoUrl }: { videoUrl: string }) {
   if (videoUrl.trim()) {
-    if (isCfdGifMedia(videoUrl)) {
-      return (
-        <main className="relative flex min-h-0 flex-1 overflow-hidden bg-black">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            key={videoUrl}
-            src={videoUrl}
-            alt="Promotional display"
-            className="h-full w-full object-contain"
-          />
-        </main>
-      );
-    }
+    const mediaClass = "max-h-full max-w-full object-contain";
 
     return (
-      <main className="relative flex min-h-0 flex-1 overflow-hidden bg-black">
-        <video
-          key={videoUrl}
-          src={videoUrl}
-          autoPlay
-          loop
-          muted
-          playsInline
-          className="h-full w-full object-contain"
-        />
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-zinc-950 px-4 py-4 sm:px-6 sm:py-6">
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-zinc-800 bg-black">
+          {isCfdGifMedia(videoUrl) ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={videoUrl}
+              src={videoUrl}
+              alt="Promotional display"
+              className={mediaClass}
+            />
+          ) : (
+            <video
+              key={videoUrl}
+              src={videoUrl}
+              autoPlay
+              loop
+              muted
+              playsInline
+              className={mediaClass}
+            />
+          )}
+        </div>
       </main>
     );
   }
@@ -256,11 +256,9 @@ export function ClientDisplayView() {
     return () => clearInterval(interval);
   }, [clientState]);
 
-  const showHeader = clientState !== "idle" || !adVideoUrl;
-
   return (
     <div className="flex min-h-screen flex-col bg-zinc-950 text-white">
-      {showHeader && <CfdHeader />}
+      <CfdHeader />
 
       {clientState === "idle" && <IdleDisplayView videoUrl={adVideoUrl} />}
 

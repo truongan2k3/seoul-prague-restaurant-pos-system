@@ -9,6 +9,7 @@ import { useApp } from "@/contexts/app-context";
 const AUTH_ERROR_KEYS = {
   invalidCredentials: "authErrorInvalidCredentials",
   databaseNotReady: "authErrorDatabaseNotReady",
+  envNotConfigured: "authErrorEnvNotConfigured",
 } as const;
 
 function LoginForm() {

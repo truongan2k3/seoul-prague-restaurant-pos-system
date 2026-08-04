@@ -65,47 +65,64 @@ function toSessionPayload(business: AuthBusiness, account: BusinessAccountRow): 
 }
 
 async function ensureSettingsForBusiness(businessId: string) {
-  const supabase = createSupabaseAdmin();
-  const { data: existing } = await supabase
-    .from("settings")
-    .select("id")
-    .eq("business_id", businessId)
-    .maybeSingle();
+  try {
+    const supabase = createSupabaseAdmin();
+    const { data: existing } = await supabase
+      .from("settings")
+      .select("id")
+      .eq("business_id", businessId)
+      .maybeSingle();
 
-  if (existing) return;
+    if (existing) return;
 
-  const legacy = await supabase.from("settings").select("id").eq("id", 1).maybeSingle();
-  if (legacy.data) {
-    await supabase.from("settings").update({ business_id: businessId }).eq("id", 1);
-    return;
+    const legacy = await supabase.from("settings").select("id").eq("id", 1).maybeSingle();
+    if (legacy.data) {
+      await supabase.from("settings").update({ business_id: businessId }).eq("id", 1);
+      return;
+    }
+
+    await supabase.from("settings").insert({
+      business_id: businessId,
+      printer_ip: DEFAULT_APP_SETTINGS.printerIp,
+      printer_port: DEFAULT_APP_SETTINGS.printerPort,
+      auto_print_on_payment: DEFAULT_APP_SETTINGS.autoPrintOnPayment,
+      receipt_header_title: DEFAULT_BUSINESS_NAME,
+      receipt_legal_name: DEFAULT_APP_SETTINGS.receiptLegalName,
+      receipt_address: DEFAULT_APP_SETTINGS.receiptAddress,
+      receipt_company_address: DEFAULT_APP_SETTINGS.receiptCompanyAddress,
+      receipt_ico: DEFAULT_APP_SETTINGS.receiptIco,
+      receipt_dic: DEFAULT_APP_SETTINGS.receiptDic,
+      receipt_phone: DEFAULT_APP_SETTINGS.receiptPhone,
+      receipt_footer_note: DEFAULT_APP_SETTINGS.receiptFooterNote,
+      custom_alert_sound_url: DEFAULT_APP_SETTINGS.customAlertSoundUrl,
+    });
+  } catch {
+    // Non-fatal — login can proceed; settings load may use defaults until fixed.
   }
+}
 
-  await supabase.from("settings").insert({
-    business_id: businessId,
-    printer_ip: DEFAULT_APP_SETTINGS.printerIp,
-    printer_port: DEFAULT_APP_SETTINGS.printerPort,
-    auto_print_on_payment: DEFAULT_APP_SETTINGS.autoPrintOnPayment,
-    receipt_header_title: DEFAULT_BUSINESS_NAME,
-    receipt_legal_name: DEFAULT_APP_SETTINGS.receiptLegalName,
-    receipt_address: DEFAULT_APP_SETTINGS.receiptAddress,
-    receipt_company_address: DEFAULT_APP_SETTINGS.receiptCompanyAddress,
-    receipt_ico: DEFAULT_APP_SETTINGS.receiptIco,
-    receipt_dic: DEFAULT_APP_SETTINGS.receiptDic,
-    receipt_phone: DEFAULT_APP_SETTINGS.receiptPhone,
-    receipt_footer_note: DEFAULT_APP_SETTINGS.receiptFooterNote,
-    custom_alert_sound_url: DEFAULT_APP_SETTINGS.customAlertSoundUrl,
-  });
+function assertSupabaseEnv() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  if (!url || !key) {
+    throw new Error("envNotConfigured");
+  }
 }
 
 /** Seed JING CHENG + admin/1 on first run (idempotent). */
 export async function ensureDefaultBusinessSeed() {
+  assertSupabaseEnv();
   const supabase = createSupabaseAdmin();
 
-  const { data: existingBusiness } = await supabase
+  const { data: existingBusiness, error: lookupError } = await supabase
     .from("businesses")
     .select("id, name, slug, logo_url")
     .eq("slug", DEFAULT_BUSINESS_SLUG)
     .maybeSingle();
+
+  if (lookupError) throw lookupError;
 
   let business: BusinessRow | null = existingBusiness as BusinessRow | null;
 
@@ -129,16 +146,24 @@ export async function ensureDefaultBusinessSeed() {
 
   if (!existingAccount) {
     const { hash, salt } = hashPassword(DEFAULT_ADMIN_PASSWORD);
-    await supabase.from("business_accounts").insert({
+    const { error: accountError } = await supabase.from("business_accounts").insert({
       business_id: business.id,
       username: DEFAULT_ADMIN_USERNAME,
       password_hash: hash,
       password_salt: salt,
       role: "owner",
     });
+    if (accountError) throw accountError;
   }
 
   await ensureSettingsForBusiness(business.id);
+}
+
+function mapAuthError(error: unknown): "envNotConfigured" | "databaseNotReady" {
+  if (error instanceof Error && error.message === "envNotConfigured") {
+    return "envNotConfigured";
+  }
+  return "databaseNotReady";
 }
 
 export async function getAuthSessionAction(): Promise<AuthSessionPayload | null> {
@@ -160,8 +185,8 @@ export async function loginAction(username: string, password: string) {
 
   try {
     await ensureDefaultBusinessSeed();
-  } catch {
-    return { ok: false as const, error: "databaseNotReady" };
+  } catch (error) {
+    return { ok: false as const, error: mapAuthError(error) };
   }
 
   const supabase = createSupabaseAdmin();
@@ -219,8 +244,8 @@ export async function registerBusinessAction(input: {
 
   try {
     await ensureDefaultBusinessSeed();
-  } catch {
-    return { ok: false as const, error: "databaseNotReady" };
+  } catch (error) {
+    return { ok: false as const, error: mapAuthError(error) };
   }
 
   const supabase = createSupabaseAdmin();

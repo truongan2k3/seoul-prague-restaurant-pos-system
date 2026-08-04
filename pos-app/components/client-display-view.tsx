@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  isCfdGifMedia,
   subscribeCfdEvents,
   type CfdCheckoutPayload,
   type CfdClientState,
@@ -174,6 +175,20 @@ function ThankYouView({
 
 function IdleDisplayView({ videoUrl }: { videoUrl: string }) {
   if (videoUrl.trim()) {
+    if (isCfdGifMedia(videoUrl)) {
+      return (
+        <main className="relative flex min-h-0 flex-1 overflow-hidden bg-black">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            key={videoUrl}
+            src={videoUrl}
+            alt="Promotional display"
+            className="h-full w-full object-contain"
+          />
+        </main>
+      );
+    }
+
     return (
       <main className="relative flex min-h-0 flex-1 overflow-hidden bg-black">
         <video

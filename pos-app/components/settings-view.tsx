@@ -19,6 +19,7 @@ import { RECEIPT_FONT_OPTIONS } from "@/lib/receipt-print-styles";
 import type { TranslationKey } from "@/lib/i18n/translations";
 import type { ReceiptFontFamily, WeekdayKey } from "@/lib/types";
 import { testTerminalConnection } from "@/src/lib/terminalApi";
+import { isCfdGifMedia } from "@/lib/cfd-display";
 import {
   clearBusinessLogoAction,
   uploadBusinessLogoAction,
@@ -699,13 +700,22 @@ export function SettingsView() {
                 <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{translate("settingsCfdAdVideo")}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">{translate("settingsCfdAdVideoHint")}</p>
                 {settings.cfdAdVideoUrl ? (
-                  <video
-                    src={settings.cfdAdVideoUrl}
-                    controls
-                    muted
-                    playsInline
-                    className="mt-2 max-h-48 w-full rounded-lg border border-gray-200 bg-black dark:border-gray-700"
-                  />
+                  isCfdGifMedia(settings.cfdAdVideoUrl) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={settings.cfdAdVideoUrl}
+                      alt="Promotional GIF preview"
+                      className="mt-2 max-h-48 w-full rounded-lg border border-gray-200 bg-black object-contain dark:border-gray-700"
+                    />
+                  ) : (
+                    <video
+                      src={settings.cfdAdVideoUrl}
+                      controls
+                      muted
+                      playsInline
+                      className="mt-2 max-h-48 w-full rounded-lg border border-gray-200 bg-black dark:border-gray-700"
+                    />
+                  )
                 ) : (
                   <p className="text-xs text-gray-500 dark:text-gray-400">{translate("settingsCfdNoVideo")}</p>
                 )}
@@ -729,7 +739,7 @@ export function SettingsView() {
                   <input
                     ref={cfdVideoInputRef}
                     type="file"
-                    accept=".mp4,.webm,video/mp4,video/webm"
+                    accept=".mp4,.webm,.gif,video/mp4,video/webm,image/gif"
                     className="hidden"
                     onChange={(event) => void handleCfdVideoUpload(event)}
                   />

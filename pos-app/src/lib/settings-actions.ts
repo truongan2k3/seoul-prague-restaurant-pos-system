@@ -310,7 +310,7 @@ async function uploadCfdMediaFile(file: File, prefix: string, allowedExtensions:
 }
 
 export async function uploadCfdAdVideo(file: File, businessId?: string | null) {
-  const { data: url, error } = await uploadCfdMediaFile(file, "cfd-ad", ["mp4", "webm"]);
+  const { data: url, error } = await uploadCfdMediaFile(file, "cfd-ad", ["mp4", "webm", "gif"]);
   if (error || !url) return { data: null, error: error ?? new Error("Upload failed") };
   return updateAppSettings({ cfdAdVideoUrl: url }, businessId);
 }

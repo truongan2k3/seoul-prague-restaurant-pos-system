@@ -79,9 +79,74 @@ export interface AppSettings {
   terminalPort: string;
   terminalPosId: string;
   terminalConnectionMode: TerminalConnectionMode;
+  /** Looping ad video on /client after thank-you (public URL) */
+  cfdAdVideoUrl: string;
+  /** Link encoded in review QR when no custom QR image is set */
+  cfdReviewUrl: string;
+  /** Optional uploaded QR image override */
+  cfdReviewQrImageUrl: string;
 }
 
 export type StaffRole = "admin" | "manager" | "server" | "kitchen" | "bar";
+
+export interface MenuOptionChoice {
+  id: string;
+  nameEn: string;
+  nameCz: string;
+  nameZh: string;
+  /** Absolute line price when basePriceFromOptions is true */
+  price?: number;
+  /** Surcharge added to base menu price */
+  priceDelta?: number;
+  default?: boolean;
+}
+
+export interface MenuOptionGroup {
+  id: string;
+  nameEn: string;
+  nameCz: string;
+  nameZh?: string;
+  required?: boolean;
+  options: MenuOptionChoice[];
+}
+
+export interface MenuFreeAddOn {
+  nameEn: string;
+  nameCz: string;
+  nameZh: string;
+  onRequest?: boolean;
+}
+
+export interface MenuCustomizationConfig {
+  basePriceFromOptions?: boolean;
+  optionGroups?: MenuOptionGroup[];
+  freeAddOn?: MenuFreeAddOn;
+}
+
+export interface SelectedMenuOption {
+  groupId: string;
+  optionId: string;
+  nameEn: string;
+  nameCz: string;
+  nameZh: string;
+  price?: number;
+  priceDelta?: number;
+}
+
+export interface OrderLineModifiers {
+  selectedOptions?: SelectedMenuOption[];
+  freeAddOnSelected?: boolean;
+  specialRequestIds?: string[];
+}
+
+export interface NotePreset {
+  id: string;
+  labelEn: string;
+  labelCz: string;
+  labelZh: string;
+  displayOrder: number;
+  active: boolean;
+}
 
 export interface OrderItem {
   id?: string;
@@ -98,6 +163,7 @@ export interface OrderItem {
   menuItemId?: string;
   tableId?: string;
   createdAt?: string;
+  modifiers?: OrderLineModifiers;
 }
 
 export interface RestaurantTable {
@@ -137,6 +203,7 @@ export interface MenuItem {
   station: Station;
   itemType: "food" | "drink";
   sortOrder: number;
+  customizationConfig?: MenuCustomizationConfig;
 }
 
 export interface StaffMember {

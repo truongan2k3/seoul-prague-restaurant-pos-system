@@ -133,6 +133,7 @@ function buildOrderRows(tableId: string, orders: OrderItem[], staffId?: string) 
       is_printed_note: item.isPrintedNote ?? false,
       station: item.station ?? "kitchen",
       status: item.status ?? "preparing",
+      modifiers: item.modifiers ?? null,
     })),
   );
 }

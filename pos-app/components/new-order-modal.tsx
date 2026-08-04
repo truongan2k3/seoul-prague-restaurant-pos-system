@@ -12,8 +12,19 @@ import {
   menuItemDisplayName,
 } from "@/lib/menu-display";
 import { resolveStation } from "@/lib/order-routing";
-import type { MenuCategoryRecord, MenuItem, OrderItem } from "@/lib/types";
+import {
+  buildCustomizationSignature,
+  hasCustomization,
+  mergeNoteWithKitchenModifiers,
+} from "@/lib/menu-customization";
+import { finalizeNoteTranslation, presetLabel, togglePresetId } from "@/lib/note-presets";
+import type { LanguageCode, MenuCategoryRecord, MenuItem, NotePreset, OrderItem, SelectedMenuOption } from "@/lib/types";
 import { filterButtonClass } from "@/lib/theme-classes";
+import { ItemCustomizeModal, type CustomizeResult } from "@/components/item-customize-modal";
+import {
+  fetchNotePresets,
+  mapNotePresetsResponse,
+} from "@/src/lib/note-preset-actions";
 import { translateNoteToChinese } from "@/src/lib/translator";
 
 interface CartLine {
@@ -28,6 +39,12 @@ interface CartLine {
   noteTranslated?: string;
   isPrintedNote: boolean;
   imageUrl?: string;
+  customizationSignature?: string;
+  selectedOptions?: SelectedMenuOption[];
+  freeAddOnSelected?: boolean;
+  kitchenModifierText?: string;
+  specialRequestIds?: string[];
+  isFreeAddOnLine?: boolean;
 }
 
 interface NewOrderModalProps {
@@ -42,42 +59,70 @@ interface NewOrderModalProps {
 }
 
 function cartLinesToOrders(lines: CartLine[]): OrderItem[] {
-  return lines.map((line) => ({
-    menuItemId: line.menuItemId,
-    name: line.name,
-    price: line.price,
-    originalPrice: line.price,
-    quantity: line.quantity,
-    notes: line.note.trim() || undefined,
-    notesTranslated: line.noteTranslated?.trim() || undefined,
-    isPrintedNote: line.isPrintedNote,
-    station: resolveStation(line.category, line.itemType),
-    status: "preparing",
-  }));
+  return lines.map((line) => {
+    const merged = mergeNoteWithKitchenModifiers(
+      line.note.trim() || undefined,
+      line.noteTranslated,
+      line.kitchenModifierText ?? "",
+    );
+    return {
+      menuItemId: line.menuItemId,
+      name: line.name,
+      price: line.price,
+      originalPrice: line.price,
+      quantity: line.quantity,
+      notes: merged.notes,
+      notesTranslated: merged.notesTranslated,
+      isPrintedNote: line.isPrintedNote,
+      station: resolveStation(line.category, line.itemType),
+      status: "preparing",
+      modifiers: {
+        selectedOptions: line.selectedOptions,
+        freeAddOnSelected: line.freeAddOnSelected,
+        specialRequestIds: line.specialRequestIds,
+      },
+    };
+  });
 }
 
 function newLineId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function findDefaultLine(cart: CartLine[], menuItemId: string) {
+function findDefaultLine(cart: CartLine[], menuItemId: string, signature?: string) {
   return cart.find(
     (line) =>
-      line.menuItemId === menuItemId && line.note === "" && !line.isPrintedNote,
+      line.menuItemId === menuItemId &&
+      line.note === "" &&
+      !line.isPrintedNote &&
+      !line.isFreeAddOnLine &&
+      (signature ? line.customizationSignature === signature : !line.customizationSignature),
   );
 }
 
-const QUICK_NOTE_TAGS = ["Ít cay", "Không hành", "Mang về", "Ít đá"];
-
-function toggleTagInNote(note: string, tag: string): string {
-  const parts = note
-    .split(/[,;]/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  if (parts.includes(tag)) {
-    return parts.filter((part) => part !== tag).join(", ");
-  }
-  return parts.length > 0 ? `${parts.join(", ")}, ${tag}` : tag;
+function buildFreeAddOnLine(item: MenuItem, language: LanguageCode): CartLine | null {
+  const addOn = item.customizationConfig?.freeAddOn;
+  if (!addOn) return null;
+  const label =
+    language === "cs"
+      ? addOn.nameCz
+      : language === "zh"
+        ? addOn.nameZh
+        : addOn.nameEn;
+  return {
+    lineId: newLineId(),
+    menuItemId: item.id,
+    name: `${label} (${language === "cs" ? "zdarma" : language === "zh" ? "免费" : "free"})`,
+    price: 0,
+    quantity: 1,
+    category: item.category,
+    itemType: item.itemType,
+    note: "",
+    isPrintedNote: false,
+    imageUrl: item.imageUrl,
+    isFreeAddOnLine: true,
+    kitchenModifierText: addOn.nameZh.trim() || addOn.nameEn,
+  };
 }
 
 function MenuItemImage({ item, label }: { item: MenuItem; label: string }) {
@@ -119,6 +164,16 @@ export function NewOrderModal({
   const [noteDraftTranslated, setNoteDraftTranslated] = useState("");
   const [noteTranslating, setNoteTranslating] = useState(false);
   const [notePrintOnReceipt, setNotePrintOnReceipt] = useState(false);
+  const [notePresetIds, setNotePresetIds] = useState<string[]>([]);
+  const [notePresets, setNotePresets] = useState<NotePreset[]>([]);
+  const [customizeItem, setCustomizeItem] = useState<MenuItem | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    void fetchNotePresets().then(({ data }) => {
+      setNotePresets(mapNotePresetsResponse(data));
+    });
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -131,6 +186,8 @@ export function NewOrderModal({
     setNoteDraftTranslated("");
     setNoteTranslating(false);
     setNotePrintOnReceipt(false);
+    setNotePresetIds([]);
+    setCustomizeItem(null);
   }, [open]);
 
   useEffect(() => {
@@ -218,6 +275,10 @@ export function NewOrderModal({
 
   const quickAdd = (item: MenuItem) => {
     if (!item.isAvailable) return;
+    if (hasCustomization(item)) {
+      setCustomizeItem(item);
+      return;
+    }
     const label = menuItemDisplayName(item, language);
     setCart((prev) => {
       const existing = findDefaultLine(prev, item.id);
@@ -246,10 +307,75 @@ export function NewOrderModal({
     });
   };
 
+  const handleCustomizeConfirm = async (result: CustomizeResult) => {
+    const item = customizeItem;
+    if (!item) return;
+
+    const signature = buildCustomizationSignature(
+      item.id,
+      result.selections,
+      result.freeAddOnSelected,
+    );
+
+    let itemNoteTranslated = "";
+    if (result.itemNote) {
+      itemNoteTranslated = await translateNoteToChinese(result.itemNote);
+    }
+
+    const mainLine: CartLine = {
+      lineId: newLineId(),
+      menuItemId: item.id,
+      name: result.displayName,
+      price: result.price,
+      quantity: 1,
+      category: item.category,
+      itemType: item.itemType,
+      note: result.itemNote,
+      noteTranslated: itemNoteTranslated || undefined,
+      isPrintedNote: false,
+      imageUrl: item.imageUrl,
+      customizationSignature: signature,
+      selectedOptions: result.selectedOptions,
+      freeAddOnSelected: result.freeAddOnSelected,
+      kitchenModifierText: result.kitchenModifierText,
+    };
+
+    setCart((prev) => {
+      const existing = findDefaultLine(prev, item.id, signature);
+      const next = existing
+        ? prev.map((line) =>
+            line.lineId === existing.lineId
+              ? { ...line, quantity: line.quantity + 1 }
+              : line,
+          )
+        : [...prev, mainLine];
+
+      if (!result.freeAddOnSelected) return next;
+
+      const freeLine = buildFreeAddOnLine(item, language);
+      if (!freeLine) return next;
+
+      const existingFree = next.find(
+        (line) => line.isFreeAddOnLine && line.menuItemId === item.id,
+      );
+      if (existingFree) {
+        return next.map((line) =>
+          line.lineId === existingFree.lineId
+            ? { ...line, quantity: line.quantity + 1 }
+            : line,
+        );
+      }
+      return [...next, freeLine];
+    });
+
+    setCustomizeItem(null);
+  };
+
   const openNoteModal = (line: CartLine) => {
     setNoteLineId(line.lineId);
     setNoteDraft(line.note);
     setNoteDraftTranslated(line.noteTranslated ?? "");
+    setNotePresetIds(line.specialRequestIds ?? []);
     setNoteTranslating(false);
     setNotePrintOnReceipt(line.isPrintedNote);
   };
@@ -258,6 +384,7 @@ export function NewOrderModal({
     setNoteLineId(null);
     setNoteDraft("");
     setNoteDraftTranslated("");
+    setNotePresetIds([]);
     setNoteTranslating(false);
     setNotePrintOnReceipt(false);
   };
@@ -265,8 +392,8 @@ export function NewOrderModal({
   const handleSaveNote = async () => {
     if (!noteLineId) return;
     const trimmed = noteDraft.trim();
-    let translated = noteDraftTranslated.trim();
-    if (trimmed && !translated) {
+    let translated = "";
+    if (trimmed) {
       translated = await translateNoteToChinese(trimmed);
     }
 
@@ -278,6 +405,10 @@ export function NewOrderModal({
               note: trimmed,
               noteTranslated: translated || undefined,
               isPrintedNote: notePrintOnReceipt,
+              specialRequestIds: notePresetIds,
+              customizationSignature: line.customizationSignature
+                ? `${line.customizationSignature}|sr:${notePresetIds.join(",")}|n:${trimmed}`
+                : `sr:${notePresetIds.join(",")}|n:${trimmed}`,
             }
           : line,
       ),
@@ -299,18 +430,37 @@ export function NewOrderModal({
 
   const handleSend = async () => {
     if (cart.length === 0 || isSaving) return;
-    const baseOrders = cartLinesToOrders(cart);
     const orders = await Promise.all(
-      baseOrders.map(async (order) => {
-        const menu = order.menuItemId ? menuById.get(order.menuItemId) : undefined;
-        const withName = menu ? { ...order, name: menuItemDisplayName(menu, language) } : order;
-        if (withName.notes && !withName.notesTranslated) {
-          return {
-            ...withName,
-            notesTranslated: await translateNoteToChinese(withName.notes),
-          };
-        }
-        return withName;
+      cart.map(async (line) => {
+        const { note, noteTranslated } = await finalizeNoteTranslation(
+          notePresets,
+          line.specialRequestIds ?? [],
+          line.note,
+          language,
+        );
+        const merged = mergeNoteWithKitchenModifiers(
+          note,
+          noteTranslated,
+          line.kitchenModifierText ?? "",
+        );
+        const menu = line.menuItemId ? menuById.get(line.menuItemId) : undefined;
+        return {
+          menuItemId: line.menuItemId,
+          name: line.name,
+          price: line.price,
+          originalPrice: line.price,
+          quantity: line.quantity,
+          notes: merged.notes,
+          notesTranslated: merged.notesTranslated,
+          isPrintedNote: line.isPrintedNote,
+          station: resolveStation(line.category, line.itemType),
+          status: "preparing" as const,
+          modifiers: {
+            selectedOptions: line.selectedOptions,
+            freeAddOnSelected: line.freeAddOnSelected,
+            specialRequestIds: line.specialRequestIds,
+          },
+        };
       }),
     );
     await onSendToKitchen(orders);
@@ -346,12 +496,21 @@ export function NewOrderModal({
         ) : (
           <ul className="space-y-3">
             {cart.map((line) => {
-              const lineLabel = cartLineDisplayName(line, menuItems, language);
+              const lineLabel = line.name.includes("·")
+                ? line.name
+                : cartLineDisplayName(line, menuItems, language);
+              const presetText = (line.specialRequestIds ?? [])
+                .map((id) => {
+                  const preset = notePresets.find((entry) => entry.id === id);
+                  return preset ? presetLabel(preset, language) : null;
+                })
+                .filter(Boolean)
+                .join(", ");
+              const noteTextParts = [presetText, line.note].filter(Boolean);
               const noteText =
-                line.noteTranslated &&
-                line.noteTranslated.toLowerCase() !== line.note.toLowerCase()
-                  ? `${line.noteTranslated} · ${line.note}`
-                  : line.note;
+                line.noteTranslated && noteTextParts.length > 0
+                  ? `${line.noteTranslated}${line.note ? ` · ${line.note}` : ""}`
+                  : noteTextParts.join(", ");
               return (
                 <li
                   key={line.lineId}
@@ -380,9 +539,9 @@ export function NewOrderModal({
                       >
                         {lineLabel}
                       </button>
-                      {line.note && (
+                      {(noteTextParts.length > 0 || line.noteTranslated) && (
                         <p className="mt-1 text-xs italic text-gray-500 dark:text-gray-400">
-                          {translate("noteLabel")}: {noteText}
+                          {translate("specialRequests")}: {noteText}
                         </p>
                       )}
                       {line.isPrintedNote && (
@@ -636,7 +795,7 @@ export function NewOrderModal({
           <Modal
             open
             onClose={closeNoteModal}
-            title={translate("itemNote")}
+            title={translate("specialRequests")}
             footer={
               <div className="flex gap-2">
                 <button
@@ -663,26 +822,25 @@ export function NewOrderModal({
 
               <div>
                 <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  Quick tags
+                  {translate("specialRequests")}
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {QUICK_NOTE_TAGS.map((tag) => {
-                    const active = noteDraft
-                      .split(/[,;]/)
-                      .map((part) => part.trim())
-                      .includes(tag);
+                  {notePresets.map((preset) => {
+                    const active = notePresetIds.includes(preset.id);
                     return (
                       <button
-                        key={tag}
+                        key={preset.id}
                         type="button"
-                        onClick={() => setNoteDraft((prev) => toggleTagInNote(prev, tag))}
+                        onClick={() =>
+                          setNotePresetIds((prev) => togglePresetId(prev, preset.id))
+                        }
                         className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                           active
                             ? "bg-emerald-600 text-white"
                             : "border border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
                         }`}
                       >
-                        {tag}
+                        {presetLabel(preset, language)}
                       </button>
                     );
                   })}
@@ -697,16 +855,23 @@ export function NewOrderModal({
                   rows={3}
                   value={noteDraft}
                   onChange={(e) => setNoteDraft(e.target.value)}
-                  placeholder='e.g. "no spicy", "no onion"'
+                  placeholder={translate("notePlaceholder")}
                   className="mt-2 min-h-[96px] w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-base text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                 />
-                {noteDraft.trim() && (
+                {(notePresetIds.length > 0 || noteDraft.trim()) && (
                   <div className="mt-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 dark:border-orange-900 dark:bg-orange-950/40">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-700 dark:text-orange-300">
                       Kitchen (中文)
                     </p>
                     <p className="mt-1 text-sm font-bold text-orange-700 dark:text-orange-300">
-                      {noteTranslating ? "…" : noteDraftTranslated || noteDraft.trim()}
+                      {[
+                        ...notePresetIds
+                          .map((id) => notePresets.find((entry) => entry.id === id)?.labelZh)
+                          .filter(Boolean),
+                        noteDraftTranslated || noteDraft.trim(),
+                      ]
+                        .filter(Boolean)
+                        .join(", ")}
                     </p>
                   </div>
                 )}
@@ -726,6 +891,15 @@ export function NewOrderModal({
             </div>
           </Modal>
         </div>
+      )}
+
+      {customizeItem && (
+        <ItemCustomizeModal
+          open
+          item={customizeItem}
+          onClose={() => setCustomizeItem(null)}
+          onConfirm={(result) => void handleCustomizeConfirm(result)}
+        />
       )}
     </>
   );

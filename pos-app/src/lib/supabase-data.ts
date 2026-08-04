@@ -49,6 +49,7 @@ interface SupabaseMenuItemRow {
   description_en?: string | null;
   description_cz?: string | null;
   description_zh?: string | null;
+  customization_config?: import("@/lib/types").MenuCustomizationConfig | null;
 }
 
 interface SupabaseCategoryRow {
@@ -74,6 +75,7 @@ export interface SupabaseOrderItemRow {
   status: string;
   created_at: string;
   updated_at: string;
+  modifiers?: import("@/lib/types").OrderLineModifiers | null;
 }
 
 function normalizeStatus(status: string): TableStatus {
@@ -118,6 +120,7 @@ export function mapMenuItemRow(row: SupabaseMenuItemRow): MenuItem {
     isAvailable,
     sortOrder: row.display_order ?? row.sort_order ?? 0,
     imageUrl: row.image_url ?? undefined,
+    customizationConfig: row.customization_config ?? undefined,
   };
 }
 
@@ -144,6 +147,7 @@ export function mapOrderItemRow(row: SupabaseOrderItemRow): OrderItem {
     menuItemId: row.menu_item_id ?? undefined,
     tableId: row.table_id,
     createdAt: row.created_at,
+    modifiers: row.modifiers ?? undefined,
   };
 }
 

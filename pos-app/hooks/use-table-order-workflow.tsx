@@ -107,10 +107,17 @@ export function useTableOrderWorkflow({
       setActionError(error.message);
       return;
     }
-    logAction("update table order", `Table ${selectedTable?.label}`);
+    if (orders.length === 0) {
+      logAction("clear table", `Table ${selectedTable?.label}`);
+    } else {
+      logAction("update table order", `Table ${selectedTable?.label}`);
+    }
     if (data) {
       const updatedTable = mapTableRow(data);
       setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
+    }
+    if (orders.length === 0) {
+      setModal(null);
     }
     onRefresh();
   };

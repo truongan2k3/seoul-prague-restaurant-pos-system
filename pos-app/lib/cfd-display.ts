@@ -39,8 +39,11 @@ export interface CfdEventPayload {
 const GOOGLE_REVIEW_URL =
   "https://www.google.com/maps/search/?api=1&query=Seoul+Prague+Restaurant";
 
-export function getCfdReviewQrUrl(size = 220): string {
-  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(GOOGLE_REVIEW_URL)}`;
+export const DEFAULT_CFD_REVIEW_URL = GOOGLE_REVIEW_URL;
+
+export function getCfdReviewQrUrl(reviewUrl?: string, size = 220): string {
+  const target = (reviewUrl?.trim() || DEFAULT_CFD_REVIEW_URL);
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(target)}`;
 }
 
 export function buildCfdCheckoutPayload(

@@ -43,11 +43,13 @@ export function SettingsView() {
     setSoundMainEnabled,
     setSoundKitchenEnabled,
   } = useApp();
-  const { settings, saving, error: settingsError, saveSettingsPageDraft, uploadAlertSound } =
+  const { settings, saving, error: settingsError, saveSettingsPageDraft, uploadAlertSound, uploadCfdAdVideo, uploadCfdReviewQrImage, saveSettings } =
     useSettings();
   const { pushNotification } = useNotifications();
   const { printTestReceipt } = useReceiptPrint();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cfdVideoInputRef = useRef<HTMLInputElement>(null);
+  const cfdQrInputRef = useRef<HTMLInputElement>(null);
   const audioPreviewRef = useRef<HTMLAudioElement>(null);
 
   const [draft, setDraft] = useState<SettingsPageDraft>(() => pickSettingsPageDraft(settings));
@@ -112,6 +114,28 @@ export function SettingsView() {
     event.target.value = "";
   };
 
+  const handleCfdVideoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    await uploadCfdAdVideo(file);
+    event.target.value = "";
+  };
+
+  const handleCfdQrUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    await uploadCfdReviewQrImage(file);
+    event.target.value = "";
+  };
+
+  const clearCfdVideo = async () => {
+    await saveSettings({ cfdAdVideoUrl: "" });
+  };
+
+  const clearCfdQrImage = async () => {
+    await saveSettings({ cfdReviewQrImageUrl: "" });
+  };
+
   const handleTestTerminal = async () => {
     setTerminalTesting(true);
     setTerminalTestMessage(null);
@@ -131,6 +155,7 @@ export function SettingsView() {
     { href: "/server", label: translate("tabletServer"), icon: Tablet, desc: "Table ordering" },
     { href: "/kds", label: translate("tabletKds"), icon: Tablet, desc: "Kitchen display" },
     { href: "/bar", label: translate("barScreen"), icon: Tv, desc: "Bar display" },
+    { href: "/client", label: translate("customerDisplay"), icon: Monitor, desc: translate("settingsCfdDeviceHint") },
   ];
 
   return (
@@ -545,6 +570,107 @@ export function SettingsView() {
                 className="hidden"
                 onChange={(event) => void handleSoundUpload(event)}
               />
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800 md:col-span-2">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("settingsCustomerDisplay")}</h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{translate("settingsCustomerDisplayHint")}</p>
+
+            <div className="mt-4 grid gap-6 lg:grid-cols-2">
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{translate("settingsCfdAdVideo")}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{translate("settingsCfdAdVideoHint")}</p>
+                {settings.cfdAdVideoUrl ? (
+                  <video
+                    src={settings.cfdAdVideoUrl}
+                    controls
+                    muted
+                    playsInline
+                    className="mt-2 max-h-48 w-full rounded-lg border border-gray-200 bg-black dark:border-gray-700"
+                  />
+                ) : (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{translate("settingsCfdNoVideo")}</p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => cfdVideoInputRef.current?.click()}
+                    className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+                  >
+                    {translate("settingsCfdUploadVideo")}
+                  </button>
+                  {settings.cfdAdVideoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => void clearCfdVideo()}
+                      className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold dark:border-gray-600"
+                    >
+                      {translate("settingsCfdRemoveVideo")}
+                    </button>
+                  )}
+                  <input
+                    ref={cfdVideoInputRef}
+                    type="file"
+                    accept=".mp4,.webm,video/mp4,video/webm"
+                    className="hidden"
+                    onChange={(event) => void handleCfdVideoUpload(event)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="block text-sm">
+                  <span className="font-medium text-gray-800 dark:text-gray-200">{translate("settingsCfdReviewUrl")}</span>
+                  <input
+                    value={draft.cfdReviewUrl}
+                    onChange={(event) => updateDraft("cfdReviewUrl", event.target.value)}
+                    placeholder="https://..."
+                    className="pos-input mt-1"
+                  />
+                </label>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{translate("settingsCfdReviewUrlHint")}</p>
+
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{translate("settingsCfdReviewQr")}</p>
+                <div className="flex flex-wrap items-start gap-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={
+                      settings.cfdReviewQrImageUrl.trim() ||
+                      `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(draft.cfdReviewUrl || settings.cfdReviewUrl)}`
+                    }
+                    alt="Review QR preview"
+                    width={120}
+                    height={120}
+                    className="rounded-lg border border-gray-200 bg-white p-2 dark:border-gray-700"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => cfdQrInputRef.current?.click()}
+                      className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold dark:border-gray-600"
+                    >
+                      {translate("settingsCfdUploadQr")}
+                    </button>
+                    {settings.cfdReviewQrImageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => void clearCfdQrImage()}
+                        className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold dark:border-gray-600"
+                      >
+                        {translate("settingsCfdUseGeneratedQr")}
+                      </button>
+                    )}
+                    <input
+                      ref={cfdQrInputRef}
+                      type="file"
+                      accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={(event) => void handleCfdQrUpload(event)}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
 

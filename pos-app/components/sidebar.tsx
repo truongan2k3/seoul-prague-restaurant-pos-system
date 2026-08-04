@@ -18,6 +18,7 @@ import {
   Users,
 } from "lucide-react";
 import { LanguageSelector } from "@/components/language-selector";
+import { FullscreenToggle } from "@/components/fullscreen-toggle";
 import { useApp } from "@/contexts/app-context";
 import { usePendingReservationCount } from "@/hooks/use-pending-reservation-count";
 import { navButtonClass } from "@/lib/theme-classes";
@@ -194,6 +195,8 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
               )}
               {isExpanded && (theme === "light" ? translate("darkMode") : translate("lightMode"))}
             </button>
+
+            <FullscreenToggle compact={!isExpanded} />
 
             {isExpanded ? (
               <>

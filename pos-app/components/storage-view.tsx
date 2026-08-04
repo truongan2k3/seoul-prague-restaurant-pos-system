@@ -1,13 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FolderTree } from "lucide-react";
 import { CategoryManagerModal } from "@/components/category-manager-modal";
 import { LiveClock } from "@/components/live-clock";
 import { InventoryManager } from "@/components/inventory-manager";
 import { MenuManager } from "@/components/menu-manager";
+import { NotePresetManager } from "@/components/note-preset-manager";
 import { useApp } from "@/contexts/app-context";
-import type { InventoryItem, MenuCategoryRecord, MenuItem } from "@/lib/types";
+import type { InventoryItem, MenuCategoryRecord, MenuItem, NotePreset } from "@/lib/types";
+import {
+  fetchAllNotePresetsAdmin,
+  mapNotePresetsResponse,
+} from "@/src/lib/note-preset-actions";
 
 export function StorageView({
   inventory,
@@ -22,6 +27,17 @@ export function StorageView({
 }) {
   const { translate } = useApp();
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [notePresets, setNotePresets] = useState<NotePreset[]>([]);
+
+  const reloadNotePresets = useCallback(async () => {
+    const { data } = await fetchAllNotePresetsAdmin();
+    setNotePresets(mapNotePresetsResponse(data));
+  }, []);
+
+  useEffect(() => {
+    void reloadNotePresets();
+  }, [reloadNotePresets]);
+
   const commercial = inventory.filter((i) => i.category === "commercial");
   const internal = inventory.filter((i) => i.category === "internal");
 
@@ -48,6 +64,13 @@ export function StorageView({
       <div className="flex-1 overflow-auto p-6">
         <div className="mx-auto max-w-6xl space-y-6">
           <MenuManager menuItems={menuItems} categories={categories} onChange={onRefresh} />
+
+          <NotePresetManager
+            presets={notePresets}
+            onChange={() => {
+              void reloadNotePresets();
+            }}
+          />
 
           <div className="grid gap-6 lg:grid-cols-2">
             <InventoryManager

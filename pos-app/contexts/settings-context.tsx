@@ -16,6 +16,8 @@ import {
   subscribeToSettingsChanges,
   updateAppSettings,
   uploadCustomAlertSound,
+  uploadCfdAdVideo,
+  uploadCfdReviewQrImage,
   type PrinterBillSettingsDraft,
   type SettingsPageDraft,
 } from "@/src/lib/settings-actions";
@@ -29,6 +31,8 @@ interface SettingsContextValue {
   savePrinterBillSettings: (draft: PrinterBillSettingsDraft) => Promise<boolean>;
   saveSettingsPageDraft: (draft: SettingsPageDraft) => Promise<boolean>;
   uploadAlertSound: (file: File) => Promise<void>;
+  uploadCfdAdVideo: (file: File) => Promise<void>;
+  uploadCfdReviewQrImage: (file: File) => Promise<void>;
   refreshSettings: () => Promise<void>;
 }
 
@@ -97,6 +101,34 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const uploadCfdAdVideoHandler = useCallback(async (file: File) => {
+    setSaving(true);
+    const { data, error: uploadError } = await uploadCfdAdVideo(file);
+    setSaving(false);
+    if (uploadError) {
+      setError(uploadError.message);
+      return;
+    }
+    if (data) {
+      setSettings(data);
+      setError(null);
+    }
+  }, []);
+
+  const uploadCfdReviewQrImageHandler = useCallback(async (file: File) => {
+    setSaving(true);
+    const { data, error: uploadError } = await uploadCfdReviewQrImage(file);
+    setSaving(false);
+    if (uploadError) {
+      setError(uploadError.message);
+      return;
+    }
+    if (data) {
+      setSettings(data);
+      setError(null);
+    }
+  }, []);
+
   const value = useMemo(
     () => ({
       settings,
@@ -107,9 +139,23 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       savePrinterBillSettings,
       saveSettingsPageDraft,
       uploadAlertSound,
+      uploadCfdAdVideo: uploadCfdAdVideoHandler,
+      uploadCfdReviewQrImage: uploadCfdReviewQrImageHandler,
       refreshSettings,
     }),
-    [settings, loading, saving, error, saveSettings, savePrinterBillSettings, saveSettingsPageDraft, uploadAlertSound, refreshSettings],
+    [
+      settings,
+      loading,
+      saving,
+      error,
+      saveSettings,
+      savePrinterBillSettings,
+      saveSettingsPageDraft,
+      uploadAlertSound,
+      uploadCfdAdVideoHandler,
+      uploadCfdReviewQrImageHandler,
+      refreshSettings,
+    ],
   );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;

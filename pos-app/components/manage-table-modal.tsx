@@ -306,10 +306,6 @@ export function ManageTableModal({
 
   const handleSave = async () => {
     setLocalError(null);
-    if (ordersPayload.length === 0) {
-      setLocalError("Order must have at least one item, or checkout to close the table.");
-      return;
-    }
     await onSaveOrders(ordersPayload);
   };
 
@@ -588,12 +584,16 @@ export function ManageTableModal({
         <div className="space-y-3 pt-1">
           <button
             type="button"
-            disabled={isSaving || lines.length === 0}
+            disabled={isSaving}
             onClick={() => void handleSave()}
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-3 text-sm font-semibold text-gray-900 disabled:opacity-40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
           >
             <Save className="h-4 w-4" />
-            {isSaving ? "..." : translate("saveOrder")}
+            {isSaving
+              ? "..."
+              : ordersPayload.length === 0
+                ? translate("saveEmptyOrder")
+                : translate("saveOrder")}
           </button>
 
           <button

@@ -37,6 +37,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   terminalPort: "2000",
   terminalPosId: "PVTL9664",
   terminalConnectionMode: "inbound",
+  cfdAdVideoUrl: "",
+  cfdReviewUrl:
+    "https://www.google.com/maps/search/?api=1&query=Seoul+Prague+Restaurant",
+  cfdReviewQrImageUrl: "",
 };
 
 type SettingsRow = {
@@ -70,6 +74,9 @@ type SettingsRow = {
   terminal_port?: string | null;
   terminal_pos_id?: string | null;
   terminal_connection_mode?: string | null;
+  cfd_ad_video_url?: string | null;
+  cfd_review_url?: string | null;
+  cfd_review_qr_image_url?: string | null;
 };
 
 function parseNumericSetting(value: number | string | null | undefined, fallback: number): number {
@@ -140,6 +147,9 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     terminalPort: row.terminal_port ?? DEFAULT_APP_SETTINGS.terminalPort,
     terminalPosId: row.terminal_pos_id ?? DEFAULT_APP_SETTINGS.terminalPosId,
     terminalConnectionMode: parseTerminalConnectionMode(row.terminal_connection_mode),
+    cfdAdVideoUrl: row.cfd_ad_video_url ?? DEFAULT_APP_SETTINGS.cfdAdVideoUrl,
+    cfdReviewUrl: row.cfd_review_url ?? DEFAULT_APP_SETTINGS.cfdReviewUrl,
+    cfdReviewQrImageUrl: row.cfd_review_qr_image_url ?? DEFAULT_APP_SETTINGS.cfdReviewQrImageUrl,
   };
 }
 
@@ -189,6 +199,11 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   if (partial.terminalConnectionMode !== undefined) {
     payload.terminal_connection_mode = partial.terminalConnectionMode;
   }
+  if (partial.cfdAdVideoUrl !== undefined) payload.cfd_ad_video_url = partial.cfdAdVideoUrl;
+  if (partial.cfdReviewUrl !== undefined) payload.cfd_review_url = partial.cfdReviewUrl;
+  if (partial.cfdReviewQrImageUrl !== undefined) {
+    payload.cfd_review_qr_image_url = partial.cfdReviewQrImageUrl;
+  }
   return payload;
 }
 
@@ -228,6 +243,45 @@ export async function uploadCustomAlertSound(file: File) {
 
   const { data: publicData } = supabase.storage.from("audio_alerts").getPublicUrl(path);
   return updateAppSettings({ customAlertSoundUrl: publicData.publicUrl });
+}
+
+async function uploadCfdMediaFile(file: File, prefix: string, allowedExtensions: string[]) {
+  const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+  if (!allowedExtensions.includes(extension)) {
+    return {
+      data: null,
+      error: new Error(`Supported formats: ${allowedExtensions.join(", ")}`),
+    };
+  }
+
+  const path = `${prefix}-${Date.now()}.${extension}`;
+  const { error: uploadError } = await supabase.storage.from("cfd_media").upload(path, file, {
+    cacheControl: "3600",
+    upsert: true,
+    contentType: file.type || undefined,
+  });
+
+  if (uploadError) return { data: null, error: uploadError };
+
+  const { data: publicData } = supabase.storage.from("cfd_media").getPublicUrl(path);
+  return { data: publicData.publicUrl, error: null as Error | null };
+}
+
+export async function uploadCfdAdVideo(file: File) {
+  const { data: url, error } = await uploadCfdMediaFile(file, "cfd-ad", ["mp4", "webm"]);
+  if (error || !url) return { data: null, error: error ?? new Error("Upload failed") };
+  return updateAppSettings({ cfdAdVideoUrl: url });
+}
+
+export async function uploadCfdReviewQrImage(file: File) {
+  const { data: url, error } = await uploadCfdMediaFile(file, "cfd-qr", [
+    "png",
+    "jpg",
+    "jpeg",
+    "webp",
+  ]);
+  if (error || !url) return { data: null, error: error ?? new Error("Upload failed") };
+  return updateAppSettings({ cfdReviewQrImageUrl: url });
 }
 
 export function subscribeToSettingsChanges(onChange: () => void) {
@@ -287,6 +341,7 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "terminalPort"
     | "terminalPosId"
     | "terminalConnectionMode"
+    | "cfdReviewUrl"
   >;
 
 export function pickPrinterBillDraft(settings: AppSettings): PrinterBillSettingsDraft {
@@ -325,5 +380,6 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     terminalPort: settings.terminalPort,
     terminalPosId: settings.terminalPosId,
     terminalConnectionMode: settings.terminalConnectionMode,
+    cfdReviewUrl: settings.cfdReviewUrl,
   };
 }

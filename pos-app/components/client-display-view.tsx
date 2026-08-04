@@ -8,6 +8,7 @@ import {
   type CfdClientState,
 } from "@/lib/cfd-display";
 import { formatCzk } from "@/lib/checkout-calculations";
+import { useSettings } from "@/contexts/settings-context";
 
 const THANK_YOU_SECONDS = 20;
 
@@ -128,7 +129,20 @@ function CheckoutView({ checkout }: { checkout: CfdCheckoutPayload }) {
   );
 }
 
-function ThankYouView({ secondsLeft }: { secondsLeft: number }) {
+function ThankYouView({
+  secondsLeft,
+  reviewUrl,
+  reviewQrImageUrl,
+  hasAdVideo,
+}: {
+  secondsLeft: number;
+  reviewUrl: string;
+  reviewQrImageUrl: string;
+  hasAdVideo: boolean;
+}) {
+  const qrSrc =
+    reviewQrImageUrl.trim() || getCfdReviewQrUrl(reviewUrl, 220);
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
       <h2 className="text-3xl font-bold text-white sm:text-4xl">Thank you for dining with us!</h2>
@@ -141,23 +155,57 @@ function ThankYouView({ secondsLeft }: { secondsLeft: number }) {
       <div className="mt-8 rounded-2xl bg-white p-4 shadow-lg">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={getCfdReviewQrUrl(220)}
-          alt="Scan to leave a Google review"
+          src={qrSrc}
+          alt="Scan to leave a review"
           width={220}
           height={220}
-          className="h-[220px] w-[220px]"
+          className="h-[220px] w-[220px] object-contain"
         />
       </div>
-      <p className="mt-4 text-sm text-zinc-500">Scan to review us on Google Maps</p>
-      <p className="mt-8 text-xs text-zinc-600">Returning to welcome screen in {secondsLeft}s</p>
+      <p className="mt-4 text-sm text-zinc-500">Scan to review us</p>
+      <p className="mt-8 text-xs text-zinc-600">
+        {hasAdVideo
+          ? `Starting promotional video in ${secondsLeft}s`
+          : `Returning to display in ${secondsLeft}s`}
+      </p>
     </div>
   );
 }
 
+function IdleDisplayView({ videoUrl }: { videoUrl: string }) {
+  if (videoUrl.trim()) {
+    return (
+      <main className="relative flex min-h-0 flex-1 overflow-hidden bg-black">
+        <video
+          key={videoUrl}
+          src={videoUrl}
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="h-full w-full object-contain"
+        />
+      </main>
+    );
+  }
+
+  return (
+    <main className="flex flex-1 flex-col items-center justify-center bg-zinc-950 px-6 text-center">
+      <p className="text-3xl font-bold tracking-[0.25em] text-white sm:text-4xl">SEOUL PRAGUE</p>
+      <p className="mt-4 text-lg text-zinc-400">Welcome</p>
+    </main>
+  );
+}
+
 export function ClientDisplayView() {
+  const { settings } = useSettings();
   const [clientState, setClientState] = useState<CfdClientState>("idle");
   const [checkout, setCheckout] = useState<CfdCheckoutPayload | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(THANK_YOU_SECONDS);
+
+  const adVideoUrl = settings.cfdAdVideoUrl.trim();
+  const reviewUrl = settings.cfdReviewUrl.trim();
+  const reviewQrImageUrl = settings.cfdReviewQrImageUrl.trim();
 
   useEffect(() => {
     return subscribeCfdEvents({
@@ -194,11 +242,13 @@ export function ClientDisplayView() {
     return () => clearInterval(interval);
   }, [clientState]);
 
+  const showHeader = clientState !== "idle" || !adVideoUrl;
+
   return (
     <div className="flex min-h-screen flex-col bg-zinc-950 text-white">
-      <CfdHeader />
+      {showHeader && <CfdHeader />}
 
-      {clientState === "idle" && <main className="flex-1 bg-zinc-950" aria-hidden />}
+      {clientState === "idle" && <IdleDisplayView videoUrl={adVideoUrl} />}
 
       {clientState === "checkout" && checkout && (
         <main className="flex min-h-0 flex-1 flex-col">
@@ -208,7 +258,12 @@ export function ClientDisplayView() {
 
       {clientState === "thankyou" && (
         <main className="flex flex-1 flex-col">
-          <ThankYouView secondsLeft={secondsLeft} />
+          <ThankYouView
+            secondsLeft={secondsLeft}
+            reviewUrl={reviewUrl}
+            reviewQrImageUrl={reviewQrImageUrl}
+            hasAdVideo={Boolean(adVideoUrl)}
+          />
         </main>
       )}
     </div>

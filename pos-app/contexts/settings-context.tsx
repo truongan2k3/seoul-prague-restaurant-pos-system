@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import type { AppSettings } from "@/lib/types";
+import { useAuth } from "@/contexts/auth-context";
 import {
   DEFAULT_APP_SETTINGS,
   fetchAppSettings,
@@ -39,13 +40,21 @@ interface SettingsContextValue {
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
+  const { session } = useAuth();
+  const businessId = session?.businessId ?? null;
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refreshSettings = useCallback(async () => {
-    const { data, error: fetchError } = await fetchAppSettings();
+    if (!businessId) {
+      setSettings(DEFAULT_APP_SETTINGS);
+      setLoading(false);
+      return;
+    }
+
+    const { data, error: fetchError } = await fetchAppSettings(businessId);
     if (fetchError) {
       setError(fetchError.message);
     } else {
@@ -53,28 +62,34 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setError(null);
     }
     setLoading(false);
-  }, []);
+  }, [businessId]);
 
   useEffect(() => {
+    setLoading(true);
     void refreshSettings();
+    if (!businessId) return;
     return subscribeToSettingsChanges(() => void refreshSettings());
-  }, [refreshSettings]);
+  }, [refreshSettings, businessId]);
 
-  const saveSettings = useCallback(async (partial: Partial<AppSettings>) => {
-    setSaving(true);
-    const { data, error: saveError } = await updateAppSettings(partial);
-    setSaving(false);
+  const saveSettings = useCallback(
+    async (partial: Partial<AppSettings>) => {
+      if (!businessId) return false;
+      setSaving(true);
+      const { data, error: saveError } = await updateAppSettings(partial, businessId);
+      setSaving(false);
 
-    if (saveError) {
-      setError(saveError.message);
-      return false;
-    }
-    if (data) {
-      setSettings(data);
-      setError(null);
-    }
-    return true;
-  }, []);
+      if (saveError) {
+        setError(saveError.message);
+        return false;
+      }
+      if (data) {
+        setSettings(data);
+        setError(null);
+      }
+      return true;
+    },
+    [businessId],
+  );
 
   const savePrinterBillSettings = useCallback(
     async (draft: PrinterBillSettingsDraft) => saveSettings(draft),
@@ -86,48 +101,60 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [saveSettings],
   );
 
-  const uploadAlertSound = useCallback(async (file: File) => {
-    setSaving(true);
-    const { data, error: uploadError } = await uploadCustomAlertSound(file);
-    setSaving(false);
+  const uploadAlertSound = useCallback(
+    async (file: File) => {
+      if (!businessId) return;
+      setSaving(true);
+      const { data, error: uploadError } = await uploadCustomAlertSound(file, businessId);
+      setSaving(false);
 
-    if (uploadError) {
-      setError(uploadError.message);
-      return;
-    }
-    if (data) {
-      setSettings(data);
-      setError(null);
-    }
-  }, []);
+      if (uploadError) {
+        setError(uploadError.message);
+        return;
+      }
+      if (data) {
+        setSettings(data);
+        setError(null);
+      }
+    },
+    [businessId],
+  );
 
-  const uploadCfdAdVideoHandler = useCallback(async (file: File) => {
-    setSaving(true);
-    const { data, error: uploadError } = await uploadCfdAdVideo(file);
-    setSaving(false);
-    if (uploadError) {
-      setError(uploadError.message);
-      return;
-    }
-    if (data) {
-      setSettings(data);
-      setError(null);
-    }
-  }, []);
+  const uploadCfdAdVideoHandler = useCallback(
+    async (file: File) => {
+      if (!businessId) return;
+      setSaving(true);
+      const { data, error: uploadError } = await uploadCfdAdVideo(file, businessId);
+      setSaving(false);
+      if (uploadError) {
+        setError(uploadError.message);
+        return;
+      }
+      if (data) {
+        setSettings(data);
+        setError(null);
+      }
+    },
+    [businessId],
+  );
 
-  const uploadCfdReviewQrImageHandler = useCallback(async (file: File) => {
-    setSaving(true);
-    const { data, error: uploadError } = await uploadCfdReviewQrImage(file);
-    setSaving(false);
-    if (uploadError) {
-      setError(uploadError.message);
-      return;
-    }
-    if (data) {
-      setSettings(data);
-      setError(null);
-    }
-  }, []);
+  const uploadCfdReviewQrImageHandler = useCallback(
+    async (file: File) => {
+      if (!businessId) return;
+      setSaving(true);
+      const { data, error: uploadError } = await uploadCfdReviewQrImage(file, businessId);
+      setSaving(false);
+      if (uploadError) {
+        setError(uploadError.message);
+        return;
+      }
+      if (data) {
+        setSettings(data);
+        setError(null);
+      }
+    },
+    [businessId],
+  );
 
   const value = useMemo(
     () => ({

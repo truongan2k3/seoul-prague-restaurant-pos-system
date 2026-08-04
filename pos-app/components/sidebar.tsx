@@ -9,6 +9,7 @@ import {
   ClipboardList,
   History,
   Languages,
+  LogOut,
   Map,
   Moon,
   Package,
@@ -18,8 +19,8 @@ import {
   Users,
 } from "lucide-react";
 import { LanguageSelector } from "@/components/language-selector";
-import { FullscreenToggle } from "@/components/fullscreen-toggle";
 import { useApp } from "@/contexts/app-context";
+import { useAuth } from "@/contexts/auth-context";
 import { usePendingReservationCount } from "@/hooks/use-pending-reservation-count";
 import { navButtonClass } from "@/lib/theme-classes";
 import type { NavId } from "@/lib/types";
@@ -50,6 +51,7 @@ function readCollapsedPreference(): boolean {
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const { theme, setTheme, currentStaffUser, setStaff, staffList, translate, canManageStaff } =
     useApp();
+  const { business, session, logout } = useAuth();
   const pendingReservationCount = usePendingReservationCount();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -109,17 +111,42 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         >
           <div
             className={`flex items-center border-b border-gray-200 dark:border-zinc-800 ${
-              isExpanded ? "justify-between px-4 py-4" : "justify-center px-2 py-3"
+              isExpanded ? "gap-3 px-4 py-4" : "justify-center px-2 py-3"
             }`}
           >
-            {isExpanded && (
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-widest text-gray-500 dark:text-zinc-500">
-                  Windows POS
-                </p>
-                <p className="mt-1 truncate text-sm font-medium text-gray-800 dark:text-zinc-200">
-                  Cashier & Floor
-                </p>
+            {isExpanded ? (
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                {business?.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={business.logoUrl}
+                    alt={business.name}
+                    className="h-11 w-11 shrink-0 rounded-lg border border-gray-200 object-cover dark:border-zinc-700"
+                  />
+                ) : (
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-sm font-bold text-white">
+                    {(business?.name ?? "P").charAt(0)}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-gray-900 dark:text-zinc-100">
+                    {business?.name ?? "POS"}
+                  </p>
+                  <p className="truncate text-xs text-gray-500 dark:text-zinc-400">
+                    {session?.username ? `@${session.username}` : translate("cashierFloor")}
+                  </p>
+                </div>
+              </div>
+            ) : business?.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={business.logoUrl}
+                alt={business.name}
+                className="h-9 w-9 rounded-lg border border-gray-200 object-cover dark:border-zinc-700"
+              />
+            ) : (
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 text-xs font-bold text-white">
+                {(business?.name ?? "P").charAt(0)}
               </div>
             )}
             <button
@@ -196,7 +223,17 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
               {isExpanded && (theme === "light" ? translate("darkMode") : translate("lightMode"))}
             </button>
 
-            <FullscreenToggle compact={!isExpanded} />
+            <button
+              type="button"
+              onClick={() => void logout()}
+              title={translate("authSignOut")}
+              className={`flex min-h-[44px] w-full items-center rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-700 hover:bg-gray-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 ${
+                isExpanded ? "gap-2 px-3 py-2" : "justify-center px-2 py-2"
+              }`}
+            >
+              <LogOut className="h-4 w-4 shrink-0" />
+              {isExpanded && translate("authSignOut")}
+            </button>
 
             {isExpanded ? (
               <>

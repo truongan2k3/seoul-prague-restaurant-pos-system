@@ -5,6 +5,7 @@ import Link from "next/link";
 import { LanguageSelector } from "@/components/language-selector";
 import { LiveClock } from "@/components/live-clock";
 import { useApp } from "@/contexts/app-context";
+import { useAuth } from "@/contexts/auth-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { useSettings } from "@/contexts/settings-context";
@@ -18,6 +19,10 @@ import { RECEIPT_FONT_OPTIONS } from "@/lib/receipt-print-styles";
 import type { TranslationKey } from "@/lib/i18n/translations";
 import type { ReceiptFontFamily, WeekdayKey } from "@/lib/types";
 import { testTerminalConnection } from "@/src/lib/terminalApi";
+import {
+  clearBusinessLogoAction,
+  uploadBusinessLogoAction,
+} from "@/src/lib/business-auth-actions";
 import { Monitor, Save, Tablet, Tv, CreditCard } from "lucide-react";
 
 const RECEIPT_FONT_LABEL_KEYS: Record<ReceiptFontFamily, TranslationKey> = {
@@ -45,9 +50,11 @@ export function SettingsView() {
   } = useApp();
   const { settings, saving, error: settingsError, saveSettingsPageDraft, uploadAlertSound, uploadCfdAdVideo, uploadCfdReviewQrImage, saveSettings } =
     useSettings();
+  const { business, updateBranding } = useAuth();
   const { pushNotification } = useNotifications();
   const { printTestReceipt } = useReceiptPrint();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const cfdVideoInputRef = useRef<HTMLInputElement>(null);
   const cfdQrInputRef = useRef<HTMLInputElement>(null);
   const audioPreviewRef = useRef<HTMLAudioElement>(null);
@@ -56,6 +63,7 @@ export function SettingsView() {
   const [dirty, setDirty] = useState(false);
   const [terminalTestMessage, setTerminalTestMessage] = useState<string | null>(null);
   const [terminalTesting, setTerminalTesting] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
 
   const weekdayLabels: Record<WeekdayKey, string> = {
     monday: translate("settingsDayMonday"),
@@ -136,6 +144,33 @@ export function SettingsView() {
     await saveSettings({ cfdReviewQrImageUrl: "" });
   };
 
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !business) return;
+
+    setLogoUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    const result = await uploadBusinessLogoAction(business.id, formData);
+    setLogoUploading(false);
+
+    if (result.ok) {
+      updateBranding({ logoUrl: result.logoUrl });
+      pushNotification({ message: translate("settingsLogoUpdated") });
+    } else {
+      pushNotification({ message: result.error ?? translate("settingsLogoUploadFailed") });
+    }
+  };
+
+  const clearBusinessLogo = async () => {
+    if (!business) return;
+    const result = await clearBusinessLogoAction(business.id);
+    if (result.ok) {
+      updateBranding({ logoUrl: "" });
+    }
+  };
+
   const handleTestTerminal = async () => {
     setTerminalTesting(true);
     setTerminalTestMessage(null);
@@ -177,6 +212,57 @@ export function SettingsView() {
               {settingsError}
             </p>
           )}
+
+          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6 md:col-span-2">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("settingsBusinessBranding")}</h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{translate("settingsBusinessBrandingHint")}</p>
+
+            <div className="mt-4 flex flex-wrap items-center gap-4">
+              {business?.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={business.logoUrl}
+                  alt={business.name}
+                  className="h-20 w-20 rounded-xl border border-gray-200 object-cover dark:border-gray-700"
+                />
+              ) : (
+                <div className="flex h-20 w-20 items-center justify-center rounded-xl bg-emerald-600 text-2xl font-bold text-white">
+                  {(business?.name ?? "P").charAt(0)}
+                </div>
+              )}
+              <div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{business?.name}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{translate("settingsBusinessLogoHint")}</p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={logoUploading}
+                onClick={() => logoInputRef.current?.click()}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {logoUploading ? translate("settingsSaving") : translate("settingsUploadLogo")}
+              </button>
+              {business?.logoUrl && (
+                <button
+                  type="button"
+                  onClick={() => void clearBusinessLogo()}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold dark:border-gray-600"
+                >
+                  {translate("settingsRemoveLogo")}
+                </button>
+              )}
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept=".png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml"
+                className="hidden"
+                onChange={(event) => void handleLogoUpload(event)}
+              />
+            </div>
+          </section>
 
           <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6 md:col-span-2">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("settingsReceiptPrinting")}</h2>

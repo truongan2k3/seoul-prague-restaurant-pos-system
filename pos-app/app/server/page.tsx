@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Providers } from "@/components/providers";
 import { useApp } from "@/contexts/app-context";
 import { NewOrderModal } from "@/components/new-order-modal";
 import type { MenuCategoryRecord, MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
@@ -121,9 +120,5 @@ function ServerApp() {
 }
 
 export default function ServerPage() {
-  return (
-    <Providers>
-      <ServerApp />
-    </Providers>
-  );
+  return <ServerApp />;
 }

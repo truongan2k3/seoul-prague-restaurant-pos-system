@@ -215,15 +215,49 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   return payload;
 }
 
-export async function fetchAppSettings() {
-  const { data, error } = await supabase.from("settings").select("*").eq("id", 1).maybeSingle();
+export async function fetchAppSettings(businessId?: string | null) {
+  const query = businessId
+    ? supabase.from("settings").select("*").eq("business_id", businessId).maybeSingle()
+    : supabase.from("settings").select("*").eq("id", 1).maybeSingle();
+
+  const { data, error } = await query;
   if (error) return { data: DEFAULT_APP_SETTINGS, error };
   if (!data) return { data: DEFAULT_APP_SETTINGS, error: null };
   return { data: mapSettingsRow(data as SettingsRow), error: null };
 }
 
-export async function updateAppSettings(partial: Partial<AppSettings>) {
+export async function updateAppSettings(partial: Partial<AppSettings>, businessId?: string | null) {
   const payload = mapSettingsToRow(partial);
+
+  if (businessId) {
+    const { data: existing, error: lookupError } = await supabase
+      .from("settings")
+      .select("id")
+      .eq("business_id", businessId)
+      .maybeSingle();
+
+    if (lookupError) return { data: null, error: lookupError };
+
+    if (existing) {
+      const { data, error } = await supabase
+        .from("settings")
+        .update(payload)
+        .eq("business_id", businessId)
+        .select("*")
+        .single();
+      if (error) return { data: null, error };
+      return { data: mapSettingsRow(data as SettingsRow), error: null };
+    }
+
+    const { data, error } = await supabase
+      .from("settings")
+      .insert({ business_id: businessId, ...payload })
+      .select("*")
+      .single();
+    if (error) return { data: null, error };
+    return { data: mapSettingsRow(data as SettingsRow), error: null };
+  }
+
   const { data, error } = await supabase
     .from("settings")
     .upsert({ id: 1, ...payload }, { onConflict: "id" })
@@ -234,7 +268,7 @@ export async function updateAppSettings(partial: Partial<AppSettings>) {
   return { data: mapSettingsRow(data as SettingsRow), error: null };
 }
 
-export async function uploadCustomAlertSound(file: File) {
+export async function uploadCustomAlertSound(file: File, businessId?: string | null) {
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "mp3";
   if (!["mp3", "wav"].includes(extension)) {
     return { data: null, error: new Error("Only .mp3 and .wav files are supported") };
@@ -250,7 +284,7 @@ export async function uploadCustomAlertSound(file: File) {
   if (uploadError) return { data: null, error: uploadError };
 
   const { data: publicData } = supabase.storage.from("audio_alerts").getPublicUrl(path);
-  return updateAppSettings({ customAlertSoundUrl: publicData.publicUrl });
+  return updateAppSettings({ customAlertSoundUrl: publicData.publicUrl }, businessId);
 }
 
 async function uploadCfdMediaFile(file: File, prefix: string, allowedExtensions: string[]) {
@@ -275,13 +309,13 @@ async function uploadCfdMediaFile(file: File, prefix: string, allowedExtensions:
   return { data: publicData.publicUrl, error: null as Error | null };
 }
 
-export async function uploadCfdAdVideo(file: File) {
+export async function uploadCfdAdVideo(file: File, businessId?: string | null) {
   const { data: url, error } = await uploadCfdMediaFile(file, "cfd-ad", ["mp4", "webm"]);
   if (error || !url) return { data: null, error: error ?? new Error("Upload failed") };
-  return updateAppSettings({ cfdAdVideoUrl: url });
+  return updateAppSettings({ cfdAdVideoUrl: url }, businessId);
 }
 
-export async function uploadCfdReviewQrImage(file: File) {
+export async function uploadCfdReviewQrImage(file: File, businessId?: string | null) {
   const { data: url, error } = await uploadCfdMediaFile(file, "cfd-qr", [
     "png",
     "jpg",
@@ -289,7 +323,7 @@ export async function uploadCfdReviewQrImage(file: File) {
     "webp",
   ]);
   if (error || !url) return { data: null, error: error ?? new Error("Upload failed") };
-  return updateAppSettings({ cfdReviewQrImageUrl: url });
+  return updateAppSettings({ cfdReviewQrImageUrl: url }, businessId);
 }
 
 export function subscribeToSettingsChanges(onChange: () => void) {

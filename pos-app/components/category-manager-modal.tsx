@@ -1,15 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  DragDropContext,
+  Draggable,
+  Droppable,
+  type DropResult,
+} from "@hello-pangea/dnd";
+import { GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { useApp } from "@/contexts/app-context";
+import { reorderCategories } from "@/lib/category-utils";
 import type { MenuCategoryRecord } from "@/lib/types";
 import {
   countItemsInCategory,
   createCategory,
   deleteCategory,
   updateCategory,
+  updateCategoryDisplayOrders,
   type CategoryType,
 } from "@/src/lib/category-actions";
 
@@ -66,11 +74,13 @@ export function CategoryManagerModal({
     setError(null);
   }, [open, categories]);
 
-  const grouped = useMemo(() => {
-    const dish = drafts.filter((c) => c.type === "dish");
-    const drink = drafts.filter((c) => c.type === "drink");
-    return { dish, drink };
-  }, [drafts]);
+  const sortedDrafts = useMemo(
+    () =>
+      [...drafts].sort(
+        (a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name),
+      ),
+    [drafts],
+  );
 
   const handleCreate = async () => {
     const name = newName.trim();
@@ -79,12 +89,15 @@ export function CategoryManagerModal({
       return;
     }
 
+    const nextOrder =
+      drafts.length > 0 ? Math.max(...drafts.map((d) => d.displayOrder)) + 1 : 0;
+
     setIsSaving(true);
     setError(null);
     const { error: createError } = await createCategory({
       name,
       type: newType,
-      displayOrder: drafts.length,
+      displayOrder: nextOrder,
     });
     setIsSaving(false);
 
@@ -175,78 +188,48 @@ export function CategoryManagerModal({
     onChange();
   };
 
-  const renderGroup = (title: string, items: DraftCategory[]) => (
-    <div className="rounded-lg border border-zinc-200 dark:border-zinc-700">
-      <div className="border-b border-zinc-200 bg-zinc-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-400">
-        {title}
-      </div>
-      {items.length === 0 ? (
-        <p className="px-4 py-6 text-sm text-zinc-500 dark:text-zinc-400">{translate("noCategoriesYet")}</p>
-      ) : (
-        <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-          {items.map((category) => (
-            <li key={category.id ?? category.name} className="flex items-center gap-3 px-4 py-3">
-              {editingId === category.id ? (
-                <>
-                  <input
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="min-w-0 flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
-                  />
-                  <select
-                    value={editType}
-                    onChange={(e) => setEditType(e.target.value as CategoryType)}
-                    className="rounded-lg border border-zinc-200 px-2 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
-                  >
-                    <option value="dish">{translate("filterDish")}</option>
-                    <option value="drink">{translate("filterDrink")}</option>
-                  </select>
-                  <button
-                    type="button"
-                    disabled={isSaving}
-                    onClick={() => void handleSaveEdit()}
-                    className="rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  >
-                    {translate("save")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingId(null)}
-                    className="rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-700"
-                  >
-                    {translate("cancel")}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span className="min-w-0 flex-1 font-medium text-zinc-900 dark:text-zinc-100">
-                    {category.name}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => startEdit(category)}
-                    className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                    aria-label={`Edit ${category.name}`}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isSaving}
-                    onClick={() => void requestDelete(category)}
-                    className="rounded-lg p-2 text-red-500 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-950"
-                    aria-label={`Delete ${category.name}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
+  const handleDragEnd = async (result: DropResult) => {
+    if (!result.destination) return;
+    if (result.source.index === result.destination.index) return;
+
+    const next = reorderCategories(
+      sortedDrafts,
+      result.source.index,
+      result.destination.index,
+    );
+    setDrafts(next);
+
+    const changed = next.filter((cat) => {
+      const previous = categories.find((entry) => entry.id === cat.id);
+      return previous && previous.displayOrder !== cat.displayOrder;
+    });
+
+    if (changed.length === 0) return;
+
+    setIsSaving(true);
+    setError(null);
+    const { error: reorderError } = await updateCategoryDisplayOrders(
+      next
+        .filter((cat): cat is DraftCategory & { id: string } => Boolean(cat.id))
+        .map((cat) => ({ id: cat.id, displayOrder: cat.displayOrder })),
+    );
+    setIsSaving(false);
+
+    if (reorderError) {
+      setError(reorderError.message);
+      setDrafts(
+        categories.map((category) => ({
+          id: category.id,
+          name: category.name,
+          type: category.type,
+          displayOrder: category.displayOrder,
+        })),
+      );
+      return;
+    }
+
+    onChange();
+  };
 
   return (
     <>
@@ -274,9 +257,123 @@ export function CategoryManagerModal({
             </p>
           )}
 
-          <div className="grid gap-4 md:grid-cols-2">
-            {renderGroup(translate("filterDish"), grouped.dish)}
-            {renderGroup(translate("filterDrink"), grouped.drink)}
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            {translate("categoryOrderHint")} · {translate("dragToReorder")}
+          </p>
+
+          <div className="rounded-lg border border-zinc-200 dark:border-zinc-700">
+            {sortedDrafts.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-zinc-500 dark:text-zinc-400">
+                {translate("noCategoriesYet")}
+              </p>
+            ) : (
+              <DragDropContext onDragEnd={(result) => void handleDragEnd(result)}>
+                <Droppable droppableId="categories">
+                  {(provided) => (
+                    <ul
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className="divide-y divide-zinc-100 dark:divide-zinc-800"
+                    >
+                      {sortedDrafts.map((category, index) => (
+                        <Draggable
+                          key={category.id ?? category.name}
+                          draggableId={category.id ?? category.name}
+                          index={index}
+                          isDragDisabled={editingId === category.id || isSaving}
+                        >
+                          {(dragProvided, snapshot) => (
+                            <li
+                              ref={dragProvided.innerRef}
+                              {...dragProvided.draggableProps}
+                              className={`flex items-center gap-3 px-4 py-3 ${
+                                snapshot.isDragging
+                                  ? "bg-zinc-100 shadow-lg dark:bg-zinc-800"
+                                  : ""
+                              }`}
+                            >
+                              {editingId === category.id ? (
+                                <>
+                                  <span className="w-6 shrink-0" />
+                                  <input
+                                    value={editName}
+                                    onChange={(e) => setEditName(e.target.value)}
+                                    className="min-w-0 flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+                                  />
+                                  <select
+                                    value={editType}
+                                    onChange={(e) =>
+                                      setEditType(e.target.value as CategoryType)
+                                    }
+                                    className="rounded-lg border border-zinc-200 px-2 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+                                  >
+                                    <option value="dish">{translate("filterDish")}</option>
+                                    <option value="drink">{translate("filterDrink")}</option>
+                                  </select>
+                                  <button
+                                    type="button"
+                                    disabled={isSaving}
+                                    onClick={() => void handleSaveEdit()}
+                                    className="rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
+                                  >
+                                    {translate("save")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingId(null)}
+                                    className="rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-700"
+                                  >
+                                    {translate("cancel")}
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    {...dragProvided.dragHandleProps}
+                                    disabled={isSaving}
+                                    className="touch-action-none shrink-0 cursor-grab rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 active:cursor-grabbing disabled:opacity-40 dark:hover:bg-zinc-700 dark:hover:text-zinc-200"
+                                    aria-label={`${translate("dragToReorder")}: ${category.name}`}
+                                  >
+                                    <GripVertical className="h-4 w-4" />
+                                  </button>
+                                  <span className="min-w-0 flex-1 font-medium text-zinc-900 dark:text-zinc-100">
+                                    {category.name}
+                                  </span>
+                                  <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                                    {category.type === "drink"
+                                      ? translate("filterDrink")
+                                      : translate("filterDish")}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => startEdit(category)}
+                                    className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                    aria-label={`Edit ${category.name}`}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isSaving}
+                                    onClick={() => void requestDelete(category)}
+                                    className="rounded-lg p-2 text-red-500 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-950"
+                                    aria-label={`Delete ${category.name}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </>
+                              )}
+                            </li>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                    </ul>
+                  )}
+                </Droppable>
+              </DragDropContext>
+            )}
           </div>
 
           <div className="rounded-lg border border-dashed border-zinc-300 p-4 dark:border-zinc-600">
@@ -339,10 +436,9 @@ export function CategoryManagerModal({
         {deleteTarget && (
           <p className="text-sm text-zinc-700 dark:text-zinc-300">
             {deleteTarget.itemCount > 0
-              ? translate("deleteCategoryWithItems").replace(
-                  "{count}",
-                  String(deleteTarget.itemCount),
-                ).replace("{name}", deleteTarget.category.name)
+              ? translate("deleteCategoryWithItems")
+                  .replace("{count}", String(deleteTarget.itemCount))
+                  .replace("{name}", deleteTarget.category.name)
               : translate("deleteCategoryConfirm").replace("{name}", deleteTarget.category.name)}
           </p>
         )}

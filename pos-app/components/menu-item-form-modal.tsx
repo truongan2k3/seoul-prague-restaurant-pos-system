@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/modal";
+import { useApp } from "@/contexts/app-context";
 import { DEFAULT_MENU_CATEGORY } from "@/lib/menu-categories";
 import { resolveStation } from "@/lib/order-routing";
 import { segmentButtonClass } from "@/lib/theme-classes";
-import type { MenuCategoryRecord, MenuItem } from "@/lib/types";
+import type { MenuCategoryRecord, MenuItem, Station } from "@/lib/types";
 import { emptyMenuItemInput, type MenuItemInput } from "@/src/lib/menu-actions";
 
 type LocaleTab = "en" | "cz" | "zh";
@@ -33,6 +34,7 @@ export function MenuItemFormModal({
   onSave,
   isSaving = false,
 }: MenuItemFormModalProps) {
+  const { translate } = useApp();
   const [form, setForm] = useState<MenuItemInput>(emptyMenuItemInput);
   const [activeTab, setActiveTab] = useState<LocaleTab>("en");
   const [error, setError] = useState<string | null>(null);
@@ -60,11 +62,14 @@ export function MenuItemFormModal({
       });
     } else {
       const defaultCategory = categories[0];
+      const itemType = defaultCategory?.type === "drink" ? "drink" : "food";
+      const categoryName = defaultCategory?.name ?? DEFAULT_MENU_CATEGORY;
       setForm({
         ...emptyMenuItemInput,
-        category: defaultCategory?.name ?? DEFAULT_MENU_CATEGORY,
+        category: categoryName,
         categoryId: defaultCategory?.id ?? null,
-        itemType: defaultCategory?.type === "drink" ? "drink" : "food",
+        itemType,
+        station: resolveStation(categoryName, itemType),
       });
     }
   }, [open, item, categories]);
@@ -92,7 +97,8 @@ export function MenuItemFormModal({
     categories.find((category) => category.name === form.category)?.id ??
     null;
 
-  const stationPreview = resolveStation(form.category, form.itemType);
+  const defaultStation = resolveStation(form.category, form.itemType);
+  const selectedStation: Station = form.station ?? defaultStation;
 
   const nameKey = activeTab === "en" ? "nameEn" : activeTab === "cz" ? "nameCz" : "nameZh";
   const descriptionKey =
@@ -179,11 +185,13 @@ export function MenuItemFormModal({
                 onChange={(e) => {
                   const category = categories.find((entry) => entry.id === e.target.value);
                   if (!category) return;
+                  const itemType = category.type === "drink" ? "drink" : "food";
                   setForm((f) => ({
                     ...f,
                     categoryId: category.id,
                     category: category.name,
-                    itemType: category.type === "drink" ? "drink" : "food",
+                    itemType,
+                    station: resolveStation(category.name, itemType),
                   }));
                 }}
                 className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100"
@@ -247,10 +255,24 @@ export function MenuItemFormModal({
               <span className="text-sm text-zinc-700 dark:text-zinc-300">Available on menu</span>
             </label>
 
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Routes to:{" "}
-              <strong className="text-zinc-700 dark:text-zinc-300">{stationPreview}</strong>
-            </p>
+            <label className="block">
+              <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                {translate("menuItemRoute")}
+              </span>
+              <select
+                value={selectedStation}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, station: e.target.value as Station }))
+                }
+                className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100"
+              >
+                <option value="kitchen">{translate("menuItemRouteKitchen")}</option>
+                <option value="bar">{translate("menuItemRouteBar")}</option>
+              </select>
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                {translate("menuItemRouteHint")}
+              </p>
+            </label>
           </div>
         </div>
       </div>

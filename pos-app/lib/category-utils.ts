@@ -80,6 +80,22 @@ export function filterMenuItems(
   });
 }
 
+export function reorderCategories<T extends { displayOrder: number; name: string }>(
+  items: T[],
+  sourceIndex: number,
+  destinationIndex: number,
+): T[] {
+  if (sourceIndex === destinationIndex) return items;
+
+  const sorted = [...items].sort(
+    (a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name),
+  );
+  const [moved] = sorted.splice(sourceIndex, 1);
+  sorted.splice(destinationIndex, 0, moved);
+
+  return sorted.map((item, index) => ({ ...item, displayOrder: index }));
+}
+
 export function reorderFilteredItems(
   allItems: MenuItem[],
   filteredItems: MenuItem[],

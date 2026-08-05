@@ -16,6 +16,15 @@ export function resolveStation(
   return "kitchen";
 }
 
+export function resolveOrderLineStation(line: {
+  station?: Station;
+  category: string;
+  itemType?: "food" | "drink";
+}): Station {
+  if (line.station) return line.station;
+  return resolveStation(line.category, line.itemType);
+}
+
 export function deriveItemType(category: string): "food" | "drink" {
   const normalized = category.trim().toLowerCase();
   if (normalized.startsWith(BAR_CATEGORY_PREFIX) || BAR_CATEGORIES.has(normalized)) {

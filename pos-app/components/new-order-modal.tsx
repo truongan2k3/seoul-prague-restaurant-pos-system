@@ -11,14 +11,14 @@ import {
   cartLineDisplayName,
   menuItemDisplayName,
 } from "@/lib/menu-display";
-import { resolveStation } from "@/lib/order-routing";
 import {
   buildCustomizationSignature,
   hasCustomization,
   mergeNoteWithKitchenModifiers,
 } from "@/lib/menu-customization";
 import { finalizeNoteTranslation, presetLabel, togglePresetId } from "@/lib/note-presets";
-import type { LanguageCode, MenuCategoryRecord, MenuItem, MenuItemLayout, NotePreset, OrderItem, SelectedMenuOption } from "@/lib/types";
+import { resolveOrderLineStation, resolveStation } from "@/lib/order-routing";
+import type { LanguageCode, MenuCategoryRecord, MenuItem, MenuItemLayout, NotePreset, OrderItem, SelectedMenuOption, Station } from "@/lib/types";
 import { filterButtonClass } from "@/lib/theme-classes";
 import { ItemCustomizeModal, type CustomizeResult } from "@/components/item-customize-modal";
 import { GrillGuestCountModal } from "@/components/grill-guest-count-modal";
@@ -42,6 +42,7 @@ interface CartLine {
   quantity: number;
   category: string;
   itemType: MenuItem["itemType"];
+  station?: Station;
   note: string;
   noteTranslated?: string;
   isPrintedNote: boolean;
@@ -82,7 +83,7 @@ function cartLinesToOrders(lines: CartLine[]): OrderItem[] {
       notes: merged.notes,
       notesTranslated: merged.notesTranslated,
       isPrintedNote: line.isPrintedNote,
-      station: resolveStation(line.category, line.itemType),
+      station: resolveOrderLineStation(line),
       status: "preparing",
       modifiers: {
         selectedOptions: line.selectedOptions,
@@ -125,6 +126,7 @@ function buildFreeAddOnLine(item: MenuItem, language: LanguageCode): CartLine | 
     quantity: 1,
     category: item.category,
     itemType: item.itemType,
+    station: item.station,
     note: "",
     isPrintedNote: false,
     imageUrl: item.imageUrl,
@@ -438,6 +440,7 @@ export function NewOrderModal({
           quantity: 1,
           category: item.category,
           itemType: item.itemType,
+          station: item.station,
           note: "",
           isPrintedNote: false,
           imageUrl: item.imageUrl,
@@ -466,6 +469,7 @@ export function NewOrderModal({
       quantity: 1,
       category: item.category,
       itemType: item.itemType,
+      station: item.station,
       note: result.itemNote,
       noteTranslated: itemNoteTranslated || undefined,
       isPrintedNote: false,
@@ -630,7 +634,7 @@ export function NewOrderModal({
           notes: merged.notes,
           notesTranslated: merged.notesTranslated,
           isPrintedNote: line.isPrintedNote,
-          station: resolveStation(line.category, line.itemType),
+          station: resolveOrderLineStation(line),
           status: "preparing" as const,
           modifiers: {
             selectedOptions: line.selectedOptions,
@@ -913,7 +917,7 @@ export function NewOrderModal({
                   >
                     {filteredItems.map((item) => {
                       const inCartQty = cartQtyByMenuId.get(item.id) ?? 0;
-                      const station = resolveStation(item.category, item.itemType);
+                      const station = item.station ?? resolveStation(item.category, item.itemType);
                       const label = menuItemDisplayName(item, language);
 
                       return (

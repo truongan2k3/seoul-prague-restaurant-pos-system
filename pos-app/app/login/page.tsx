@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { useApp } from "@/contexts/app-context";
+import { LanguageSelector } from "@/components/language-selector";
 
 const AUTH_ERROR_KEYS = {
   invalidCredentials: "authErrorInvalidCredentials",
@@ -111,7 +112,10 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 dark:bg-zinc-950">
+    <div className="relative flex min-h-screen items-center justify-center bg-gray-50 px-4 dark:bg-zinc-950">
+      <div className="absolute right-4 top-4 z-10">
+        <LanguageSelector variant="flag-menu" />
+      </div>
       <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900 sm:p-8">
         <Suspense fallback={<p className="text-sm text-gray-500">Loading…</p>}>
           <LoginForm />

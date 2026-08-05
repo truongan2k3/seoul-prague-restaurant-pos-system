@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { ArrowLeft, ArrowRight, ChevronDown, Printer, X } from "lucide-react";
 import { CardPaymentModal } from "@/components/card-payment-modal";
+import { NumericInputField } from "@/components/numeric-input-field";
+import { PercentPresetButtons } from "@/components/percent-preset-buttons";
 import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
 import { useSettings } from "@/contexts/settings-context";
@@ -26,7 +28,6 @@ import type { MenuItem, OrderItem, PaymentMethod } from "@/lib/types";
 import type { TerminalPaymentResponse } from "@/src/lib/terminalApi";
 import { filterButtonClass, paymentFilterClass } from "@/lib/theme-classes";
 
-const TIP_PRESETS = [5, 10, 15] as const;
 type AccordionPanel = "split" | "discount" | "tip";
 
 interface CheckoutPanelProps {
@@ -137,6 +138,7 @@ export function CheckoutPanel({
   const [accordion, setAccordion] = useState<AccordionPanel | null>(null);
   const [discountType, setDiscountType] = useState<DiscountType>("percent");
   const [discountValue, setDiscountValue] = useState(0);
+  const [discountPreset, setDiscountPreset] = useState<number | null>(null);
   const [tipMode, setTipMode] = useState<"preset" | "custom">("custom");
   const [tipPreset, setTipPreset] = useState<number | null>(null);
   const [customTip, setCustomTip] = useState(0);
@@ -166,6 +168,7 @@ export function CheckoutPanel({
   useEffect(() => {
     setSelectedLineIds(lines.map((line) => line.lineId));
     setDiscountValue(0);
+    setDiscountPreset(null);
     setCustomTip(0);
     setTipPreset(null);
     setTipMode("custom");
@@ -309,17 +312,35 @@ export function CheckoutPanel({
     setSelectedLineIds((prev) => prev.filter((id) => id !== lineId));
   };
 
+  const handleDiscountPreset = (percent: number) => {
+    setDiscountType("percent");
+    setDiscountPreset(percent);
+    setDiscountValue(percent);
+  };
+
+  const handleDiscountValueChange = (raw: string) => {
+    setDiscountPreset(null);
+    const next = Number(raw) || 0;
+    setDiscountValue(Math.min(100, Math.max(0, next)));
+  };
+
   const handleTipPreset = (percent: number) => {
     setTipMode("preset");
     setTipPreset(percent);
     setCustomTip(0);
   };
 
-  const handleCustomTipChange = (value: number) => {
+  const handleCustomTipChange = (raw: string) => {
     setTipMode("custom");
     setTipPreset(null);
-    setCustomTip(Math.max(0, value));
+    setCustomTip(Math.max(0, Number(raw) || 0));
   };
+
+  const customTipDisplay =
+    tipMode === "custom" && customTip > 0 ? String(customTip) : "";
+
+  const discountValueDisplay =
+    discountValue > 0 ? String(discountValue) : "";
 
   const handleCheckout = async () => {
     setLocalError(null);
@@ -433,32 +454,18 @@ export function CheckoutPanel({
 
   const tipControls = (
     <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/80 p-3 dark:border-gray-700 dark:bg-gray-900/40">
-      <div className="flex flex-wrap gap-2">
-        {TIP_PRESETS.map((pct) => (
-          <button
-            key={pct}
-            type="button"
-            onClick={() => handleTipPreset(pct)}
-            className={`min-w-[3.5rem] flex-1 rounded-lg py-2 text-xs font-medium ${
-              tipMode === "preset" && tipPreset === pct
-                ? "bg-blue-600 text-white"
-                : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
-            }`}
-          >
-            {pct}%
-          </button>
-        ))}
-      </div>
+      <PercentPresetButtons
+        selected={tipMode === "preset" ? tipPreset : null}
+        onSelect={handleTipPreset}
+      />
       <label className="block">
         <span className="text-xs text-gray-500 dark:text-gray-400">{translate("customTip")}</span>
-        <input
-          type="number"
-          min={0}
-          step={1}
-          value={tipMode === "custom" ? customTip : ""}
-          onChange={(e) => handleCustomTipChange(Number(e.target.value))}
+        <NumericInputField
+          value={customTipDisplay}
+          onChange={handleCustomTipChange}
+          allowDecimal={false}
           placeholder="0 Kč"
-          className="pos-input mt-1"
+          className="mt-1"
         />
       </label>
     </div>
@@ -545,13 +552,14 @@ export function CheckoutPanel({
                     <label className="text-xs text-gray-500 dark:text-gray-400">
                       {translate("splitCount")}
                     </label>
-                    <input
-                      type="number"
-                      min={2}
-                      max={20}
-                      value={splitCount}
-                      onChange={(e) => setSplitCount(Math.max(2, Number(e.target.value)))}
-                      className="w-20 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                    <NumericInputField
+                      value={String(splitCount)}
+                      onChange={(raw) => {
+                        const next = Math.min(20, Math.max(2, Number(raw) || 2));
+                        setSplitCount(next);
+                      }}
+                      allowDecimal={false}
+                      inputClassName="w-20 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                     />
                     <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
                       {translate("perPerson")}: {displayPrice(totals.amountDueNow)}
@@ -649,7 +657,10 @@ export function CheckoutPanel({
                     <button
                       key={type}
                       type="button"
-                      onClick={() => setDiscountType(type)}
+                      onClick={() => {
+                        setDiscountType(type);
+                        setDiscountPreset(null);
+                      }}
                       className={`flex-1 rounded-lg py-2 text-xs font-medium ${
                         discountType === type
                           ? "bg-orange-600 text-white"
@@ -660,15 +671,26 @@ export function CheckoutPanel({
                     </button>
                   ))}
                 </div>
-                <input
-                  type="number"
-                  min={0}
-                  step={discountType === "percent" ? 1 : 0.5}
-                  max={discountType === "percent" ? 100 : undefined}
-                  value={discountValue || ""}
-                  onChange={(e) => setDiscountValue(Math.max(0, Number(e.target.value)))}
+                {discountType === "percent" && (
+                  <PercentPresetButtons
+                    selected={discountPreset}
+                    onSelect={handleDiscountPreset}
+                    activeClassName="bg-orange-600 text-white"
+                    inactiveClassName="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                  />
+                )}
+                <NumericInputField
+                  value={discountValueDisplay}
+                  onChange={(raw) => {
+                    if (discountType === "percent") {
+                      handleDiscountValueChange(raw);
+                      return;
+                    }
+                    setDiscountPreset(null);
+                    setDiscountValue(Math.max(0, Number(raw) || 0));
+                  }}
+                  allowDecimal={discountType !== "percent"}
                   placeholder={discountType === "percent" ? "0 %" : "0 Kč"}
-                  className="pos-input"
                 />
               </div>
             </CollapseSection>
@@ -707,19 +729,15 @@ export function CheckoutPanel({
                 <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
                   {translate("amountPaidByGuest")}
                 </span>
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
+                <NumericInputField
                   value={amountGiven}
-                  onChange={(e) => {
-                    setAmountGiven(e.target.value);
+                  onChange={(raw) => {
+                    setAmountGiven(raw);
                     setTipFromChange(0);
                   }}
+                  allowDecimal={false}
                   placeholder="0 Kč"
-                  className={`pos-input mt-1 ${
-                    insufficientCash ? "border-red-400 dark:border-red-600" : ""
-                  }`}
+                  className={`mt-1 ${insufficientCash ? "[&_input]:border-red-400 dark:[&_input]:border-red-600" : ""}`}
                 />
               </label>
               {amountGiven !== "" && !insufficientCash && (
@@ -736,19 +754,16 @@ export function CheckoutPanel({
                   <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
                     {translate("tipFromChange")}
                   </span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={maxTipFromChange}
-                    step={1}
-                    value={tipFromChange || ""}
-                    onChange={(e) =>
+                  <NumericInputField
+                    value={tipFromChange > 0 ? String(tipFromChange) : ""}
+                    onChange={(raw) =>
                       setTipFromChange(
-                        Math.min(maxTipFromChange, Math.max(0, Number(e.target.value))),
+                        Math.min(maxTipFromChange, Math.max(0, Number(raw) || 0)),
                       )
                     }
+                    allowDecimal={false}
                     placeholder="0 Kč"
-                    className="pos-input mt-1"
+                    className="mt-1"
                   />
                 </label>
               )}

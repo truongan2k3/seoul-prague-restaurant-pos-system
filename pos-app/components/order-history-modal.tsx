@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Printer, Trash2, X } from "lucide-react";
 import { useAdminDeletionGate } from "@/contexts/admin-deletion-gate-context";
+import { NumericInputField } from "@/components/numeric-input-field";
 import { useApp } from "@/contexts/app-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
@@ -279,26 +280,26 @@ export function OrderHistoryModal({
           <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
             {editMode ? (
               <div className="space-y-3 text-sm">
-                <label className="flex items-center justify-between gap-3">
-                  <span>{translate("discount")}</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={editDiscount}
-                    onChange={(event) => setEditDiscount(Math.max(0, Number(event.target.value) || 0))}
-                    className="w-28 rounded border border-gray-200 px-2 py-1 text-right text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                <label className="block space-y-1">
+                  <span className="flex items-center justify-between gap-3">
+                    {translate("discount")}
+                  </span>
+                  <NumericInputField
+                    value={editDiscount > 0 ? String(editDiscount) : ""}
+                    onChange={(raw) => setEditDiscount(Math.max(0, Number(raw) || 0))}
+                    allowDecimal
+                    inputClassName="w-full rounded border border-gray-200 px-2 py-1 text-right text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                   />
                 </label>
-                <label className="flex items-center justify-between gap-3">
-                  <span>{translate("tip")}</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={editTip}
-                    onChange={(event) => setEditTip(Math.max(0, Number(event.target.value) || 0))}
-                    className="w-28 rounded border border-gray-200 px-2 py-1 text-right text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                <label className="block space-y-1">
+                  <span className="flex items-center justify-between gap-3">
+                    {translate("tip")}
+                  </span>
+                  <NumericInputField
+                    value={editTip > 0 ? String(editTip) : ""}
+                    onChange={(raw) => setEditTip(Math.max(0, Number(raw) || 0))}
+                    allowDecimal
+                    inputClassName="w-full rounded border border-gray-200 px-2 py-1 text-right text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                   />
                 </label>
               </div>

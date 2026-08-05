@@ -8,7 +8,6 @@ import {
   ChevronRight,
   ClipboardList,
   History,
-  Languages,
   LogOut,
   Map,
   Moon,
@@ -197,14 +196,8 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
               isExpanded ? "p-4" : "p-2"
             }`}
           >
-            <div>
-              {isExpanded && (
-                <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-zinc-500">
-                  <Languages className="h-4 w-4" />
-                  {translate("language")}
-                </div>
-              )}
-              <LanguageSelector variant={isExpanded ? "sidebar" : "compact"} />
+            <div className="flex justify-center">
+              <LanguageSelector variant="flag-menu" />
             </div>
 
             <button

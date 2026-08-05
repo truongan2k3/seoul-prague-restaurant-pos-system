@@ -1,16 +1,19 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/contexts/app-context";
 import { LANGUAGE_OPTIONS } from "@/lib/i18n/languages";
 import { filterButtonClass } from "@/lib/theme-classes";
 import type { LanguageCode } from "@/lib/types";
 
 interface LanguageSelectorProps {
-  variant?: "sidebar" | "segmented" | "dropdown" | "compact";
+  variant?: "sidebar" | "segmented" | "dropdown" | "compact" | "flag-menu";
   className?: string;
   language?: LanguageCode;
   onLanguageChange?: (language: LanguageCode) => void;
   compact?: boolean;
+  /** Visual style for flag-menu on dark backgrounds */
+  tone?: "light" | "dark";
 }
 
 export function LanguageSelector({
@@ -19,10 +22,22 @@ export function LanguageSelector({
   language: languageProp,
   onLanguageChange,
   compact = false,
+  tone = "light",
 }: LanguageSelectorProps) {
   const app = useApp();
   const language = languageProp ?? app.language;
   const setLanguage = onLanguageChange ?? app.setLanguage;
+
+  if (variant === "flag-menu") {
+    return (
+      <FlagLanguageMenu
+        language={language}
+        onLanguageChange={setLanguage}
+        className={className}
+        tone={tone}
+      />
+    );
+  }
 
   if (variant === "dropdown") {
     return (
@@ -97,6 +112,103 @@ export function LanguageSelector({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function FlagLanguageMenu({
+  language,
+  onLanguageChange,
+  className,
+  tone,
+}: {
+  language: LanguageCode;
+  onLanguageChange: (language: LanguageCode) => void;
+  className?: string;
+  tone: "light" | "dark";
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const current = LANGUAGE_OPTIONS.find((option) => option.code === language) ?? LANGUAGE_OPTIONS[0];
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+    };
+  }, [open]);
+
+  const buttonClass =
+    tone === "dark"
+      ? "border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800"
+      : "border-gray-200 bg-white text-gray-900 hover:bg-gray-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700";
+
+  const menuClass =
+    tone === "dark"
+      ? "border-zinc-700 bg-zinc-900 shadow-xl"
+      : "border-gray-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900";
+
+  const optionActiveClass =
+    tone === "dark" ? "bg-zinc-800 text-white" : "bg-gray-100 text-gray-900 dark:bg-zinc-800 dark:text-white";
+
+  const optionIdleClass =
+    tone === "dark"
+      ? "text-zinc-300 hover:bg-zinc-800/70 hover:text-white"
+      : "text-gray-700 hover:bg-gray-50 dark:text-zinc-300 dark:hover:bg-zinc-800";
+
+  return (
+    <div ref={rootRef} className={`relative ${className ?? ""}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={current.label}
+        title={current.label}
+        className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border text-lg leading-none transition-colors ${buttonClass}`}
+      >
+        <span aria-hidden>{current.flag}</span>
+      </button>
+
+      {open && (
+        <ul
+          role="listbox"
+          aria-label="Select language"
+          className={`absolute right-0 top-full z-50 mt-1 flex flex-col gap-0.5 overflow-hidden rounded-lg border p-1 ${menuClass}`}
+        >
+          {LANGUAGE_OPTIONS.map(({ code, flag, label }) => {
+            const active = code === language;
+            return (
+              <li key={code} role="option" aria-selected={active}>
+                <button
+                  type="button"
+                  title={label}
+                  aria-label={label}
+                  onClick={() => {
+                    onLanguageChange(code);
+                    setOpen(false);
+                  }}
+                  className={`flex h-9 w-9 items-center justify-center rounded-md text-lg leading-none transition-colors ${
+                    active ? optionActiveClass : optionIdleClass
+                  }`}
+                >
+                  <span aria-hidden>{flag}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

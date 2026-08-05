@@ -251,14 +251,12 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="w-44">
-            <LanguageSelector
-              variant="dropdown"
-              language={language}
-              onLanguageChange={setLanguage}
-              className="border-zinc-600 bg-zinc-900 text-zinc-100"
-            />
-          </div>
+          <LanguageSelector
+            variant="flag-menu"
+            tone="dark"
+            language={language}
+            onLanguageChange={setLanguage}
+          />
           <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2">
             <User className="h-4 w-4 text-zinc-400" />
             <input

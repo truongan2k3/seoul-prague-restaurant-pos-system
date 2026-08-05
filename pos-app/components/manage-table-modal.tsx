@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRightLeft, Minus, Percent, Plus, Save, ShoppingBag, Tag, Trash2 } from "lucide-react";
 import { Modal } from "@/components/modal";
+import { NumericInputField } from "@/components/numeric-input-field";
+import { PercentPresetButtons } from "@/components/percent-preset-buttons";
 import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
 import { useSettings } from "@/contexts/settings-context";
@@ -112,6 +114,11 @@ function LinePriceEditor({
         : line.price,
     );
   });
+  const [percentPreset, setPercentPreset] = useState<number | null>(() => {
+    if (!adjusted || mode !== "percent") return null;
+    const pct = inferPercentDiscount(originalPrice, line.price);
+    return pct > 0 ? pct : null;
+  });
 
   const previewPrice =
     mode === "percent"
@@ -137,7 +144,10 @@ function LinePriceEditor({
         </button>
         <button
           type="button"
-          onClick={() => setMode("custom")}
+          onClick={() => {
+            setMode("custom");
+            setPercentPreset(null);
+          }}
           className={filterButtonClass(mode === "custom")}
         >
           {translate("priceAdjustCustom")}
@@ -148,15 +158,28 @@ function LinePriceEditor({
         <span className="text-gray-600 dark:text-gray-300">
           {mode === "percent" ? translate("priceAdjustPercent") : translate("priceAdjustCustom")}
         </span>
-        <input
-          type="number"
-          min={0}
-          max={mode === "percent" ? 100 : undefined}
-          step={mode === "percent" ? 1 : 0.5}
+        {mode === "percent" && (
+          <div className="mt-2">
+            <PercentPresetButtons
+              selected={percentPreset}
+              onSelect={(pct) => {
+                setPercentPreset(pct);
+                setValue(String(pct));
+              }}
+              activeClassName="bg-amber-600 text-white"
+              inactiveClassName="bg-white text-amber-900 dark:bg-gray-900 dark:text-amber-200"
+            />
+          </div>
+        )}
+        <NumericInputField
           value={value}
-          onChange={(event) => setValue(event.target.value)}
-          className="pos-input mt-1"
+          onChange={(next) => {
+            setValue(next);
+            setPercentPreset(null);
+          }}
+          allowDecimal={mode !== "percent"}
           placeholder={mode === "percent" ? "10" : String(originalPrice)}
+          className="mt-2"
         />
       </label>
 

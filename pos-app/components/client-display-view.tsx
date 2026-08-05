@@ -1,7 +1,7 @@
 "use client";
 
-import { ChevronDown, Globe } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { LanguageSelector } from "@/components/language-selector";
 import {
   isCfdGifMedia,
   subscribeCfdEvents,
@@ -9,7 +9,6 @@ import {
   type CfdClientState,
 } from "@/lib/cfd-display";
 import { formatCzk } from "@/lib/checkout-calculations";
-import { LANGUAGE_OPTIONS } from "@/lib/i18n/languages";
 import { t, type TranslationKey } from "@/lib/i18n/translations";
 import type { LanguageCode } from "@/lib/types";
 import { useSettings } from "@/contexts/settings-context";
@@ -38,83 +37,6 @@ function useCfdLanguage() {
   );
 
   return { language, setLanguage, translate };
-}
-
-function CfdLanguageMenu({
-  language,
-  onLanguageChange,
-}: {
-  language: LanguageCode;
-  onLanguageChange: (code: LanguageCode) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const current = LANGUAGE_OPTIONS.find((option) => option.code === language) ?? LANGUAGE_OPTIONS[0];
-
-  useEffect(() => {
-    if (!open) return;
-
-    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("touchstart", handlePointerDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("touchstart", handlePointerDown);
-    };
-  }, [open]);
-
-  return (
-    <div ref={rootRef} className="relative shrink-0">
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
-      >
-        <Globe className="h-4 w-4 text-zinc-400" />
-        <span aria-hidden>{current.flag}</span>
-        <span className="hidden sm:inline">{current.label}</span>
-        <ChevronDown className={`h-4 w-4 text-zinc-400 transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-
-      {open && (
-        <ul
-          role="listbox"
-          aria-label="Select language"
-          className="absolute right-0 top-full z-30 mt-2 min-w-[11rem] overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 py-1 shadow-xl"
-        >
-          {LANGUAGE_OPTIONS.map(({ code, flag, label }) => {
-            const active = code === language;
-            return (
-              <li key={code} role="option" aria-selected={active}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onLanguageChange(code);
-                    setOpen(false);
-                  }}
-                  className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium ${
-                    active ? "bg-zinc-800 text-white" : "text-zinc-300 hover:bg-zinc-800/70 hover:text-white"
-                  }`}
-                >
-                  <span aria-hidden className="text-lg leading-none">
-                    {flag}
-                  </span>
-                  {label}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
 }
 
 function CfdClock({ language }: { language: LanguageCode }) {
@@ -162,11 +84,15 @@ function CfdHeader({
   return (
     <header className="z-20 flex shrink-0 items-center justify-between gap-3 border-b border-zinc-800 bg-zinc-950 px-4 py-4 sm:gap-4 sm:px-6">
       <div className="min-w-0">
-        <p className="truncate text-xl font-bold tracking-[0.2em] text-white sm:text-2xl">SEOUL PRAGUE</p>
-        <p className="mt-0.5 text-xs uppercase tracking-widest text-zinc-500">{translate("customerDisplay")}</p>
+        <p className="truncate text-xl font-bold text-white sm:text-2xl">{translate("cfdWelcome")}</p>
       </div>
       <div className="flex shrink-0 items-center gap-2 sm:gap-4">
-        <CfdLanguageMenu language={language} onLanguageChange={onLanguageChange} />
+        <LanguageSelector
+          variant="flag-menu"
+          tone="dark"
+          language={language}
+          onLanguageChange={onLanguageChange}
+        />
         <CfdClock language={language} />
       </div>
     </header>
@@ -322,8 +248,7 @@ function IdleDisplayView({
 
   return (
     <main className="flex min-h-0 flex-1 flex-col items-center justify-center bg-zinc-950 px-6 text-center">
-      <p className="text-3xl font-bold tracking-[0.25em] text-white sm:text-4xl">SEOUL PRAGUE</p>
-      <p className="mt-4 text-lg text-zinc-400">{translate("cfdWelcome")}</p>
+      <p className="text-3xl font-bold text-white sm:text-5xl">{translate("cfdWelcome")}</p>
     </main>
   );
 }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useApp } from "@/contexts/app-context";
 import { NewOrderModal } from "@/components/new-order-modal";
+import { LanguageSelector } from "@/components/language-selector";
 import type { MenuCategoryRecord, MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
 import {
   fetchCategories,
@@ -23,7 +24,7 @@ type OrderModalState = {
 } | null;
 
 function ServerApp() {
-  const { translate, staff, logAction } = useApp();
+  const { translate, staff, logAction, language, setLanguage } = useApp();
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<MenuCategoryRecord[]>([]);
@@ -71,11 +72,18 @@ function ServerApp() {
 
   return (
     <div className="min-h-screen bg-zinc-100 dark:bg-zinc-950">
-      <header className="border-b border-zinc-200 bg-white px-4 py-4 dark:border-zinc-800 dark:bg-zinc-900">
-        <p className="text-xs uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
-          {translate("tabletServer")}
-        </p>
-        <p className="font-semibold text-zinc-900 dark:text-zinc-100">{staff?.name}</p>
+      <header className="flex items-start justify-between gap-3 border-b border-zinc-200 bg-white px-4 py-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <div>
+          <p className="text-xs uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
+            {translate("tabletServer")}
+          </p>
+          <p className="font-semibold text-zinc-900 dark:text-zinc-100">{staff?.name}</p>
+        </div>
+        <LanguageSelector
+          variant="flag-menu"
+          language={language}
+          onLanguageChange={setLanguage}
+        />
       </header>
       <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 sm:gap-3 md:grid-cols-4 md:gap-4 lg:grid-cols-6">
         {tables.map((table) => (

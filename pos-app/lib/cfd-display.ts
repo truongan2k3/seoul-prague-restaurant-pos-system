@@ -64,20 +64,32 @@ export function buildCfdCheckoutPayload(
 ): CfdCheckoutPayload {
   const menuById = new Map(menuItems.map((item) => [item.id, item]));
 
-  const items: CfdCheckoutItem[] = orders.map((order) => {
+  const merged = new Map<string, CfdCheckoutItem>();
+
+  for (const order of orders) {
     const menu = order.menuItemId ? menuById.get(order.menuItemId) : undefined;
     const name = menu?.nameEn?.trim() || order.name;
-    return {
-      name,
-      quantity: order.quantity,
-      unitPrice: order.price,
-      lineTotal: order.price * order.quantity,
-    };
-  });
+    const unitPrice = order.price;
+    const key = `${name}::${unitPrice.toFixed(2)}`;
+    const lineTotal = order.price * order.quantity;
+    const existing = merged.get(key);
+
+    if (existing) {
+      existing.quantity += order.quantity;
+      existing.lineTotal += lineTotal;
+    } else {
+      merged.set(key, {
+        name,
+        quantity: order.quantity,
+        unitPrice,
+        lineTotal,
+      });
+    }
+  }
 
   return {
     tableNumber,
-    items,
+    items: [...merged.values()],
     subtotal: totals.subtotal,
     discount: totals.discount,
     tip: totals.tip,

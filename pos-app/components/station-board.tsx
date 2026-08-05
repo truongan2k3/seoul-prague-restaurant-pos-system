@@ -6,12 +6,10 @@ import { CancelReasonModal } from "@/components/cancel-reason-modal";
 import { NewOrderNotificationListener } from "@/components/new-order-notification-listener";
 import { LanguageSelector } from "@/components/language-selector";
 import { LiveClock } from "@/components/live-clock";
-import { OrderItemChecklist, TicketActionBar } from "@/components/order-item-checklist";
+import { OrderItemChecklist } from "@/components/order-item-checklist";
 import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
-import { useNotifications } from "@/contexts/notification-context";
 import { useStationScreen } from "@/contexts/station-screen-context";
-import { resolveSelectedItemIds } from "@/lib/order-item-selection";
 import { filterItemsForBoard, sortKitchenTickets, ticketHasOpenKitchenWork } from "@/lib/order-board";
 import { normalizeOrderItemStatus, STATION_BOARD_STATUSES } from "@/lib/order-status";
 import { canVoidOrderItems } from "@/lib/staff-roles";
@@ -29,7 +27,7 @@ import {
 import {
   autoFirePendingItems,
   cancelOrderItems,
-  markItemsLate,
+  markItemsPreparing,
   markItemsReady,
 } from "@/src/lib/table-actions";
 import { supabase } from "@/src/lib/supabase";
@@ -49,13 +47,9 @@ function TicketCard({
   menuItems,
   language,
   translate,
-  selectedIds,
-  lateIds,
-  onToggle,
-  onToggleAll,
-  onDone,
-  onLate,
-  onCancel,
+  onMarkReady,
+  onUndoReady,
+  onCancelItem,
   busy,
   showCancel,
 }: {
@@ -63,26 +57,22 @@ function TicketCard({
   menuItems: MenuItem[];
   language: ReturnType<typeof useStationScreen>["language"];
   translate: ReturnType<typeof useStationScreen>["translate"];
-  selectedIds: Set<string>;
-  lateIds: Set<string>;
-  onToggle: (tableId: string, itemId: string) => void;
-  onToggleAll: (tableId: string, items: StationOrderItem[]) => void;
-  onDone: (tableId: string, items: StationOrderItem[]) => void;
-  onLate: (tableId: string, items: StationOrderItem[]) => void;
-  onCancel: (tableId: string, items: StationOrderItem[]) => void;
+  onMarkReady: (tableId: string, itemId: string) => void;
+  onUndoReady: (tableId: string, itemId: string) => void;
+  onCancelItem?: (tableId: string, itemId: string) => void;
   busy: boolean;
   showCancel: boolean;
 }) {
-  const hasLate = ticket.items.some((item) => item.id && lateIds.has(item.id));
+  const openCount = ticket.items.filter(
+    (item) => normalizeOrderItemStatus(item.status) === "preparing",
+  ).length;
 
   return (
     <article
-      className={`flex h-full min-h-[360px] max-h-[70vh] flex-col rounded-2xl border-4 bg-white p-4 shadow-xl sm:p-5 dark:bg-gray-900 ${
-        hasLate
-          ? "border-red-500 ring-2 ring-red-500/30"
-          : ticketHasOpenKitchenWork(ticket.items)
-            ? "border-amber-500 ring-2 ring-amber-500/30"
-            : "border-emerald-500 ring-2 ring-emerald-500/20 opacity-90"
+      className={`flex h-full min-h-0 w-[min(100%,360px)] shrink-0 flex-col rounded-2xl border-4 bg-white p-4 shadow-xl sm:w-[340px] sm:p-5 dark:bg-gray-900 ${
+        ticketHasOpenKitchenWork(ticket.items)
+          ? "border-amber-500 ring-2 ring-amber-500/30"
+          : "border-emerald-500 ring-2 ring-emerald-500/20 opacity-95"
       }`}
     >
       <header className="flex shrink-0 items-start justify-between gap-4 border-b-2 border-gray-200 pb-3 dark:border-gray-700 sm:pb-4">
@@ -95,37 +85,33 @@ function TicketCard({
           </p>
         </div>
         <div className="rounded-xl bg-gray-100 px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-          {ticket.items.length} {translate("preparing").toLowerCase()}
+          {openCount} {translate("preparing").toLowerCase()}
         </div>
       </header>
 
-      <div className="mt-3 min-h-0 flex-1 overflow-y-auto sm:mt-4">
-        <div className="max-h-60 overflow-y-auto pr-1">
-          <OrderItemChecklist
+      <div className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain sm:mt-4">
+        <OrderItemChecklist
           items={ticket.items}
           menuItems={menuItems}
           language={language}
           translate={translate}
-          selectedIds={selectedIds}
-          lateIds={lateIds}
-          onToggle={(itemId) => onToggle(ticket.table.id, itemId)}
-          onToggleAll={() => onToggleAll(ticket.table.id, ticket.items)}
           variant="kitchen"
+          interactive
+          onMarkReady={(itemId) => {
+            if (!busy) onMarkReady(ticket.table.id, itemId);
+          }}
+          onUndoReady={(itemId) => {
+            if (!busy) onUndoReady(ticket.table.id, itemId);
+          }}
+          onCancelItem={
+            showCancel && onCancelItem
+              ? (itemId) => {
+                  if (!busy) onCancelItem(ticket.table.id, itemId);
+                }
+              : undefined
+          }
         />
-        </div>
       </div>
-
-      <footer className="mt-3 shrink-0 border-t-2 border-gray-100 pt-3 dark:border-gray-800 sm:mt-4 sm:pt-4">
-        <TicketActionBar
-          translate={translate}
-          disabled={busy || ticket.items.length === 0}
-          onDone={() => onDone(ticket.table.id, ticket.items)}
-          onLate={() => onLate(ticket.table.id, ticket.items)}
-          onCancel={() => onCancel(ticket.table.id, ticket.items)}
-          showCancel={showCancel}
-          variant="kitchen"
-        />
-      </footer>
     </article>
   );
 }
@@ -139,14 +125,11 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
   const { language, staffName, setStaffName, setLanguage, translate } = useStationScreen();
   const { currentStaffUser } = useApp();
   const { requestPin } = usePinGate();
-  const { pushToast } = useNotifications();
   const canCancel = canVoidOrderItems(currentStaffUser?.role);
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [items, setItems] = useState<StationOrderItem[]>([]);
   const [busy, setBusy] = useState(false);
-  const [selectedByTable, setSelectedByTable] = useState<Record<string, Set<string>>>({});
-  const [lateIds, setLateIds] = useState<Set<string>>(new Set());
   const [cancelTarget, setCancelTarget] = useState<{
     tableId: string;
     itemIds: string[];
@@ -214,62 +197,24 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
     return sortKitchenTickets(result);
   }, [items, tables]);
 
-  const getSelectedForTable = (tableId: string) => selectedByTable[tableId] ?? new Set<string>();
-
-  const resolveTargetIds = (tableId: string, tableItems: StationOrderItem[]) =>
-    resolveSelectedItemIds(tableItems, getSelectedForTable(tableId));
-
-  const toggleItem = (tableId: string, itemId: string) => {
-    setSelectedByTable((prev) => {
-      const current = new Set(prev[tableId] ?? []);
-      if (current.has(itemId)) current.delete(itemId);
-      else current.add(itemId);
-      return { ...prev, [tableId]: current };
-    });
-  };
-
-  const toggleAll = (tableId: string, tableItems: StationOrderItem[]) => {
-    const ids = tableItems.map((item) => item.id).filter((id): id is string => Boolean(id));
-    setSelectedByTable((prev) => {
-      const current = prev[tableId] ?? new Set<string>();
-      const allSelected = ids.length > 0 && ids.every((id) => current.has(id));
-      return { ...prev, [tableId]: allSelected ? new Set<string>() : new Set(ids) };
-    });
-  };
-
-  const handleDone = async (tableId: string, tableItems: StationOrderItem[]) => {
-    const itemIds = resolveTargetIds(tableId, tableItems).filter((id) => {
-      const item = tableItems.find((row) => row.id === id);
-      return item && normalizeOrderItemStatus(item.status) === "preparing";
-    });
-    if (itemIds.length === 0 || busy) return;
+  const handleMarkItemReady = async (tableId: string, itemId: string) => {
+    if (busy) return;
     setBusy(true);
-    await markItemsReady(itemIds, actor, tableId);
-    setSelectedByTable((prev) => ({ ...prev, [tableId]: new Set() }));
+    await markItemsReady([itemId], actor, tableId);
     setBusy(false);
     void reload();
   };
 
-  const handleLate = async (tableId: string, tableItems: StationOrderItem[]) => {
-    const itemIds = resolveTargetIds(tableId, tableItems);
-    if (itemIds.length === 0) {
-      pushToast({ message: translate("selectItemsToCancel") });
-      return;
-    }
+  const handleUndoItemReady = async (tableId: string, itemId: string) => {
     if (busy) return;
     setBusy(true);
-    await markItemsLate(itemIds, actor);
-    setLateIds((prev) => new Set([...prev, ...itemIds]));
+    await markItemsPreparing([itemId], actor, tableId);
     setBusy(false);
+    void reload();
   };
 
-  const handleCancelRequest = (tableId: string, tableItems: StationOrderItem[]) => {
-    const itemIds = resolveTargetIds(tableId, tableItems);
-    if (itemIds.length === 0) {
-      pushToast({ message: translate("selectItemsToCancel") });
-      return;
-    }
-    requestPin(() => setCancelTarget({ tableId, itemIds }));
+  const handleCancelItemRequest = (tableId: string, itemId: string) => {
+    requestPin(() => setCancelTarget({ tableId, itemIds: [itemId] }));
   };
 
   const handleCancelConfirm = async (reason: string) => {
@@ -283,8 +228,8 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
 
   const isKitchen = variant === "kitchen";
   const shellClass = isKitchen
-    ? "flex h-screen min-h-0 flex-col bg-zinc-950 text-white"
-    : "flex h-screen min-h-0 flex-col bg-slate-950 text-white";
+    ? "flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-zinc-950 text-white"
+    : "flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-slate-950 text-white";
   const headerBorder = isKitchen ? "border-zinc-700" : "border-slate-700";
   const title = station === "kitchen" ? translate("kitchen") : translate("bar");
   const totalPreparing = items.filter(
@@ -327,32 +272,26 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-5 md:p-6">
+      <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto overflow-y-hidden p-5 md:p-6">
         {tickets.length === 0 ? (
-          <div className="flex h-full min-h-[320px] items-center justify-center text-lg font-medium text-zinc-500">
+          <div className="flex flex-1 items-center justify-center text-lg font-medium text-zinc-500">
             {translate("noOrders")}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {tickets.map((ticket) => (
-              <TicketCard
-                key={ticket.table.id}
-                ticket={ticket}
-                menuItems={menuItems}
-                language={language}
-                translate={translate}
-                selectedIds={getSelectedForTable(ticket.table.id)}
-                lateIds={lateIds}
-                onToggle={toggleItem}
-                onToggleAll={toggleAll}
-                onDone={(tableId, tableItems) => void handleDone(tableId, tableItems)}
-                onLate={(tableId, tableItems) => void handleLate(tableId, tableItems)}
-                onCancel={handleCancelRequest}
-                busy={busy}
-                showCancel={canCancel}
-              />
-            ))}
-          </div>
+          tickets.map((ticket) => (
+            <TicketCard
+              key={ticket.table.id}
+              ticket={ticket}
+              menuItems={menuItems}
+              language={language}
+              translate={translate}
+              onMarkReady={(tableId, itemId) => void handleMarkItemReady(tableId, itemId)}
+              onUndoReady={(tableId, itemId) => void handleUndoItemReady(tableId, itemId)}
+              onCancelItem={handleCancelItemRequest}
+              busy={busy}
+              showCancel={canCancel}
+            />
+          ))
         )}
       </div>
 

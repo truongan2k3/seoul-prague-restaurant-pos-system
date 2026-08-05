@@ -11,6 +11,7 @@ import { StaffView } from "@/components/staff-view";
 import { SettingsView } from "@/components/settings-view";
 import { ReadyNotificationListener } from "@/components/ready-notification-listener";
 import { Sidebar } from "@/components/sidebar";
+import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { useTableOrderWorkflow } from "@/hooks/use-table-order-workflow";
 import { useApp } from "@/contexts/app-context";
 import { canAccessNavTab } from "@/lib/staff-roles";
@@ -234,6 +235,7 @@ export function DashboardShell() {
       <ReadyNotificationListener tables={tables} menuItems={menuItems} />
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <AnnouncementMarquee />
         <main className="flex-1 overflow-hidden">{content}</main>
       </div>
       {tableOrder.tableOrderModals}

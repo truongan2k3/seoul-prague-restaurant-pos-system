@@ -643,3 +643,25 @@ input[type="search"] {
 .receipt-print-80mm .receipt-inner {
   font-family: "Courier New", Courier, monospace;
 }
+
+/* ── Announcement marquee (main POS) ─────────────────────────────────────── */
+
+@keyframes pos-marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.pos-marquee-track {
+  animation: pos-marquee-scroll linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pos-marquee-track {
+    animation: none;
+    transform: none;
+  }
+}

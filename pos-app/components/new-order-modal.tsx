@@ -718,7 +718,7 @@ export function NewOrderModal({
   return (
     <>
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4"
+        className="fixed inset-0 z-50 flex flex-col sm:items-center sm:justify-center sm:p-4"
         role="dialog"
         aria-modal="true"
         aria-labelledby="pos-order-title"
@@ -730,7 +730,7 @@ export function NewOrderModal({
           className="absolute inset-0 bg-black/65"
         />
 
-        <div className="relative z-10 flex h-[min(94vh,920px)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900">
+        <div className="relative z-10 flex h-[100dvh] max-h-[100dvh] w-full max-w-6xl flex-col overflow-hidden rounded-none border border-gray-200 bg-white shadow-2xl sm:h-[min(94vh,920px)] sm:max-h-[min(94vh,920px)] sm:rounded-2xl dark:border-gray-700 dark:bg-gray-900">
           <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700 sm:px-5 sm:py-4">
             <div>
               <h2
@@ -752,7 +752,7 @@ export function NewOrderModal({
             </button>
           </div>
 
-        <div className="relative flex min-h-0 flex-1 flex-col md:flex-row">
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
           <aside className="hidden w-36 shrink-0 flex-col border-r border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-950/50 md:flex sm:w-44 lg:w-52">
             <p className="px-3 py-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
               Categories
@@ -778,7 +778,7 @@ export function NewOrderModal({
             </nav>
           </aside>
 
-          <div className="flex min-w-0 flex-1 flex-col md:max-w-[68%]">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col md:max-w-[68%]">
             <div className="shrink-0 border-b border-gray-200 md:hidden dark:border-gray-700">
               <div className="flex gap-2 overflow-x-auto px-3 py-2 no-scrollbar">
                 <button
@@ -801,7 +801,7 @@ export function NewOrderModal({
               </div>
             </div>
 
-            <main className="flex min-h-0 flex-1 flex-col">
+            <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
               <div className="shrink-0 border-b border-gray-200 px-3 py-3 dark:border-gray-700 sm:px-4">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
@@ -821,16 +821,10 @@ export function NewOrderModal({
                 </div>
               </div>
 
-              {searchKeyboardOpen && (
-                <OnScreenKeyboard
-                  value={search}
-                  onChange={setSearch}
-                  onHide={() => setSearchKeyboardOpen(false)}
-                />
-              )}
-
               <div
-                className={`flex-1 overflow-y-auto p-3 sm:p-4 md:pb-4 ${searchKeyboardOpen ? "pb-4" : "pb-24"}`}
+                className={`order-3 min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4 md:order-3 md:pb-4 ${
+                  searchKeyboardOpen ? "pb-[15.5rem] md:pb-4" : "pb-24 md:pb-4"
+                }`}
               >
                 {filteredItems.length === 0 ? (
                   <div className="flex h-full min-h-[200px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
@@ -867,6 +861,18 @@ export function NewOrderModal({
                   </div>
                 )}
               </div>
+
+              {searchKeyboardOpen && (
+                <div className="order-2 pointer-events-none absolute inset-x-0 bottom-14 z-20 md:pointer-events-auto md:static md:bottom-auto md:z-auto md:shrink-0">
+                  <div className="pointer-events-auto shadow-[0_-8px_24px_rgba(0,0,0,0.12)] md:shadow-none">
+                    <OnScreenKeyboard
+                      value={search}
+                      onChange={setSearch}
+                      onHide={() => setSearchKeyboardOpen(false)}
+                    />
+                  </div>
+                </div>
+              )}
             </main>
           </div>
 

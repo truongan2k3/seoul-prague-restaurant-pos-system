@@ -372,7 +372,7 @@ export function ManageTableModal({
                         <p
                           className={`text-sm font-medium ${
                             isServed
-                              ? "text-slate-600 line-through opacity-80 dark:text-slate-300"
+                              ? "text-slate-700 dark:text-slate-200"
                               : isReady
                                 ? "text-emerald-900 dark:text-emerald-100"
                                 : "text-gray-900 dark:text-gray-100"

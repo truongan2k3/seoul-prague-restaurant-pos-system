@@ -90,6 +90,14 @@ export interface AppSettings {
   cfdReviewUrl: string;
   /** Optional uploaded QR image override */
   cfdReviewQrImageUrl: string;
+  /** Scrolling announcement banner on main POS tabs */
+  marqueeEnabled: boolean;
+  marqueeText: string;
+  /** Seconds for one full scroll loop (lower = faster) */
+  marqueeDurationSeconds: number;
+  marqueeFontFamily: ReceiptFontFamily;
+  /** ISO datetime — hide marquee after this moment (empty = no expiry) */
+  marqueeEndAt: string;
 }
 
 export type StaffRole = "admin" | "manager" | "server" | "kitchen" | "bar";

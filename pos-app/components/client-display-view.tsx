@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { ChevronDown, Globe } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   isCfdGifMedia,
   subscribeCfdEvents,
@@ -8,12 +9,117 @@ import {
   type CfdClientState,
 } from "@/lib/cfd-display";
 import { formatCzk } from "@/lib/checkout-calculations";
+import { LANGUAGE_OPTIONS } from "@/lib/i18n/languages";
+import { t, type TranslationKey } from "@/lib/i18n/translations";
+import type { LanguageCode } from "@/lib/types";
 import { useSettings } from "@/contexts/settings-context";
 
 const THANK_YOU_SECONDS = 20;
+const CFD_LANGUAGE_KEY = "cfd-language";
 
-function CfdClock() {
+function useCfdLanguage() {
+  const [language, setLanguageState] = useState<LanguageCode>("en");
+
+  useEffect(() => {
+    const stored = localStorage.getItem(CFD_LANGUAGE_KEY);
+    if (stored === "en" || stored === "cs" || stored === "zh") {
+      setLanguageState(stored);
+    }
+  }, []);
+
+  const setLanguage = useCallback((code: LanguageCode) => {
+    setLanguageState(code);
+    localStorage.setItem(CFD_LANGUAGE_KEY, code);
+  }, []);
+
+  const translate = useCallback(
+    (key: TranslationKey) => t(language, key),
+    [language],
+  );
+
+  return { language, setLanguage, translate };
+}
+
+function CfdLanguageMenu({
+  language,
+  onLanguageChange,
+}: {
+  language: LanguageCode;
+  onLanguageChange: (code: LanguageCode) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const current = LANGUAGE_OPTIONS.find((option) => option.code === language) ?? LANGUAGE_OPTIONS[0];
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
+      >
+        <Globe className="h-4 w-4 text-zinc-400" />
+        <span aria-hidden>{current.flag}</span>
+        <span className="hidden sm:inline">{current.label}</span>
+        <ChevronDown className={`h-4 w-4 text-zinc-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <ul
+          role="listbox"
+          aria-label="Select language"
+          className="absolute right-0 top-full z-30 mt-2 min-w-[11rem] overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 py-1 shadow-xl"
+        >
+          {LANGUAGE_OPTIONS.map(({ code, flag, label }) => {
+            const active = code === language;
+            return (
+              <li key={code} role="option" aria-selected={active}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onLanguageChange(code);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium ${
+                    active ? "bg-zinc-800 text-white" : "text-zinc-300 hover:bg-zinc-800/70 hover:text-white"
+                  }`}
+                >
+                  <span aria-hidden className="text-lg leading-none">
+                    {flag}
+                  </span>
+                  {label}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function CfdClock({ language }: { language: LanguageCode }) {
   const [now, setNow] = useState<Date | null>(null);
+  const locale = language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-US";
 
   useEffect(() => {
     setNow(new Date());
@@ -25,16 +131,16 @@ function CfdClock() {
     return <span className="text-sm text-zinc-400">&nbsp;</span>;
   }
 
-  const datePart = now.toLocaleDateString("en-US", {
+  const datePart = now.toLocaleDateString(locale, {
     weekday: "long",
     month: "long",
     day: "numeric",
     year: "numeric",
   });
-  const timePart = now.toLocaleTimeString("en-US", {
+  const timePart = now.toLocaleTimeString(locale, {
     hour: "2-digit",
     minute: "2-digit",
-    hour12: true,
+    hour12: language === "en",
   });
 
   return (
@@ -44,39 +150,58 @@ function CfdClock() {
   );
 }
 
-function CfdHeader() {
+function CfdHeader({
+  language,
+  onLanguageChange,
+  translate,
+}: {
+  language: LanguageCode;
+  onLanguageChange: (code: LanguageCode) => void;
+  translate: (key: TranslationKey) => string;
+}) {
   return (
-    <header className="flex shrink-0 items-center justify-between gap-4 border-b border-zinc-800 bg-zinc-950/95 px-6 py-4 backdrop-blur">
-      <div>
-        <p className="text-xl font-bold tracking-[0.2em] text-white sm:text-2xl">SEOUL PRAGUE</p>
-        <p className="mt-0.5 text-xs uppercase tracking-widest text-zinc-500">Customer Display</p>
+    <header className="z-20 flex shrink-0 items-center justify-between gap-3 border-b border-zinc-800 bg-zinc-950 px-4 py-4 sm:gap-4 sm:px-6">
+      <div className="min-w-0">
+        <p className="truncate text-xl font-bold tracking-[0.2em] text-white sm:text-2xl">SEOUL PRAGUE</p>
+        <p className="mt-0.5 text-xs uppercase tracking-widest text-zinc-500">{translate("customerDisplay")}</p>
       </div>
-      <CfdClock />
+      <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+        <CfdLanguageMenu language={language} onLanguageChange={onLanguageChange} />
+        <CfdClock language={language} />
+      </div>
     </header>
   );
 }
 
-function CheckoutView({ checkout }: { checkout: CfdCheckoutPayload }) {
+function CheckoutView({
+  checkout,
+  translate,
+}: {
+  checkout: CfdCheckoutPayload;
+  translate: (key: TranslationKey) => string;
+}) {
   const displayTotal = checkout.amountDueNow ?? checkout.total;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-zinc-800 bg-zinc-900/80 px-6 py-4">
-        <p className="text-2xl font-bold text-white sm:text-3xl">Table: {checkout.tableNumber}</p>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="shrink-0 border-b border-zinc-800 bg-zinc-900/95 px-4 py-4 sm:px-6">
+        <p className="text-2xl font-bold text-white sm:text-3xl">
+          {translate("table")}: {checkout.tableNumber}
+        </p>
         <p className="mt-1 text-sm font-semibold uppercase tracking-widest text-zinc-400">
-          Order Details
+          {translate("orderDetails")}
         </p>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
         <div className="overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900">
           <table className="w-full text-left">
-            <thead className="bg-zinc-800 text-xs font-bold uppercase tracking-wider text-zinc-300">
+            <thead className="sticky top-0 z-10 bg-zinc-800 text-xs font-bold uppercase tracking-wider text-zinc-300">
               <tr>
-                <th className="px-4 py-3 text-center">Qty</th>
-                <th className="px-4 py-3">Item</th>
-                <th className="hidden px-4 py-3 text-right sm:table-cell">Unit</th>
-                <th className="px-4 py-3 text-right">Total</th>
+                <th className="px-4 py-3 text-center">{translate("cfdQty")}</th>
+                <th className="px-4 py-3">{translate("itemName")}</th>
+                <th className="hidden px-4 py-3 text-right sm:table-cell">{translate("cfdUnit")}</th>
+                <th className="px-4 py-3 text-right">{translate("total")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
@@ -99,26 +224,26 @@ function CheckoutView({ checkout }: { checkout: CfdCheckoutPayload }) {
         </div>
       </div>
 
-      <footer className="shrink-0 border-t border-zinc-700 bg-zinc-900 px-6 py-5">
+      <footer className="shrink-0 border-t border-zinc-700 bg-zinc-900 px-4 py-5 shadow-[0_-8px_24px_rgba(0,0,0,0.35)] sm:px-6">
         <div className="mx-auto max-w-3xl space-y-2 text-lg text-zinc-300">
           <div className="flex justify-between">
-            <span>Subtotal</span>
+            <span>{translate("subtotal")}</span>
             <span className="tabular-nums">{formatCzk(checkout.subtotal)}</span>
           </div>
           {checkout.discount > 0 && (
             <div className="flex justify-between text-orange-300">
-              <span>Discount</span>
+              <span>{translate("discount")}</span>
               <span className="tabular-nums">−{formatCzk(checkout.discount)}</span>
             </div>
           )}
           {checkout.tip > 0 && (
             <div className="flex justify-between text-emerald-300">
-              <span>Tip</span>
+              <span>{translate("tip")}</span>
               <span className="tabular-nums">{formatCzk(checkout.tip)}</span>
             </div>
           )}
           <div className="flex items-end justify-between border-t border-zinc-700 pt-3">
-            <span className="text-xl font-bold uppercase tracking-wide text-white">Total</span>
+            <span className="text-xl font-bold uppercase tracking-wide text-white">{translate("total")}</span>
             <span className="text-4xl font-black tabular-nums text-white sm:text-5xl">
               {formatCzk(displayTotal)} CZK
             </span>
@@ -133,19 +258,21 @@ function ThankYouView({
   secondsLeft,
   reviewQrImageUrl,
   hasAdVideo,
+  translate,
 }: {
   secondsLeft: number;
   reviewQrImageUrl: string;
   hasAdVideo: boolean;
+  translate: (key: TranslationKey) => string;
 }) {
   const hasQr = reviewQrImageUrl.trim().length > 0;
+  const countdownKey = hasAdVideo ? "cfdVideoIn" : "cfdReturningIn";
+  const countdownText = translate(countdownKey).replace("{seconds}", String(secondsLeft));
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
-      <h2 className="text-3xl font-bold text-white sm:text-4xl">Thank you for dining with us!</h2>
-      <p className="mt-4 max-w-xl text-lg text-zinc-300 sm:text-xl">
-        Please leave us a review to help us improve!
-      </p>
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-6 py-10 text-center">
+      <h2 className="text-3xl font-bold text-white sm:text-4xl">{translate("cfdThankYou")}</h2>
+      <p className="mt-4 max-w-xl text-lg text-zinc-300 sm:text-xl">{translate("cfdReviewPrompt")}</p>
       <p className="mt-6 text-4xl tracking-widest text-amber-400" aria-label="5 star rating">
         ⭐⭐⭐⭐⭐
       </p>
@@ -155,25 +282,27 @@ function ThankYouView({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={reviewQrImageUrl}
-              alt="Scan to leave a review"
+              alt={translate("cfdScanReview")}
               width={220}
               height={220}
               className="h-[220px] w-[220px] object-contain"
             />
           </div>
-          <p className="mt-4 text-sm text-zinc-500">Scan to review us</p>
+          <p className="mt-4 text-sm text-zinc-500">{translate("cfdScanReview")}</p>
         </>
       )}
-      <p className="mt-8 text-xs text-zinc-600">
-        {hasAdVideo
-          ? `Starting promotional video in ${secondsLeft}s`
-          : `Returning to display in ${secondsLeft}s`}
-      </p>
+      <p className="mt-8 text-xs text-zinc-600">{countdownText}</p>
     </div>
   );
 }
 
-function IdleDisplayView({ videoUrl }: { videoUrl: string }) {
+function IdleDisplayView({
+  videoUrl,
+  translate,
+}: {
+  videoUrl: string;
+  translate: (key: TranslationKey) => string;
+}) {
   if (videoUrl.trim()) {
     const mediaClass = "max-h-full max-w-full object-contain";
 
@@ -182,22 +311,9 @@ function IdleDisplayView({ videoUrl }: { videoUrl: string }) {
         <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-zinc-800 bg-black">
           {isCfdGifMedia(videoUrl) ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={videoUrl}
-              src={videoUrl}
-              alt="Promotional display"
-              className={mediaClass}
-            />
+            <img key={videoUrl} src={videoUrl} alt="Promotional display" className={mediaClass} />
           ) : (
-            <video
-              key={videoUrl}
-              src={videoUrl}
-              autoPlay
-              loop
-              muted
-              playsInline
-              className={mediaClass}
-            />
+            <video key={videoUrl} src={videoUrl} autoPlay loop muted playsInline className={mediaClass} />
           )}
         </div>
       </main>
@@ -205,15 +321,16 @@ function IdleDisplayView({ videoUrl }: { videoUrl: string }) {
   }
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center bg-zinc-950 px-6 text-center">
+    <main className="flex min-h-0 flex-1 flex-col items-center justify-center bg-zinc-950 px-6 text-center">
       <p className="text-3xl font-bold tracking-[0.25em] text-white sm:text-4xl">SEOUL PRAGUE</p>
-      <p className="mt-4 text-lg text-zinc-400">Welcome</p>
+      <p className="mt-4 text-lg text-zinc-400">{translate("cfdWelcome")}</p>
     </main>
   );
 }
 
 export function ClientDisplayView() {
   const { settings } = useSettings();
+  const { language, setLanguage, translate } = useCfdLanguage();
   const [clientState, setClientState] = useState<CfdClientState>("idle");
   const [checkout, setCheckout] = useState<CfdCheckoutPayload | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(THANK_YOU_SECONDS);
@@ -257,23 +374,24 @@ export function ClientDisplayView() {
   }, [clientState]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-950 text-white">
-      <CfdHeader />
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-zinc-950 text-white">
+      <CfdHeader language={language} onLanguageChange={setLanguage} translate={translate} />
 
-      {clientState === "idle" && <IdleDisplayView videoUrl={adVideoUrl} />}
+      {clientState === "idle" && <IdleDisplayView videoUrl={adVideoUrl} translate={translate} />}
 
       {clientState === "checkout" && checkout && (
-        <main className="flex min-h-0 flex-1 flex-col">
-          <CheckoutView checkout={checkout} />
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <CheckoutView checkout={checkout} translate={translate} />
         </main>
       )}
 
       {clientState === "thankyou" && (
-        <main className="flex flex-1 flex-col">
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <ThankYouView
             secondsLeft={secondsLeft}
             reviewQrImageUrl={reviewQrImageUrl}
             hasAdVideo={Boolean(adVideoUrl)}
+            translate={translate}
           />
         </main>
       )}

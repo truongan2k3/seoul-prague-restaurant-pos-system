@@ -64,6 +64,13 @@ ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS cfd_ad_video_url text DEFAU
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS cfd_review_url text DEFAULT 'https://www.google.com/maps/search/?api=1&query=Seoul+Prague+Restaurant';
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS cfd_review_qr_image_url text DEFAULT '';
 
+-- Announcement marquee (main POS tabs)
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS marquee_enabled boolean DEFAULT false;
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS marquee_text text DEFAULT '';
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS marquee_duration_seconds int DEFAULT 28;
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS marquee_font_family text DEFAULT 'arial';
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS marquee_end_at timestamptz DEFAULT NULL;
+
 -- RLS (anon POS access)
 ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "settings_anon_all" ON public.settings;

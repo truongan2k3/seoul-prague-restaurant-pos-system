@@ -1,6 +1,10 @@
 import type { AppSettings, MenuItemLayout, ReservationOperatingHours, TerminalConnectionMode, TerminalType } from "@/lib/types";
 import { DEFAULT_RESERVATION_OPERATING_HOURS } from "@/lib/reservation-slots";
 import {
+  clampMarqueeDurationSeconds,
+  parseMarqueeFontFamily,
+} from "@/lib/marquee-settings";
+import {
   parseReceiptFontFamily,
   parseReceiptFontSize,
   parseReceiptFontWeight,
@@ -42,6 +46,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   cfdReviewUrl:
     "https://www.google.com/maps/search/?api=1&query=Seoul+Prague+Restaurant",
   cfdReviewQrImageUrl: "",
+  marqueeEnabled: false,
+  marqueeText: "",
+  marqueeDurationSeconds: 28,
+  marqueeFontFamily: "arial",
+  marqueeEndAt: "",
 };
 
 type SettingsRow = {
@@ -79,6 +88,11 @@ type SettingsRow = {
   cfd_ad_video_url?: string | null;
   cfd_review_url?: string | null;
   cfd_review_qr_image_url?: string | null;
+  marquee_enabled?: boolean | null;
+  marquee_text?: string | null;
+  marquee_duration_seconds?: number | null;
+  marquee_font_family?: string | null;
+  marquee_end_at?: string | null;
 };
 
 function parseNumericSetting(value: number | string | null | undefined, fallback: number): number {
@@ -157,6 +171,13 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     cfdAdVideoUrl: row.cfd_ad_video_url ?? DEFAULT_APP_SETTINGS.cfdAdVideoUrl,
     cfdReviewUrl: row.cfd_review_url ?? DEFAULT_APP_SETTINGS.cfdReviewUrl,
     cfdReviewQrImageUrl: row.cfd_review_qr_image_url ?? DEFAULT_APP_SETTINGS.cfdReviewQrImageUrl,
+    marqueeEnabled: row.marquee_enabled ?? DEFAULT_APP_SETTINGS.marqueeEnabled,
+    marqueeText: row.marquee_text ?? DEFAULT_APP_SETTINGS.marqueeText,
+    marqueeDurationSeconds: clampMarqueeDurationSeconds(
+      parseNumericSetting(row.marquee_duration_seconds, DEFAULT_APP_SETTINGS.marqueeDurationSeconds),
+    ),
+    marqueeFontFamily: parseMarqueeFontFamily(row.marquee_font_family),
+    marqueeEndAt: row.marquee_end_at ?? DEFAULT_APP_SETTINGS.marqueeEndAt,
   };
 }
 
@@ -212,6 +233,13 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   if (partial.cfdReviewQrImageUrl !== undefined) {
     payload.cfd_review_qr_image_url = partial.cfdReviewQrImageUrl;
   }
+  if (partial.marqueeEnabled !== undefined) payload.marquee_enabled = partial.marqueeEnabled;
+  if (partial.marqueeText !== undefined) payload.marquee_text = partial.marqueeText;
+  if (partial.marqueeDurationSeconds !== undefined) {
+    payload.marquee_duration_seconds = clampMarqueeDurationSeconds(partial.marqueeDurationSeconds);
+  }
+  if (partial.marqueeFontFamily !== undefined) payload.marquee_font_family = partial.marqueeFontFamily;
+  if (partial.marqueeEndAt !== undefined) payload.marquee_end_at = partial.marqueeEndAt || null;
   return payload;
 }
 
@@ -384,6 +412,11 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "terminalPort"
     | "terminalPosId"
     | "terminalConnectionMode"
+    | "marqueeEnabled"
+    | "marqueeText"
+    | "marqueeDurationSeconds"
+    | "marqueeFontFamily"
+    | "marqueeEndAt"
   >;
 
 export function pickPrinterBillDraft(settings: AppSettings): PrinterBillSettingsDraft {
@@ -423,5 +456,10 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     terminalPort: settings.terminalPort,
     terminalPosId: settings.terminalPosId,
     terminalConnectionMode: settings.terminalConnectionMode,
+    marqueeEnabled: settings.marqueeEnabled,
+    marqueeText: settings.marqueeText,
+    marqueeDurationSeconds: settings.marqueeDurationSeconds,
+    marqueeFontFamily: settings.marqueeFontFamily,
+    marqueeEndAt: settings.marqueeEndAt,
   };
 }

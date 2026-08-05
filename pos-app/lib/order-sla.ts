@@ -35,18 +35,19 @@ export function isLineEditable(status: OrderItem["status"] | undefined): boolean
   return normalized === "pending" || normalized === "held" || !status;
 }
 
-/** Manage-table screen: allow qty/delete while item is still in active prep. */
+/** Manage-table screen: qty/delete available for all active bill lines, including served. */
 export function isManageTableLineEditable(status: OrderItem["status"] | undefined): boolean {
   const normalized = normalizeOrderItemStatus(status);
   return (
     normalized === "pending" ||
     normalized === "held" ||
     normalized === "preparing" ||
+    normalized === "ready" ||
+    normalized === "served" ||
     !status
   );
 }
 
-export function isManageTablePriceEditable(status: OrderItem["status"] | undefined): boolean {
-  const normalized = normalizeOrderItemStatus(status);
-  return normalized !== "served";
+export function isManageTablePriceEditable(_status: OrderItem["status"] | undefined): boolean {
+  return true;
 }

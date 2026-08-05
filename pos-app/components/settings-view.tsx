@@ -16,6 +16,12 @@ import {
 } from "@/src/lib/settings-actions";
 import { WEEKDAY_KEYS } from "@/lib/reservation-slots";
 import { RECEIPT_FONT_OPTIONS } from "@/lib/receipt-print-styles";
+import {
+  fromDatetimeLocalValue,
+  MARQUEE_SPEED_MAX,
+  MARQUEE_SPEED_MIN,
+  toDatetimeLocalValue,
+} from "@/lib/marquee-settings";
 import type { TranslationKey } from "@/lib/i18n/translations";
 import type { ReceiptFontFamily, WeekdayKey } from "@/lib/types";
 import { testTerminalConnection } from "@/src/lib/terminalApi";
@@ -546,6 +552,121 @@ export function SettingsView() {
                 </div>
               </label>
             )}
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6 md:col-span-2">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">
+              {translate("settingsMarquee")}
+            </h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {translate("settingsMarqueeHint")}
+            </p>
+
+            <div className="mt-4 space-y-3">
+              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
+                <span className="text-sm text-gray-800 dark:text-gray-200">
+                  {translate("settingsMarqueeEnabled")}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={draft.marqueeEnabled}
+                  onChange={(event) => updateDraft("marqueeEnabled", event.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+              </label>
+
+              <label className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">{translate("settingsMarqueeText")}</span>
+                <textarea
+                  value={draft.marqueeText}
+                  onChange={(event) => updateDraft("marqueeText", event.target.value)}
+                  rows={2}
+                  placeholder={translate("settingsMarqueeTextPlaceholder")}
+                  className="pos-input mt-1 min-h-[72px] resize-y"
+                />
+              </label>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {translate("settingsMarqueeSpeed")}
+                  </span>
+                  <input
+                    type="number"
+                    min={MARQUEE_SPEED_MIN}
+                    max={MARQUEE_SPEED_MAX}
+                    value={draft.marqueeDurationSeconds}
+                    onChange={(event) =>
+                      updateDraft("marqueeDurationSeconds", Number(event.target.value))
+                    }
+                    className="pos-input mt-1"
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {translate("settingsMarqueeSpeedHint")}
+                  </p>
+                </label>
+
+                <label className="block text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {translate("settingsMarqueeFont")}
+                  </span>
+                  <select
+                    value={draft.marqueeFontFamily}
+                    onChange={(event) =>
+                      updateDraft("marqueeFontFamily", event.target.value as ReceiptFontFamily)
+                    }
+                    className="pos-input mt-1"
+                  >
+                    {RECEIPT_FONT_OPTIONS.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {translate(RECEIPT_FONT_LABEL_KEYS[option.id])}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <label className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">
+                  {translate("settingsMarqueeEndAt")}
+                </span>
+                <input
+                  type="datetime-local"
+                  value={toDatetimeLocalValue(draft.marqueeEndAt)}
+                  onChange={(event) =>
+                    updateDraft("marqueeEndAt", fromDatetimeLocalValue(event.target.value))
+                  }
+                  className="pos-input mt-1"
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {translate("settingsMarqueeEndAtHint")}
+                </p>
+              </label>
+
+              {draft.marqueeEnabled && draft.marqueeText.trim() && (
+                <div className="overflow-hidden rounded-lg border border-amber-300 bg-amber-100 dark:border-amber-700 dark:bg-amber-950/40">
+                  <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                    {translate("settingsMarqueePreview")}
+                  </p>
+                  <div
+                    className="overflow-hidden py-2"
+                    style={{ fontFamily: RECEIPT_FONT_OPTIONS.find((f) => f.id === draft.marqueeFontFamily)?.stack }}
+                  >
+                    <div
+                      className="pos-marquee-track flex w-max items-center"
+                      style={{ animationDuration: `${draft.marqueeDurationSeconds}s` }}
+                    >
+                      <span className="pos-marquee-segment px-6 text-sm font-semibold text-amber-950 dark:text-amber-100">
+                        {draft.marqueeText.trim()}
+                      </span>
+                      <span className="pos-marquee-segment px-6 text-sm font-semibold text-amber-950 dark:text-amber-100" aria-hidden>
+                        {draft.marqueeText.trim()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </section>
 
           <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6 md:col-span-2">

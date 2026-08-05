@@ -39,12 +39,17 @@ function aggregateOrderItems(items: OrderItem[]): OrderItem[] {
 
 function expandOrderToUnits(order: OrderItem): OrderItem[] {
   const units: OrderItem[] = [];
+  const normalized = normalizeOrderItemStatus(order.status);
+  const extraUnitStatus: OrderItem["status"] =
+    normalized === "served" || normalized === "ready" ? "preparing" : normalized;
+
   for (let index = 0; index < order.quantity; index += 1) {
     units.push({
       ...order,
       quantity: 1,
       id: index === 0 ? order.id : undefined,
       createdAt: index === 0 ? order.createdAt : undefined,
+      status: index === 0 ? order.status : extraUnitStatus,
     });
   }
   return units;
@@ -459,6 +464,24 @@ export async function markItemsReady(
 ) {
   for (const itemId of itemIds) {
     const { error } = await updateOrderItemStatus(itemId, "ready", staffName);
+    if (error) return { error };
+  }
+
+  if (tableId) {
+    await syncTableOrdersFromDb(tableId);
+    await markTableReadyIfAllDone(tableId);
+  }
+
+  return { error: null };
+}
+
+export async function markItemsPreparing(
+  itemIds: string[],
+  staffName: string,
+  tableId?: string,
+) {
+  for (const itemId of itemIds) {
+    const { error } = await updateOrderItemStatus(itemId, "preparing", staffName);
     if (error) return { error };
   }
 

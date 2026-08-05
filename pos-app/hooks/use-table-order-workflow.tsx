@@ -272,6 +272,7 @@ export function useTableOrderWorkflow({
           menuItems={menuItems}
           categories={categories}
           mode={modal.mode}
+          existingOrders={orderItems.filter((item) => item.tableId === selectedTable.id)}
           onClose={() => setModal(null)}
           onSendToKitchen={handleSendToKitchen}
           isSaving={isSaving}

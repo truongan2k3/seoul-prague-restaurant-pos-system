@@ -21,7 +21,13 @@ import { finalizeNoteTranslation, presetLabel, togglePresetId } from "@/lib/note
 import type { LanguageCode, MenuCategoryRecord, MenuItem, MenuItemLayout, NotePreset, OrderItem, SelectedMenuOption } from "@/lib/types";
 import { filterButtonClass } from "@/lib/theme-classes";
 import { ItemCustomizeModal, type CustomizeResult } from "@/components/item-customize-modal";
+import { GrillGuestCountModal } from "@/components/grill-guest-count-modal";
 import { OnScreenKeyboard } from "@/components/on-screen-keyboard";
+import {
+  buildGrillGuestPrepOrder,
+  cartHasGrillItems,
+  shouldPromptGrillGuestCount,
+} from "@/lib/grill-guest-count";
 import {
   fetchNotePresets,
   mapNotePresetsResponse,
@@ -54,6 +60,7 @@ interface NewOrderModalProps {
   menuItems: MenuItem[];
   categories?: MenuCategoryRecord[];
   mode?: "new" | "append";
+  existingOrders?: OrderItem[];
   onClose: () => void;
   onSendToKitchen: (orders: OrderItem[]) => void | Promise<void>;
   isSaving?: boolean;
@@ -252,6 +259,7 @@ export function NewOrderModal({
   menuItems,
   categories = [],
   mode = "new",
+  existingOrders = [],
   onClose,
   onSendToKitchen,
   isSaving = false,
@@ -275,6 +283,10 @@ export function NewOrderModal({
   const [notePresetIds, setNotePresetIds] = useState<string[]>([]);
   const [notePresets, setNotePresets] = useState<NotePreset[]>([]);
   const [customizeItem, setCustomizeItem] = useState<MenuItem | null>(null);
+  const [grillGuestCount, setGrillGuestCount] = useState<number | null>(null);
+  const [grillGuestModalOpen, setGrillGuestModalOpen] = useState(false);
+  const [pendingGrillItem, setPendingGrillItem] = useState<MenuItem | null>(null);
+  const [pendingCustomizeResult, setPendingCustomizeResult] = useState<CustomizeResult | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -297,6 +309,10 @@ export function NewOrderModal({
     setNotePrintOnReceipt(false);
     setNotePresetIds([]);
     setCustomizeItem(null);
+    setGrillGuestCount(null);
+    setGrillGuestModalOpen(false);
+    setPendingGrillItem(null);
+    setPendingCustomizeResult(null);
   }, [open]);
 
   useEffect(() => {
@@ -338,11 +354,6 @@ export function NewOrderModal({
   }, [noteDraft]);
 
   const categoryOptions = useMemo(() => categoriesForOrdering(categories), [categories]);
-
-  const menuById = useMemo(
-    () => new Map(menuItems.map((item) => [item.id, item])),
-    [menuItems],
-  );
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -389,6 +400,24 @@ export function NewOrderModal({
       setCustomizeItem(item);
       return;
     }
+    if (
+      shouldPromptGrillGuestCount({
+        item,
+        cart,
+        existingOrders,
+        menuItems,
+        guestCountCollected: grillGuestCount !== null,
+      })
+    ) {
+      setPendingGrillItem(item);
+      setPendingCustomizeResult(null);
+      setGrillGuestModalOpen(true);
+      return;
+    }
+    addItemToCart(item);
+  };
+
+  const addItemToCart = (item: MenuItem) => {
     const label = menuItemDisplayName(item, language);
     setCart((prev) => {
       const existing = findDefaultLine(prev, item.id);
@@ -417,10 +446,7 @@ export function NewOrderModal({
     });
   };
 
-  const handleCustomizeConfirm = async (result: CustomizeResult) => {
-    const item = customizeItem;
-    if (!item) return;
-
+  const applyCustomizeResult = async (item: MenuItem, result: CustomizeResult) => {
     const signature = buildCustomizationSignature(
       item.id,
       result.selections,
@@ -477,8 +503,50 @@ export function NewOrderModal({
       }
       return [...next, freeLine];
     });
+  };
+
+  const handleCustomizeConfirm = async (result: CustomizeResult) => {
+    const item = customizeItem;
+    if (!item) return;
 
     setCustomizeItem(null);
+
+    if (
+      shouldPromptGrillGuestCount({
+        item,
+        cart,
+        existingOrders,
+        menuItems,
+        guestCountCollected: grillGuestCount !== null,
+      })
+    ) {
+      setPendingGrillItem(item);
+      setPendingCustomizeResult(result);
+      setGrillGuestModalOpen(true);
+      return;
+    }
+
+    await applyCustomizeResult(item, result);
+  };
+
+  const handleGrillGuestConfirm = async (count: number) => {
+    setGrillGuestCount(count);
+    setGrillGuestModalOpen(false);
+
+    if (pendingGrillItem && pendingCustomizeResult) {
+      await applyCustomizeResult(pendingGrillItem, pendingCustomizeResult);
+    } else if (pendingGrillItem) {
+      addItemToCart(pendingGrillItem);
+    }
+
+    setPendingGrillItem(null);
+    setPendingCustomizeResult(null);
+  };
+
+  const handleGrillGuestClose = () => {
+    setGrillGuestModalOpen(false);
+    setPendingGrillItem(null);
+    setPendingCustomizeResult(null);
   };
 
   const openNoteModal = (line: CartLine) => {
@@ -540,7 +608,7 @@ export function NewOrderModal({
 
   const handleSend = async () => {
     if (cart.length === 0 || isSaving) return;
-    const orders = await Promise.all(
+    const orders: OrderItem[] = await Promise.all(
       cart.map(async (line) => {
         const { note, noteTranslated } = await finalizeNoteTranslation(
           notePresets,
@@ -553,7 +621,6 @@ export function NewOrderModal({
           noteTranslated,
           line.kitchenModifierText ?? "",
         );
-        const menu = line.menuItemId ? menuById.get(line.menuItemId) : undefined;
         return {
           menuItemId: line.menuItemId,
           name: line.name,
@@ -573,9 +640,15 @@ export function NewOrderModal({
         };
       }),
     );
+
+    if (grillGuestCount !== null && cartHasGrillItems(cart)) {
+      orders.unshift(buildGrillGuestPrepOrder(grillGuestCount));
+    }
+
     await onSendToKitchen(orders);
     setCart([]);
     setCartOpen(false);
+    setGrillGuestCount(null);
   };
 
   const handleClose = () => {
@@ -1011,6 +1084,16 @@ export function NewOrderModal({
           onConfirm={(result) => void handleCustomizeConfirm(result)}
         />
       )}
+
+      <GrillGuestCountModal
+        open={grillGuestModalOpen}
+        itemLabel={
+          pendingGrillItem ? menuItemDisplayName(pendingGrillItem, language) : undefined
+        }
+        translate={translate}
+        onConfirm={(count) => void handleGrillGuestConfirm(count)}
+        onClose={handleGrillGuestClose}
+      />
     </>
   );
 }

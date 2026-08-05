@@ -110,6 +110,7 @@ function ServerApp() {
           menuItems={menuItems.filter((m) => m.isAvailable)}
           categories={categories}
           mode={orderModal.mode}
+          existingOrders={orderModal.table.orders ?? []}
           onClose={() => setOrderModal(null)}
           onSendToKitchen={handleSend}
           isSaving={isSaving}

@@ -202,17 +202,26 @@ export function SettingsView() {
 
   return (
     <div className="flex h-full flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <header className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
+      <header className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
         <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{translate("settings")}</h1>
         <div className="flex items-center gap-3">
           {saving && (
             <span className="text-xs text-gray-500 dark:text-gray-400">{translate("settingsSaving")}</span>
           )}
+          <button
+            type="button"
+            disabled={saving || !dirty}
+            onClick={() => void handleSaveSettings()}
+            className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Save className="h-4 w-4" />
+            {translate("settingsSaveChanges")}
+          </button>
           <LiveClock />
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto p-4 pb-24 md:p-6 md:pb-6">
+      <div className="flex-1 overflow-auto p-4 md:p-6">
         <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2">
           {settingsError && (
             <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 md:col-span-2 dark:bg-red-950 dark:text-red-300">
@@ -447,16 +456,6 @@ export function SettingsView() {
                 />
               </label>
             </div>
-
-            <button
-              type="button"
-              disabled={saving || !dirty}
-              onClick={() => void handleSaveSettings()}
-              className="mt-6 hidden w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3.5 text-base font-bold text-white shadow-md transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 md:flex"
-            >
-              <Save className="h-5 w-5" />
-              💾 {translate("settingsSaveChanges")}
-            </button>
           </section>
 
           <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6 md:col-span-2">
@@ -1160,20 +1159,6 @@ export function SettingsView() {
           </section>
         </div>
       </div>
-
-      {dirty && (
-        <div className="pos-mobile-sticky-bar fixed bottom-0 left-0 right-0 z-30 border-t border-gray-200 bg-white p-3 shadow-lg md:hidden dark:border-gray-800 dark:bg-gray-900">
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => void handleSaveSettings()}
-            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-base font-bold text-white disabled:opacity-50"
-          >
-            <Save className="h-5 w-5" />
-            💾 {translate("settingsSaveChanges")}
-          </button>
-        </div>
-      )}
     </div>
   );
 }

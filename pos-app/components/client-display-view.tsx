@@ -84,7 +84,8 @@ function CfdHeader({
   return (
     <header className="z-20 flex shrink-0 items-center justify-between gap-3 border-b border-zinc-800 bg-zinc-950 px-4 py-4 sm:gap-4 sm:px-6">
       <div className="min-w-0">
-        <p className="truncate text-xl font-bold text-white sm:text-2xl">{translate("cfdWelcome")}</p>
+        <p className="truncate text-xl font-bold tracking-[0.2em] text-white sm:text-2xl">SEOUL PRAGUE</p>
+        <p className="mt-0.5 text-xs uppercase tracking-widest text-zinc-500">{translate("cfdWelcome")}</p>
       </div>
       <div className="flex shrink-0 items-center gap-2 sm:gap-4">
         <LanguageSelector
@@ -248,7 +249,8 @@ function IdleDisplayView({
 
   return (
     <main className="flex min-h-0 flex-1 flex-col items-center justify-center bg-zinc-950 px-6 text-center">
-      <p className="text-3xl font-bold text-white sm:text-5xl">{translate("cfdWelcome")}</p>
+      <p className="text-3xl font-bold tracking-[0.25em] text-white sm:text-4xl">SEOUL PRAGUE</p>
+      <p className="mt-4 text-lg text-zinc-400">{translate("cfdWelcome")}</p>
     </main>
   );
 }

@@ -1,6 +1,7 @@
-import type { LanguageCode, MenuItem } from "@/lib/types";
 import type {
+  LanguageCode,
   MenuCustomizationConfig,
+  MenuItem,
   MenuOptionChoice,
   SelectedMenuOption,
 } from "@/lib/types";
@@ -13,13 +14,42 @@ export function hasCustomization(item: MenuItem): boolean {
   );
 }
 
-export function getDefaultSelections(config: MenuCustomizationConfig): Record<string, string> {
+/** Lunch / Món ăn trưa category detection for default protein selection. */
+export function isLunchMenuItem(item: Pick<MenuItem, "category">): boolean {
+  const name = item.category.trim().toLowerCase();
+  return (
+    name.includes("lunch") ||
+    name.includes("trưa") ||
+    name.includes("trua") ||
+    name.includes("món ăn trưa")
+  );
+}
+
+function isChickenOption(option: MenuOptionChoice): boolean {
+  const haystack = `${option.id} ${option.nameEn} ${option.nameCz} ${option.nameZh}`.toLowerCase();
+  return (
+    option.id === "chicken" ||
+    haystack.includes("chicken") ||
+    haystack.includes("kuřecí") ||
+    haystack.includes("kureci") ||
+    haystack.includes("鸡肉")
+  );
+}
+
+export function getDefaultSelections(
+  config: MenuCustomizationConfig,
+  item?: Pick<MenuItem, "category">,
+): Record<string, string> {
+  const preferChicken = item ? isLunchMenuItem(item) : false;
   const selections: Record<string, string> = {};
+
   for (const group of config.optionGroups ?? []) {
+    const chicken = preferChicken ? group.options.find(isChickenOption) : undefined;
     const defaultOption =
-      group.options.find((option) => option.default) ?? group.options[0];
+      chicken ?? group.options.find((option) => option.default) ?? group.options[0];
     if (defaultOption) selections[group.id] = defaultOption.id;
   }
+
   return selections;
 }
 

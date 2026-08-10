@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRightLeft, Minus, Percent, Plus, Save, ShoppingBag, Tag, Trash2 } from "lucide-react";
+import { CancelReasonModal } from "@/components/cancel-reason-modal";
 import { Modal } from "@/components/modal";
 import { NumericInputField } from "@/components/numeric-input-field";
 import { PercentPresetButtons } from "@/components/percent-preset-buttons";
@@ -27,9 +28,10 @@ import {
   isManageTablePriceEditable,
 } from "@/lib/order-sla";
 import { formatPosPrice, priceDisplayOptionsFromSettings } from "@/lib/price-display";
+import { isTablePaidInProgress } from "@/lib/table-payment";
 import { filterButtonClass } from "@/lib/theme-classes";
 import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
-import { markItemsServed } from "@/src/lib/table-actions";
+import { cancelOrderItems } from "@/src/lib/table-actions";
 
 type EditableLine = OrderItem & { lineId: string };
 
@@ -238,13 +240,18 @@ export function ManageTableModal({
   const { settings } = useSettings();
   const priceOptions = priceDisplayOptionsFromSettings(settings);
   const formatOrderPrice = (amount: number) => formatPosPrice(amount, priceOptions);
+  const isPaidInProgress = isTablePaidInProgress(table);
 
   const [lines, setLines] = useState<EditableLine[]>([]);
   const [transferTo, setTransferTo] = useState("");
   const [showTransfer, setShowTransfer] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [servingId, setServingId] = useState<string | null>(null);
   const [priceEditLineId, setPriceEditLineId] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<{
+    lineId: string;
+    itemId: string;
+  } | null>(null);
+  const [cancelSaving, setCancelSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -252,7 +259,6 @@ export function ManageTableModal({
     setTransferTo("");
     setShowTransfer(false);
     setLocalError(null);
-    setServingId(null);
     setPriceEditLineId(null);
   }, [open, table, orderItems, menuItems]);
 
@@ -281,7 +287,37 @@ export function ManageTableModal({
 
   const removeLine = (lineId: string) => {
     setPriceEditLineId(null);
-    setLines((prev) => prev.filter((line) => line.lineId !== lineId));
+    const line = lines.find((entry) => entry.lineId === lineId);
+    if (!line) return;
+
+    // Local-only draft line (not yet in DB) — drop from state.
+    if (!line.id) {
+      setLines((prev) => prev.filter((entry) => entry.lineId !== lineId));
+      return;
+    }
+
+    requestPin(() => setCancelTarget({ lineId, itemId: line.id! }));
+  };
+
+  const handleCancelConfirm = async (reason: string) => {
+    if (!cancelTarget) return;
+    setCancelSaving(true);
+    setLocalError(null);
+    const actor = currentStaffUser?.name?.trim() || "Staff";
+    const { error: cancelError } = await cancelOrderItems(
+      [cancelTarget.itemId],
+      table.id,
+      reason,
+      actor,
+    );
+    setCancelSaving(false);
+    if (cancelError) {
+      setLocalError(cancelError.message);
+      return;
+    }
+    setLines((prev) => prev.filter((entry) => entry.lineId !== cancelTarget.lineId));
+    setCancelTarget(null);
+    onRefresh();
   };
 
   const openPriceEditor = (line: EditableLine) => {
@@ -308,25 +344,6 @@ export function ManageTableModal({
     setPriceEditLineId(null);
   };
 
-  const markServed = async (line: EditableLine) => {
-    if (!line.id || servingId) return;
-    setServingId(line.id);
-    setLocalError(null);
-    const actor = currentStaffUser?.name ?? "Staff";
-    const { error: updateError } = await markItemsServed([line.id], actor, table.id);
-    setServingId(null);
-    if (updateError) {
-      setLocalError(updateError.message);
-      return;
-    }
-    setLines((prev) =>
-      prev.map((row) =>
-        row.lineId === line.lineId ? { ...row, status: "served" as const } : row,
-      ),
-    );
-    onRefresh();
-  };
-
   const handleSave = async () => {
     setLocalError(null);
     await onSaveOrders(ordersPayload);
@@ -351,6 +368,7 @@ export function ManageTableModal({
   };
 
   return (
+    <>
     <Modal
       open={open}
       onClose={onClose}
@@ -504,17 +522,6 @@ export function ManageTableModal({
                         </div>
                       )}
 
-                      {isReady && line.id && (
-                        <button
-                          type="button"
-                          disabled={servingId === line.id}
-                          onClick={() => void markServed(line)}
-                          className="shrink-0 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-emerald-500 disabled:opacity-50"
-                        >
-                          {translate("served")}
-                        </button>
-                      )}
-
                       <span className="w-20 text-right text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                         {formatOrderPrice(line.price * line.quantity)}
                       </span>
@@ -619,17 +626,36 @@ export function ManageTableModal({
                 : translate("saveOrder")}
           </button>
 
-          <button
-            type="button"
-            disabled={isSaving || lines.length === 0}
-            onClick={() => void handleProceedToCheckout()}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-4 text-base font-bold text-white shadow-md transition hover:bg-emerald-700 disabled:opacity-40"
-          >
-            <ShoppingBag className="h-5 w-5" />
-            {translate("proceedToCheckout")}
-          </button>
+          {isPaidInProgress ? (
+            <div
+              role="status"
+              className="flex w-full cursor-default items-center justify-center gap-2 rounded-xl bg-emerald-600 py-4 text-base font-bold text-white shadow-md"
+            >
+              Đã thanh toán
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={isSaving || lines.length === 0}
+              onClick={() => void handleProceedToCheckout()}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-4 text-base font-bold text-white shadow-md transition hover:bg-emerald-700 disabled:opacity-40"
+            >
+              <ShoppingBag className="h-5 w-5" />
+              {translate("proceedToCheckout")}
+            </button>
+          )}
         </div>
       </div>
     </Modal>
+
+      <CancelReasonModal
+        open={cancelTarget !== null}
+        itemCount={1}
+        translate={translate}
+        onClose={() => setCancelTarget(null)}
+        onConfirm={handleCancelConfirm}
+        isSaving={cancelSaving}
+      />
+    </>
   );
 }

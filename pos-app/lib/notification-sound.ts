@@ -55,9 +55,24 @@ export function playTestAlertSound(url: string) {
   playCustomAlertSound(url, "newOrder");
 }
 
-/** Ascending success chime for approved card payments. */
-export function playPaymentSuccessSound() {
+export function playPaymentSuccessSound(url?: string) {
+  if (url) {
+    playCustomAlertSound(url, "ready");
+    return;
+  }
   playBellTone([523, 659, 784, 1047], 0.65);
+}
+
+export function playCallWaiterSound(url?: string) {
+  if (url) {
+    playCustomAlertSound(url, "newOrder");
+    return;
+  }
+  playBellTone([1047, 784, 1047, 1319], 0.7);
+}
+
+export function playCancelAlertSound() {
+  playBellTone([440, 330, 220], 0.5);
 }
 
 function playBellTone(frequencies: number[], durationSec: number) {

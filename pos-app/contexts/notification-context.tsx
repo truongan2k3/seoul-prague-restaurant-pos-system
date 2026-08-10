@@ -219,12 +219,18 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       );
 
       if (playSound === "newOrder") {
-        playCustomAlertSound(settings.customAlertSoundUrl, "newOrder");
+        playCustomAlertSound(
+          settings.soundConfigs?.newOrder || settings.customAlertSoundUrl,
+          "newOrder",
+        );
       } else if (playSound !== false) {
-        playCustomAlertSound(settings.customAlertSoundUrl, "ready");
+        playCustomAlertSound(
+          settings.soundConfigs?.newOrder || settings.customAlertSoundUrl,
+          "ready",
+        );
       }
     },
-    [dismissToast, settings.customAlertSoundUrl],
+    [dismissToast, settings.customAlertSoundUrl, settings.soundConfigs?.newOrder],
   );
 
   const pushToast = useCallback(

@@ -1,12 +1,17 @@
 import type {
   InventoryItem,
+  KitchenStatus,
   MenuCategoryRecord,
   MenuItem,
+  MenuItemAddonGroup,
   OrderItem,
   OrderLogEntry,
   RestaurantTable,
   SaleRecord,
+  SelectedAddon,
   StaffMember,
+  TableFulfillmentStatus,
+  TablePaymentStatus,
   TableStatus,
 } from "@/lib/types";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
@@ -21,6 +26,8 @@ interface SupabaseTableRow {
   type: "regular" | "special";
   shape?: "square" | "round";
   status: string;
+  payment_status?: string | null;
+  fulfillment_status?: string | null;
   grid_column: string;
   grid_row: string;
   pos_x?: number | null;
@@ -73,9 +80,50 @@ export interface SupabaseOrderItemRow {
   is_printed_note?: boolean | null;
   station: "kitchen" | "bar";
   status: string;
+  kitchen_status?: string | null;
+  ready_at?: string | null;
+  is_cancelled?: boolean | null;
+  cancel_reason?: string | null;
+  cancelled_at?: string | null;
+  selected_addons?: SelectedAddon[] | null;
   created_at: string;
   updated_at: string;
   modifiers?: import("@/lib/types").OrderLineModifiers | null;
+}
+
+interface SupabaseMenuItemAddonRow {
+  id: string;
+  item_id: string;
+  title: string;
+  addons: SelectedAddon[] | { id?: string; name: string; price: number }[] | null;
+  is_required: boolean | null;
+  created_at?: string | null;
+}
+
+function normalizePaymentStatus(status: string | null | undefined): TablePaymentStatus {
+  return status === "paid" ? "paid" : "unpaid";
+}
+
+function normalizeFulfillmentStatus(
+  status: string | null | undefined,
+): TableFulfillmentStatus {
+  return status === "completed" ? "completed" : "in_progress";
+}
+
+function normalizeKitchenStatus(
+  kitchenStatus: string | null | undefined,
+  legacyStatus: string,
+  isCancelled?: boolean | null,
+): KitchenStatus {
+  if (isCancelled || kitchenStatus === "cancelled") return "cancelled";
+  if (kitchenStatus === "archived") return "archived";
+  if (kitchenStatus === "pending" || kitchenStatus === "ready" || kitchenStatus === "served") {
+    return kitchenStatus;
+  }
+  const normalized = normalizeOrderItemStatus(legacyStatus);
+  if (normalized === "ready") return "ready";
+  if (normalized === "served") return "served";
+  return "pending";
 }
 
 function normalizeStatus(status: string): TableStatus {
@@ -92,6 +140,8 @@ export function mapTableRow(row: SupabaseTableRow): RestaurantTable {
     type: row.type,
     shape: row.shape ?? "square",
     status: normalizeStatus(row.status),
+    paymentStatus: normalizePaymentStatus(row.payment_status),
+    fulfillmentStatus: normalizeFulfillmentStatus(row.fulfillment_status),
     gridColumn: row.grid_column,
     gridRow: row.grid_row,
     posX: row.pos_x ?? fallback.x,
@@ -144,10 +194,35 @@ export function mapOrderItemRow(row: SupabaseOrderItemRow): OrderItem {
     isPrintedNote: row.is_printed_note ?? undefined,
     station: row.station,
     status: normalizeOrderItemStatus(row.status),
+    kitchenStatus: normalizeKitchenStatus(row.kitchen_status, row.status, row.is_cancelled),
+    isCancelled: Boolean(row.is_cancelled) || row.kitchen_status === "cancelled",
+    cancelReason: row.cancel_reason ?? undefined,
+    cancelledAt: row.cancelled_at ?? undefined,
+    readyAt: row.ready_at ?? undefined,
+    selectedAddons: row.selected_addons ?? undefined,
     menuItemId: row.menu_item_id ?? undefined,
     tableId: row.table_id,
     createdAt: row.created_at,
     modifiers: row.modifiers ?? undefined,
+  };
+}
+
+export function mapMenuItemAddonRow(row: SupabaseMenuItemAddonRow): MenuItemAddonGroup {
+  const addons = Array.isArray(row.addons)
+    ? row.addons.map((addon, index) => ({
+        id: typeof addon.id === "string" && addon.id ? addon.id : `addon-${index}`,
+        name: addon.name,
+        price: Number(addon.price) || 0,
+      }))
+    : [];
+
+  return {
+    id: row.id,
+    itemId: row.item_id,
+    title: row.title,
+    addons,
+    isRequired: Boolean(row.is_required),
+    createdAt: row.created_at ?? undefined,
   };
 }
 
@@ -186,6 +261,17 @@ export async function fetchCategories() {
   }
 
   return result;
+}
+
+export async function fetchMenuItemAddons(itemId?: string) {
+  let query = supabase
+    .from("menu_item_addons")
+    .select("*")
+    .order("created_at", { ascending: true });
+
+  if (itemId) query = query.eq("item_id", itemId);
+
+  return query;
 }
 
 export function mapCategoriesResponse(data: SupabaseCategoryRow[] | null) {

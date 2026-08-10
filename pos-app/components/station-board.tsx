@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { User } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Bell, User } from "lucide-react";
 import { CancelReasonModal } from "@/components/cancel-reason-modal";
 import { NewOrderNotificationListener } from "@/components/new-order-notification-listener";
 import { LanguageSelector } from "@/components/language-selector";
@@ -11,7 +11,14 @@ import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
 import { useStationScreen } from "@/contexts/station-screen-context";
 import { filterItemsForBoard, sortKitchenTickets, ticketHasOpenKitchenWork } from "@/lib/order-board";
-import { normalizeOrderItemStatus, STATION_BOARD_STATUSES } from "@/lib/order-status";
+import {
+  AUTO_SERVE_POLL_MS,
+  isCancelledKitchenItem,
+  resolveKitchenStatus,
+} from "@/lib/auto-serve";
+import { playCancelAlertSound } from "@/lib/notification-sound";
+import { broadcastCallWaiter } from "@/lib/pos-notifications";
+import { STATION_BOARD_KITCHEN_STATUSES, STATION_BOARD_STATUSES } from "@/lib/order-status";
 import { canVoidOrderItems } from "@/lib/staff-roles";
 import type { MenuItem, OrderItem, RestaurantTable, Station } from "@/lib/types";
 import {
@@ -25,7 +32,9 @@ import {
   type SupabaseOrderItemRow,
 } from "@/src/lib/supabase-data";
 import {
+  acknowledgeCancelledItems,
   autoFirePendingItems,
+  autoServeExpiredReadyItems,
   cancelOrderItems,
   markItemsPreparing,
   markItemsReady,
@@ -50,6 +59,7 @@ function TicketCard({
   onMarkReady,
   onUndoReady,
   onCancelItem,
+  onAcknowledgeCancel,
   busy,
   showCancel,
 }: {
@@ -60,19 +70,23 @@ function TicketCard({
   onMarkReady: (tableId: string, itemId: string) => void;
   onUndoReady: (tableId: string, itemId: string) => void;
   onCancelItem?: (tableId: string, itemId: string) => void;
+  onAcknowledgeCancel?: (tableId: string, itemId: string) => void;
   busy: boolean;
   showCancel: boolean;
 }) {
   const openCount = ticket.items.filter(
-    (item) => normalizeOrderItemStatus(item.status) === "preparing",
+    (item) => resolveKitchenStatus(item) === "pending",
   ).length;
+  const hasCancelled = ticket.items.some((item) => isCancelledKitchenItem(item));
 
   return (
     <article
       className={`flex h-full min-h-0 w-[min(100%,360px)] shrink-0 flex-col rounded-2xl border-4 bg-white p-4 shadow-xl sm:w-[340px] sm:p-5 dark:bg-gray-900 ${
-        ticketHasOpenKitchenWork(ticket.items)
-          ? "border-amber-500 ring-2 ring-amber-500/30"
-          : "border-emerald-500 ring-2 ring-emerald-500/20 opacity-95"
+        hasCancelled
+          ? "border-red-500 ring-2 ring-red-500/40"
+          : ticketHasOpenKitchenWork(ticket.items)
+            ? "border-amber-500 ring-2 ring-amber-500/30"
+            : "border-emerald-500 ring-2 ring-emerald-500/20 opacity-95"
       }`}
     >
       <header className="flex shrink-0 items-start justify-between gap-4 border-b-2 border-gray-200 pb-3 dark:border-gray-700 sm:pb-4">
@@ -110,6 +124,13 @@ function TicketCard({
                 }
               : undefined
           }
+          onAcknowledgeCancel={
+            onAcknowledgeCancel
+              ? (itemId) => {
+                  if (!busy) onAcknowledgeCancel(ticket.table.id, itemId);
+                }
+              : undefined
+          }
         />
       </div>
     </article>
@@ -134,22 +155,32 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
     tableId: string;
     itemIds: string[];
   } | null>(null);
+  const [callingWaiter, setCallingWaiter] = useState(false);
+  const seenCancelledIdsRef = useRef<Set<string>>(new Set());
+  const cancelAlertReadyRef = useRef(false);
 
   const actor = staffName.trim() || (station === "kitchen" ? "Kitchen" : "Bar");
 
   const reload = useCallback(async () => {
     await autoFirePendingItems(actor, station);
 
-    const [tablesRes, itemsRes, menuRes] = await Promise.all([
-      fetchTables(),
-      supabase
-        .from("order_items")
-        .select("*")
-        .eq("station", station)
-        .in("status", STATION_BOARD_STATUSES)
-        .order("created_at"),
-      fetchMenuItems(),
-    ]);
+    const kitchenStatusQuery = await supabase
+      .from("order_items")
+      .select("*")
+      .eq("station", station)
+      .in("kitchen_status", [...STATION_BOARD_KITCHEN_STATUSES])
+      .order("created_at");
+
+    const itemsRes = kitchenStatusQuery.error
+      ? await supabase
+          .from("order_items")
+          .select("*")
+          .eq("station", station)
+          .in("status", STATION_BOARD_STATUSES)
+          .order("created_at")
+      : kitchenStatusQuery;
+
+    const [tablesRes, menuRes] = await Promise.all([fetchTables(), fetchMenuItems()]);
 
     if (!tablesRes.error) setTables(mapTablesResponse(tablesRes.data));
     if (!menuRes.error) setMenuItems(mapMenuItemsResponse(menuRes.data));
@@ -172,6 +203,48 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
     };
   }, [reload]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const runAutoServe = async () => {
+      const { servedIds, error } = await autoServeExpiredReadyItems(station);
+      if (cancelled) return;
+      if (error) {
+        console.warn("[AutoServe] Failed:", error.message);
+        return;
+      }
+      if (servedIds.length > 0) void reload();
+    };
+
+    void runAutoServe();
+    const timer = window.setInterval(() => {
+      void runAutoServe();
+    }, AUTO_SERVE_POLL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [station, reload]);
+
+  useEffect(() => {
+    const cancelledIds = items
+      .filter((item) => isCancelledKitchenItem(item) && item.id)
+      .map((item) => item.id!);
+
+    if (!cancelAlertReadyRef.current) {
+      seenCancelledIdsRef.current = new Set(cancelledIds);
+      cancelAlertReadyRef.current = true;
+      return;
+    }
+
+    const fresh = cancelledIds.filter((id) => !seenCancelledIdsRef.current.has(id));
+    if (fresh.length > 0) {
+      playCancelAlertSound();
+    }
+    seenCancelledIdsRef.current = new Set(cancelledIds);
+  }, [items]);
+
   const tickets = useMemo(() => {
     const tableMap = new Map(tables.map((t) => [t.id, t]));
     const grouped = new Map<string, StationOrderItem[]>();
@@ -188,9 +261,12 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
       const table = tableMap.get(tableId);
       if (!table || table.status === "empty") continue;
 
+      const filtered = filterItemsForBoard(tableItems, "kitchen") as StationOrderItem[];
+      if (filtered.length === 0) continue;
+
       result.push({
         table,
-        items: filterItemsForBoard(tableItems, "kitchen") as StationOrderItem[],
+        items: filtered,
       });
     }
 
@@ -226,15 +302,41 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
     void reload();
   };
 
+  const handleAcknowledgeCancel = async (tableId: string, itemId: string) => {
+    if (busy) return;
+    setBusy(true);
+    await acknowledgeCancelledItems([itemId], actor);
+    setBusy(false);
+    void reload();
+  };
+
+  const handleCallWaiter = async () => {
+    if (callingWaiter) return;
+    setCallingWaiter(true);
+    try {
+      const focusTicket = tickets.find((ticket) =>
+        ticket.items.some((item) => isCancelledKitchenItem(item) || resolveKitchenStatus(item) === "pending"),
+      );
+      await broadcastCallWaiter({
+        tableId: focusTicket?.table.id,
+        tableLabel: focusTicket?.table.label,
+        station,
+        message: station === "bar" ? "Quầy bar gọi phục vụ!" : "Bếp gọi phục vụ!",
+      });
+    } catch (error) {
+      console.warn("[CallWaiter] Broadcast failed:", error);
+    } finally {
+      setCallingWaiter(false);
+    }
+  };
+
   const isKitchen = variant === "kitchen";
   const shellClass = isKitchen
     ? "flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-zinc-950 text-white"
     : "flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-slate-950 text-white";
   const headerBorder = isKitchen ? "border-zinc-700" : "border-slate-700";
   const title = station === "kitchen" ? translate("kitchen") : translate("bar");
-  const totalPreparing = items.filter(
-    (i) => normalizeOrderItemStatus(i.status) === "preparing",
-  ).length;
+  const totalPreparing = items.filter((i) => resolveKitchenStatus(i) === "pending").length;
 
   return (
     <div className={shellClass}>
@@ -251,6 +353,15 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void handleCallWaiter()}
+            disabled={callingWaiter}
+            className="inline-flex min-h-[48px] items-center gap-2 rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-black uppercase tracking-wide text-zinc-950 shadow-lg shadow-amber-500/30 transition hover:bg-amber-300 disabled:opacity-60"
+          >
+            <Bell className="h-5 w-5" />
+            {callingWaiter ? "Đang gọi…" : "Gọi Phục Vụ (Call Waiter)"}
+          </button>
           <LanguageSelector
             variant="flag-menu"
             tone="dark"
@@ -286,6 +397,7 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
               onMarkReady={(tableId, itemId) => void handleMarkItemReady(tableId, itemId)}
               onUndoReady={(tableId, itemId) => void handleUndoItemReady(tableId, itemId)}
               onCancelItem={handleCancelItemRequest}
+              onAcknowledgeCancel={(tableId, itemId) => void handleAcknowledgeCancel(tableId, itemId)}
               busy={busy}
               showCancel={canCancel}
             />

@@ -289,6 +289,7 @@ export function NewOrderModal({
   const [grillGuestModalOpen, setGrillGuestModalOpen] = useState(false);
   const [pendingGrillItem, setPendingGrillItem] = useState<MenuItem | null>(null);
   const [pendingCustomizeResult, setPendingCustomizeResult] = useState<CustomizeResult | null>(null);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -315,20 +316,16 @@ export function NewOrderModal({
     setGrillGuestModalOpen(false);
     setPendingGrillItem(null);
     setPendingCustomizeResult(null);
+    setDiscardConfirmOpen(false);
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !noteLineId) onClose();
-    };
     document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", handleKeyDown);
     return () => {
       document.body.style.overflow = "";
-      window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open, onClose, noteLineId]);
+  }, [open]);
 
   useEffect(() => {
     const note = noteDraft.trim();
@@ -656,9 +653,32 @@ export function NewOrderModal({
   };
 
   const handleClose = () => {
+    setDiscardConfirmOpen(false);
     setCart([]);
     onClose();
   };
+
+  const requestClose = () => {
+    if (cart.length > 0) {
+      setDiscardConfirmOpen(true);
+      return;
+    }
+    handleClose();
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || noteLineId) return;
+      if (discardConfirmOpen) {
+        setDiscardConfirmOpen(false);
+        return;
+      }
+      requestClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, noteLineId, discardConfirmOpen, cart.length, onClose]);
 
   const renderCartPanel = (showCloseButton: boolean) => (
     <>
@@ -800,10 +820,8 @@ export function NewOrderModal({
         aria-modal="true"
         aria-labelledby="pos-order-title"
       >
-        <button
-          type="button"
-          aria-label="Close"
-          onClick={handleClose}
+        <div
+          aria-hidden="true"
           className="absolute inset-0 bg-black/65"
         />
 
@@ -822,7 +840,7 @@ export function NewOrderModal({
             </div>
             <button
               type="button"
-              onClick={handleClose}
+              onClick={requestClose}
               className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
             >
               <X className="h-6 w-6" />
@@ -1098,6 +1116,41 @@ export function NewOrderModal({
         onConfirm={(count) => void handleGrillGuestConfirm(count)}
         onClose={handleGrillGuestClose}
       />
+
+      {discardConfirmOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div aria-hidden="true" className="absolute inset-0 bg-black/50" />
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="discard-cart-title"
+            className="relative z-10 w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-700 dark:bg-gray-900"
+          >
+            <p
+              id="discard-cart-title"
+              className="text-sm leading-relaxed text-gray-800 dark:text-gray-100"
+            >
+              Bạn có chắc chắn muốn thoát? Các món chưa lưu sẽ bị xóa.
+            </p>
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setDiscardConfirmOpen(false)}
+                className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-800 dark:border-gray-700 dark:text-gray-100"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleClose}
+                className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white"
+              >
+                Thoát
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

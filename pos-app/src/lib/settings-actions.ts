@@ -1,4 +1,5 @@
-import type { AppSettings, MenuItemLayout, ReservationOperatingHours, TerminalConnectionMode, TerminalType } from "@/lib/types";
+import type { AppSettings, MenuItemLayout, ReservationOperatingHours, SoundConfigs, TerminalConnectionMode, TerminalType } from "@/lib/types";
+import { DEFAULT_SOUND_CONFIGS, parseSoundConfigs, soundConfigsToDb } from "@/lib/auto-serve";
 import { DEFAULT_RESERVATION_OPERATING_HOURS } from "@/lib/reservation-slots";
 import {
   clampMarqueeDurationSeconds,
@@ -24,6 +25,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   receiptPhone: "+420 222 240 429",
   receiptFooterNote: "Děkujeme za Vaši návštěvu!\nOtevírací doba: Po-Ne 10:00-22:00",
   customAlertSoundUrl: "/sounds/default-bell.mp3",
+  soundConfigs: { ...DEFAULT_SOUND_CONFIGS },
   showPricesOnOrderScreen: true,
   menuItemLayout: "vertical",
   enablePriceRounding: true,
@@ -67,6 +69,7 @@ type SettingsRow = {
   receipt_tax_id?: string | null;
   receipt_footer_note: string;
   custom_alert_sound_url: string;
+  sound_configs?: SoundConfigs | Record<string, string> | null;
   show_prices_on_order_screen?: boolean | null;
   menu_item_layout?: string | null;
   enable_price_rounding?: boolean | null;
@@ -148,6 +151,7 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     receiptPhone: row.receipt_phone,
     receiptFooterNote: row.receipt_footer_note,
     customAlertSoundUrl: row.custom_alert_sound_url,
+    soundConfigs: parseSoundConfigs(row.sound_configs),
     showPricesOnOrderScreen: row.show_prices_on_order_screen ?? DEFAULT_APP_SETTINGS.showPricesOnOrderScreen,
     menuItemLayout: parseMenuItemLayout(row.menu_item_layout),
     enablePriceRounding: row.enable_price_rounding ?? DEFAULT_APP_SETTINGS.enablePriceRounding,
@@ -198,6 +202,7 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   if (partial.receiptPhone !== undefined) payload.receipt_phone = partial.receiptPhone;
   if (partial.receiptFooterNote !== undefined) payload.receipt_footer_note = partial.receiptFooterNote;
   if (partial.customAlertSoundUrl !== undefined) payload.custom_alert_sound_url = partial.customAlertSoundUrl;
+  if (partial.soundConfigs !== undefined) payload.sound_configs = soundConfigsToDb(partial.soundConfigs);
   if (partial.showPricesOnOrderScreen !== undefined) {
     payload.show_prices_on_order_screen = partial.showPricesOnOrderScreen;
   }
@@ -417,6 +422,7 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "marqueeDurationSeconds"
     | "marqueeFontFamily"
     | "marqueeEndAt"
+    | "soundConfigs"
   >;
 
 export function pickPrinterBillDraft(settings: AppSettings): PrinterBillSettingsDraft {
@@ -461,5 +467,6 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     marqueeDurationSeconds: settings.marqueeDurationSeconds,
     marqueeFontFamily: settings.marqueeFontFamily,
     marqueeEndAt: settings.marqueeEndAt,
+    soundConfigs: settings.soundConfigs,
   };
 }

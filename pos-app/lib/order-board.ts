@@ -1,22 +1,32 @@
 import { normalizeOrderItemStatus } from "@/lib/order-status";
+import {
+  isCancelledKitchenItem,
+  isKitchenBoardVisible,
+  resolveKitchenStatus,
+} from "@/lib/auto-serve";
 import type { OrderItem, OrderItemStatus, RestaurantTable } from "@/lib/types";
 
-/** Kitchen KDS — cooking + finished items stay visible until ticket ages out. */
-export const KDS_VISIBLE_STATUSES: OrderItemStatus[] = ["preparing", "ready"];
+/** Kitchen KDS — pending + ready stay visible; served is auto-hidden. */
+export const KDS_VISIBLE_STATUSES: OrderItemStatus[] = ["preparing", "ready", "pending"];
 
 /** Floor active orders — billable until checkout clears the table. */
-export const FLOOR_ACTIVE_STATUSES: OrderItemStatus[] = ["preparing", "ready", "served"];
+export const FLOOR_ACTIVE_STATUSES: OrderItemStatus[] = ["preparing", "ready", "served", "pending"];
 
 export function filterItemsForBoard(
   items: OrderItem[],
   mode: "kitchen" | "floor",
 ): OrderItem[] {
-  const allowed = mode === "kitchen" ? KDS_VISIBLE_STATUSES : FLOOR_ACTIVE_STATUSES;
-  return items.filter((item) => allowed.includes(normalizeOrderItemStatus(item.status)));
+  if (mode === "kitchen") {
+    return items.filter((item) => isKitchenBoardVisible(item));
+  }
+  return items.filter((item) => {
+    if (isCancelledKitchenItem(item) || resolveKitchenStatus(item) === "archived") return false;
+    return FLOOR_ACTIVE_STATUSES.includes(normalizeOrderItemStatus(item.status));
+  });
 }
 
 export function ticketHasOpenKitchenWork(items: OrderItem[]): boolean {
-  return items.some((item) => normalizeOrderItemStatus(item.status) === "preparing");
+  return items.some((item) => resolveKitchenStatus(item) === "pending");
 }
 
 /** Tables with open kitchen work first; fully ready tickets sink to the back. */
@@ -32,5 +42,5 @@ export function sortKitchenTickets<T extends { table: RestaurantTable; items: Or
 }
 
 export function isItemReadyForKitchen(item: OrderItem): boolean {
-  return normalizeOrderItemStatus(item.status) === "ready";
+  return resolveKitchenStatus(item) === "ready";
 }

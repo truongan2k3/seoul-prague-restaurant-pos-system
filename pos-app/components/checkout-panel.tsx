@@ -421,6 +421,7 @@ export function CheckoutPanel({
 
     try {
       await onCheckout(enriched);
+      playPaymentSuccessSound(settings.soundConfigs.paymentSuccess);
     } finally {
       setCardTerminalOpen(false);
       setPendingCheckout(null);
@@ -430,7 +431,6 @@ export function CheckoutPanel({
 
   const handleCardApproved = (result: TerminalPaymentResponse) => {
     if (!pendingCheckout) return;
-    playPaymentSuccessSound();
     void submitCheckout(pendingCheckout, result);
   };
 

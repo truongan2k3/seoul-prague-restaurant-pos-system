@@ -30,8 +30,9 @@ export function nextWorkflowStatus(status: OrderItemStatus | undefined): OrderIt
   return WORKFLOW_STATUSES[index + 1];
 }
 
-/** Statuses visible on KDS / Bar boards (preparing + done items stay on screen). */
-export const STATION_BOARD_STATUSES: OrderItemStatus[] = ["preparing", "ready"];
+/** Statuses visible on KDS / Bar boards (pending/preparing + ready; served auto-hides). */
+export const STATION_BOARD_STATUSES: OrderItemStatus[] = ["pending", "preparing", "ready"];
+export const STATION_BOARD_KITCHEN_STATUSES = ["pending", "ready", "cancelled"] as const;
 
 export function isStationBoardStatus(status: OrderItemStatus | undefined): boolean {
   return STATION_BOARD_STATUSES.includes(normalizeOrderItemStatus(status));

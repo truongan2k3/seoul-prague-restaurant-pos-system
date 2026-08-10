@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { MenuCustomizationEditor } from "@/components/menu-customization-editor";
 import { Modal } from "@/components/modal";
 import { useApp } from "@/contexts/app-context";
 import { DEFAULT_MENU_CATEGORY } from "@/lib/menu-categories";
@@ -59,6 +60,7 @@ export function MenuItemFormModal({
         sortOrder: item.sortOrder,
         station: item.station,
         itemType: item.itemType,
+        customizationConfig: item.customizationConfig,
       });
     } else {
       const defaultCategory = categories[0];
@@ -108,7 +110,7 @@ export function MenuItemFormModal({
     <Modal
       open={open}
       onClose={onClose}
-      size="lg"
+      size="xl"
       title={item ? "Edit Menu Item" : "New Menu Item"}
       footer={
         <div className="flex justify-end gap-2">
@@ -151,7 +153,9 @@ export function MenuItemFormModal({
         </div>
 
         <label className="block">
-          <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Name ({activeTab.toUpperCase()})</span>
+          <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+            Name ({activeTab.toUpperCase()})
+          </span>
           <input
             value={form[nameKey]}
             onChange={(e) => setForm((f) => ({ ...f, [nameKey]: e.target.value }))}
@@ -275,6 +279,13 @@ export function MenuItemFormModal({
             </label>
           </div>
         </div>
+
+        <MenuCustomizationEditor
+          value={form.customizationConfig}
+          onChange={(customizationConfig) =>
+            setForm((current) => ({ ...current, customizationConfig }))
+          }
+        />
       </div>
     </Modal>
   );

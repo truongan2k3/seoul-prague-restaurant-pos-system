@@ -6,6 +6,7 @@ import { ElapsedTimer } from "@/components/live-clock";
 import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
 import { orderItemDisplayName } from "@/lib/menu-display";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
+import { isTablePaidInProgress } from "@/lib/table-payment";
 import { useApp } from "@/contexts/app-context";
 import { TABLE_CARD_WIDTH } from "@/lib/table-layout";
 
@@ -56,6 +57,7 @@ export function TableCard({
 }: TableCardProps) {
   const { translate, language } = useApp();
   const isRound = table.shape === "round";
+  const isPaidInProgress = isTablePaidInProgress(table);
   const displayOrders =
     orderItems.length > 0 ? orderItems : (table.orders ?? []);
   const oldestActiveItem = displayOrders
@@ -67,7 +69,9 @@ export function TableCard({
 
   const cardClassName = `flex h-full w-full flex-col border p-2.5 text-left shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 sm:p-3 ${
     compact ? "min-h-[100px] max-h-none rounded-xl" : "min-h-[120px] max-h-[176px] rounded-xl"
-  } ${isRound && !compact ? "aspect-square max-h-[140px] items-center justify-center text-center rounded-full" : ""} ${statusStyles[table.status]} ${slaAlert ? "sla-alert-pulse" : ""} ${dimmed ? "opacity-30" : "opacity-100"} ${
+  } ${isRound && !compact ? "aspect-square max-h-[140px] items-center justify-center text-center rounded-full" : ""} ${statusStyles[table.status]} ${
+    isPaidInProgress ? "ring-2 ring-emerald-500/70" : ""
+  } ${slaAlert ? "sla-alert-pulse" : ""} ${dimmed ? "opacity-30" : "opacity-100"} ${
     editMode ? "cursor-grab ring-2 ring-blue-400 ring-offset-2 active:cursor-grabbing" : "hover:shadow-md"
   } ${table.type === "special" ? "ring-1 ring-inset ring-gray-300/60 dark:ring-gray-600/60" : ""}`;
 
@@ -120,12 +124,19 @@ export function TableCard({
           {translate("available")}
         </p>
       )}
-      {table.status === "waiting" && (
+      {table.status !== "empty" && isPaidInProgress && (
+        <p className="mt-auto shrink-0 pt-1">
+          <span className="inline-flex rounded-md bg-emerald-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+            Đã thanh toán
+          </span>
+        </p>
+      )}
+      {table.status === "waiting" && !isPaidInProgress && (
         <p className="mt-auto shrink-0 pt-1 text-xs font-medium text-orange-600 dark:text-orange-400">
           {translate("waiting")}
         </p>
       )}
-      {table.status === "ready" && (
+      {table.status === "ready" && !isPaidInProgress && (
         <p className="mt-auto shrink-0 pt-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
           {translate("ready")}
         </p>

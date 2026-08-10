@@ -1,4 +1,4 @@
-import type { MenuItem } from "@/lib/types";
+import type { MenuCustomizationConfig, MenuItem } from "@/lib/types";
 import { DEFAULT_MENU_CATEGORY, type MenuCategory } from "@/lib/menu-categories";
 import { deriveItemType, resolveStation } from "@/lib/order-routing";
 import { supabase } from "@/src/lib/supabase";
@@ -18,6 +18,7 @@ export type MenuItemInput = {
   sortOrder?: number;
   station?: MenuItem["station"];
   itemType?: MenuItem["itemType"];
+  customizationConfig?: MenuCustomizationConfig;
 };
 
 function deriveRouting(category: string, itemType?: MenuItem["itemType"]) {
@@ -47,6 +48,7 @@ function toDbRow(input: MenuItemInput) {
     display_order: displayOrder,
     image_url: input.imageUrl?.trim() || null,
     description: input.descriptionEn?.trim() || null,
+    customization_config: input.customizationConfig ?? null,
   };
 }
 
@@ -94,4 +96,5 @@ export const emptyMenuItemInput: MenuItemInput = {
   price: 0,
   imageUrl: "",
   isAvailable: true,
+  customizationConfig: undefined,
 };

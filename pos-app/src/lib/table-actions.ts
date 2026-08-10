@@ -1,6 +1,11 @@
 import type { CheckoutPaymentRecord } from "@/lib/checkout-calculations";
+import {
+  autoServeActor,
+  isReadyForAutoServe,
+  resolveKitchenStatus,
+} from "@/lib/auto-serve";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
-import type { OrderItem } from "@/lib/types";
+import type { OrderItem, Station } from "@/lib/types";
 import { logOrderStatusChange, fetchOrderLogsForItems } from "@/src/lib/order-log-actions";
 import { completeReservationForTable, findActiveReservationForTable, mapReservationRow } from "@/src/lib/reservation-actions";
 import { mapOrderItemRow, type SupabaseOrderItemRow } from "@/src/lib/supabase-data";
@@ -55,7 +60,16 @@ function expandOrderToUnits(order: OrderItem): OrderItem[] {
   return units;
 }
 
+function kitchenStatusFromOrderStatus(status: OrderItem["status"]): "pending" | "ready" | "served" {
+  const normalized = normalizeOrderItemStatus(status);
+  if (normalized === "ready") return "ready";
+  if (normalized === "served") return "served";
+  return "pending";
+}
+
 function orderItemRowUpdate(unit: OrderItem) {
+  const status = normalizeOrderItemStatus(unit.status ?? "preparing");
+  const kitchenStatus = unit.kitchenStatus ?? kitchenStatusFromOrderStatus(status);
   return {
     name: unit.name,
     price: unit.price,
@@ -64,9 +78,27 @@ function orderItemRowUpdate(unit: OrderItem) {
     notes_translated: unit.notesTranslated ?? null,
     is_printed_note: unit.isPrintedNote ?? false,
     station: unit.station ?? "kitchen",
-    status: normalizeOrderItemStatus(unit.status ?? "preparing"),
+    status,
+    kitchen_status: kitchenStatus,
+    ready_at: unit.readyAt ?? null,
+    selected_addons: unit.selectedAddons ?? [],
     menu_item_id: unit.menuItemId ?? null,
+    modifiers: unit.modifiers ?? null,
   };
+}
+
+function isBillableOrderItem(
+  item: Pick<OrderItem, "kitchenStatus" | "status" | "isCancelled">,
+): boolean {
+  const kitchenStatus = resolveKitchenStatus(item);
+  return kitchenStatus !== "cancelled" && kitchenStatus !== "archived" && !item.isCancelled;
+}
+
+function isKitchenStillOpen(
+  item: Pick<OrderItem, "kitchenStatus" | "status" | "isCancelled">,
+): boolean {
+  const kitchenStatus = resolveKitchenStatus(item);
+  return kitchenStatus === "pending" || kitchenStatus === "ready" || kitchenStatus === "cancelled";
 }
 
 async function syncTableOrdersFromDb(tableId: string) {
@@ -83,17 +115,27 @@ async function syncTableOrdersFromDb(tableId: string) {
     return;
   }
 
-  const orders = aggregateOrderItems(
-    (rows as SupabaseOrderItemRow[]).map(mapOrderItemRow),
-  );
+  const mapped = (rows as SupabaseOrderItemRow[]).map(mapOrderItemRow);
+  const billable = mapped.filter(isBillableOrderItem);
+  const kitchenOpen = mapped.some(isKitchenStillOpen);
+
+  // All lines archived/served and nothing left for KDS — free the table.
+  if (billable.length === 0 && !kitchenOpen) {
+    await clearTable(tableId);
+    return;
+  }
+
+  const orders = aggregateOrderItems(billable);
 
   const hasPreparing = orders.some(
     (item) => normalizeOrderItemStatus(item.status) === "preparing",
   );
-  const allReadyOrServed = orders.every((item) => {
-    const status = normalizeOrderItemStatus(item.status);
-    return status === "ready" || status === "served";
-  });
+  const allReadyOrServed =
+    orders.length > 0 &&
+    orders.every((item) => {
+      const status = normalizeOrderItemStatus(item.status);
+      return status === "ready" || status === "served";
+    });
 
   await supabase
     .from("tables")
@@ -125,8 +167,9 @@ async function insertOrderRowsWithLogs(
 }
 
 function buildOrderRows(tableId: string, orders: OrderItem[], staffId?: string) {
-  return orders.flatMap((item) =>
-    Array.from({ length: item.quantity }, () => ({
+  return orders.flatMap((item) => {
+    const status = item.status ?? "preparing";
+    return Array.from({ length: item.quantity }, () => ({
       table_id: tableId,
       menu_item_id: item.menuItemId ?? null,
       staff_id: staffId ?? null,
@@ -137,10 +180,13 @@ function buildOrderRows(tableId: string, orders: OrderItem[], staffId?: string) 
       notes_translated: item.notesTranslated ?? null,
       is_printed_note: item.isPrintedNote ?? false,
       station: item.station ?? "kitchen",
-      status: item.status ?? "preparing",
+      status,
+      kitchen_status: item.kitchenStatus ?? "pending",
+      ready_at: item.readyAt ?? null,
+      selected_addons: item.selectedAddons ?? [],
       modifiers: item.modifiers ?? null,
-    })),
-  );
+    }));
+  });
 }
 
 export async function occupyTable(
@@ -157,6 +203,8 @@ export async function occupyTable(
       status: "waiting",
       occupied_at: occupiedAt,
       orders,
+      payment_status: "unpaid",
+      fulfillment_status: "in_progress",
     })
     .eq("id", tableId);
 
@@ -193,6 +241,14 @@ export async function appendOrdersToTable(
   );
   if (itemsError) return { data: null, error: itemsError };
 
+  await supabase
+    .from("tables")
+    .update({
+      fulfillment_status: "in_progress",
+      payment_status: "unpaid",
+    })
+    .eq("id", tableId);
+
   await syncTableOrdersFromDb(tableId);
 
   return supabase.from("tables").select("*").eq("id", tableId).single();
@@ -200,10 +256,6 @@ export async function appendOrdersToTable(
 
 export async function updateTableOrders(tableId: string, orders: OrderItem[]) {
   const activeOrders = orders.filter((item) => item.quantity > 0);
-
-  if (activeOrders.length === 0) {
-    return clearTable(tableId);
-  }
 
   const { data: existingRows, error: fetchItemsError } = await supabase
     .from("order_items")
@@ -213,16 +265,60 @@ export async function updateTableOrders(tableId: string, orders: OrderItem[]) {
 
   if (fetchItemsError) return { data: null, error: fetchItemsError };
 
+  if (activeOrders.length === 0) {
+    const openIds = (existingRows ?? [])
+      .filter((row) => {
+        const status = resolveKitchenStatus({
+          status: row.status,
+          kitchenStatus: row.kitchen_status ?? undefined,
+          isCancelled: Boolean(row.is_cancelled),
+        });
+        return status !== "archived" && status !== "cancelled" && !row.is_cancelled;
+      })
+      .map((row) => row.id);
+
+    if (openIds.length > 0) {
+      const cancelledAt = new Date().toISOString();
+      const { error: cancelError } = await supabase
+        .from("order_items")
+        .update({
+          is_cancelled: true,
+          cancel_reason: "Removed from order",
+          cancelled_at: cancelledAt,
+          kitchen_status: "cancelled",
+          updated_at: cancelledAt,
+        })
+        .in("id", openIds);
+      if (cancelError) return { data: null, error: cancelError };
+    }
+
+    await syncTableOrdersFromDb(tableId);
+    return supabase.from("tables").select("*").eq("id", tableId).single();
+  }
+
   const desiredUnits = activeOrders.flatMap(expandOrderToUnits);
   const existingIds = new Set((existingRows ?? []).map((row) => row.id));
   const desiredIds = new Set(
     desiredUnits.map((unit) => unit.id).filter((id): id is string => Boolean(id)),
   );
 
-  const idsToDelete = [...existingIds].filter((id) => !desiredIds.has(id));
-  if (idsToDelete.length > 0) {
-    const { error: deleteError } = await supabase.from("order_items").delete().in("id", idsToDelete);
-    if (deleteError) return { data: null, error: deleteError };
+  // Soft-delete lines removed from the cart (keep row for KDS red cancel alert).
+  const idsToCancel = [...existingIds].filter((id) => !desiredIds.has(id));
+  if (idsToCancel.length > 0) {
+    const cancelledAt = new Date().toISOString();
+    const { error: cancelError } = await supabase
+      .from("order_items")
+      .update({
+        is_cancelled: true,
+        cancel_reason: "Removed from order",
+        cancelled_at: cancelledAt,
+        kitchen_status: "cancelled",
+        updated_at: cancelledAt,
+      })
+      .in("id", idsToCancel)
+      .eq("is_cancelled", false)
+      .neq("kitchen_status", "archived");
+    if (cancelError) return { data: null, error: cancelError };
   }
 
   for (const unit of desiredUnits) {
@@ -254,10 +350,53 @@ export async function clearTable(tableId: string) {
       status: "empty",
       occupied_at: null,
       orders: null,
+      payment_status: "unpaid",
+      fulfillment_status: "in_progress",
     })
     .eq("id", tableId)
     .select("*")
     .single();
+}
+
+/**
+ * After full payment: keep kitchen tickets on KDS/Bar until auto-serve finishes.
+ * Only archive the table when every line is already served.
+ */
+async function settlePaidTable(tableId: string) {
+  const { data: items } = await supabase
+    .from("order_items")
+    .select("status, kitchen_status")
+    .eq("table_id", tableId);
+
+  const hasOpenKitchen = (items ?? []).some((item) =>
+    isKitchenStillOpen({
+      status: item.status,
+      kitchenStatus: item.kitchen_status ?? undefined,
+      isCancelled: item.kitchen_status === "cancelled",
+    }),
+  );
+
+  if (hasOpenKitchen) {
+    return supabase
+      .from("tables")
+      .update({
+        payment_status: "paid",
+        fulfillment_status: "in_progress",
+      })
+      .eq("id", tableId)
+      .select("*")
+      .single();
+  }
+
+  await supabase
+    .from("tables")
+    .update({
+      payment_status: "paid",
+      fulfillment_status: "completed",
+    })
+    .eq("id", tableId);
+
+  return clearTable(tableId);
 }
 
 export async function checkoutTable(
@@ -332,24 +471,27 @@ export async function checkoutTable(
     })),
   });
 
-  if (saleError) return { error: saleError };
+  if (saleError) return { data: null, error: saleError };
 
   if (options?.closeTable !== false) {
     await completeReservationForTable(tableId);
   }
 
+  // Partial item-split: unpaid lines remain on the bill.
   if (options?.remainingOrders !== undefined) {
     if (options.remainingOrders.length === 0) {
-      return clearTable(tableId);
+      return settlePaidTable(tableId);
     }
     return updateTableOrders(tableId, options.remainingOrders);
   }
 
+  // Equal-split installment — leave table open without marking fully paid.
   if (options?.closeTable === false) {
-    return { error: null };
+    return { data: null, error: null };
   }
 
-  return clearTable(tableId);
+  // Full checkout — keep KDS tickets if kitchen still in progress.
+  return settlePaidTable(tableId);
 }
 
 export async function transferTable(fromId: string, toId: string) {
@@ -406,10 +548,20 @@ export async function updateOrderItemStatus(
   staffName: string,
 ) {
   const normalized = normalizeOrderItemStatus(status);
-  const { error } = await supabase
-    .from("order_items")
-    .update({ status: normalized, updated_at: new Date().toISOString() })
-    .eq("id", itemId);
+  const kitchenStatus = kitchenStatusFromOrderStatus(normalized);
+  const patch: Record<string, string | null> = {
+    status: normalized,
+    kitchen_status: kitchenStatus,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (kitchenStatus === "ready") {
+    patch.ready_at = new Date().toISOString();
+  } else if (kitchenStatus === "pending") {
+    patch.ready_at = null;
+  }
+
+  const { error } = await supabase.from("order_items").update(patch).eq("id", itemId);
 
   if (error) return { error };
 
@@ -493,6 +645,52 @@ export async function markItemsPreparing(
   return { error: null };
 }
 
+export async function markTableFulfillmentIfAllServed(tableId: string) {
+  const { data: items } = await supabase
+    .from("order_items")
+    .select("status, kitchen_status")
+    .eq("table_id", tableId);
+
+  if (!items?.length) return;
+
+  const allServed = items.every((item) => {
+    const kitchenStatus =
+      item.kitchen_status === "pending" ||
+      item.kitchen_status === "ready" ||
+      item.kitchen_status === "served" ||
+      item.kitchen_status === "cancelled" ||
+      item.kitchen_status === "archived"
+        ? item.kitchen_status
+        : resolveKitchenStatus({
+            status: item.status,
+            kitchenStatus: item.kitchen_status ?? undefined,
+          });
+    return (
+      kitchenStatus === "served" ||
+      kitchenStatus === "cancelled" ||
+      kitchenStatus === "archived"
+    );
+  });
+
+  if (!allServed) return;
+
+  const { data: table } = await supabase
+    .from("tables")
+    .select("payment_status")
+    .eq("id", tableId)
+    .single();
+
+  await supabase
+    .from("tables")
+    .update({ fulfillment_status: "completed" })
+    .eq("id", tableId);
+
+  // Pre-paid takeaway / early pay: archive once kitchen auto-serve finishes.
+  if (table?.payment_status === "paid") {
+    await clearTable(tableId);
+  }
+}
+
 export async function markItemsServed(
   itemIds: string[],
   staffName: string,
@@ -505,9 +703,56 @@ export async function markItemsServed(
 
   if (tableId) {
     await syncTableOrdersFromDb(tableId);
+    await markTableFulfillmentIfAllServed(tableId);
   }
 
   return { error: null };
+}
+
+/** Auto-serve ready lines whose ready_at is at least 3 minutes old. */
+export async function autoServeExpiredReadyItems(station?: Station) {
+  let query = supabase
+    .from("order_items")
+    .select("id, table_id, status, kitchen_status, ready_at")
+    .eq("kitchen_status", "ready")
+    .not("ready_at", "is", null);
+
+  if (station) query = query.eq("station", station);
+
+  const { data, error } = await query;
+  if (error || !data?.length) return { servedIds: [] as string[], error: error ?? null };
+
+  const now = Date.now();
+  const expired = data.filter((row) =>
+    isReadyForAutoServe(
+      {
+        status: row.status,
+        kitchenStatus: row.kitchen_status ?? undefined,
+        readyAt: row.ready_at ?? undefined,
+      },
+      now,
+    ),
+  );
+
+  if (expired.length === 0) return { servedIds: [] as string[], error: null };
+
+  const actor = autoServeActor(station);
+  const tableIds = new Set<string>();
+  const servedIds: string[] = [];
+
+  for (const row of expired) {
+    const { error: serveError } = await updateOrderItemStatus(row.id, "served", actor);
+    if (serveError) return { servedIds, error: serveError };
+    servedIds.push(row.id);
+    if (row.table_id) tableIds.add(row.table_id);
+  }
+
+  for (const tableId of tableIds) {
+    await syncTableOrdersFromDb(tableId);
+    await markTableFulfillmentIfAllServed(tableId);
+  }
+
+  return { servedIds, error: null };
 }
 
 export async function markItemsLate(itemIds: string[], staffName: string) {
@@ -523,13 +768,51 @@ export async function cancelOrderItems(
   reason: string,
   staffName: string,
 ) {
+  const cancelledAt = new Date().toISOString();
   for (const itemId of itemIds) {
     await logOrderStatusChange(itemId, `cancelled: ${reason}`, staffName);
-    const { error } = await supabase.from("order_items").delete().eq("id", itemId);
+    const { error } = await supabase
+      .from("order_items")
+      .update({
+        is_cancelled: true,
+        cancel_reason: reason,
+        cancelled_at: cancelledAt,
+        kitchen_status: "cancelled",
+        updated_at: cancelledAt,
+      })
+      .eq("id", itemId);
     if (error) return { error };
   }
 
   await syncTableOrdersFromDb(tableId);
+  return { error: null };
+}
+
+/** Kitchen acknowledges a cancelled line — hide permanently from KDS/Bar. */
+export async function acknowledgeCancelledItems(itemIds: string[], staffName: string) {
+  const updatedAt = new Date().toISOString();
+  const tableIds = new Set<string>();
+
+  for (const itemId of itemIds) {
+    await logOrderStatusChange(itemId, "cancel_acknowledged", staffName);
+    const { data, error } = await supabase
+      .from("order_items")
+      .update({
+        kitchen_status: "archived",
+        updated_at: updatedAt,
+      })
+      .eq("id", itemId)
+      .select("table_id")
+      .single();
+    if (error) return { error };
+    if (data?.table_id) tableIds.add(data.table_id);
+  }
+
+  for (const tableId of tableIds) {
+    await syncTableOrdersFromDb(tableId);
+    await markTableFulfillmentIfAllServed(tableId);
+  }
+
   return { error: null };
 }
 

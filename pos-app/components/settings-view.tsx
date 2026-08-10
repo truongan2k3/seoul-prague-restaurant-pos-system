@@ -4,12 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LanguageSelector } from "@/components/language-selector";
 import { LiveClock } from "@/components/live-clock";
+import { MenuCustomizationManager } from "@/components/menu-customization-manager";
 import { useApp } from "@/contexts/app-context";
 import { useAuth } from "@/contexts/auth-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { useSettings } from "@/contexts/settings-context";
 import { playTestAlertSound } from "@/lib/notification-sound";
+import { SOUND_FILE_OPTIONS } from "@/lib/auto-serve";
 import {
   pickSettingsPageDraft,
   type SettingsPageDraft,
@@ -41,7 +43,15 @@ const RECEIPT_FONT_LABEL_KEYS: Record<ReceiptFontFamily, TranslationKey> = {
   georgia: "settingsReceiptFontGeorgia",
 };
 
-export function SettingsView() {
+export function SettingsView({
+  menuItems = [],
+  categories = [],
+  onMenuChange,
+}: {
+  menuItems?: import("@/lib/types").MenuItem[];
+  categories?: import("@/lib/types").MenuCategoryRecord[];
+  onMenuChange?: () => void;
+}) {
   const {
     translate,
     theme,
@@ -553,6 +563,16 @@ export function SettingsView() {
             )}
           </section>
 
+          {(menuItems.length > 0 || categories.length > 0) && (
+            <div className="md:col-span-2">
+              <MenuCustomizationManager
+                menuItems={menuItems}
+                categories={categories}
+                onChange={() => onMenuChange?.()}
+              />
+            </div>
+          )}
+
           <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6 md:col-span-2">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">
               {translate("settingsMarquee")}
@@ -973,6 +993,62 @@ export function SettingsView() {
                 </label>
               </div>
             )}
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">
+              🔊 Cài đặt Âm thanh (Sound Settings)
+            </h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Chọn file trong <code className="rounded bg-gray-100 px-1 dark:bg-gray-900">/public/sounds</code> cho từng sự kiện.
+            </p>
+            <div className="mt-4 space-y-3">
+              {(
+                [
+                  {
+                    key: "callWaiter" as const,
+                    label: "Chuông gọi phục vụ (Call Waiter)",
+                  },
+                  {
+                    key: "newOrder" as const,
+                    label: "Có đơn mới (New Order)",
+                  },
+                  {
+                    key: "paymentSuccess" as const,
+                    label: "Thanh toán thành công (Payment Success)",
+                  },
+                ] as const
+              ).map((row) => (
+                <label key={row.key} className="block text-sm">
+                  <span className="text-gray-700 dark:text-gray-300">{row.label}</span>
+                  <div className="mt-1 flex gap-2">
+                    <select
+                      value={draft.soundConfigs[row.key]}
+                      onChange={(event) =>
+                        updateDraft("soundConfigs", {
+                          ...draft.soundConfigs,
+                          [row.key]: event.target.value,
+                        })
+                      }
+                      className="pos-input flex-1"
+                    >
+                      {SOUND_FILE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => playTestAlertSound(draft.soundConfigs[row.key])}
+                      className="shrink-0 rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold dark:border-gray-600"
+                    >
+                      Test
+                    </button>
+                  </div>
+                </label>
+              ))}
+            </div>
           </section>
 
           <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">

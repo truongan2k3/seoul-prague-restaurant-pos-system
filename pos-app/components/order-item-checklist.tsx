@@ -3,6 +3,7 @@
 import { useRef } from "react";
 import { ElapsedTimer } from "@/components/live-clock";
 import { WaiterNoteDisplay } from "@/components/waiter-note-display";
+import { resolveKitchenStatus } from "@/lib/auto-serve";
 import { orderItemDualDisplay } from "@/lib/menu-display";
 import { isItemSlaBreached } from "@/lib/order-sla";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
@@ -21,6 +22,7 @@ interface OrderItemChecklistProps {
   onMarkReady?: (itemId: string) => void;
   onUndoReady?: (itemId: string) => void;
   onCancelItem?: (itemId: string) => void;
+  onAcknowledgeCancel?: (itemId: string) => void;
   variant?: "kitchen" | "floor";
   dense?: boolean;
   interactive?: boolean;
@@ -45,6 +47,7 @@ export function OrderItemChecklist({
   onMarkReady,
   onUndoReady,
   onCancelItem,
+  onAcknowledgeCancel,
   variant = "kitchen",
   dense = false,
   interactive = false,
@@ -93,8 +96,9 @@ export function OrderItemChecklist({
       return;
     }
 
-    const status = normalizeOrderItemStatus(item.status);
-    if (status === "preparing") {
+    const kitchenStatus = resolveKitchenStatus(item);
+    if (kitchenStatus === "cancelled") return;
+    if (kitchenStatus === "pending") {
       onMarkReady?.(item.id);
     }
   };
@@ -104,8 +108,7 @@ export function OrderItemChecklist({
 
     longPressTriggeredRef.current = false;
 
-    const status = normalizeOrderItemStatus(item.status);
-    if (status === "ready") {
+    if (resolveKitchenStatus(item) === "ready") {
       onUndoReady?.(item.id);
     }
   };
@@ -127,30 +130,35 @@ export function OrderItemChecklist({
       <ul className={dense ? "space-y-2" : "space-y-3"}>
         {items.map((item, index) => {
           const status = normalizeOrderItemStatus(item.status);
+          const kitchenStatus = resolveKitchenStatus(item);
           const { primary, secondary } = orderItemDualDisplay(item, menuItems, language);
-          const isReady = status === "ready";
-          const isServed = status === "served";
+          const isCancelled = kitchenStatus === "cancelled" || Boolean(item.isCancelled);
+          const isReady = !isCancelled && (kitchenStatus === "ready" || status === "ready");
+          const isServed = !isCancelled && (kitchenStatus === "served" || status === "served");
           const isLate = item.id ? lateIds.has(item.id) : false;
           const slaBreached = isItemSlaBreached(item);
           const kitchenDone = variant === "kitchen" && isReady;
           const timerStart = itemTimerStart(item);
-          const rowInteractive = useTapWorkflow && Boolean(item.id) && !isServed;
+          const rowInteractive =
+            useTapWorkflow && Boolean(item.id) && !isServed && !isCancelled;
 
           const rowClass = `${
             rowInteractive ? "cursor-pointer select-none active:scale-[0.99]" : ""
           } flex items-start gap-3 rounded-xl border-2 p-3 transition-transform ${
-            isServed
-              ? "border-slate-300 bg-slate-50 opacity-80 dark:border-slate-600 dark:bg-slate-900/60"
-              : isReady
-                ? "border-emerald-400 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-950/40"
-                : isLate || slaBreached
-                  ? "border-red-400 bg-red-50 dark:border-red-800 dark:bg-red-950/40"
-                  : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900"
+            isCancelled
+              ? "border-red-600 bg-red-500 text-white shadow-lg shadow-red-900/30"
+              : isServed
+                ? "border-slate-300 bg-slate-50 opacity-80 dark:border-slate-600 dark:bg-slate-900/60"
+                : isReady
+                  ? "border-emerald-400 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-950/40"
+                  : isLate || slaBreached
+                    ? "border-red-400 bg-red-50 dark:border-red-800 dark:bg-red-950/40"
+                    : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900"
           }`;
 
           const rowBody = (
             <>
-              {!useTapWorkflow && (
+              {!useTapWorkflow && !isCancelled && (
                 <input
                   type="checkbox"
                   checked={kitchenDone || (item.id ? selectedIds.has(item.id) : false)}
@@ -164,12 +172,12 @@ export function OrderItemChecklist({
                   <span className="text-lg font-bold tabular-nums">{item.quantity}×</span>
                   <span
                     className={`text-base font-semibold leading-snug ${
-                      kitchenDone || isServed ? "line-through opacity-70" : ""
+                      kitchenDone || isServed || isCancelled ? "line-through opacity-90" : ""
                     }`}
                   >
                     {primary}
                   </span>
-                  {timerStart && !isServed && !isReady && (
+                  {timerStart && !isServed && !isReady && !isCancelled && (
                     <ElapsedTimer
                       start={timerStart}
                       className={`rounded px-1.5 py-0.5 font-mono text-xs font-bold tabular-nums ${
@@ -179,28 +187,57 @@ export function OrderItemChecklist({
                       }`}
                     />
                   )}
-                  {isLate && (
+                  {isCancelled && (
+                    <span className="rounded bg-white/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
+                      CANCELLED
+                    </span>
+                  )}
+                  {isLate && !isCancelled && (
                     <span className="rounded bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
                       {translate("delayed")}
                     </span>
                   )}
-                  {(variant === "kitchen" ? isReady : isReady || isServed) && (
+                  {!isCancelled && (variant === "kitchen" ? isReady : isReady || isServed) && (
                     <span className="rounded bg-emerald-600 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
                       {translate(isServed ? "served" : "done")}
                     </span>
                   )}
                 </div>
                 {secondary && (
-                  <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{secondary}</p>
+                  <p
+                    className={`mt-0.5 text-sm ${
+                      isCancelled ? "text-white/80" : "text-gray-500 dark:text-gray-400"
+                    }`}
+                  >
+                    {secondary}
+                  </p>
                 )}
-                {variant === "kitchen" ? (
-                  <WaiterNoteDisplay notes={item.notes} notesTranslated={item.notesTranslated} />
-                ) : (
-                  item.notes && (
-                    <p className="mt-1 text-sm font-medium italic text-red-700 dark:text-red-300">
-                      {item.notes}
-                    </p>
-                  )
+                {isCancelled && item.cancelReason && (
+                  <p className="mt-1 text-sm font-medium text-white/90">
+                    {item.cancelReason}
+                  </p>
+                )}
+                {!isCancelled &&
+                  (variant === "kitchen" ? (
+                    <WaiterNoteDisplay notes={item.notes} notesTranslated={item.notesTranslated} />
+                  ) : (
+                    item.notes && (
+                      <p className="mt-1 text-sm font-medium italic text-red-700 dark:text-red-300">
+                        {item.notes}
+                      </p>
+                    )
+                  ))}
+                {isCancelled && variant === "kitchen" && item.id && onAcknowledgeCancel && (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onAcknowledgeCancel(item.id!);
+                    }}
+                    className="mt-3 min-h-[44px] w-full rounded-lg bg-white px-3 py-2 text-sm font-black uppercase tracking-wide text-red-700"
+                  >
+                    Đã rõ / Acknowledge
+                  </button>
                 )}
               </div>
             </>

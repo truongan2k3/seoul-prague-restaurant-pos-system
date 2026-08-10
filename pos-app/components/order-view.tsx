@@ -12,13 +12,13 @@ import { useNotifications } from "@/contexts/notification-context";
 import { filterItemsForBoard } from "@/lib/order-board";
 import { resolveActionItemIds, resolveSelectedItemIds } from "@/lib/order-item-selection";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
+import { isTablePaidInProgress } from "@/lib/table-payment";
 import { canVoidOrderItems } from "@/lib/staff-roles";
 import { formatPrice } from "@/lib/i18n/translations";
 import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
 import {
   cancelOrderItems,
   markItemsLate,
-  markItemsServed,
 } from "@/src/lib/table-actions";
 
 function OrderCard({
@@ -32,13 +32,11 @@ function OrderCard({
   lateIds,
   onToggle,
   onToggleAll,
-  onDone,
   onLate,
   onCancel,
   onManage,
   busy,
   canCancel,
-  showMarkServed,
   showDelay,
 }: {
   table: RestaurantTable;
@@ -51,23 +49,24 @@ function OrderCard({
   lateIds: Set<string>;
   onToggle: (itemId: string) => void;
   onToggleAll: () => void;
-  onDone: () => void;
   onLate: () => void;
   onCancel: () => void;
   onManage: () => void;
   busy: boolean;
   canCancel: boolean;
-  showMarkServed: boolean;
   showDelay: boolean;
 }) {
   const isReady = table.status === "ready";
+  const isPaidInProgress = isTablePaidInProgress(table);
 
   return (
     <article
       className={`mb-4 flex break-inside-avoid flex-col rounded-xl border p-4 shadow-sm ${
-        isReady
-          ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/30"
-          : "border-orange-200 bg-white dark:border-orange-900 dark:bg-gray-900"
+        isPaidInProgress
+          ? "border-emerald-300 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/40"
+          : isReady
+            ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/30"
+            : "border-orange-200 bg-white dark:border-orange-900 dark:bg-gray-900"
       }`}
     >
       <button
@@ -82,15 +81,21 @@ function OrderCard({
           <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{table.label}</p>
         </div>
         <div className="text-right">
-          <p
-            className={`text-xs font-medium ${
-              isReady
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-orange-600 dark:text-orange-400"
-            }`}
-          >
-            {translate(isReady ? "ready" : "waiting")}
-          </p>
+          {isPaidInProgress ? (
+            <p className="inline-flex rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-white">
+              Đã thanh toán
+            </p>
+          ) : (
+            <p
+              className={`text-xs font-medium ${
+                isReady
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-orange-600 dark:text-orange-400"
+              }`}
+            >
+              {translate(isReady ? "ready" : "waiting")}
+            </p>
+          )}
           <p className="mt-2 inline-flex items-center gap-1 rounded-lg bg-gray-900 px-2.5 py-1 text-xs font-semibold text-white dark:bg-gray-100 dark:text-gray-900">
             <ShoppingBag className="h-3.5 w-3.5" />
             {translate("manageTable")}
@@ -117,11 +122,11 @@ function OrderCard({
         <TicketActionBar
           translate={translate}
           disabled={busy || items.length === 0}
-          onDone={onDone}
+          onDone={() => undefined}
           onLate={onLate}
           onCancel={onCancel}
           showCancel={canCancel}
-          showMarkServed={showMarkServed}
+          showMarkServed={false}
           showDelay={showDelay}
           variant="floor"
         />
@@ -194,22 +199,6 @@ export function OrderView({
     });
   };
 
-  const handleDone = async (tableId: string, tableItems: OrderItem[]) => {
-    const selected = getSelectedForTable(tableId);
-    const itemIds = resolveActionItemIds(
-      tableItems,
-      selected,
-      (item) => normalizeOrderItemStatus(item.status) === "ready",
-    );
-    if (itemIds.length === 0 || busy) return;
-
-    setBusy(true);
-    await markItemsServed(itemIds, actor, tableId);
-    setSelectedByTable((prev) => ({ ...prev, [tableId]: new Set() }));
-    setBusy(false);
-    onRefresh?.();
-  };
-
   const handleLate = async (tableId: string, tableItems: OrderItem[]) => {
     const selected = getSelectedForTable(tableId);
     const itemIds = resolveActionItemIds(
@@ -280,9 +269,6 @@ export function OrderView({
                 "floor",
               );
               const total = itemsForTable.reduce((s, i) => s + i.price * i.quantity, 0);
-              const showMarkServed = itemsForTable.some(
-                (item) => normalizeOrderItemStatus(item.status) === "ready",
-              );
               const showDelay = itemsForTable.some(
                 (item) => normalizeOrderItemStatus(item.status) === "preparing",
               );
@@ -300,13 +286,11 @@ export function OrderView({
                   lateIds={lateIds}
                   onToggle={(itemId) => toggleItem(table.id, itemId)}
                   onToggleAll={() => toggleAll(table.id, itemsForTable)}
-                  onDone={() => void handleDone(table.id, itemsForTable)}
                   onLate={() => void handleLate(table.id, itemsForTable)}
                   onCancel={() => handleCancelRequest(table.id, itemsForTable)}
                   onManage={() => onOpenTable(table.id)}
                   busy={busy}
                   canCancel={canCancel}
-                  showMarkServed={showMarkServed}
                   showDelay={showDelay}
                 />
               );

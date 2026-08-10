@@ -125,6 +125,7 @@ export function useTableOrderWorkflow({
   const handleProceedToCheckout = async (orders: OrderItem[]) => {
     if (!modal || modal.type !== "manage-table" || !selectedTable) return;
     if (orders.length === 0) return;
+    if (selectedTable.paymentStatus === "paid") return;
 
     setIsSaving(true);
     setActionError(null);
@@ -152,7 +153,7 @@ export function useTableOrderWorkflow({
       ? ordersFromLines(payload.remainingLines)
       : undefined;
 
-    const { error } = await checkoutTable(
+    const { data, error } = await checkoutTable(
       modal.tableId,
       selectedTable.label,
       payload.paidOrders,
@@ -183,11 +184,23 @@ export function useTableOrderWorkflow({
 
     void sendCfdEvent("PAYMENT_SUCCESS", { tableNumber: selectedTable.label });
 
-    if (payload.closeTable) {
+    if (data) {
+      const updatedTable = mapTableRow(data);
+      setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
+      // Return to floor map — paid tables stay visible with "Đã thanh toán" until auto-serve clears.
+      setModal(null);
+    } else if (payload.closeTable) {
       setTables((prev) =>
         prev.map((t) =>
           t.id === modal.tableId
-            ? { ...t, status: "empty", occupiedAt: undefined, orders: undefined }
+            ? {
+                ...t,
+                status: "empty",
+                occupiedAt: undefined,
+                orders: undefined,
+                paymentStatus: "unpaid",
+                fulfillmentStatus: "in_progress",
+              }
             : t,
         ),
       );

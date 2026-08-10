@@ -45,10 +45,10 @@ export function ItemCustomizeModal({ open, item, onClose, onConfirm }: ItemCusto
 
   useEffect(() => {
     if (!open || !config) return;
-    setSelections(getDefaultSelections(config));
+    setSelections(getDefaultSelections(config, item));
     setFreeAddOnSelected(false);
     setItemNote("");
-  }, [open, item.id, config]);
+  }, [open, item, config]);
 
   const selectedOptions = useMemo(
     () => (config ? resolveSelectedOptions(config, selections) : []),

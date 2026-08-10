@@ -10,6 +10,7 @@ import { StorageView } from "@/components/storage-view";
 import { StaffView } from "@/components/staff-view";
 import { SettingsView } from "@/components/settings-view";
 import { ReadyNotificationListener } from "@/components/ready-notification-listener";
+import { CallWaiterListener } from "@/components/call-waiter-listener";
 import { Sidebar } from "@/components/sidebar";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { useTableOrderWorkflow } from "@/hooks/use-table-order-workflow";
@@ -224,7 +225,16 @@ export function DashboardShell() {
       case "staff":
         return <StaffView onRefresh={() => void refreshStaffList()} />;
       case "settings":
-        return <SettingsView />;
+        return (
+          <SettingsView
+            menuItems={menuItems}
+            categories={categories}
+            onMenuChange={() => {
+              void reloadMenu();
+              void reloadCategories();
+            }}
+          />
+        );
       default:
         return null;
     }
@@ -233,6 +243,7 @@ export function DashboardShell() {
   return (
     <div className="flex h-[100dvh] bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <ReadyNotificationListener tables={tables} menuItems={menuItems} />
+      <CallWaiterListener />
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <AnnouncementMarquee />

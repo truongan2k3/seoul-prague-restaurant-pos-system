@@ -3,6 +3,10 @@ import type { MenuCategory } from "@/lib/menu-categories";
 export type TableStatus = "empty" | "waiting" | "ready";
 export type TableShape = "square" | "round";
 export type OrderItemStatus = "pending" | "held" | "preparing" | "ready" | "served";
+/** Coarse KDS lane status for auto-serve / cancel / acknowledge. */
+export type KitchenStatus = "pending" | "ready" | "served" | "cancelled" | "archived";
+export type TablePaymentStatus = "unpaid" | "paid";
+export type TableFulfillmentStatus = "in_progress" | "completed";
 export type Station = "kitchen" | "bar";
 export type PaymentMethod = "cash" | "card";
 export type DiscountType = "percent" | "fixed";
@@ -52,6 +56,13 @@ export type MenuItemLayout = "vertical" | "horizontal";
 /** outbound = POS connects to terminal IP; inbound = POS listens, terminal connects to PC. */
 export type TerminalConnectionMode = "outbound" | "inbound";
 
+/** Configurable alert sounds (paths under /public/sounds). */
+export interface SoundConfigs {
+  callWaiter: string;
+  newOrder: string;
+  paymentSuccess: string;
+}
+
 export interface AppSettings {
   printerIp: string;
   printerPort: string;
@@ -65,6 +76,7 @@ export interface AppSettings {
   receiptPhone: string;
   receiptFooterNote: string;
   customAlertSoundUrl: string;
+  soundConfigs: SoundConfigs;
   showPricesOnOrderScreen: boolean;
   /** Order screen menu tiles: image above text, or image + text on one row */
   menuItemLayout: MenuItemLayout;
@@ -152,6 +164,30 @@ export interface OrderLineModifiers {
   specialRequestIds?: string[];
 }
 
+/** Priced add-on chosen on an order line (stored in order_items.selected_addons). */
+export interface SelectedAddon {
+  id?: string;
+  name: string;
+  price: number;
+}
+
+/** One add-on choice inside a menu_item_addons group. */
+export interface MenuAddonChoice {
+  id: string;
+  name: string;
+  price: number;
+}
+
+/** Special-request / add-on group linked to a menu item. */
+export interface MenuItemAddonGroup {
+  id: string;
+  itemId: string;
+  title: string;
+  addons: MenuAddonChoice[];
+  isRequired: boolean;
+  createdAt?: string;
+}
+
 export interface NotePreset {
   id: string;
   labelEn: string;
@@ -165,14 +201,22 @@ export interface OrderItem {
   id?: string;
   name: string;
   quantity: number;
-  price: number;
   /** Menu list price before line-level override/discount */
   originalPrice?: number;
+  price: number;
   notes?: string;
   notesTranslated?: string;
   isPrintedNote?: boolean;
   station?: Station;
   status?: OrderItemStatus;
+  kitchenStatus?: KitchenStatus;
+  /** Soft-deleted / kitchen cancel alert */
+  isCancelled?: boolean;
+  cancelReason?: string;
+  cancelledAt?: string;
+  /** ISO timestamp when kitchen marked the line ready (starts 3-min auto-serve). */
+  readyAt?: string;
+  selectedAddons?: SelectedAddon[];
   menuItemId?: string;
   tableId?: string;
   createdAt?: string;
@@ -185,6 +229,8 @@ export interface RestaurantTable {
   type: "regular" | "special";
   shape: TableShape;
   status: TableStatus;
+  paymentStatus?: TablePaymentStatus;
+  fulfillmentStatus?: TableFulfillmentStatus;
   gridColumn: string;
   gridRow: string;
   posX: number;

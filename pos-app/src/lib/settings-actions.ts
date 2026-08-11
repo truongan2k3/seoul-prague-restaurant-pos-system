@@ -1,4 +1,13 @@
-import type { AppSettings, KitchenPrintLanguage, MenuItemLayout, ReservationOperatingHours, SoundConfigs, TerminalConnectionMode, TerminalType } from "@/lib/types";
+import type {
+  AppSettings,
+  KitchenPrintFontSize,
+  KitchenPrintLanguage,
+  MenuItemLayout,
+  ReservationOperatingHours,
+  SoundConfigs,
+  TerminalConnectionMode,
+  TerminalType,
+} from "@/lib/types";
 import { DEFAULT_SOUND_CONFIGS, parseSoundConfigs, soundConfigsToDb } from "@/lib/auto-serve";
 import { DEFAULT_RESERVATION_OPERATING_HOURS } from "@/lib/reservation-slots";
 import {
@@ -19,6 +28,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   kitchenPrintEnabled: true,
   kitchenPrintPrimaryLang: "zh",
   kitchenPrintSecondaryLang: "en",
+  kitchenPrintOrderFontSize: "large",
+  kitchenPrintMessageFontSize: "large",
   receiptHeaderTitle: "JIN CHENG",
   receiptLegalName: "JING DE INTER.TRADE, s.r.o.",
   receiptAddress: "Václavské nám. 819, 110 00 Praha",
@@ -65,6 +76,8 @@ type SettingsRow = {
   kitchen_print_enabled?: boolean | null;
   kitchen_print_primary_lang?: string | null;
   kitchen_print_secondary_lang?: string | null;
+  kitchen_print_order_font_size?: string | null;
+  kitchen_print_message_font_size?: string | null;
   receipt_header_title: string;
   receipt_legal_name?: string | null;
   receipt_address: string;
@@ -155,6 +168,11 @@ function parseKitchenPrintSecondary(
   return DEFAULT_APP_SETTINGS.kitchenPrintSecondaryLang;
 }
 
+function parseKitchenPrintFontSize(value: string | null | undefined): KitchenPrintFontSize {
+  if (value === "normal" || value === "large" || value === "xlarge") return value;
+  return DEFAULT_APP_SETTINGS.kitchenPrintOrderFontSize;
+}
+
 function mapSettingsRow(row: SettingsRow): AppSettings {
   return {
     printerIp: row.printer_ip,
@@ -163,6 +181,10 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     kitchenPrintEnabled: row.kitchen_print_enabled ?? DEFAULT_APP_SETTINGS.kitchenPrintEnabled,
     kitchenPrintPrimaryLang: parseKitchenPrintPrimary(row.kitchen_print_primary_lang),
     kitchenPrintSecondaryLang: parseKitchenPrintSecondary(row.kitchen_print_secondary_lang),
+    kitchenPrintOrderFontSize: parseKitchenPrintFontSize(row.kitchen_print_order_font_size),
+    kitchenPrintMessageFontSize: parseKitchenPrintFontSize(
+      row.kitchen_print_message_font_size ?? row.kitchen_print_order_font_size,
+    ),
     receiptHeaderTitle: row.receipt_header_title,
     receiptLegalName: row.receipt_legal_name ?? DEFAULT_APP_SETTINGS.receiptLegalName,
     receiptAddress: row.receipt_address,
@@ -217,6 +239,12 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   }
   if (partial.kitchenPrintSecondaryLang !== undefined) {
     payload.kitchen_print_secondary_lang = partial.kitchenPrintSecondaryLang;
+  }
+  if (partial.kitchenPrintOrderFontSize !== undefined) {
+    payload.kitchen_print_order_font_size = partial.kitchenPrintOrderFontSize;
+  }
+  if (partial.kitchenPrintMessageFontSize !== undefined) {
+    payload.kitchen_print_message_font_size = partial.kitchenPrintMessageFontSize;
   }
   if (partial.receiptHeaderTitle !== undefined) payload.receipt_header_title = partial.receiptHeaderTitle;
   if (partial.receiptLegalName !== undefined) payload.receipt_legal_name = partial.receiptLegalName;
@@ -417,6 +445,8 @@ export type PrinterBillSettingsDraft = Pick<
   | "kitchenPrintEnabled"
   | "kitchenPrintPrimaryLang"
   | "kitchenPrintSecondaryLang"
+  | "kitchenPrintOrderFontSize"
+  | "kitchenPrintMessageFontSize"
   | "receiptHeaderTitle"
   | "receiptLegalName"
   | "receiptAddress"
@@ -464,6 +494,8 @@ export function pickPrinterBillDraft(settings: AppSettings): PrinterBillSettings
     kitchenPrintEnabled: settings.kitchenPrintEnabled,
     kitchenPrintPrimaryLang: settings.kitchenPrintPrimaryLang,
     kitchenPrintSecondaryLang: settings.kitchenPrintSecondaryLang,
+    kitchenPrintOrderFontSize: settings.kitchenPrintOrderFontSize,
+    kitchenPrintMessageFontSize: settings.kitchenPrintMessageFontSize,
     receiptHeaderTitle: settings.receiptHeaderTitle,
     receiptLegalName: settings.receiptLegalName,
     receiptAddress: settings.receiptAddress,

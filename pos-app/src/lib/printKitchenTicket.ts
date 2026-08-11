@@ -3,6 +3,7 @@ import { aggregateDisplayItems } from "@/lib/order-item-aggregate";
 import { menuItemDisplayName, resolveMenuItemForOrder } from "@/lib/menu-display";
 import type {
   AppSettings,
+  KitchenPrintFontSize,
   KitchenPrintLanguage,
   MenuItem,
   OrderItem,
@@ -19,6 +20,62 @@ const TICKET_WIDTH_MM = 80;
 const CONTENT_WIDTH_PX = 560;
 const NAME_WIDTH_PX = 470;
 const FULL_WIDTH_PX = 540;
+
+interface KitchenTypeScale {
+  table: number;
+  meta: number;
+  qty: number;
+  namePrimary: number;
+  nameSecondary: number;
+  notePrimary: number;
+  noteSecondary: number;
+  message: number;
+  messageSrc: number;
+  empty: number;
+}
+
+const ORDER_TYPE_SCALE: Record<KitchenPrintFontSize, KitchenTypeScale> = {
+  normal: {
+    table: 28,
+    meta: 12,
+    qty: 22,
+    namePrimary: 22,
+    nameSecondary: 13,
+    notePrimary: 14,
+    noteSecondary: 12,
+    message: 22,
+    messageSrc: 12,
+    empty: 20,
+  },
+  large: {
+    table: 34,
+    meta: 14,
+    qty: 28,
+    namePrimary: 28,
+    nameSecondary: 16,
+    notePrimary: 17,
+    noteSecondary: 14,
+    message: 28,
+    messageSrc: 14,
+    empty: 24,
+  },
+  xlarge: {
+    table: 40,
+    meta: 16,
+    qty: 34,
+    namePrimary: 34,
+    nameSecondary: 19,
+    notePrimary: 20,
+    noteSecondary: 16,
+    message: 34,
+    messageSrc: 16,
+    empty: 28,
+  },
+};
+
+function scaleFor(size: KitchenPrintFontSize | undefined): KitchenTypeScale {
+  return ORDER_TYPE_SCALE[size ?? "large"] ?? ORDER_TYPE_SCALE.large;
+}
 
 function langLabel(lang: KitchenPrintLanguage): string {
   if (lang === "zh") return "ZH";
@@ -53,7 +110,6 @@ function dualItemNames(
 
   let secondary = itemNameForLang(item, menuItems, secondaryLang);
 
-  // If UI primary was zh but nameZh empty (fell back to EN), still try menu ZH for secondary swap.
   if (primaryLang === "zh" || secondaryLang === "zh") {
     const menu = resolveMenuItemForOrder(item, menuItems);
     const zh = menu?.nameZh?.trim() || (isGrillGuestPrepOrder(item) ? "准备烤肉蘸料" : "");
@@ -106,12 +162,14 @@ export type KitchenPrintSettings = Pick<
   | "kitchenPrintEnabled"
   | "kitchenPrintPrimaryLang"
   | "kitchenPrintSecondaryLang"
+  | "kitchenPrintOrderFontSize"
+  | "kitchenPrintMessageFontSize"
   | "receiptFontSize"
   | "receiptFontWeight"
   | "receiptFontFamily"
 >;
 
-function kitchenTicketCss(): string {
+function kitchenTicketCss(qtyPx: number): string {
   return `
     <style>
       .kitchen-ticket {
@@ -148,7 +206,7 @@ function kitchenTicketCss(): string {
       }
       .kitchen-qty {
         flex: 0 0 auto;
-        font-size: 22px;
+        font-size: ${qtyPx}px;
         font-weight: 700;
         line-height: 1.2;
         min-width: 1.8em;
@@ -178,9 +236,11 @@ export async function buildKitchenTicketHtml(input: {
   menuItems: MenuItem[];
   primaryLang: KitchenPrintLanguage;
   secondaryLang: KitchenPrintLanguage | "none";
+  fontSize?: KitchenPrintFontSize;
   stationLabel?: string;
 }): Promise<string> {
   await ensureCjkPrintFont();
+  const s = scaleFor(input.fontSize);
 
   const lines = aggregateDisplayItems(input.orders);
   const now = new Date();
@@ -206,11 +266,15 @@ export async function buildKitchenTicketHtml(input: {
         Boolean(noteSecondary) &&
         noteSecondary.trim().toLowerCase() !== notePrimary.trim().toLowerCase();
 
-      const namePrimaryHtml = bmp(primary, { width: NAME_WIDTH_PX, size: 22, weight: 700 });
+      const namePrimaryHtml = bmp(primary, {
+        width: NAME_WIDTH_PX,
+        size: s.namePrimary,
+        weight: 700,
+      });
       const nameSecondaryHtml = secondary
         ? `<div class="kitchen-name-secondary">${bmp(secondary, {
             width: NAME_WIDTH_PX,
-            size: 13,
+            size: s.nameSecondary,
             weight: 600,
           })}</div>`
         : "";
@@ -222,7 +286,7 @@ export async function buildKitchenTicketHtml(input: {
                 notePrimary
                   ? `<div class="kitchen-note-primary">${bmp(`※ ${notePrimary}`, {
                       width: FULL_WIDTH_PX,
-                      size: 14,
+                      size: s.notePrimary,
                       weight: 700,
                     })}</div>`
                   : ""
@@ -231,7 +295,7 @@ export async function buildKitchenTicketHtml(input: {
                 showNoteSecondary
                   ? `<div class="kitchen-note-secondary">${bmp(noteSecondary, {
                       width: FULL_WIDTH_PX,
-                      size: 12,
+                      size: s.noteSecondary,
                       weight: 600,
                     })}</div>`
                   : ""
@@ -254,31 +318,34 @@ export async function buildKitchenTicketHtml(input: {
     .join("");
 
   return `
-    ${kitchenTicketCss()}
+    ${kitchenTicketCss(s.qty)}
     <div class="kitchen-ticket">
       <div class="kitchen-header">
         ${bmp(`TABLE ${input.tableLabel}`, {
           width: FULL_WIDTH_PX,
-          size: 30,
+          size: s.table,
           weight: 700,
           align: "center",
         })}
         <div class="kitchen-meta-gap"></div>
         ${bmp(`${station} · ${time}`, {
           width: FULL_WIDTH_PX,
-          size: 13,
+          size: s.meta,
           weight: 600,
           align: "center",
         })}
         <div class="kitchen-meta-gap"></div>
         ${bmp(langs, {
           width: FULL_WIDTH_PX,
-          size: 12,
+          size: Math.max(11, s.meta - 1),
           weight: 600,
           align: "center",
         })}
       </div>
-      ${itemBlocks || `<div class="kitchen-item">${bmp("—", { width: FULL_WIDTH_PX, size: 20 })}</div>`}
+      ${
+        itemBlocks ||
+        `<div class="kitchen-item">${bmp("—", { width: FULL_WIDTH_PX, size: s.empty })}</div>`
+      }
       <div class="kitchen-footer">*** NEW ORDER ***</div>
     </div>`;
 }
@@ -287,8 +354,10 @@ export async function buildKitchenMessageHtml(input: {
   tableLabel: string;
   message: string;
   messageZh: string;
+  fontSize?: KitchenPrintFontSize;
 }): Promise<string> {
   await ensureCjkPrintFont();
+  const s = scaleFor(input.fontSize);
 
   const now = new Date();
   const time = now.toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
@@ -296,30 +365,35 @@ export async function buildKitchenMessageHtml(input: {
   const src = input.message.trim();
 
   return `
-    ${kitchenTicketCss()}
+    ${kitchenTicketCss(s.qty)}
     <div class="kitchen-ticket">
       <div class="kitchen-header">
         ${bmp(`TABLE ${input.tableLabel}`, {
           width: FULL_WIDTH_PX,
-          size: 30,
+          size: s.table,
           weight: 700,
           align: "center",
         })}
         <div class="kitchen-meta-gap"></div>
         ${bmp(`MESSAGE · ${time}`, {
           width: FULL_WIDTH_PX,
-          size: 13,
+          size: s.meta,
           weight: 600,
           align: "center",
         })}
       </div>
       <div class="kitchen-message-box">
-        ${bmp(zh, { width: FULL_WIDTH_PX - 20, size: 22, weight: 700, align: "center" })}
+        ${bmp(zh, {
+          width: FULL_WIDTH_PX - 20,
+          size: s.message,
+          weight: 700,
+          align: "center",
+        })}
         ${
           src && src !== zh
             ? `<div class="kitchen-meta-gap"></div>${bmp(src, {
                 width: FULL_WIDTH_PX - 20,
-                size: 12,
+                size: s.messageSrc,
                 weight: 600,
                 align: "center",
               })}`
@@ -345,6 +419,7 @@ export async function printKitchenTicket(input: {
     menuItems: input.menuItems,
     primaryLang: input.settings.kitchenPrintPrimaryLang,
     secondaryLang: input.settings.kitchenPrintSecondaryLang,
+    fontSize: input.settings.kitchenPrintOrderFontSize,
     stationLabel: input.stationLabel,
   });
 
@@ -367,6 +442,7 @@ export async function printKitchenMessage(input: {
     tableLabel: input.tableLabel,
     message: input.message,
     messageZh: input.messageZh,
+    fontSize: input.settings.kitchenPrintMessageFontSize,
   });
   await printReceiptHTML(html, {
     receiptFontSize: input.settings.receiptFontSize,

@@ -89,6 +89,8 @@ async function ensureSettingsForBusiness(businessId: string) {
       kitchen_print_enabled: DEFAULT_APP_SETTINGS.kitchenPrintEnabled,
       kitchen_print_primary_lang: DEFAULT_APP_SETTINGS.kitchenPrintPrimaryLang,
       kitchen_print_secondary_lang: DEFAULT_APP_SETTINGS.kitchenPrintSecondaryLang,
+      kitchen_print_order_font_size: DEFAULT_APP_SETTINGS.kitchenPrintOrderFontSize,
+      kitchen_print_message_font_size: DEFAULT_APP_SETTINGS.kitchenPrintMessageFontSize,
       receipt_header_title: DEFAULT_BUSINESS_NAME,
       receipt_legal_name: DEFAULT_APP_SETTINGS.receiptLegalName,
       receipt_address: DEFAULT_APP_SETTINGS.receiptAddress,

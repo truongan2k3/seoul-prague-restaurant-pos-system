@@ -393,6 +393,44 @@ export function SettingsView({
                     <option value="none">{translate("settingsKitchenPrintLangNone")}</option>
                   </select>
                 </label>
+                <label className="block text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {translate("settingsKitchenPrintOrderFontSize")}
+                  </span>
+                  <select
+                    value={draft.kitchenPrintOrderFontSize}
+                    onChange={(event) =>
+                      updateDraft(
+                        "kitchenPrintOrderFontSize",
+                        event.target.value as SettingsPageDraft["kitchenPrintOrderFontSize"],
+                      )
+                    }
+                    className="pos-input mt-1"
+                  >
+                    <option value="normal">{translate("settingsKitchenPrintFontNormal")}</option>
+                    <option value="large">{translate("settingsKitchenPrintFontLarge")}</option>
+                    <option value="xlarge">{translate("settingsKitchenPrintFontXLarge")}</option>
+                  </select>
+                </label>
+                <label className="block text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {translate("settingsKitchenPrintMessageFontSize")}
+                  </span>
+                  <select
+                    value={draft.kitchenPrintMessageFontSize}
+                    onChange={(event) =>
+                      updateDraft(
+                        "kitchenPrintMessageFontSize",
+                        event.target.value as SettingsPageDraft["kitchenPrintMessageFontSize"],
+                      )
+                    }
+                    className="pos-input mt-1"
+                  >
+                    <option value="normal">{translate("settingsKitchenPrintFontNormal")}</option>
+                    <option value="large">{translate("settingsKitchenPrintFontLarge")}</option>
+                    <option value="xlarge">{translate("settingsKitchenPrintFontXLarge")}</option>
+                  </select>
+                </label>
               </div>
             )}
 

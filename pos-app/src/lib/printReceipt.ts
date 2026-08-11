@@ -212,15 +212,17 @@ function getOrCreatePrintIframe(): HTMLIFrameElement {
   iframe.style.height = "0";
   iframe.style.border = "0";
   iframe.style.visibility = "hidden";
+  iframe.style.colorScheme = "only light";
   document.body.appendChild(iframe);
   return iframe;
 }
 
 function buildPrintDocument(bodyHtml: string, typography: ReceiptTypography): string {
   return `<!DOCTYPE html>
-<html>
+<html lang="zh-CN" style="color-scheme: only light;">
   <head>
     <meta charset="utf-8" />
+    <meta name="color-scheme" content="only light" />
     <title>Receipt</title>
     <style>${buildThermalPrintCss(typography)}</style>
   </head>

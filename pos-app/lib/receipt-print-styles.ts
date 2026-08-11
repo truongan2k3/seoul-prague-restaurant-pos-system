@@ -6,11 +6,11 @@ export interface ReceiptFontOption {
   sample: string;
 }
 
-/** CJK fallbacks — monospace Latin fonts often omit Chinese glyphs (prints as blank). */
+/** CJK-capable stack with Latin first so print engines always have a solid face. */
 const CJK_FONT_FALLBACK =
-  "'PingFang SC', 'Hiragino Sans GB', 'Heiti SC', 'Microsoft YaHei', 'Noto Sans SC', 'Source Han Sans SC', 'WenQuanYi Micro Hei', sans-serif";
+  "Arial, Helvetica, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Heiti SC', 'Microsoft YaHei', 'Noto Sans SC', 'Source Han Sans SC', sans-serif";
 
-/** System font stacks — no web fonts, reliable on thermal printers & Windows POS. */
+/** System font stacks — Latin primary + CJK fallbacks for bilingual kitchen tickets. */
 export const RECEIPT_FONT_OPTIONS: ReceiptFontOption[] = [
   {
     id: "consolas",
@@ -24,12 +24,12 @@ export const RECEIPT_FONT_OPTIONS: ReceiptFontOption[] = [
   },
   {
     id: "arial",
-    stack: `Arial, Helvetica, 'Segoe UI', ${CJK_FONT_FALLBACK}`,
+    stack: CJK_FONT_FALLBACK,
     sample: "Arial",
   },
   {
     id: "tahoma",
-    stack: `Tahoma, Verdana, 'Segoe UI', ${CJK_FONT_FALLBACK}`,
+    stack: `Tahoma, Verdana, ${CJK_FONT_FALLBACK}`,
     sample: "Tahoma",
   },
   {
@@ -181,12 +181,18 @@ export function buildThermalPrintCss(typography: ReceiptTypography): string {
   * {
     box-sizing: border-box;
   }
+  :root, html {
+    color-scheme: only light;
+  }
   html, body {
     width: 72mm;
     margin: 0;
     padding: 0;
-    background: #fff;
-    color: #000;
+    background: #fff !important;
+    color: #000 !important;
+    color-scheme: only light;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
   body {
     padding: 2mm;
@@ -194,11 +200,15 @@ export function buildThermalPrintCss(typography: ReceiptTypography): string {
     font-size: ${typography.bodyPx}px;
     font-weight: ${typography.bodyWeight};
     line-height: ${typography.lineHeight};
-    -webkit-font-smoothing: none;
-    -moz-osx-font-smoothing: unset;
-    text-rendering: optimizeLegibility;
-    color: #000;
-    background: #fff;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: geometricPrecision;
+    background: #fff !important;
+    color: #000 !important;
+  }
+  /* Dark-mode parents can invert iframe print text — force ink black. */
+  body, body * {
+    color: #000 !important;
+    -webkit-text-fill-color: #000 !important;
   }
   .text-center { text-align: center; }
   .text-right { text-align: right; }

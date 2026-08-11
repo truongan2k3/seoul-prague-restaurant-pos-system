@@ -113,21 +113,26 @@ export function buildKitchenTicketHtml(input: {
     <style>
       .kitchen-ticket, .kitchen-ticket * {
         font-family: ${KITCHEN_TICKET_FONT_STACK} !important;
-        color: #000;
+        color: #000 !important;
+        -webkit-text-fill-color: #000 !important;
       }
-      .kitchen-ticket { width: 72mm; max-width: 72mm; }
+      .kitchen-ticket {
+        width: 72mm;
+        max-width: 72mm;
+        background: #fff !important;
+      }
       .kitchen-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; }
-      .kitchen-table { font-size: 28px; font-weight: 900; letter-spacing: 0.04em; }
-      .kitchen-meta { font-size: 12px; margin-top: 4px; }
+      .kitchen-table { font-size: 28px; font-weight: 700; letter-spacing: 0.04em; }
+      .kitchen-meta { font-size: 12px; margin-top: 4px; font-weight: 600; }
       .kitchen-item { border-bottom: 1px dashed #000; padding: 8px 0; }
       .kitchen-item-row { display: flex; gap: 6px; align-items: flex-start; }
-      .kitchen-qty { font-size: 22px; font-weight: 900; min-width: 2.2em; }
-      .kitchen-name-primary { font-size: 22px; font-weight: 900; line-height: 1.25; word-break: break-word; }
-      .kitchen-name-secondary { font-size: 13px; margin: 2px 0 0 2.4em; word-break: break-word; }
+      .kitchen-qty { font-size: 22px; font-weight: 700; min-width: 2.2em; }
+      .kitchen-name-primary { font-size: 22px; font-weight: 700; line-height: 1.25; word-break: break-word; }
+      .kitchen-name-secondary { font-size: 13px; margin: 2px 0 0 2.4em; font-weight: 600; word-break: break-word; }
       .kitchen-note { margin: 4px 0 0 2.4em; }
       .kitchen-note-primary { font-size: 14px; font-weight: 700; word-break: break-word; }
-      .kitchen-note-secondary { font-size: 11px; margin-top: 2px; word-break: break-word; }
-      .kitchen-footer { margin-top: 10px; text-align: center; font-size: 11px; }
+      .kitchen-note-secondary { font-size: 11px; margin-top: 2px; font-weight: 600; word-break: break-word; }
+      .kitchen-footer { margin-top: 10px; text-align: center; font-size: 11px; font-weight: 700; }
     </style>
     <div class="kitchen-ticket">
       <div class="kitchen-header">
@@ -156,16 +161,21 @@ export function buildKitchenMessageHtml(input: {
     <style>
       .kitchen-ticket, .kitchen-ticket * {
         font-family: ${KITCHEN_TICKET_FONT_STACK} !important;
-        color: #000;
+        color: #000 !important;
+        -webkit-text-fill-color: #000 !important;
       }
-      .kitchen-ticket { width: 72mm; max-width: 72mm; }
+      .kitchen-ticket {
+        width: 72mm;
+        max-width: 72mm;
+        background: #fff !important;
+      }
       .kitchen-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; }
-      .kitchen-table { font-size: 28px; font-weight: 900; letter-spacing: 0.04em; }
-      .kitchen-meta { font-size: 12px; margin-top: 4px; }
+      .kitchen-table { font-size: 28px; font-weight: 700; letter-spacing: 0.04em; }
+      .kitchen-meta { font-size: 12px; margin-top: 4px; font-weight: 600; }
       .kitchen-message-box { border: 2px solid #000; padding: 12px 8px; margin-top: 8px; }
-      .kitchen-message-zh { font-size: 22px; font-weight: 900; line-height: 1.35; text-align: center; word-break: break-word; }
-      .kitchen-message-src { font-size: 12px; margin-top: 10px; text-align: center; word-break: break-word; }
-      .kitchen-footer { margin-top: 10px; text-align: center; font-size: 11px; }
+      .kitchen-message-zh { font-size: 22px; font-weight: 700; line-height: 1.35; text-align: center; word-break: break-word; }
+      .kitchen-message-src { font-size: 12px; margin-top: 10px; text-align: center; font-weight: 600; word-break: break-word; }
+      .kitchen-footer { margin-top: 10px; text-align: center; font-size: 11px; font-weight: 700; }
     </style>
     <div class="kitchen-ticket">
       <div class="kitchen-header">

@@ -172,10 +172,14 @@ export function receiptTypographyCssVars(
   };
 }
 
-export function buildThermalPrintCss(typography: ReceiptTypography): string {
+export function buildThermalPrintCss(
+  typography: ReceiptTypography,
+  paperWidthMm: number = 72,
+): string {
+  const width = Number.isFinite(paperWidthMm) && paperWidthMm > 0 ? paperWidthMm : 72;
   return `
   @page {
-    size: 72mm auto;
+    size: ${width}mm auto;
     margin: 0mm;
   }
   * {
@@ -185,7 +189,7 @@ export function buildThermalPrintCss(typography: ReceiptTypography): string {
     color-scheme: only light;
   }
   html, body {
-    width: 72mm;
+    width: ${width}mm;
     margin: 0;
     padding: 0;
     background: #fff !important;
@@ -209,6 +213,11 @@ export function buildThermalPrintCss(typography: ReceiptTypography): string {
   body, body * {
     color: #000 !important;
     -webkit-text-fill-color: #000 !important;
+  }
+  img {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    max-width: 100%;
   }
   .text-center { text-align: center; }
   .text-right { text-align: right; }

@@ -19,7 +19,10 @@ const PRINT_IFRAME_ID = "receipt-print-iframe";
 export type ReceiptPrintFontSettings = Pick<
   AppSettings,
   "receiptFontSize" | "receiptFontWeight" | "receiptFontFamily"
->;
+> & {
+  /** Thermal paper width in mm (kitchen tickets use 80). */
+  paperWidthMm?: number;
+};
 
 function escapeHtml(value: string): string {
   return value
@@ -206,25 +209,30 @@ function getOrCreatePrintIframe(): HTMLIFrameElement {
   iframe.title = "Receipt print frame";
   iframe.setAttribute("aria-hidden", "true");
   iframe.style.position = "fixed";
-  iframe.style.right = "0";
-  iframe.style.bottom = "0";
-  iframe.style.width = "0";
-  iframe.style.height = "0";
+  iframe.style.left = "-10000px";
+  iframe.style.top = "0";
+  iframe.style.width = "80mm";
+  iframe.style.height = "240mm";
   iframe.style.border = "0";
-  iframe.style.visibility = "hidden";
+  iframe.style.opacity = "0";
+  iframe.style.pointerEvents = "none";
   iframe.style.colorScheme = "only light";
   document.body.appendChild(iframe);
   return iframe;
 }
 
-function buildPrintDocument(bodyHtml: string, typography: ReceiptTypography): string {
+function buildPrintDocument(
+  bodyHtml: string,
+  typography: ReceiptTypography,
+  paperWidthMm: number,
+): string {
   return `<!DOCTYPE html>
 <html lang="zh-CN" style="color-scheme: only light;">
   <head>
     <meta charset="utf-8" />
     <meta name="color-scheme" content="only light" />
     <title>Receipt</title>
-    <style>${buildThermalPrintCss(typography)}</style>
+    <style>${buildThermalPrintCss(typography, paperWidthMm)}</style>
   </head>
   <body>${bodyHtml}</body>
 </html>`;
@@ -279,41 +287,35 @@ export function printReceiptHTML(
     };
 
     const typography = resolvePrintTypography(fontSettings);
+    const paperWidthMm = fontSettings?.paperWidthMm ?? 72;
 
     doc.open();
-    doc.write(buildPrintDocument(receiptHtmlContent, typography));
+    doc.write(buildPrintDocument(receiptHtmlContent, typography, paperWidthMm));
     doc.close();
 
-    const waitForReady = () => {
-      const images = doc.images;
-      if (images.length === 0) {
-        window.setTimeout(runPrint, 150);
-        return;
-      }
-
-      let loaded = 0;
-      const onImageDone = () => {
-        loaded += 1;
-        if (loaded >= images.length) {
-          window.setTimeout(runPrint, 100);
-        }
-      };
-
-      for (let i = 0; i < images.length; i += 1) {
-        const img = images[i];
-        if (img.complete) {
-          onImageDone();
-        } else {
-          img.addEventListener("load", onImageDone);
-          img.addEventListener("error", onImageDone);
-        }
-      }
+    const waitForReady = async () => {
+      const images = Array.from(doc.images);
+      await Promise.all(
+        images.map(
+          (img) =>
+            new Promise<void>((resolveImg) => {
+              if (img.complete) {
+                resolveImg();
+                return;
+              }
+              img.addEventListener("load", () => resolveImg(), { once: true });
+              img.addEventListener("error", () => resolveImg(), { once: true });
+            }),
+        ),
+      );
+      // Give the print engine a beat to composite bitmaps.
+      window.setTimeout(runPrint, 200);
     };
 
     if (doc.readyState === "complete") {
-      waitForReady();
+      void waitForReady();
     } else {
-      iframe.addEventListener("load", waitForReady, { once: true });
+      iframe.addEventListener("load", () => void waitForReady(), { once: true });
     }
   });
 }

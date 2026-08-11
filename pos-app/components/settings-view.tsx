@@ -407,9 +407,9 @@ export function SettingsView({
                     }
                     className="pos-input mt-1"
                   >
-                    <option value="normal">{translate("settingsKitchenPrintFontNormal")}</option>
                     <option value="large">{translate("settingsKitchenPrintFontLarge")}</option>
                     <option value="xlarge">{translate("settingsKitchenPrintFontXLarge")}</option>
+                    <option value="xxlarge">{translate("settingsKitchenPrintFontXXLarge")}</option>
                   </select>
                 </label>
                 <label className="block text-sm">
@@ -426,9 +426,9 @@ export function SettingsView({
                     }
                     className="pos-input mt-1"
                   >
-                    <option value="normal">{translate("settingsKitchenPrintFontNormal")}</option>
                     <option value="large">{translate("settingsKitchenPrintFontLarge")}</option>
                     <option value="xlarge">{translate("settingsKitchenPrintFontXLarge")}</option>
+                    <option value="xxlarge">{translate("settingsKitchenPrintFontXXLarge")}</option>
                   </select>
                 </label>
               </div>

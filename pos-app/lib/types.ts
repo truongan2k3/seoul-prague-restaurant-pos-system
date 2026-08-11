@@ -66,8 +66,8 @@ export interface SoundConfigs {
 /** Languages printed on kitchen tickets (large primary + optional secondary). */
 export type KitchenPrintLanguage = "zh" | "en" | "cs";
 
-/** Bitmap text size for kitchen order / message tickets. */
-export type KitchenPrintFontSize = "normal" | "large" | "xlarge";
+/** Bitmap text size for kitchen order / message tickets (Large = minimum). */
+export type KitchenPrintFontSize = "large" | "xlarge" | "xxlarge";
 
 export interface AppSettings {
   printerIp: string;

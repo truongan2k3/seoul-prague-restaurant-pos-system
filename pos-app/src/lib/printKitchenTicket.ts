@@ -34,47 +34,48 @@ interface KitchenTypeScale {
   empty: number;
 }
 
+/** Large is the smallest option; sizes tuned for 80mm kitchen readability. */
 const ORDER_TYPE_SCALE: Record<KitchenPrintFontSize, KitchenTypeScale> = {
-  normal: {
-    table: 28,
-    meta: 12,
-    qty: 22,
-    namePrimary: 22,
-    nameSecondary: 13,
-    notePrimary: 14,
-    noteSecondary: 12,
-    message: 22,
-    messageSrc: 12,
-    empty: 20,
-  },
   large: {
-    table: 34,
-    meta: 14,
-    qty: 28,
-    namePrimary: 28,
-    nameSecondary: 16,
-    notePrimary: 17,
-    noteSecondary: 14,
-    message: 28,
-    messageSrc: 14,
-    empty: 24,
-  },
-  xlarge: {
     table: 40,
     meta: 16,
     qty: 34,
     namePrimary: 34,
-    nameSecondary: 19,
+    nameSecondary: 20,
     notePrimary: 20,
     noteSecondary: 16,
     message: 34,
     messageSrc: 16,
     empty: 28,
   },
+  xlarge: {
+    table: 46,
+    meta: 18,
+    qty: 40,
+    namePrimary: 42,
+    nameSecondary: 24,
+    notePrimary: 24,
+    noteSecondary: 18,
+    message: 42,
+    messageSrc: 18,
+    empty: 34,
+  },
+  xxlarge: {
+    table: 52,
+    meta: 20,
+    qty: 46,
+    namePrimary: 50,
+    nameSecondary: 28,
+    notePrimary: 28,
+    noteSecondary: 22,
+    message: 50,
+    messageSrc: 22,
+    empty: 40,
+  },
 };
 
 function scaleFor(size: KitchenPrintFontSize | undefined): KitchenTypeScale {
-  return ORDER_TYPE_SCALE[size ?? "large"] ?? ORDER_TYPE_SCALE.large;
+  return ORDER_TYPE_SCALE[size ?? "xlarge"] ?? ORDER_TYPE_SCALE.xlarge;
 }
 
 function langLabel(lang: KitchenPrintLanguage): string {

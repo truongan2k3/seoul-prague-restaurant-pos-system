@@ -28,8 +28,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   kitchenPrintEnabled: true,
   kitchenPrintPrimaryLang: "zh",
   kitchenPrintSecondaryLang: "en",
-  kitchenPrintOrderFontSize: "large",
-  kitchenPrintMessageFontSize: "large",
+  kitchenPrintOrderFontSize: "xlarge",
+  kitchenPrintMessageFontSize: "xlarge",
   receiptHeaderTitle: "JIN CHENG",
   receiptLegalName: "JING DE INTER.TRADE, s.r.o.",
   receiptAddress: "Václavské nám. 819, 110 00 Praha",
@@ -169,7 +169,9 @@ function parseKitchenPrintSecondary(
 }
 
 function parseKitchenPrintFontSize(value: string | null | undefined): KitchenPrintFontSize {
-  if (value === "normal" || value === "large" || value === "xlarge") return value;
+  if (value === "large" || value === "xlarge" || value === "xxlarge") return value;
+  // Legacy "normal" was smaller than Large — bump to minimum Large.
+  if (value === "normal") return "large";
   return DEFAULT_APP_SETTINGS.kitchenPrintOrderFontSize;
 }
 

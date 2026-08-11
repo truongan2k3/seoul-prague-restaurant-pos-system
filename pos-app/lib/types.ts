@@ -47,14 +47,21 @@ export type ReceiptFontFamily =
   | "georgia"
   | "lucida";
 
-/** Card terminal integration mode. */
-export type TerminalType = "mock" | "network";
-
 /** Menu picker tile layout on order screen. */
 export type MenuItemLayout = "vertical" | "horizontal";
 
-/** outbound = POS connects to terminal IP; inbound = POS listens, terminal connects to PC. */
-export type TerminalConnectionMode = "outbound" | "inbound";
+/** Roles a network thermal printer can serve. */
+export type PrinterRole = "receipt" | "kitchen";
+
+/** LAN thermal printer targeted via the local print bridge. */
+export interface NetworkPrinter {
+  id: string;
+  name: string;
+  host: string;
+  port: string;
+  enabled: boolean;
+  roles: PrinterRole[];
+}
 
 /** Configurable alert sounds (paths under /public/sounds). */
 export interface SoundConfigs {
@@ -72,6 +79,14 @@ export type KitchenPrintFontSize = "large" | "xlarge" | "xxlarge";
 export interface AppSettings {
   printerIp: string;
   printerPort: string;
+  /** Use local print bridge for silent multi-printer ESC/POS (no browser dialog). */
+  silentPrintEnabled: boolean;
+  /** Local bridge base URL, e.g. http://127.0.0.1:39100 */
+  printBridgeUrl: string;
+  /** If silent print fails, fall back to browser print dialog. */
+  browserPrintFallback: boolean;
+  /** Configured LAN printers (receipt / kitchen roles). */
+  printers: NetworkPrinter[];
   autoPrintOnPayment: boolean;
   /** Print kitchen ticket when staff sends order. */
   kitchenPrintEnabled: boolean;
@@ -107,11 +122,6 @@ export interface AppSettings {
   receiptFontWeight: ReceiptFontWeight;
   receiptFontFamily: ReceiptFontFamily;
   adminDeletionPassword: string;
-  terminalType: TerminalType;
-  terminalIp: string;
-  terminalPort: string;
-  terminalPosId: string;
-  terminalConnectionMode: TerminalConnectionMode;
   /** Looping ad video on /client after thank-you (public URL) */
   cfdAdVideoUrl: string;
   /** Link encoded in review QR when no custom QR image is set */

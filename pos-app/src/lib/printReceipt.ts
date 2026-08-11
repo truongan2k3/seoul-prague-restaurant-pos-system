@@ -19,10 +19,16 @@ const PRINT_IFRAME_ID = "receipt-print-iframe";
 export type ReceiptPrintFontSettings = Pick<
   AppSettings,
   "receiptFontSize" | "receiptFontWeight" | "receiptFontFamily"
-> & {
-  /** Thermal paper width in mm (kitchen tickets use 80). */
-  paperWidthMm?: number;
-};
+> &
+  Partial<
+    Pick<
+      AppSettings,
+      "silentPrintEnabled" | "printBridgeUrl" | "browserPrintFallback" | "printers"
+    >
+  > & {
+    /** Thermal paper width in mm (kitchen tickets use 80). */
+    paperWidthMm?: number;
+  };
 
 function escapeHtml(value: string): string {
   return value
@@ -320,10 +326,78 @@ export function printReceiptHTML(
   });
 }
 
-export function printReceiptData(
+export function buildReceiptEscPosLines(
+  data: ReceiptData,
+  template?: ReceiptTemplate,
+): string[] {
+  const biz = resolveTemplate(data, template);
+  const lines: string[] = [
+    biz.brandName,
+    biz.brandAddress,
+    biz.legalName,
+    biz.companyAddress,
+    `ICO: ${biz.ico}  DIC: ${biz.dic}`,
+    biz.phone,
+    "--------------------------------",
+    `Stul: ${data.tableLabel}`,
+    `Doklad: ${formatReceiptDisplayIndex(data.orderNumber)}`,
+    `${formatReceiptDate(data.closedAt)} ${formatReceiptTime(data.closedAt)}`,
+    "--------------------------------",
+  ];
+
+  for (const item of data.items) {
+    lines.push(`${item.code} ${item.name}`);
+    lines.push(`  ${item.quantity} x ${formatReceiptAmount(item.unitPrice)} = ${formatReceiptAmount(item.lineTotal)}`);
+  }
+
+  lines.push("--------------------------------");
+  lines.push(`Mezisoucet: ${formatReceiptAmount(data.subtotal)} CZK`);
+  if (data.discountAmount > 0) {
+    lines.push(`${data.discountLabel ?? "Sleva"}: -${formatReceiptAmount(data.discountAmount)} CZK`);
+  }
+  if (data.tip > 0) {
+    lines.push(`Spropitne: ${formatReceiptAmount(data.tip)} CZK`);
+  }
+  lines.push(`CELKEM: ${formatReceiptAmount(data.grandTotal)} CZK`);
+  lines.push(`Platba: ${paymentMethodLabel(data.paymentMethod)}`);
+  for (const footer of biz.footerLines) {
+    lines.push(footer);
+  }
+  return lines;
+}
+
+export async function printReceiptData(
   data: ReceiptData,
   template?: ReceiptTemplate,
   fontSettings?: ReceiptPrintFontSettings,
 ): Promise<void> {
-  return printReceiptHTML(buildReceiptHtmlContent(data, template), fontSettings);
+  const html = buildReceiptHtmlContent(data, template);
+
+  if (fontSettings?.silentPrintEnabled) {
+    try {
+      const { buildEscPosFromTextLines } = await import("@/src/lib/escpos");
+      const { silentPrintEscPos } = await import("@/src/lib/print-bridge-client");
+      const bytes = buildEscPosFromTextLines(buildReceiptEscPosLines(data, template));
+      const result = await silentPrintEscPos(
+        {
+          silentPrintEnabled: true,
+          printBridgeUrl: fontSettings.printBridgeUrl ?? "http://127.0.0.1:39100",
+          browserPrintFallback: fontSettings.browserPrintFallback ?? true,
+          printers: fontSettings.printers ?? [],
+        },
+        "receipt",
+        bytes,
+      );
+      if (result.sent) return;
+      console.warn("[ReceiptPrint] Silent print incomplete:", result.error);
+      if (!fontSettings.browserPrintFallback) {
+        throw new Error(result.error || "Silent receipt print failed");
+      }
+    } catch (error) {
+      console.warn("[ReceiptPrint] Silent print failed:", error);
+      if (fontSettings.browserPrintFallback === false) throw error;
+    }
+  }
+
+  return printReceiptHTML(html, fontSettings);
 }

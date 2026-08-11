@@ -2,11 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { ArrowLeft, ArrowRight, Printer } from "lucide-react";
-import { CardPaymentModal } from "@/components/card-payment-modal";
 import { NumericInputField } from "@/components/numeric-input-field";
 import { PercentPresetButtons } from "@/components/percent-preset-buttons";
 import { useApp } from "@/contexts/app-context";
-import { usePinGate } from "@/contexts/pin-gate-context";
 import { useSettings } from "@/contexts/settings-context";
 import {
   buildCheckoutTotals,
@@ -24,7 +22,6 @@ import { buildReceiptLines } from "@/lib/receipt-calculations";
 import { buildCfdCheckoutPayload, sendCfdEvent, type CfdCheckoutPayload } from "@/lib/cfd-display";
 import { playPaymentSuccessSound } from "@/lib/notification-sound";
 import type { MenuItem, OrderItem, PaymentMethod } from "@/lib/types";
-import type { TerminalPaymentResponse } from "@/src/lib/terminalApi";
 import { filterButtonClass, paymentFilterClass } from "@/lib/theme-classes";
 
 type AccordionPanel = "split" | "discount" | "tip";
@@ -127,7 +124,6 @@ export function CheckoutPanel({
 }: CheckoutPanelProps) {
   const { translate } = useApp();
   const { settings } = useSettings();
-  const { requestPin } = usePinGate();
   const priceOptions = useMemo(
     () => priceDisplayOptionsFromSettings(settings),
     [settings],
@@ -153,9 +149,6 @@ export function CheckoutPanel({
   const [splitCount, setSplitCount] = useState(2);
   const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [cardTerminalOpen, setCardTerminalOpen] = useState(false);
-  const [pendingCheckout, setPendingCheckout] = useState<CheckoutSubmitPayload | null>(null);
-  const [terminalBusy, setTerminalBusy] = useState(false);
 
   const menuById = useMemo(() => new Map(menuItems.map((item) => [item.id, item])), [menuItems]);
 
@@ -428,60 +421,12 @@ export function CheckoutPanel({
       closeTable,
     };
 
-    if (paymentMethod === "card") {
-      setPendingCheckout(payload);
-      setCardTerminalOpen(true);
-      setTerminalBusy(true);
-      void sendCfdEvent("TERMINAL_PENDING", { amount: chargeAmount });
-      return;
-    }
-
     await submitCheckout(payload);
   };
 
-  const submitCheckout = async (
-    payload: CheckoutSubmitPayload,
-    cardResult?: TerminalPaymentResponse,
-  ) => {
-    const enriched: CheckoutSubmitPayload = cardResult
-      ? {
-          ...payload,
-          payment: {
-            ...payload.payment,
-            cardAuthCode: cardResult.authCode,
-            cardLast4: cardResult.last4,
-            cardBrand: cardResult.brand,
-          },
-        }
-      : payload;
-
-    try {
-      await onCheckout(enriched);
-      playPaymentSuccessSound(settings.soundConfigs.paymentSuccess);
-    } finally {
-      setCardTerminalOpen(false);
-      setPendingCheckout(null);
-      setTerminalBusy(false);
-    }
-  };
-
-  const handleCardApproved = (result: TerminalPaymentResponse) => {
-    if (!pendingCheckout) return;
-    void submitCheckout(pendingCheckout, result);
-  };
-
-  const handleCardCancel = () => {
-    setCardTerminalOpen(false);
-    setPendingCheckout(null);
-    setTerminalBusy(false);
-    void sendCfdEvent("CANCEL_CHECKOUT", {});
-  };
-
-  const handleCardManualOverride = () => {
-    requestPin(() => {
-      if (!pendingCheckout) return;
-      void submitCheckout(pendingCheckout);
-    });
+  const submitCheckout = async (payload: CheckoutSubmitPayload) => {
+    await onCheckout(payload);
+    playPaymentSuccessSound(settings.soundConfigs.paymentSuccess);
   };
 
   const submitLabel = confirmLabel
@@ -825,31 +770,16 @@ export function CheckoutPanel({
 
         <button
           type="button"
-          disabled={isSaving || terminalBusy || lines.length === 0 || insufficientCash}
+          disabled={isSaving || lines.length === 0 || insufficientCash}
           onClick={() => void handleCheckout()}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-base font-bold text-white shadow-sm disabled:opacity-40"
         >
           <Printer className="h-5 w-5 shrink-0" />
           <span className="truncate">
-            {isSaving || terminalBusy ? "..." : submitLabel}
+            {isSaving ? "..." : submitLabel}
           </span>
         </button>
       </footer>
-
-      <CardPaymentModal
-        open={cardTerminalOpen}
-        amount={pendingCheckout?.payment.amountDueNow ?? totals.amountDueNow}
-        terminalConfig={{
-          terminalType: settings.terminalType,
-          terminalIp: settings.terminalIp,
-          terminalPort: settings.terminalPort,
-          terminalPosId: settings.terminalPosId,
-          terminalConnectionMode: settings.terminalConnectionMode,
-        }}
-        onApproved={handleCardApproved}
-        onCancel={handleCardCancel}
-        onManualOverride={handleCardManualOverride}
-      />
     </div>
   );
 }

@@ -147,6 +147,7 @@ function bmp(
     weight?: 400 | 600 | 700;
     align?: "left" | "center";
   },
+  sink?: string[],
 ): string {
   const url = textToPngDataUrl(text, {
     maxWidthPx: opts.width,
@@ -155,6 +156,7 @@ function bmp(
     align: opts.align ?? "left",
     dpr: 2,
   });
+  if (url && sink) sink.push(url);
   return bitmapImgHtml(url, text, opts.width);
 }
 
@@ -168,6 +170,10 @@ export type KitchenPrintSettings = Pick<
   | "receiptFontSize"
   | "receiptFontWeight"
   | "receiptFontFamily"
+  | "silentPrintEnabled"
+  | "printBridgeUrl"
+  | "browserPrintFallback"
+  | "printers"
 >;
 
 function kitchenTicketCss(qtyPx: number): string {
@@ -239,9 +245,19 @@ export async function buildKitchenTicketHtml(input: {
   secondaryLang: KitchenPrintLanguage | "none";
   fontSize?: KitchenPrintFontSize;
   stationLabel?: string;
-}): Promise<string> {
+}): Promise<{ html: string; pngs: string[] }> {
   await ensureCjkPrintFont();
   const s = scaleFor(input.fontSize);
+  const pngs: string[] = [];
+  const draw = (
+    text: string,
+    opts: {
+      width: number;
+      size: number;
+      weight?: 400 | 600 | 700;
+      align?: "left" | "center";
+    },
+  ) => bmp(text, opts, pngs);
 
   const lines = aggregateDisplayItems(input.orders);
   const now = new Date();
@@ -267,13 +283,13 @@ export async function buildKitchenTicketHtml(input: {
         Boolean(noteSecondary) &&
         noteSecondary.trim().toLowerCase() !== notePrimary.trim().toLowerCase();
 
-      const namePrimaryHtml = bmp(primary, {
-        width: NAME_WIDTH_PX,
+      const namePrimaryHtml = draw(`${item.quantity}× ${primary}`, {
+        width: FULL_WIDTH_PX,
         size: s.namePrimary,
         weight: 700,
       });
       const nameSecondaryHtml = secondary
-        ? `<div class="kitchen-name-secondary">${bmp(secondary, {
+        ? `<div class="kitchen-name-secondary">${draw(secondary, {
             width: NAME_WIDTH_PX,
             size: s.nameSecondary,
             weight: 600,
@@ -285,7 +301,7 @@ export async function buildKitchenTicketHtml(input: {
           ? `<div class="kitchen-note">
               ${
                 notePrimary
-                  ? `<div class="kitchen-note-primary">${bmp(`※ ${notePrimary}`, {
+                  ? `<div class="kitchen-note-primary">${draw(`※ ${notePrimary}`, {
                       width: FULL_WIDTH_PX,
                       size: s.notePrimary,
                       weight: 700,
@@ -294,7 +310,7 @@ export async function buildKitchenTicketHtml(input: {
               }
               ${
                 showNoteSecondary
-                  ? `<div class="kitchen-note-secondary">${bmp(noteSecondary, {
+                  ? `<div class="kitchen-note-secondary">${draw(noteSecondary, {
                       width: FULL_WIDTH_PX,
                       size: s.noteSecondary,
                       weight: 600,
@@ -306,37 +322,34 @@ export async function buildKitchenTicketHtml(input: {
 
       return `
         <div class="kitchen-item">
-          <div class="kitchen-item-row">
-            <span class="kitchen-qty">${item.quantity}×</span>
-            <div class="kitchen-name-col">
-              ${namePrimaryHtml}
-              ${nameSecondaryHtml}
-            </div>
+          <div class="kitchen-name-col">
+            ${namePrimaryHtml}
+            ${nameSecondaryHtml}
           </div>
           ${noteHtml}
         </div>`;
     })
     .join("");
 
-  return `
+  const html = `
     ${kitchenTicketCss(s.qty)}
     <div class="kitchen-ticket">
       <div class="kitchen-header">
-        ${bmp(`TABLE ${input.tableLabel}`, {
+        ${draw(`TABLE ${input.tableLabel}`, {
           width: FULL_WIDTH_PX,
           size: s.table,
           weight: 700,
           align: "center",
         })}
         <div class="kitchen-meta-gap"></div>
-        ${bmp(`${station} · ${time}`, {
+        ${draw(`${station} · ${time}`, {
           width: FULL_WIDTH_PX,
           size: s.meta,
           weight: 600,
           align: "center",
         })}
         <div class="kitchen-meta-gap"></div>
-        ${bmp(langs, {
+        ${draw(langs, {
           width: FULL_WIDTH_PX,
           size: Math.max(11, s.meta - 1),
           weight: 600,
@@ -345,10 +358,12 @@ export async function buildKitchenTicketHtml(input: {
       </div>
       ${
         itemBlocks ||
-        `<div class="kitchen-item">${bmp("—", { width: FULL_WIDTH_PX, size: s.empty })}</div>`
+        `<div class="kitchen-item">${draw("—", { width: FULL_WIDTH_PX, size: s.empty })}</div>`
       }
       <div class="kitchen-footer">*** NEW ORDER ***</div>
     </div>`;
+
+  return { html, pngs };
 }
 
 export async function buildKitchenMessageHtml(input: {
@@ -356,27 +371,37 @@ export async function buildKitchenMessageHtml(input: {
   message: string;
   messageZh: string;
   fontSize?: KitchenPrintFontSize;
-}): Promise<string> {
+}): Promise<{ html: string; pngs: string[] }> {
   await ensureCjkPrintFont();
   const s = scaleFor(input.fontSize);
+  const pngs: string[] = [];
+  const draw = (
+    text: string,
+    opts: {
+      width: number;
+      size: number;
+      weight?: 400 | 600 | 700;
+      align?: "left" | "center";
+    },
+  ) => bmp(text, opts, pngs);
 
   const now = new Date();
   const time = now.toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
   const zh = input.messageZh.trim() || input.message.trim();
   const src = input.message.trim();
 
-  return `
+  const html = `
     ${kitchenTicketCss(s.qty)}
     <div class="kitchen-ticket">
       <div class="kitchen-header">
-        ${bmp(`TABLE ${input.tableLabel}`, {
+        ${draw(`TABLE ${input.tableLabel}`, {
           width: FULL_WIDTH_PX,
           size: s.table,
           weight: 700,
           align: "center",
         })}
         <div class="kitchen-meta-gap"></div>
-        ${bmp(`MESSAGE · ${time}`, {
+        ${draw(`MESSAGE · ${time}`, {
           width: FULL_WIDTH_PX,
           size: s.meta,
           weight: 600,
@@ -384,7 +409,7 @@ export async function buildKitchenMessageHtml(input: {
         })}
       </div>
       <div class="kitchen-message-box">
-        ${bmp(zh, {
+        ${draw(zh, {
           width: FULL_WIDTH_PX - 20,
           size: s.message,
           weight: 700,
@@ -392,7 +417,7 @@ export async function buildKitchenMessageHtml(input: {
         })}
         ${
           src && src !== zh
-            ? `<div class="kitchen-meta-gap"></div>${bmp(src, {
+            ? `<div class="kitchen-meta-gap"></div>${draw(src, {
                 width: FULL_WIDTH_PX - 20,
                 size: s.messageSrc,
                 weight: 600,
@@ -403,6 +428,40 @@ export async function buildKitchenMessageHtml(input: {
       </div>
       <div class="kitchen-footer">*** STAFF MESSAGE ***</div>
     </div>`;
+
+  return { html, pngs };
+}
+
+async function dispatchKitchenPrint(
+  settings: KitchenPrintSettings,
+  html: string,
+  pngs: string[],
+): Promise<void> {
+  const fontSettings = {
+    receiptFontSize: settings.receiptFontSize,
+    receiptFontWeight: settings.receiptFontWeight,
+    receiptFontFamily: settings.receiptFontFamily,
+    paperWidthMm: TICKET_WIDTH_MM,
+  };
+
+  if (settings.silentPrintEnabled && pngs.length > 0) {
+    try {
+      const { buildEscPosFromPngs } = await import("@/src/lib/escpos");
+      const { silentPrintEscPos } = await import("@/src/lib/print-bridge-client");
+      const bytes = await buildEscPosFromPngs(pngs);
+      const result = await silentPrintEscPos(settings, "kitchen", bytes);
+      if (result.sent) return;
+      console.warn("[KitchenPrint] Silent print incomplete:", result.error);
+      if (!settings.browserPrintFallback) {
+        throw new Error(result.error || "Silent kitchen print failed");
+      }
+    } catch (error) {
+      console.warn("[KitchenPrint] Silent print failed:", error);
+      if (!settings.browserPrintFallback) throw error;
+    }
+  }
+
+  await printReceiptHTML(html, fontSettings);
 }
 
 export async function printKitchenTicket(input: {
@@ -414,7 +473,7 @@ export async function printKitchenTicket(input: {
 }): Promise<void> {
   if (!input.settings.kitchenPrintEnabled || input.orders.length === 0) return;
 
-  const html = await buildKitchenTicketHtml({
+  const { html, pngs } = await buildKitchenTicketHtml({
     tableLabel: input.tableLabel,
     orders: input.orders,
     menuItems: input.menuItems,
@@ -424,12 +483,7 @@ export async function printKitchenTicket(input: {
     stationLabel: input.stationLabel,
   });
 
-  await printReceiptHTML(html, {
-    receiptFontSize: input.settings.receiptFontSize,
-    receiptFontWeight: input.settings.receiptFontWeight,
-    receiptFontFamily: input.settings.receiptFontFamily,
-    paperWidthMm: TICKET_WIDTH_MM,
-  });
+  await dispatchKitchenPrint(input.settings, html, pngs);
 }
 
 export async function printKitchenMessage(input: {
@@ -439,16 +493,11 @@ export async function printKitchenMessage(input: {
   settings: KitchenPrintSettings;
 }): Promise<void> {
   if (!input.settings.kitchenPrintEnabled) return;
-  const html = await buildKitchenMessageHtml({
+  const { html, pngs } = await buildKitchenMessageHtml({
     tableLabel: input.tableLabel,
     message: input.message,
     messageZh: input.messageZh,
     fontSize: input.settings.kitchenPrintMessageFontSize,
   });
-  await printReceiptHTML(html, {
-    receiptFontSize: input.settings.receiptFontSize,
-    receiptFontWeight: input.settings.receiptFontWeight,
-    receiptFontFamily: input.settings.receiptFontFamily,
-    paperWidthMm: TICKET_WIDTH_MM,
-  });
+  await dispatchKitchenPrint(input.settings, html, pngs);
 }

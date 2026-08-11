@@ -25,14 +25,14 @@ import {
   toDatetimeLocalValue,
 } from "@/lib/marquee-settings";
 import type { TranslationKey } from "@/lib/i18n/translations";
-import type { ReceiptFontFamily, WeekdayKey } from "@/lib/types";
-import { testTerminalConnection } from "@/src/lib/terminalApi";
+import { pingPrintBridge } from "@/src/lib/print-bridge-client";
 import { isCfdGifMedia } from "@/lib/cfd-display";
+import type { NetworkPrinter, PrinterRole, ReceiptFontFamily, WeekdayKey } from "@/lib/types";
 import {
   clearBusinessLogoAction,
   uploadBusinessLogoAction,
 } from "@/src/lib/business-auth-actions";
-import { Monitor, Save, Tablet, Tv, CreditCard } from "lucide-react";
+import { Monitor, Plus, Save, Tablet, Trash2, Tv } from "lucide-react";
 
 const RECEIPT_FONT_LABEL_KEYS: Record<ReceiptFontFamily, TranslationKey> = {
   consolas: "settingsReceiptFontConsolas",
@@ -78,8 +78,8 @@ export function SettingsView({
 
   const [draft, setDraft] = useState<SettingsPageDraft>(() => pickSettingsPageDraft(settings));
   const [dirty, setDirty] = useState(false);
-  const [terminalTestMessage, setTerminalTestMessage] = useState<string | null>(null);
-  const [terminalTesting, setTerminalTesting] = useState(false);
+  const [bridgeTestMessage, setBridgeTestMessage] = useState<string | null>(null);
+  const [bridgeTesting, setBridgeTesting] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
 
   const weekdayLabels: Record<WeekdayKey, string> = {
@@ -188,18 +188,48 @@ export function SettingsView({
     }
   };
 
-  const handleTestTerminal = async () => {
-    setTerminalTesting(true);
-    setTerminalTestMessage(null);
-    const result = await testTerminalConnection({
-      terminalType: draft.terminalType,
-      terminalIp: draft.terminalIp,
-      terminalPort: draft.terminalPort,
-      terminalPosId: draft.terminalPosId,
-      terminalConnectionMode: draft.terminalConnectionMode,
-    });
-    setTerminalTesting(false);
-    setTerminalTestMessage(result.message);
+  const handleTestPrintBridge = async () => {
+    setBridgeTesting(true);
+    setBridgeTestMessage(null);
+    const result = await pingPrintBridge(draft.printBridgeUrl);
+    setBridgeTesting(false);
+    setBridgeTestMessage(result.message);
+  };
+
+  const updatePrinter = (id: string, patch: Partial<NetworkPrinter>) => {
+    updateDraft(
+      "printers",
+      draft.printers.map((printer) => (printer.id === id ? { ...printer, ...patch } : printer)),
+    );
+  };
+
+  const togglePrinterRole = (id: string, role: PrinterRole) => {
+    const printer = draft.printers.find((entry) => entry.id === id);
+    if (!printer) return;
+    const hasRole = printer.roles.includes(role);
+    const roles = hasRole
+      ? printer.roles.filter((entry) => entry !== role)
+      : [...printer.roles, role];
+    updatePrinter(id, { roles: roles.length > 0 ? roles : [role] });
+  };
+
+  const addPrinter = () => {
+    const next: NetworkPrinter = {
+      id: `printer-${Date.now()}`,
+      name: `Printer ${draft.printers.length + 1}`,
+      host: draft.printerIp || "192.168.1.200",
+      port: draft.printerPort || "9100",
+      enabled: true,
+      roles: ["kitchen"],
+    };
+    updateDraft("printers", [...draft.printers, next]);
+  };
+
+  const removePrinter = (id: string) => {
+    updateDraft(
+      "printers",
+      draft.printers.filter((printer) => printer.id !== id),
+    );
   };
 
   const devices = [
@@ -294,25 +324,173 @@ export function SettingsView({
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("settingsReceiptPrinting")}</h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{translate("settingsPrinterHint")}</p>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <label className="block text-sm">
-                <span className="text-gray-500 dark:text-gray-400">{translate("settingsPrinterIp")}</span>
-                <input
-                  value={draft.printerIp}
-                  onChange={(event) => updateDraft("printerIp", event.target.value)}
-                  className="pos-input mt-1"
-                  placeholder="192.168.1.200"
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="text-gray-500 dark:text-gray-400">{translate("settingsPrinterPort")}</span>
-                <input
-                  value={draft.printerPort}
-                  onChange={(event) => updateDraft("printerPort", event.target.value)}
-                  className="pos-input mt-1"
-                  placeholder="9100"
-                />
-              </label>
+            <label className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
+              <div className="min-w-0">
+                <span className="block text-sm text-gray-800 dark:text-gray-200">
+                  {translate("settingsSilentPrint")}
+                </span>
+                <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+                  {translate("settingsSilentPrintHint")}
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={draft.silentPrintEnabled}
+                onChange={(event) => updateDraft("silentPrintEnabled", event.target.checked)}
+                className="h-4 w-4 shrink-0 rounded border-gray-300"
+              />
+            </label>
+
+            {draft.silentPrintEnabled && (
+              <div className="mt-3 space-y-3">
+                <label className="block text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {translate("settingsPrintBridgeUrl")}
+                  </span>
+                  <input
+                    value={draft.printBridgeUrl}
+                    onChange={(event) => updateDraft("printBridgeUrl", event.target.value)}
+                    className="pos-input mt-1"
+                    placeholder="http://127.0.0.1:39100"
+                  />
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={bridgeTesting}
+                    onClick={() => void handleTestPrintBridge()}
+                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold dark:border-gray-600"
+                  >
+                    {bridgeTesting
+                      ? translate("settingsPrintBridgeTesting")
+                      : translate("settingsPrintBridgeTest")}
+                  </button>
+                  {bridgeTestMessage && (
+                    <span className="text-xs text-gray-600 dark:text-gray-300">{bridgeTestMessage}</span>
+                  )}
+                </div>
+                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
+                  <span className="text-sm text-gray-800 dark:text-gray-200">
+                    {translate("settingsBrowserPrintFallback")}
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={draft.browserPrintFallback}
+                    onChange={(event) =>
+                      updateDraft("browserPrintFallback", event.target.checked)
+                    }
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                </label>
+              </div>
+            )}
+
+            <div className="mt-5 flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {translate("settingsPrinters")}
+              </h3>
+              <button
+                type="button"
+                onClick={addPrinter}
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold dark:border-gray-600"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {translate("settingsPrinterAdd")}
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {translate("settingsPrintersHint")}
+            </p>
+
+            <div className="mt-3 space-y-3">
+              {draft.printers.map((printer) => (
+                <div
+                  key={printer.id}
+                  className="rounded-xl border border-gray-200 p-3 dark:border-gray-700"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      <input
+                        type="checkbox"
+                        checked={printer.enabled}
+                        onChange={(event) =>
+                          updatePrinter(printer.id, { enabled: event.target.checked })
+                        }
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      {translate("settingsPrinterEnabled")}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => removePrinter(printer.id)}
+                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {translate("settingsPrinterRemove")}
+                    </button>
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="block text-sm">
+                      <span className="text-gray-500 dark:text-gray-400">
+                        {translate("settingsPrinterName")}
+                      </span>
+                      <input
+                        value={printer.name}
+                        onChange={(event) =>
+                          updatePrinter(printer.id, { name: event.target.value })
+                        }
+                        className="pos-input mt-1"
+                      />
+                    </label>
+                    <label className="block text-sm">
+                      <span className="text-gray-500 dark:text-gray-400">
+                        {translate("settingsPrinterIp")}
+                      </span>
+                      <input
+                        value={printer.host}
+                        onChange={(event) =>
+                          updatePrinter(printer.id, { host: event.target.value })
+                        }
+                        className="pos-input mt-1"
+                        placeholder="192.168.1.200"
+                      />
+                    </label>
+                    <label className="block text-sm">
+                      <span className="text-gray-500 dark:text-gray-400">
+                        {translate("settingsPrinterPort")}
+                      </span>
+                      <input
+                        value={printer.port}
+                        onChange={(event) =>
+                          updatePrinter(printer.id, { port: event.target.value })
+                        }
+                        className="pos-input mt-1"
+                        placeholder="9100"
+                      />
+                    </label>
+                    <div className="block text-sm">
+                      <span className="text-gray-500 dark:text-gray-400">
+                        {translate("settingsPrinterRoles")}
+                      </span>
+                      <div className="mt-2 flex flex-wrap gap-3">
+                        {(["receipt", "kitchen"] as PrinterRole[]).map((role) => (
+                          <label key={role} className="inline-flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={printer.roles.includes(role)}
+                              onChange={() => togglePrinterRole(printer.id, role)}
+                              className="h-4 w-4 rounded border-gray-300"
+                            />
+                            {role === "receipt"
+                              ? translate("settingsPrinterRoleReceipt")
+                              : translate("settingsPrinterRoleKitchen")}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
@@ -1192,10 +1370,10 @@ export function SettingsView({
 
           <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30 sm:p-6 md:col-span-2">
             <h2 className="font-semibold text-amber-900 dark:text-amber-200">
-              {translate("settingsAdminTerminal")}
+              {translate("settingsAdminSecurity")}
             </h2>
             <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
-              {translate("settingsAdminTerminalHint")}
+              {translate("settingsAdminSecurityHint")}
             </p>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -1211,125 +1389,10 @@ export function SettingsView({
                   autoComplete="new-password"
                 />
               </label>
-
-              <label className="block text-sm sm:col-span-2">
-                <span className="text-amber-900 dark:text-amber-200">
-                  {translate("settingsTerminalMode")}
-                </span>
-                <select
-                  value={draft.terminalType}
-                  onChange={(event) =>
-                    updateDraft(
-                      "terminalType",
-                      event.target.value as SettingsPageDraft["terminalType"],
-                    )
-                  }
-                  className="pos-input mt-1"
-                >
-                  <option value="mock">{translate("settingsTerminalMock")}</option>
-                  <option value="network">{translate("settingsTerminalNetwork")}</option>
-                </select>
-              </label>
-
-              {draft.terminalType === "network" && (
-                <>
-                  <label className="block text-sm sm:col-span-2">
-                    <span className="text-amber-900 dark:text-amber-200">
-                      {translate("settingsTerminalConnectionMode")}
-                    </span>
-                    <select
-                      value={draft.terminalConnectionMode}
-                      onChange={(event) =>
-                        updateDraft(
-                          "terminalConnectionMode",
-                          event.target.value as SettingsPageDraft["terminalConnectionMode"],
-                        )
-                      }
-                      className="pos-input mt-1"
-                    >
-                      <option value="inbound">{translate("settingsTerminalInbound")}</option>
-                      <option value="outbound">{translate("settingsTerminalOutbound")}</option>
-                    </select>
-                    <span className="mt-1 block text-xs text-amber-800 dark:text-amber-400">
-                      {translate("settingsTerminalInboundHint")}
-                    </span>
-                  </label>
-                  <label className="block text-sm">
-                    <span className="text-amber-900 dark:text-amber-200">
-                      {draft.terminalConnectionMode === "inbound"
-                        ? translate("settingsTerminalPcIp")
-                        : translate("settingsTerminalIp")}
-                    </span>
-                    {draft.terminalConnectionMode === "outbound" ? (
-                      <input
-                        type="text"
-                        value={draft.terminalIp}
-                        onChange={(event) => updateDraft("terminalIp", event.target.value)}
-                        className="pos-input mt-1"
-                        placeholder="192.168.1.105"
-                      />
-                    ) : (
-                      <input
-                        type="text"
-                        value="192.168.1.43"
-                        readOnly
-                        className="pos-input mt-1 bg-amber-100/50 dark:bg-amber-950/20"
-                      />
-                    )}
-                  </label>
-                  <label className="block text-sm">
-                    <span className="text-amber-900 dark:text-amber-200">
-                      {draft.terminalConnectionMode === "inbound"
-                        ? translate("settingsTerminalListenPort")
-                        : translate("settingsTerminalPort")}
-                    </span>
-                    <input
-                      type="text"
-                      value={draft.terminalPort}
-                      onChange={(event) => updateDraft("terminalPort", event.target.value)}
-                      className="pos-input mt-1"
-                      placeholder="2000"
-                    />
-                  </label>
-                  <label className="block text-sm sm:col-span-2">
-                    <span className="text-amber-900 dark:text-amber-200">
-                      {translate("settingsTerminalPosId")}
-                    </span>
-                    <input
-                      type="text"
-                      value={draft.terminalPosId}
-                      onChange={(event) => updateDraft("terminalPosId", event.target.value)}
-                      className="pos-input mt-1 font-mono uppercase"
-                      placeholder="PVTL9664"
-                      maxLength={16}
-                    />
-                    <span className="mt-1 block text-xs text-amber-800 dark:text-amber-400">
-                      {translate("settingsTerminalPosIdHint")}
-                    </span>
-                  </label>
-                </>
-              )}
-
-              <div className="sm:col-span-2">
-                <button
-                  type="button"
-                  disabled={terminalTesting}
-                  onClick={() => void handleTestTerminal()}
-                  className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-amber-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
-                >
-                  <CreditCard className="h-4 w-4" />
-                  {terminalTesting
-                    ? translate("settingsTerminalTesting")
-                    : translate("settingsTerminalTest")}
-                </button>
-                {terminalTestMessage && (
-                  <p className="mt-2 text-sm text-amber-900 dark:text-amber-200">{terminalTestMessage}</p>
-                )}
-              </div>
             </div>
 
             <p className="mt-4 text-xs text-amber-800 dark:text-amber-400">
-              {translate("managerPin")}: Demo PIN <strong>1234</strong> — voids, discounts, manual card override.
+              {translate("managerPin")}: Demo PIN <strong>1234</strong> — voids, discounts.
             </p>
           </section>
         </div>

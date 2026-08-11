@@ -82,6 +82,10 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
         receiptFontSize: settings.receiptFontSize,
         receiptFontWeight: settings.receiptFontWeight,
         receiptFontFamily: settings.receiptFontFamily,
+        silentPrintEnabled: settings.silentPrintEnabled,
+        printBridgeUrl: settings.printBridgeUrl,
+        browserPrintFallback: settings.browserPrintFallback,
+        printers: settings.printers,
       });
     },
     [
@@ -90,6 +94,10 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
       settings.receiptFontSize,
       settings.receiptFontWeight,
       settings.receiptFontFamily,
+      settings.silentPrintEnabled,
+      settings.printBridgeUrl,
+      settings.browserPrintFallback,
+      settings.printers,
       receiptShowUsd,
       usdRate,
       business,
@@ -133,6 +141,10 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
         receiptFontSize: settings.receiptFontSize,
         receiptFontWeight: settings.receiptFontWeight,
         receiptFontFamily: settings.receiptFontFamily,
+        silentPrintEnabled: settings.silentPrintEnabled,
+        printBridgeUrl: settings.printBridgeUrl,
+        browserPrintFallback: settings.browserPrintFallback,
+        printers: settings.printers,
       });
     }
   }, [
@@ -141,6 +153,10 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
     settings.receiptFontSize,
     settings.receiptFontWeight,
     settings.receiptFontFamily,
+    settings.silentPrintEnabled,
+    settings.printBridgeUrl,
+    settings.browserPrintFallback,
+    settings.printers,
   ]);
 
   return (

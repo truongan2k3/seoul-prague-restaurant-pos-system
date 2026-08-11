@@ -3,10 +3,10 @@ import type {
   KitchenPrintFontSize,
   KitchenPrintLanguage,
   MenuItemLayout,
+  NetworkPrinter,
+  PrinterRole,
   ReservationOperatingHours,
   SoundConfigs,
-  TerminalConnectionMode,
-  TerminalType,
 } from "@/lib/types";
 import { DEFAULT_SOUND_CONFIGS, parseSoundConfigs, soundConfigsToDb } from "@/lib/auto-serve";
 import { DEFAULT_RESERVATION_OPERATING_HOURS } from "@/lib/reservation-slots";
@@ -21,9 +21,34 @@ import {
 } from "@/lib/receipt-print-styles";
 import { supabase } from "@/src/lib/supabase";
 
+export function createDefaultPrinters(host = "192.168.1.200", port = "9100"): NetworkPrinter[] {
+  return [
+    {
+      id: "printer-receipt",
+      name: "Receipt",
+      host,
+      port,
+      enabled: true,
+      roles: ["receipt"],
+    },
+    {
+      id: "printer-kitchen",
+      name: "Kitchen",
+      host,
+      port,
+      enabled: true,
+      roles: ["kitchen"],
+    },
+  ];
+}
+
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   printerIp: "192.168.1.200",
   printerPort: "9100",
+  silentPrintEnabled: false,
+  printBridgeUrl: "http://127.0.0.1:39100",
+  browserPrintFallback: true,
+  printers: createDefaultPrinters(),
   autoPrintOnPayment: true,
   kitchenPrintEnabled: true,
   kitchenPrintPrimaryLang: "zh",
@@ -53,11 +78,6 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   receiptFontWeight: "bold",
   receiptFontFamily: "consolas",
   adminDeletionPassword: "1234",
-  terminalType: "network",
-  terminalIp: "192.168.1.105",
-  terminalPort: "2000",
-  terminalPosId: "PVTL9664",
-  terminalConnectionMode: "inbound",
   cfdAdVideoUrl: "",
   cfdReviewUrl:
     "https://www.google.com/maps/search/?api=1&query=Seoul+Prague+Restaurant",
@@ -72,6 +92,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
 type SettingsRow = {
   printer_ip: string;
   printer_port: string;
+  silent_print_enabled?: boolean | null;
+  print_bridge_url?: string | null;
+  browser_print_fallback?: boolean | null;
+  printers?: NetworkPrinter[] | unknown | null;
   auto_print_on_payment: boolean;
   kitchen_print_enabled?: boolean | null;
   kitchen_print_primary_lang?: string | null;
@@ -102,11 +126,6 @@ type SettingsRow = {
   receipt_font_weight?: string | null;
   receipt_font_family?: string | null;
   admin_deletion_password?: string | null;
-  terminal_type?: string | null;
-  terminal_ip?: string | null;
-  terminal_port?: string | null;
-  terminal_pos_id?: string | null;
-  terminal_connection_mode?: string | null;
   cfd_ad_video_url?: string | null;
   cfd_review_url?: string | null;
   cfd_review_qr_image_url?: string | null;
@@ -144,16 +163,46 @@ function parseOperatingHours(
   return merged;
 }
 
-function parseTerminalConnectionMode(value: string | null | undefined): TerminalConnectionMode {
-  return value === "outbound" ? "outbound" : "inbound";
-}
-
-function parseTerminalType(value: string | null | undefined): TerminalType {
-  return value === "network" ? "network" : "mock";
-}
-
 function parseMenuItemLayout(value: string | null | undefined): MenuItemLayout {
   return value === "horizontal" ? "horizontal" : "vertical";
+}
+
+function parsePrinterRole(value: unknown): PrinterRole | null {
+  return value === "receipt" || value === "kitchen" ? value : null;
+}
+
+function parseNetworkPrinter(value: unknown): NetworkPrinter | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const id = typeof row.id === "string" && row.id.trim() ? row.id.trim() : null;
+  const name = typeof row.name === "string" && row.name.trim() ? row.name.trim() : null;
+  const host = typeof row.host === "string" && row.host.trim() ? row.host.trim() : null;
+  if (!id || !name || !host) return null;
+  const roles = Array.isArray(row.roles)
+    ? row.roles.map(parsePrinterRole).filter((role): role is PrinterRole => Boolean(role))
+    : [];
+  return {
+    id,
+    name,
+    host,
+    port: typeof row.port === "string" && row.port.trim() ? row.port.trim() : "9100",
+    enabled: row.enabled !== false,
+    roles: roles.length > 0 ? roles : ["receipt"],
+  };
+}
+
+function parsePrinters(
+  value: unknown,
+  fallbackHost: string,
+  fallbackPort: string,
+): NetworkPrinter[] {
+  if (Array.isArray(value)) {
+    const parsed = value
+      .map(parseNetworkPrinter)
+      .filter((printer): printer is NetworkPrinter => Boolean(printer));
+    if (parsed.length > 0) return parsed;
+  }
+  return createDefaultPrinters(fallbackHost || "192.168.1.200", fallbackPort || "9100");
 }
 
 function parseKitchenPrintPrimary(value: string | null | undefined): KitchenPrintLanguage {
@@ -176,9 +225,16 @@ function parseKitchenPrintFontSize(value: string | null | undefined): KitchenPri
 }
 
 function mapSettingsRow(row: SettingsRow): AppSettings {
+  const printerIp = row.printer_ip || DEFAULT_APP_SETTINGS.printerIp;
+  const printerPort = row.printer_port || DEFAULT_APP_SETTINGS.printerPort;
   return {
-    printerIp: row.printer_ip,
-    printerPort: row.printer_port,
+    printerIp,
+    printerPort,
+    silentPrintEnabled: row.silent_print_enabled ?? DEFAULT_APP_SETTINGS.silentPrintEnabled,
+    printBridgeUrl: row.print_bridge_url?.trim() || DEFAULT_APP_SETTINGS.printBridgeUrl,
+    browserPrintFallback:
+      row.browser_print_fallback ?? DEFAULT_APP_SETTINGS.browserPrintFallback,
+    printers: parsePrinters(row.printers, printerIp, printerPort),
     autoPrintOnPayment: row.auto_print_on_payment,
     kitchenPrintEnabled: row.kitchen_print_enabled ?? DEFAULT_APP_SETTINGS.kitchenPrintEnabled,
     kitchenPrintPrimaryLang: parseKitchenPrintPrimary(row.kitchen_print_primary_lang),
@@ -212,11 +268,6 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     receiptFontWeight: parseReceiptFontWeight(row.receipt_font_weight),
     receiptFontFamily: parseReceiptFontFamily(row.receipt_font_family),
     adminDeletionPassword: row.admin_deletion_password ?? DEFAULT_APP_SETTINGS.adminDeletionPassword,
-    terminalType: parseTerminalType(row.terminal_type),
-    terminalIp: row.terminal_ip ?? DEFAULT_APP_SETTINGS.terminalIp,
-    terminalPort: row.terminal_port ?? DEFAULT_APP_SETTINGS.terminalPort,
-    terminalPosId: row.terminal_pos_id ?? DEFAULT_APP_SETTINGS.terminalPosId,
-    terminalConnectionMode: parseTerminalConnectionMode(row.terminal_connection_mode),
     cfdAdVideoUrl: row.cfd_ad_video_url ?? DEFAULT_APP_SETTINGS.cfdAdVideoUrl,
     cfdReviewUrl: row.cfd_review_url ?? DEFAULT_APP_SETTINGS.cfdReviewUrl,
     cfdReviewQrImageUrl: row.cfd_review_qr_image_url ?? DEFAULT_APP_SETTINGS.cfdReviewQrImageUrl,
@@ -234,6 +285,14 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (partial.printerIp !== undefined) payload.printer_ip = partial.printerIp;
   if (partial.printerPort !== undefined) payload.printer_port = partial.printerPort;
+  if (partial.silentPrintEnabled !== undefined) {
+    payload.silent_print_enabled = partial.silentPrintEnabled;
+  }
+  if (partial.printBridgeUrl !== undefined) payload.print_bridge_url = partial.printBridgeUrl;
+  if (partial.browserPrintFallback !== undefined) {
+    payload.browser_print_fallback = partial.browserPrintFallback;
+  }
+  if (partial.printers !== undefined) payload.printers = partial.printers;
   if (partial.autoPrintOnPayment !== undefined) payload.auto_print_on_payment = partial.autoPrintOnPayment;
   if (partial.kitchenPrintEnabled !== undefined) payload.kitchen_print_enabled = partial.kitchenPrintEnabled;
   if (partial.kitchenPrintPrimaryLang !== undefined) {
@@ -283,13 +342,6 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   if (partial.receiptFontFamily !== undefined) payload.receipt_font_family = partial.receiptFontFamily;
   if (partial.adminDeletionPassword !== undefined) {
     payload.admin_deletion_password = partial.adminDeletionPassword;
-  }
-  if (partial.terminalType !== undefined) payload.terminal_type = partial.terminalType;
-  if (partial.terminalIp !== undefined) payload.terminal_ip = partial.terminalIp;
-  if (partial.terminalPort !== undefined) payload.terminal_port = partial.terminalPort;
-  if (partial.terminalPosId !== undefined) payload.terminal_pos_id = partial.terminalPosId;
-  if (partial.terminalConnectionMode !== undefined) {
-    payload.terminal_connection_mode = partial.terminalConnectionMode;
   }
   if (partial.cfdAdVideoUrl !== undefined) payload.cfd_ad_video_url = partial.cfdAdVideoUrl;
   if (partial.cfdReviewUrl !== undefined) payload.cfd_review_url = partial.cfdReviewUrl;
@@ -443,6 +495,10 @@ export type PrinterBillSettingsDraft = Pick<
   AppSettings,
   | "printerIp"
   | "printerPort"
+  | "silentPrintEnabled"
+  | "printBridgeUrl"
+  | "browserPrintFallback"
+  | "printers"
   | "autoPrintOnPayment"
   | "kitchenPrintEnabled"
   | "kitchenPrintPrimaryLang"
@@ -475,11 +531,6 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "receiptFontWeight"
     | "receiptFontFamily"
     | "adminDeletionPassword"
-    | "terminalType"
-    | "terminalIp"
-    | "terminalPort"
-    | "terminalPosId"
-    | "terminalConnectionMode"
     | "marqueeEnabled"
     | "marqueeText"
     | "marqueeDurationSeconds"
@@ -492,6 +543,10 @@ export function pickPrinterBillDraft(settings: AppSettings): PrinterBillSettings
   return {
     printerIp: settings.printerIp,
     printerPort: settings.printerPort,
+    silentPrintEnabled: settings.silentPrintEnabled,
+    printBridgeUrl: settings.printBridgeUrl,
+    browserPrintFallback: settings.browserPrintFallback,
+    printers: settings.printers,
     autoPrintOnPayment: settings.autoPrintOnPayment,
     kitchenPrintEnabled: settings.kitchenPrintEnabled,
     kitchenPrintPrimaryLang: settings.kitchenPrintPrimaryLang,
@@ -525,11 +580,6 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     receiptFontWeight: settings.receiptFontWeight,
     receiptFontFamily: settings.receiptFontFamily,
     adminDeletionPassword: settings.adminDeletionPassword,
-    terminalType: settings.terminalType,
-    terminalIp: settings.terminalIp,
-    terminalPort: settings.terminalPort,
-    terminalPosId: settings.terminalPosId,
-    terminalConnectionMode: settings.terminalConnectionMode,
     marqueeEnabled: settings.marqueeEnabled,
     marqueeText: settings.marqueeText,
     marqueeDurationSeconds: settings.marqueeDurationSeconds,

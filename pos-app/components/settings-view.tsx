@@ -540,23 +540,25 @@ export function SettingsView({
                         {translate("settingsPrinterRoles")}
                       </span>
                       <div className="mt-2 flex flex-wrap gap-3">
-                        {(["receipt", "kitchen", "kitchen-message"] as PrinterRole[]).map(
-                          (role) => (
-                            <label key={role} className="inline-flex items-center gap-2 text-sm">
-                              <input
-                                type="checkbox"
-                                checked={printer.roles.includes(role)}
-                                onChange={() => togglePrinterRole(printer.id, role)}
-                                className="h-4 w-4 rounded border-gray-300"
-                              />
-                              {role === "receipt"
-                                ? translate("settingsPrinterRoleReceipt")
-                                : role === "kitchen"
-                                  ? translate("settingsPrinterRoleKitchen")
-                                  : translate("settingsPrinterRoleKitchenMessage")}
-                            </label>
-                          ),
-                        )}
+                        {(
+                          ["receipt", "kitchen", "kitchen-message", "bar"] as PrinterRole[]
+                        ).map((role) => (
+                          <label key={role} className="inline-flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={printer.roles.includes(role)}
+                              onChange={() => togglePrinterRole(printer.id, role)}
+                              className="h-4 w-4 rounded border-gray-300"
+                            />
+                            {role === "receipt"
+                              ? translate("settingsPrinterRoleReceipt")
+                              : role === "kitchen"
+                                ? translate("settingsPrinterRoleKitchen")
+                                : role === "kitchen-message"
+                                  ? translate("settingsPrinterRoleKitchenMessage")
+                                  : translate("settingsPrinterRoleBar")}
+                          </label>
+                        ))}
                       </div>
                     </div>
                   </div>

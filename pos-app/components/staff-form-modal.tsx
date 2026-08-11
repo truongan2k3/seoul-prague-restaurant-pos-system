@@ -2,16 +2,35 @@
 
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/modal";
-import { STAFF_ROLES } from "@/lib/staff-roles";
-import type { StaffMember, StaffRole } from "@/lib/types";
+import { useApp } from "@/contexts/app-context";
+import {
+  ALL_NAV_TABS,
+  STAFF_ROLES,
+  defaultNavTabsForRole,
+  parseAllowedNav,
+} from "@/lib/staff-roles";
+import type { NavId, StaffMember, StaffRole } from "@/lib/types";
+import type { TranslationKey } from "@/lib/i18n/translations";
 import type { StaffInput } from "@/src/lib/staff-actions";
 
-const emptyForm: StaffInput = {
+const NAV_LABEL_KEYS: Record<NavId, TranslationKey> = {
+  map: "map",
+  order: "order",
+  reservations: "reservations",
+  history: "history",
+  summary: "summary",
+  storage: "storage",
+  staff: "staffManagement",
+  settings: "settings",
+};
+
+const emptyForm = (): StaffInput => ({
   name: "",
   role: "server",
   pin: "",
   active: true,
-};
+  allowedNav: defaultNavTabsForRole("server"),
+});
 
 interface StaffFormModalProps {
   open: boolean;
@@ -38,6 +57,7 @@ export function StaffFormModal({
   onDelete,
   isSaving = false,
 }: StaffFormModalProps) {
+  const { translate } = useApp();
   const [form, setForm] = useState<StaffInput>(emptyForm);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,30 +70,57 @@ export function StaffFormModal({
         role: member.role,
         pin: member.pin ?? "",
         active: member.active,
+        allowedNav: member.allowedNav?.length
+          ? [...member.allowedNav]
+          : defaultNavTabsForRole(member.role),
       });
     } else {
-      setForm(emptyForm);
+      setForm(emptyForm());
     }
   }, [open, member]);
 
+  const toggleNav = (tab: NavId) => {
+    setForm((prev) => {
+      const has = prev.allowedNav.includes(tab);
+      const next = has ? prev.allowedNav.filter((id) => id !== tab) : [...prev.allowedNav, tab];
+      // Always keep at least one tab so the user is never locked out of POS.
+      return { ...prev, allowedNav: next.length > 0 ? next : ["map"] };
+    });
+  };
+
+  const handleRoleChange = (role: StaffRole) => {
+    setForm((prev) => ({
+      ...prev,
+      role,
+      allowedNav: defaultNavTabsForRole(role),
+    }));
+  };
+
   const handleSubmit = async () => {
     if (!form.name.trim()) {
-      setError("Name is required");
+      setError(translate("staffNameRequired"));
       return;
     }
     if (form.pin && !/^\d{4}$/.test(form.pin)) {
-      setError("PIN must be exactly 4 digits");
+      setError(translate("staffPinInvalid"));
+      return;
+    }
+    if (form.allowedNav.length === 0) {
+      setError(translate("staffNavRequired"));
       return;
     }
     setError(null);
-    await onSave(form);
+    await onSave({
+      ...form,
+      allowedNav: parseAllowedNav(form.allowedNav) ?? defaultNavTabsForRole(form.role),
+    });
   };
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={member ? "Edit Staff Member" : "New Staff Member"}
+      title={member ? translate("staffEditMember") : translate("staffNewMember")}
       footer={
         <div className="flex flex-wrap items-center justify-between gap-2">
           {member && onDelete ? (
@@ -83,7 +130,7 @@ export function StaffFormModal({
               onClick={() => void onDelete()}
               className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950"
             >
-              Delete
+              {translate("delete")}
             </button>
           ) : (
             <span />
@@ -94,7 +141,7 @@ export function StaffFormModal({
               onClick={onClose}
               className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-800 dark:border-gray-600 dark:text-gray-200"
             >
-              Cancel
+              {translate("cancel")}
             </button>
             <button
               type="button"
@@ -102,7 +149,7 @@ export function StaffFormModal({
               onClick={() => void handleSubmit()}
               className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
             >
-              {isSaving ? "Saving..." : "Save"}
+              {isSaving ? translate("settingsSaving") : translate("save")}
             </button>
           </div>
         </div>
@@ -112,20 +159,20 @@ export function StaffFormModal({
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
         <label className="block">
-          <span className="pos-label">Name</span>
+          <span className="pos-label">{translate("staffName")}</span>
           <input
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             className="pos-input mt-1"
-            placeholder="Full name"
+            placeholder={translate("staffNamePlaceholder")}
           />
         </label>
 
         <label className="block">
-          <span className="pos-label">Role</span>
+          <span className="pos-label">{translate("staffRole")}</span>
           <select
             value={form.role}
-            onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as StaffRole }))}
+            onChange={(e) => handleRoleChange(e.target.value as StaffRole)}
             className="pos-input mt-1"
           >
             {STAFF_ROLES.map((role) => (
@@ -137,7 +184,7 @@ export function StaffFormModal({
         </label>
 
         <label className="block">
-          <span className="pos-label">PIN Code (4 digits)</span>
+          <span className="pos-label">{translate("staffPin")}</span>
           <input
             type="password"
             inputMode="numeric"
@@ -158,8 +205,35 @@ export function StaffFormModal({
             onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))}
             className="h-4 w-4 rounded border-gray-300"
           />
-          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Active</span>
+          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            {translate("active")}
+          </span>
         </label>
+
+        <div className="rounded-lg border border-gray-200 px-3 py-3 dark:border-gray-600">
+          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            {translate("staffAllowedTabs")}
+          </p>
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+            {translate("staffAllowedTabsHint")}
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {ALL_NAV_TABS.map((tab) => (
+              <label
+                key={tab}
+                className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-100 px-3 py-2 text-sm dark:border-gray-700"
+              >
+                <input
+                  type="checkbox"
+                  checked={form.allowedNav.includes(tab)}
+                  onChange={() => toggleNav(tab)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <span className="text-gray-800 dark:text-gray-200">{translate(NAV_LABEL_KEYS[tab])}</span>
+              </label>
+            ))}
+          </div>
+        </div>
       </div>
     </Modal>
   );

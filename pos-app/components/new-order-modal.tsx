@@ -53,7 +53,7 @@ import { translateNoteToChinese } from "@/src/lib/translator";
 
 interface CartLine {
   lineId: string;
-  menuItemId: string;
+  menuItemId?: string;
   name: string;
   price: number;
   quantity: number;
@@ -70,6 +70,7 @@ interface CartLine {
   kitchenModifierText?: string;
   specialRequestIds?: string[];
   isFreeAddOnLine?: boolean;
+  isCustomItem?: boolean;
 }
 
 interface NewOrderModalProps {
@@ -122,10 +123,12 @@ function newLineId() {
 function findDefaultLine(cart: CartLine[], menuItemId: string, signature?: string) {
   return cart.find(
     (line) =>
+      Boolean(menuItemId) &&
       line.menuItemId === menuItemId &&
       line.note === "" &&
       !line.isPrintedNote &&
       !line.isFreeAddOnLine &&
+      !line.isCustomItem &&
       (signature ? line.customizationSignature === signature : !line.customizationSignature),
   );
 }
@@ -299,6 +302,8 @@ export function NewOrderModal({
   const showMenuPrices = settings.showPricesOnOrderScreen;
   const menuItemLayout = settings.menuItemLayout;
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [sendSkipPrint, setSendSkipPrint] = useState(false);
+  const [sendHideOnKds, setSendHideOnKds] = useState(false);
   const [search, setSearch] = useState("");
   const [searchKeyboardOpen, setSearchKeyboardOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>("__all__");
@@ -320,6 +325,12 @@ export function NewOrderModal({
   const [kitchenMessageDraft, setKitchenMessageDraft] = useState("");
   const [kitchenMessageBusy, setKitchenMessageBusy] = useState(false);
   const [kitchenMessageError, setKitchenMessageError] = useState<string | null>(null);
+  const [customItemOpen, setCustomItemOpen] = useState(false);
+  const [customItemName, setCustomItemName] = useState("");
+  const [customItemPrice, setCustomItemPrice] = useState("");
+  const [customItemQty, setCustomItemQty] = useState("1");
+  const [customItemStation, setCustomItemStation] = useState<Station>("kitchen");
+  const [customItemError, setCustomItemError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -351,6 +362,12 @@ export function NewOrderModal({
     setKitchenMessageDraft("");
     setKitchenMessageBusy(false);
     setKitchenMessageError(null);
+    setCustomItemOpen(false);
+    setCustomItemName("");
+    setCustomItemPrice("");
+    setCustomItemQty("1");
+    setCustomItemStation("kitchen");
+    setCustomItemError(null);
   }, [open]);
 
   useEffect(() => {
@@ -450,6 +467,7 @@ export function NewOrderModal({
   const cartQtyByMenuId = useMemo(() => {
     const totals = new Map<string, number>();
     for (const line of cart) {
+      if (!line.menuItemId) continue;
       totals.set(line.menuItemId, (totals.get(line.menuItemId) ?? 0) + line.quantity);
     }
     return totals;
@@ -699,6 +717,42 @@ export function NewOrderModal({
     );
   };
 
+  const addCustomItemToCart = () => {
+    const name = customItemName.trim();
+    const price = Number(customItemPrice);
+    const quantity = Math.max(1, Math.floor(Number(customItemQty) || 1));
+    if (!name) {
+      setCustomItemError(translate("customItemNameRequired"));
+      return;
+    }
+    if (!Number.isFinite(price) || price < 0) {
+      setCustomItemError(translate("customItemPriceInvalid"));
+      return;
+    }
+    setCustomItemError(null);
+    setCart((prev) => [
+      ...prev,
+      {
+        lineId: newLineId(),
+        name,
+        price,
+        quantity,
+        category: "Custom",
+        itemType: customItemStation === "bar" ? "drink" : "food",
+        station: customItemStation,
+        note: "",
+        isPrintedNote: false,
+        isCustomItem: true,
+      },
+    ]);
+    setCustomItemOpen(false);
+    setCustomItemName("");
+    setCustomItemPrice("");
+    setCustomItemQty("1");
+    setCustomItemStation("kitchen");
+    setCartOpen(true);
+  };
+
   const handleSend = async () => {
     if (cart.length === 0 || isSaving) return;
     const orders: OrderItem[] = await Promise.all(
@@ -723,6 +777,8 @@ export function NewOrderModal({
           notes: merged.notes,
           notesTranslated: merged.notesTranslated,
           isPrintedNote: line.isPrintedNote,
+          skipPrint: sendSkipPrint,
+          hideOnKds: sendHideOnKds,
           station: resolveOrderLineStation(line),
           status: "preparing" as const,
           modifiers: {
@@ -735,18 +791,26 @@ export function NewOrderModal({
     );
 
     if (grillGuestCount !== null && cartHasGrillItems(cart)) {
-      orders.unshift(buildGrillGuestPrepOrder(grillGuestCount));
+      orders.unshift({
+        ...buildGrillGuestPrepOrder(grillGuestCount),
+        skipPrint: sendSkipPrint,
+        hideOnKds: sendHideOnKds,
+      });
     }
 
     await onSendToKitchen(orders);
     setCart([]);
     setCartOpen(false);
     setGrillGuestCount(null);
+    setSendSkipPrint(false);
+    setSendHideOnKds(false);
   };
 
   const handleClose = () => {
     setDiscardConfirmOpen(false);
     setCart([]);
+    setSendSkipPrint(false);
+    setSendHideOnKds(false);
     onClose();
   };
 
@@ -960,6 +1024,28 @@ export function NewOrderModal({
             {formatOrderPrice(billTotal)}
           </span>
         </div>
+        {cart.length > 0 && (
+          <div className="space-y-1.5 rounded-xl border border-gray-200 px-3 py-2 dark:border-gray-700">
+            <label className="flex min-h-[40px] cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+              <input
+                type="checkbox"
+                checked={sendSkipPrint}
+                onChange={(event) => setSendSkipPrint(event.target.checked)}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              {translate("sendSkipPrint")}
+            </label>
+            <label className="flex min-h-[40px] cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+              <input
+                type="checkbox"
+                checked={sendHideOnKds}
+                onChange={(event) => setSendHideOnKds(event.target.checked)}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              {translate("sendHideOnKds")}
+            </label>
+          </div>
+        )}
         <button
           type="button"
           disabled={cart.length === 0 || isSaving}
@@ -1093,21 +1179,34 @@ export function NewOrderModal({
 
             <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
               <div className="shrink-0 border-b border-gray-200 px-3 py-3 dark:border-gray-700 sm:px-4">
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="search"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    onFocus={() => setSearchKeyboardOpen(true)}
-                    onClick={() => setSearchKeyboardOpen(true)}
-                    inputMode="none"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    placeholder={translate("searchMenu")}
-                    className="min-h-[48px] w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-11 pr-4 text-base outline-none focus:ring-2 focus:ring-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-                  />
+                <div className="flex gap-2">
+                  <div className="relative min-w-0 flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="search"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      onFocus={() => setSearchKeyboardOpen(true)}
+                      onClick={() => setSearchKeyboardOpen(true)}
+                      inputMode="none"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      placeholder={translate("searchMenu")}
+                      className="min-h-[48px] w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-11 pr-4 text-base outline-none focus:ring-2 focus:ring-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomItemError(null);
+                      setCustomItemOpen(true);
+                    }}
+                    className="inline-flex min-h-[48px] shrink-0 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-800 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+                  >
+                    <Plus className="h-4 w-4" />
+                    {translate("customItem")}
+                  </button>
                 </div>
               </div>
 
@@ -1374,6 +1473,102 @@ export function NewOrderModal({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {customItemOpen && (
+        <div className="relative z-[60]">
+          <Modal
+            open
+            onClose={() => setCustomItemOpen(false)}
+            title={translate("customItemTitle")}
+            footer={
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCustomItemOpen(false)}
+                  className="min-h-[44px] flex-1 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold dark:border-gray-700"
+                >
+                  {translate("cancel")}
+                </button>
+                <button
+                  type="button"
+                  onClick={addCustomItemToCart}
+                  className="min-h-[44px] flex-1 rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white dark:bg-gray-100 dark:text-gray-900"
+                >
+                  {translate("addToCart")}
+                </button>
+              </div>
+            }
+          >
+            <div className="space-y-3">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {translate("customItemHint")}
+              </p>
+              {customItemError && (
+                <p className="text-sm text-red-600 dark:text-red-400">{customItemError}</p>
+              )}
+              <label className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">{translate("customItemName")}</span>
+                <input
+                  value={customItemName}
+                  onChange={(event) => setCustomItemName(event.target.value)}
+                  className="pos-input mt-1"
+                  placeholder={translate("customItemNamePlaceholder")}
+                  autoFocus
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">{translate("customItemPrice")}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={customItemPrice}
+                    onChange={(event) => setCustomItemPrice(event.target.value)}
+                    className="pos-input mt-1"
+                    placeholder="0"
+                    inputMode="decimal"
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">{translate("customItemQty")}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={customItemQty}
+                    onChange={(event) => setCustomItemQty(event.target.value)}
+                    className="pos-input mt-1"
+                    inputMode="numeric"
+                  />
+                </label>
+              </div>
+              <div className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">{translate("customItemStation")}</span>
+                <div className="mt-2 flex gap-2">
+                  {(
+                    [
+                      ["kitchen", "kitchen"],
+                      ["bar", "bar"],
+                    ] as const
+                  ).map(([value, labelKey]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setCustomItemStation(value)}
+                      className={`min-h-[40px] flex-1 rounded-lg px-3 text-sm font-semibold ${filterButtonClass(
+                        customItemStation === value,
+                      )}`}
+                    >
+                      {translate(labelKey)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </Modal>
         </div>
       )}
 

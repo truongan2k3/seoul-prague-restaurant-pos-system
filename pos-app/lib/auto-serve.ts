@@ -47,8 +47,9 @@ export function isCancelledKitchenItem(
 }
 
 export function isKitchenBoardVisible(
-  item: Pick<OrderItem, "kitchenStatus" | "status" | "isCancelled">,
+  item: Pick<OrderItem, "kitchenStatus" | "status" | "isCancelled" | "hideOnKds">,
 ): boolean {
+  if (item.hideOnKds) return false;
   const kitchenStatus = resolveKitchenStatus(item);
   return kitchenStatus === "pending" || kitchenStatus === "ready" || kitchenStatus === "cancelled";
 }

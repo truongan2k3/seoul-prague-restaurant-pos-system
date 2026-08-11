@@ -39,7 +39,7 @@ export function StaffView({ onRefresh }: StaffViewProps) {
     return (
       <div className="flex h-full items-center justify-center bg-gray-50 dark:bg-gray-950">
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          Staff management is available to Admin and Manager roles only.
+          {translate("staffAccessDenied")}
         </p>
       </div>
     );

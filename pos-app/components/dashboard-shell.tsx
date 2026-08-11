@@ -16,7 +16,7 @@ import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { useTableOrderWorkflow } from "@/hooks/use-table-order-workflow";
 import { useApp } from "@/contexts/app-context";
 import { AUTO_SERVE_POLL_MS } from "@/lib/auto-serve";
-import { canAccessNavTab } from "@/lib/staff-roles";
+import { canAccessNavTabForMember, firstAccessibleNavTab } from "@/lib/staff-roles";
 import {
   fetchCategories,
   fetchInventory,
@@ -165,8 +165,8 @@ export function DashboardShell() {
 
   useEffect(() => {
     if (!currentStaffUser) return;
-    if (!canAccessNavTab(currentStaffUser.role, activeTab)) {
-      setActiveTab("map");
+    if (!canAccessNavTabForMember(currentStaffUser, activeTab)) {
+      setActiveTab(firstAccessibleNavTab(currentStaffUser));
     }
   }, [currentStaffUser, activeTab]);
 

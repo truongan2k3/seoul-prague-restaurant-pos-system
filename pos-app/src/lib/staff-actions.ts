@@ -1,4 +1,5 @@
-import type { StaffRole } from "@/lib/types";
+import type { NavId, StaffRole } from "@/lib/types";
+import { parseAllowedNav } from "@/lib/staff-roles";
 import { supabase } from "@/src/lib/supabase";
 
 export interface StaffInput {
@@ -6,33 +7,27 @@ export interface StaffInput {
   role: StaffRole;
   pin: string;
   active: boolean;
+  /** Custom tab permissions; empty = role defaults */
+  allowedNav: NavId[];
+}
+
+function staffRowPayload(input: StaffInput) {
+  const allowedNav = parseAllowedNav(input.allowedNav);
+  return {
+    name: input.name.trim(),
+    role: input.role,
+    pin: input.pin.trim() || null,
+    active: input.active,
+    allowed_nav: allowedNav ?? null,
+  };
 }
 
 export async function createStaff(input: StaffInput) {
-  return supabase
-    .from("staff")
-    .insert({
-      name: input.name.trim(),
-      role: input.role,
-      pin: input.pin.trim() || null,
-      active: input.active,
-    })
-    .select("*")
-    .single();
+  return supabase.from("staff").insert(staffRowPayload(input)).select("*").single();
 }
 
 export async function updateStaff(id: string, input: StaffInput) {
-  return supabase
-    .from("staff")
-    .update({
-      name: input.name.trim(),
-      role: input.role,
-      pin: input.pin.trim() || null,
-      active: input.active,
-    })
-    .eq("id", id)
-    .select("*")
-    .single();
+  return supabase.from("staff").update(staffRowPayload(input)).eq("id", id).select("*").single();
 }
 
 export async function deleteStaff(id: string) {

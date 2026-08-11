@@ -51,7 +51,7 @@ export type ReceiptFontFamily =
 export type MenuItemLayout = "vertical" | "horizontal";
 
 /** Roles a network thermal printer can serve. */
-export type PrinterRole = "receipt" | "kitchen" | "kitchen-message";
+export type PrinterRole = "receipt" | "kitchen" | "kitchen-message" | "bar";
 
 /** LAN thermal printer targeted via the local print bridge. */
 export interface NetworkPrinter {
@@ -85,7 +85,7 @@ export interface AppSettings {
   printBridgeUrl: string;
   /** If silent print fails, fall back to browser print dialog. */
   browserPrintFallback: boolean;
-  /** Configured LAN printers (receipt / kitchen / kitchen-message roles). */
+  /** Configured LAN printers (receipt / kitchen / kitchen-message / bar roles). */
   printers: NetworkPrinter[];
   autoPrintOnPayment: boolean;
   /** Print kitchen ticket when staff sends order. */
@@ -246,6 +246,10 @@ export interface OrderItem {
   notes?: string;
   notesTranslated?: string;
   isPrintedNote?: boolean;
+  /** Do not print this line on kitchen/bar tickets. */
+  skipPrint?: boolean;
+  /** Do not show on KDS/Bar display or new-order alerts. */
+  hideOnKds?: boolean;
   station?: Station;
   status?: OrderItemStatus;
   kitchenStatus?: KitchenStatus;
@@ -312,6 +316,10 @@ export interface StaffMember {
   role: StaffRole;
   pin?: string;
   active: boolean;
+  /**
+   * Custom POS tabs this member may see. When empty/undefined, role defaults apply.
+   */
+  allowedNav?: NavId[];
 }
 
 export type VisitSource = "reservation" | "walk_in";

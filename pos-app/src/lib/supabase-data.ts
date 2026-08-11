@@ -17,7 +17,7 @@ import type {
 import { normalizeOrderItemStatus } from "@/lib/order-status";
 import { gridToPosition } from "@/lib/table-layout";
 import { deriveItemType, resolveStation } from "@/lib/order-routing";
-import { normalizeStaffRole } from "@/lib/staff-roles";
+import { normalizeStaffRole, parseAllowedNav } from "@/lib/staff-roles";
 import { supabase } from "@/src/lib/supabase";
 
 interface SupabaseTableRow {
@@ -78,6 +78,8 @@ export interface SupabaseOrderItemRow {
   notes: string | null;
   notes_translated?: string | null;
   is_printed_note?: boolean | null;
+  skip_print?: boolean | null;
+  hide_on_kds?: boolean | null;
   station: "kitchen" | "bar";
   status: string;
   kitchen_status?: string | null;
@@ -192,6 +194,8 @@ export function mapOrderItemRow(row: SupabaseOrderItemRow): OrderItem {
     notes: row.notes ?? undefined,
     notesTranslated: row.notes_translated ?? undefined,
     isPrintedNote: row.is_printed_note ?? undefined,
+    skipPrint: row.skip_print ?? undefined,
+    hideOnKds: row.hide_on_kds ?? undefined,
     station: row.station,
     status: normalizeOrderItemStatus(row.status),
     kitchenStatus: normalizeKitchenStatus(row.kitchen_status, row.status, row.is_cancelled),
@@ -320,6 +324,7 @@ export function mapStaffResponse(
         role: string;
         pin?: string | null;
         active?: boolean | null;
+        allowed_nav?: unknown;
       }[]
     | null,
 ) {
@@ -329,6 +334,7 @@ export function mapStaffResponse(
     role: normalizeStaffRole(s.role),
     pin: s.pin ?? undefined,
     active: s.active ?? true,
+    allowedNav: parseAllowedNav(s.allowed_nav),
   }));
 }
 

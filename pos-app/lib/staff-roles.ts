@@ -1,6 +1,17 @@
-import type { NavId, StaffRole } from "@/lib/types";
+import type { NavId, StaffMember, StaffRole } from "@/lib/types";
 
 export const STAFF_ROLES: StaffRole[] = ["admin", "manager", "server", "kitchen", "bar"];
+
+export const ALL_NAV_TABS: NavId[] = [
+  "map",
+  "order",
+  "reservations",
+  "history",
+  "summary",
+  "storage",
+  "staff",
+  "settings",
+];
 
 /** Legacy DB value `cashier` maps to admin in the UI. */
 export function normalizeStaffRole(role: string): StaffRole {
@@ -13,13 +24,52 @@ export function canManageStaff(role: StaffRole | undefined): boolean {
   return role === "admin" || role === "manager";
 }
 
-/** Which main POS sidebar tabs the logged-in role may open. */
+/** Default tabs for a role when `allowedNav` is not set. */
+export function defaultNavTabsForRole(role: StaffRole | undefined): NavId[] {
+  if (!role) return ["map"];
+  if (role === "admin" || role === "manager") return [...ALL_NAV_TABS];
+  if (role === "server") return ["map", "order", "reservations"];
+  // Kitchen / bar primarily use dedicated screens; POS map is the fallback home.
+  return ["map"];
+}
+
+export function parseAllowedNav(value: unknown): NavId[] | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  const allowed = new Set<string>(ALL_NAV_TABS);
+  const tabs = value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter((entry): entry is NavId => allowed.has(entry));
+  return tabs.length > 0 ? tabs : undefined;
+}
+
+/** Effective tabs for a member (custom list or role defaults). */
+export function effectiveNavTabs(member: StaffMember | null | undefined): NavId[] {
+  if (!member) return ["map"];
+  if (member.allowedNav && member.allowedNav.length > 0) {
+    return member.allowedNav.filter((tab) => ALL_NAV_TABS.includes(tab));
+  }
+  return defaultNavTabsForRole(member.role);
+}
+
+/** Which main POS sidebar tabs the member may open. */
 export function canAccessNavTab(role: StaffRole | undefined, tab: NavId): boolean {
-  if (!role) return tab === "map";
-  if (role === "admin" || role === "manager") return true;
-  if (tab === "staff" || tab === "history") return false;
-  if (tab === "map" || tab === "order" || tab === "reservations") return role === "server";
-  return false;
+  return defaultNavTabsForRole(role).includes(tab);
+}
+
+export function canAccessNavTabForMember(
+  member: StaffMember | null | undefined,
+  tab: NavId,
+): boolean {
+  if (!effectiveNavTabs(member).includes(tab)) return false;
+  // Staff management UI still requires Admin/Manager role.
+  if (tab === "staff" && !canManageStaff(member?.role)) return false;
+  return true;
+}
+
+export function firstAccessibleNavTab(member: StaffMember | null | undefined): NavId {
+  const tabs = effectiveNavTabs(member);
+  return tabs[0] ?? "map";
 }
 
 /** Route-level access for dedicated screens (Map, KDS, Bar, Server tablet). */

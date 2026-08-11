@@ -39,6 +39,14 @@ export function createDefaultPrinters(host = "192.168.1.200", port = "9100"): Ne
       enabled: true,
       roles: ["kitchen", "kitchen-message"],
     },
+    {
+      id: "printer-bar",
+      name: "Bar",
+      host,
+      port,
+      enabled: true,
+      roles: ["bar"],
+    },
   ];
 }
 
@@ -178,7 +186,10 @@ function parseMenuItemLayout(value: string | null | undefined): MenuItemLayout {
 }
 
 function parsePrinterRole(value: unknown): PrinterRole | null {
-  return value === "receipt" || value === "kitchen" || value === "kitchen-message"
+  return value === "receipt" ||
+    value === "kitchen" ||
+    value === "kitchen-message" ||
+    value === "bar"
     ? value
     : null;
 }

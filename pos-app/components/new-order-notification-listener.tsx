@@ -30,6 +30,7 @@ export function NewOrderNotificationListener({
 
     return subscribeToOrderItemInserts((row) => {
       if (row.station !== station) return;
+      if (row.hide_on_kds) return;
       const status = normalizeOrderItemStatus(row.status);
       if (status !== "preparing" && status !== "pending") return;
 

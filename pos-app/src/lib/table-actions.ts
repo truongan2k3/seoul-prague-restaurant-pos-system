@@ -21,6 +21,8 @@ function aggregateOrderItems(items: OrderItem[]): OrderItem[] {
         entry.notes === item.notes &&
         entry.notesTranslated === item.notesTranslated &&
         entry.isPrintedNote === item.isPrintedNote &&
+        entry.skipPrint === item.skipPrint &&
+        entry.hideOnKds === item.hideOnKds &&
         normalizeOrderItemStatus(entry.status) === normalizeOrderItemStatus(item.status) &&
         entry.price === item.price &&
         entry.station === item.station,
@@ -77,6 +79,8 @@ function orderItemRowUpdate(unit: OrderItem) {
     notes: unit.notes ?? null,
     notes_translated: unit.notesTranslated ?? null,
     is_printed_note: unit.isPrintedNote ?? false,
+    skip_print: unit.skipPrint ?? false,
+    hide_on_kds: unit.hideOnKds ?? false,
     station: unit.station ?? "kitchen",
     status,
     kitchen_status: kitchenStatus,
@@ -96,9 +100,9 @@ function isBillableOrderItem(
 
 /** Still cooking / waiting to auto-serve — cancelled alerts must NOT block floor close. */
 function isKitchenStillOpen(
-  item: Pick<OrderItem, "kitchenStatus" | "status" | "isCancelled">,
+  item: Pick<OrderItem, "kitchenStatus" | "status" | "isCancelled" | "hideOnKds">,
 ): boolean {
-  if (item.isCancelled) return false;
+  if (item.isCancelled || item.hideOnKds) return false;
   const kitchenStatus = resolveKitchenStatus(item);
   return kitchenStatus === "pending" || kitchenStatus === "ready";
 }
@@ -181,6 +185,8 @@ function buildOrderRows(tableId: string, orders: OrderItem[], staffId?: string) 
       notes: item.notes ?? null,
       notes_translated: item.notesTranslated ?? null,
       is_printed_note: item.isPrintedNote ?? false,
+      skip_print: item.skipPrint ?? false,
+      hide_on_kds: item.hideOnKds ?? false,
       station: item.station ?? "kitchen",
       status,
       kitchen_status: item.kitchenStatus ?? "pending",
@@ -379,7 +385,7 @@ export async function forceCloseTable(tableId: string) {
 async function settlePaidTable(tableId: string) {
   const { data: items } = await supabase
     .from("order_items")
-    .select("status, kitchen_status")
+    .select("status, kitchen_status, hide_on_kds")
     .eq("table_id", tableId);
 
   const hasOpenKitchen = (items ?? []).some((item) =>
@@ -387,6 +393,7 @@ async function settlePaidTable(tableId: string) {
       status: item.status,
       kitchenStatus: item.kitchen_status ?? undefined,
       isCancelled: item.kitchen_status === "cancelled",
+      hideOnKds: item.hide_on_kds ?? false,
     }),
   );
 

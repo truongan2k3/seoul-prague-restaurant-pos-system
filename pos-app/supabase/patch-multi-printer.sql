@@ -12,4 +12,4 @@ COMMENT ON COLUMN public.settings.print_bridge_url IS
 COMMENT ON COLUMN public.settings.browser_print_fallback IS
   'If silent print fails, fall back to browser print dialog';
 COMMENT ON COLUMN public.settings.printers IS
-  'JSON array of { id, name, host, port, enabled, roles: receipt|kitchen|kitchen-message }';
+  'JSON array of { id, name, host, port, enabled, roles: receipt|kitchen|kitchen-message|bar }';

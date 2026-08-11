@@ -120,6 +120,7 @@ export function PrintStationView() {
       const status = normalizeOrderItemStatus(row.status);
       if (status !== "preparing" && status !== "pending") return;
       if (row.is_cancelled) return;
+      if (row.skip_print) return;
       if (seenIdsRef.current.has(row.id)) return;
 
       seenIdsRef.current.add(row.id);

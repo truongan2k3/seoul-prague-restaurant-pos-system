@@ -26,7 +26,9 @@ export function filterItemsForBoard(
 }
 
 export function ticketHasOpenKitchenWork(items: OrderItem[]): boolean {
-  return items.some((item) => resolveKitchenStatus(item) === "pending");
+  return items.some(
+    (item) => !item.hideOnKds && resolveKitchenStatus(item) === "pending",
+  );
 }
 
 /** Tables with open kitchen work first; fully ready tickets sink to the back. */

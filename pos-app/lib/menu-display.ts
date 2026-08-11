@@ -73,7 +73,7 @@ export function orderItemDualDisplay(
 }
 
 export function cartLineDisplayName(
-  line: { menuItemId: string; name: string },
+  line: { menuItemId?: string; name: string },
   menuItems: MenuItem[],
   language: LanguageCode,
 ): string {

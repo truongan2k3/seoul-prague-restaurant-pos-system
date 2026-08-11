@@ -22,6 +22,7 @@ import { useApp } from "@/contexts/app-context";
 import { useAuth } from "@/contexts/auth-context";
 import { usePendingReservationCount } from "@/hooks/use-pending-reservation-count";
 import { navButtonClass } from "@/lib/theme-classes";
+import { canAccessNavTabForMember } from "@/lib/staff-roles";
 import type { NavId } from "@/lib/types";
 
 const SIDEBAR_COLLAPSED_KEY = "pos-sidebar-collapsed";
@@ -30,10 +31,10 @@ export const navItems = [
   { id: "map" as const, labelKey: "map" as const, icon: Map },
   { id: "order" as const, labelKey: "order" as const, icon: ClipboardList },
   { id: "reservations" as const, labelKey: "reservations" as const, icon: CalendarDays },
-  { id: "history" as const, labelKey: "history" as const, icon: History, adminOnly: true },
+  { id: "history" as const, labelKey: "history" as const, icon: History },
   { id: "summary" as const, labelKey: "summary" as const, icon: BarChart3 },
   { id: "storage" as const, labelKey: "storage" as const, icon: Package },
-  { id: "staff" as const, labelKey: "staffManagement" as const, icon: Users, adminOnly: true },
+  { id: "staff" as const, labelKey: "staffManagement" as const, icon: Users },
   { id: "settings" as const, labelKey: "settings" as const, icon: Settings },
 ] as const;
 
@@ -48,8 +49,7 @@ function readCollapsedPreference(): boolean {
 }
 
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
-  const { theme, setTheme, currentStaffUser, setStaff, staffList, translate, canManageStaff } =
-    useApp();
+  const { theme, setTheme, currentStaffUser, setStaff, staffList, translate } = useApp();
   const { business, session, logout } = useAuth();
   const pendingReservationCount = usePendingReservationCount();
   const [collapsed, setCollapsed] = useState(false);
@@ -58,8 +58,8 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
     setCollapsed(readCollapsedPreference());
   }, []);
 
-  const visibleNavItems = navItems.filter(
-    (item) => !("adminOnly" in item && item.adminOnly) || canManageStaff,
+  const visibleNavItems = navItems.filter((item) =>
+    canAccessNavTabForMember(currentStaffUser, item.id),
   );
 
   const activeStaffOptions = staffList.filter((member) => member.active);

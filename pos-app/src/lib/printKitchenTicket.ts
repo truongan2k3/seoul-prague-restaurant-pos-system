@@ -418,7 +418,7 @@ async function dispatchKitchenPrint(
   settings: KitchenPrintSettings,
   html: string,
   pngs: string[],
-  role: "kitchen" | "kitchen-message" = "kitchen",
+  role: "kitchen" | "kitchen-message" | "bar" = "kitchen",
 ): Promise<void> {
   const fontSettings = {
     receiptFontSize: settings.receiptFontSize,
@@ -442,6 +442,11 @@ async function dispatchKitchenPrint(
         result = await silentPrintEscPos(settings, "kitchen", bytes);
       }
       if (result.sent) return;
+      // No bar printer configured → skip (do not print bar tickets on kitchen).
+      if (role === "bar" && result.error === "No enabled printers for this role") {
+        console.warn("[KitchenPrint] Skipping bar ticket — no bar printer configured");
+        return;
+      }
       console.warn("[KitchenPrint] Silent print incomplete:", result.error);
       if (!settings.browserPrintFallback) {
         throw new Error(result.error || "Silent kitchen print failed");
@@ -455,14 +460,15 @@ async function dispatchKitchenPrint(
   await printReceiptHTML(html, fontSettings);
 }
 
-export async function printKitchenTicket(input: {
+async function printStationTicket(input: {
   tableLabel: string;
   orders: OrderItem[];
   menuItems: MenuItem[];
   settings: KitchenPrintSettings;
+  role: "kitchen" | "bar";
   stationLabel?: string;
 }): Promise<void> {
-  if (!input.settings.kitchenPrintEnabled || input.orders.length === 0) return;
+  if (input.orders.length === 0) return;
 
   const { html, pngs } = await buildKitchenTicketHtml({
     tableLabel: input.tableLabel,
@@ -474,7 +480,38 @@ export async function printKitchenTicket(input: {
     stationLabel: input.stationLabel,
   });
 
-  await dispatchKitchenPrint(input.settings, html, pngs, "kitchen");
+  await dispatchKitchenPrint(input.settings, html, pngs, input.role);
+}
+
+export async function printKitchenTicket(input: {
+  tableLabel: string;
+  orders: OrderItem[];
+  menuItems: MenuItem[];
+  settings: KitchenPrintSettings;
+  stationLabel?: string;
+}): Promise<void> {
+  if (!input.settings.kitchenPrintEnabled || input.orders.length === 0) return;
+
+  const kitchenOrders = input.orders.filter(
+    (order) => order.station !== "bar" && !order.skipPrint,
+  );
+  const barOrders = input.orders.filter(
+    (order) => order.station === "bar" && !order.skipPrint,
+  );
+  if (kitchenOrders.length === 0 && barOrders.length === 0) return;
+
+  await printStationTicket({
+    ...input,
+    orders: kitchenOrders,
+    role: "kitchen",
+    stationLabel: input.stationLabel ?? "KITCHEN",
+  });
+  await printStationTicket({
+    ...input,
+    orders: barOrders,
+    role: "bar",
+    stationLabel: "BAR",
+  });
 }
 
 export async function printKitchenMessage(input: {

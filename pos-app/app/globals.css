@@ -644,24 +644,27 @@ input[type="search"] {
   font-family: "Courier New", Courier, monospace;
 }
 
-/* ── Announcement marquee (main POS) ─────────────────────────────────────── */
+/* ── Announcement marquee ─────────────────────────────────────────────────── */
+/* Starts off-screen right (padding-left: 100%), scrolls until fully off left, then restarts. */
 
 @keyframes pos-marquee-scroll {
   from {
     transform: translateX(0);
   }
   to {
-    transform: translateX(-50%);
+    transform: translateX(-100%);
   }
 }
 
 .pos-marquee-track {
   animation: pos-marquee-scroll linear infinite;
+  will-change: transform;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .pos-marquee-track {
     animation: none;
     transform: none;
+    padding-left: 2.5rem;
   }
 }

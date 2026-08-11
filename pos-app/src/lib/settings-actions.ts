@@ -37,7 +37,7 @@ export function createDefaultPrinters(host = "192.168.1.200", port = "9100"): Ne
       host,
       port,
       enabled: true,
-      roles: ["kitchen"],
+      roles: ["kitchen", "kitchen-message"],
     },
   ];
 }
@@ -88,6 +88,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   marqueeDurationSeconds: 28,
   marqueeFontFamily: "arial",
   marqueeEndAt: "",
+  marqueeOnPos: true,
+  marqueeOnClient: false,
+  marqueeOnKds: false,
+  marqueeOnBar: false,
 };
 
 type SettingsRow = {
@@ -136,6 +140,10 @@ type SettingsRow = {
   marquee_duration_seconds?: number | null;
   marquee_font_family?: string | null;
   marquee_end_at?: string | null;
+  marquee_on_pos?: boolean | null;
+  marquee_on_client?: boolean | null;
+  marquee_on_kds?: boolean | null;
+  marquee_on_bar?: boolean | null;
 };
 
 function parseNumericSetting(value: number | string | null | undefined, fallback: number): number {
@@ -170,7 +178,9 @@ function parseMenuItemLayout(value: string | null | undefined): MenuItemLayout {
 }
 
 function parsePrinterRole(value: unknown): PrinterRole | null {
-  return value === "receipt" || value === "kitchen" ? value : null;
+  return value === "receipt" || value === "kitchen" || value === "kitchen-message"
+    ? value
+    : null;
 }
 
 function parseNetworkPrinter(value: unknown): NetworkPrinter | null {
@@ -282,6 +292,10 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     ),
     marqueeFontFamily: parseMarqueeFontFamily(row.marquee_font_family),
     marqueeEndAt: row.marquee_end_at ?? DEFAULT_APP_SETTINGS.marqueeEndAt,
+    marqueeOnPos: row.marquee_on_pos ?? DEFAULT_APP_SETTINGS.marqueeOnPos,
+    marqueeOnClient: row.marquee_on_client ?? DEFAULT_APP_SETTINGS.marqueeOnClient,
+    marqueeOnKds: row.marquee_on_kds ?? DEFAULT_APP_SETTINGS.marqueeOnKds,
+    marqueeOnBar: row.marquee_on_bar ?? DEFAULT_APP_SETTINGS.marqueeOnBar,
   };
 }
 
@@ -362,6 +376,10 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   }
   if (partial.marqueeFontFamily !== undefined) payload.marquee_font_family = partial.marqueeFontFamily;
   if (partial.marqueeEndAt !== undefined) payload.marquee_end_at = partial.marqueeEndAt || null;
+  if (partial.marqueeOnPos !== undefined) payload.marquee_on_pos = partial.marqueeOnPos;
+  if (partial.marqueeOnClient !== undefined) payload.marquee_on_client = partial.marqueeOnClient;
+  if (partial.marqueeOnKds !== undefined) payload.marquee_on_kds = partial.marqueeOnKds;
+  if (partial.marqueeOnBar !== undefined) payload.marquee_on_bar = partial.marqueeOnBar;
   return payload;
 }
 
@@ -544,6 +562,10 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "marqueeDurationSeconds"
     | "marqueeFontFamily"
     | "marqueeEndAt"
+    | "marqueeOnPos"
+    | "marqueeOnClient"
+    | "marqueeOnKds"
+    | "marqueeOnBar"
     | "soundConfigs"
   >;
 
@@ -594,6 +616,10 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     marqueeDurationSeconds: settings.marqueeDurationSeconds,
     marqueeFontFamily: settings.marqueeFontFamily,
     marqueeEndAt: settings.marqueeEndAt,
+    marqueeOnPos: settings.marqueeOnPos,
+    marqueeOnClient: settings.marqueeOnClient,
+    marqueeOnKds: settings.marqueeOnKds,
+    marqueeOnBar: settings.marqueeOnBar,
     soundConfigs: settings.soundConfigs,
   };
 }

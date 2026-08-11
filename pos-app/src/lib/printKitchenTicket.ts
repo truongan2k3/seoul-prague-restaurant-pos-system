@@ -78,12 +78,6 @@ function scaleFor(size: KitchenPrintFontSize | undefined): KitchenTypeScale {
   return ORDER_TYPE_SCALE[size ?? "xlarge"] ?? ORDER_TYPE_SCALE.xlarge;
 }
 
-function langLabel(lang: KitchenPrintLanguage): string {
-  if (lang === "zh") return "ZH";
-  if (lang === "cs") return "CS";
-  return "EN";
-}
-
 function itemNameForLang(
   item: OrderItem,
   menuItems: MenuItem[],
@@ -132,11 +126,15 @@ function dualItemNames(
   return { primary, secondary };
 }
 
-function noteForLang(item: OrderItem, lang: KitchenPrintLanguage): string {
+function dualNotes(item: OrderItem): { zh: string; en: string } {
   const original = item.notes?.trim() ?? "";
   const translated = item.notesTranslated?.trim() ?? "";
-  if (lang === "zh") return translated || original;
-  return original || translated;
+  if (translated && original && translated.toLowerCase() !== original.toLowerCase()) {
+    return { zh: translated, en: original };
+  }
+  if (translated) return { zh: translated, en: "" };
+  if (original) return { zh: original, en: "" };
+  return { zh: "", en: "" };
 }
 
 function bmp(
@@ -261,27 +259,19 @@ export async function buildKitchenTicketHtml(input: {
 
   const lines = aggregateDisplayItems(input.orders);
   const now = new Date();
-  const time = now.toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
-  const station = input.stationLabel ?? "KITCHEN";
-  const langs =
-    input.secondaryLang === "none"
-      ? langLabel(input.primaryLang)
-      : `${langLabel(input.primaryLang)} / ${langLabel(input.secondaryLang)}`;
+  const printedAt = now.toLocaleString("cs-CZ", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
+  // Kitchen order ticket is always ZH (large) + EN (small), per kitchen template.
   const itemBlocks = lines
     .map((item) => {
-      const { primary, secondary } = dualItemNames(
-        item,
-        input.menuItems,
-        input.primaryLang,
-        input.secondaryLang,
-      );
-      const notePrimary = noteForLang(item, input.primaryLang);
-      const noteSecondary =
-        input.secondaryLang === "none" ? "" : noteForLang(item, input.secondaryLang);
-      const showNoteSecondary =
-        Boolean(noteSecondary) &&
-        noteSecondary.trim().toLowerCase() !== notePrimary.trim().toLowerCase();
+      const { primary, secondary } = dualItemNames(item, input.menuItems, "zh", "en");
+      const { zh: noteZh, en: noteEn } = dualNotes(item);
 
       const namePrimaryHtml = draw(`${item.quantity}× ${primary}`, {
         width: FULL_WIDTH_PX,
@@ -297,11 +287,11 @@ export async function buildKitchenTicketHtml(input: {
         : "";
 
       const noteHtml =
-        notePrimary || showNoteSecondary
+        noteZh || noteEn
           ? `<div class="kitchen-note">
               ${
-                notePrimary
-                  ? `<div class="kitchen-note-primary">${draw(`※ ${notePrimary}`, {
+                noteZh
+                  ? `<div class="kitchen-note-primary">${draw(`※ ${noteZh}`, {
                       width: FULL_WIDTH_PX,
                       size: s.notePrimary,
                       weight: 700,
@@ -309,8 +299,8 @@ export async function buildKitchenTicketHtml(input: {
                   : ""
               }
               ${
-                showNoteSecondary
-                  ? `<div class="kitchen-note-secondary">${draw(noteSecondary, {
+                noteEn
+                  ? `<div class="kitchen-note-secondary">${draw(noteEn, {
                       width: FULL_WIDTH_PX,
                       size: s.noteSecondary,
                       weight: 600,
@@ -335,23 +325,16 @@ export async function buildKitchenTicketHtml(input: {
     ${kitchenTicketCss(s.qty)}
     <div class="kitchen-ticket">
       <div class="kitchen-header">
-        ${draw(`TABLE ${input.tableLabel}`, {
+        ${draw(`Table: ${input.tableLabel}`, {
           width: FULL_WIDTH_PX,
           size: s.table,
           weight: 700,
           align: "center",
         })}
         <div class="kitchen-meta-gap"></div>
-        ${draw(`${station} · ${time}`, {
+        ${draw(printedAt, {
           width: FULL_WIDTH_PX,
           size: s.meta,
-          weight: 600,
-          align: "center",
-        })}
-        <div class="kitchen-meta-gap"></div>
-        ${draw(langs, {
-          width: FULL_WIDTH_PX,
-          size: Math.max(11, s.meta - 1),
           weight: 600,
           align: "center",
         })}
@@ -360,7 +343,6 @@ export async function buildKitchenTicketHtml(input: {
         itemBlocks ||
         `<div class="kitchen-item">${draw("—", { width: FULL_WIDTH_PX, size: s.empty })}</div>`
       }
-      <div class="kitchen-footer">*** NEW ORDER ***</div>
     </div>`;
 
   return { html, pngs };
@@ -436,6 +418,7 @@ async function dispatchKitchenPrint(
   settings: KitchenPrintSettings,
   html: string,
   pngs: string[],
+  role: "kitchen" | "kitchen-message" = "kitchen",
 ): Promise<void> {
   const fontSettings = {
     receiptFontSize: settings.receiptFontSize,
@@ -449,7 +432,15 @@ async function dispatchKitchenPrint(
       const { buildEscPosFromPngs } = await import("@/src/lib/escpos");
       const { silentPrintEscPos } = await import("@/src/lib/print-bridge-client");
       const bytes = await buildEscPosFromPngs(pngs);
-      const result = await silentPrintEscPos(settings, "kitchen", bytes);
+      let result = await silentPrintEscPos(settings, role, bytes);
+      // Messages: if no printer has kitchen-message role, fall back to kitchen printers.
+      if (
+        !result.sent &&
+        role === "kitchen-message" &&
+        result.error === "No enabled printers for this role"
+      ) {
+        result = await silentPrintEscPos(settings, "kitchen", bytes);
+      }
       if (result.sent) return;
       console.warn("[KitchenPrint] Silent print incomplete:", result.error);
       if (!settings.browserPrintFallback) {
@@ -483,7 +474,7 @@ export async function printKitchenTicket(input: {
     stationLabel: input.stationLabel,
   });
 
-  await dispatchKitchenPrint(input.settings, html, pngs);
+  await dispatchKitchenPrint(input.settings, html, pngs, "kitchen");
 }
 
 export async function printKitchenMessage(input: {
@@ -499,5 +490,5 @@ export async function printKitchenMessage(input: {
     messageZh: input.messageZh,
     fontSize: input.settings.kitchenPrintMessageFontSize,
   });
-  await dispatchKitchenPrint(input.settings, html, pngs);
+  await dispatchKitchenPrint(input.settings, html, pngs, "kitchen-message");
 }

@@ -15,6 +15,8 @@ export function parseMarqueeFontFamily(value: string | null | undefined): Receip
   return allowed.includes(value as ReceiptFontFamily) ? (value as ReceiptFontFamily) : "arial";
 }
 
+export type MarqueeSurface = "pos" | "client" | "kds" | "bar";
+
 export function isMarqueeActive(settings: AppSettings, now = Date.now()): boolean {
   if (!settings.marqueeEnabled) return false;
   if (!settings.marqueeText.trim()) return false;
@@ -24,6 +26,26 @@ export function isMarqueeActive(settings: AppSettings, now = Date.now()): boolea
 
   const endMs = new Date(endAt).getTime();
   return Number.isFinite(endMs) && now < endMs;
+}
+
+export function isMarqueeVisibleOn(
+  settings: AppSettings,
+  surface: MarqueeSurface,
+  now = Date.now(),
+): boolean {
+  if (!isMarqueeActive(settings, now)) return false;
+  switch (surface) {
+    case "pos":
+      return settings.marqueeOnPos;
+    case "client":
+      return settings.marqueeOnClient;
+    case "kds":
+      return settings.marqueeOnKds;
+    case "bar":
+      return settings.marqueeOnBar;
+    default:
+      return false;
+  }
 }
 
 export function marqueeFontFamilyStack(family: ReceiptFontFamily): string {

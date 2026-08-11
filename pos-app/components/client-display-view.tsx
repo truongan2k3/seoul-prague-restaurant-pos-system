@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { LanguageSelector } from "@/components/language-selector";
 import {
   isCfdGifMedia,
@@ -302,6 +303,7 @@ export function ClientDisplayView() {
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-zinc-950 text-white">
+      <AnnouncementMarquee surface="client" tone="dark" />
       <CfdHeader language={language} onLanguageChange={setLanguage} translate={translate} />
 
       {clientState === "idle" && <IdleDisplayView videoUrl={adVideoUrl} translate={translate} />}

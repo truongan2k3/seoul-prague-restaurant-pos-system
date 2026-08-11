@@ -242,6 +242,16 @@ export function PrintStationView() {
     listening &&
     (!settings.silentPrintEnabled || bridgeOk === true);
 
+  const notReadyReason = !settings.kitchenPrintEnabled
+    ? translate("printStationNeedKitchenPrint")
+    : !settings.kitchenPrintViaStation
+      ? translate("printStationNeedViaStation")
+      : !listening
+        ? translate("printStationIdle")
+        : settings.silentPrintEnabled && bridgeOk !== true
+          ? translate("printStationNeedBridge")
+          : null;
+
   return (
     <div className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
       <header className="flex items-start justify-between gap-3 border-b border-zinc-200 bg-white px-4 py-4 dark:border-zinc-800 dark:bg-zinc-900">
@@ -279,9 +289,11 @@ export function PrintStationView() {
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
                 {printing
                   ? translate("printStationPrinting")
-                  : listening
-                    ? translate("printStationListening")
-                    : translate("printStationIdle")}
+                  : notReadyReason
+                    ? notReadyReason
+                    : listening
+                      ? translate("printStationListening")
+                      : translate("printStationIdle")}
               </p>
             </div>
           </div>
@@ -312,6 +324,11 @@ export function PrintStationView() {
               {bridgeDetail ? ` (${bridgeDetail})` : ""}
             </li>
           </ul>
+          {!statusReady && settings.silentPrintEnabled && bridgeOk === false ? (
+            <p className="mt-3 text-sm text-amber-700 dark:text-amber-400">
+              {translate("printStationBridgeHelp")}
+            </p>
+          ) : null}
         </section>
 
         <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">

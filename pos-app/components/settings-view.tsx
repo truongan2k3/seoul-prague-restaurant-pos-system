@@ -43,6 +43,19 @@ const RECEIPT_FONT_LABEL_KEYS: Record<ReceiptFontFamily, TranslationKey> = {
   georgia: "settingsReceiptFontGeorgia",
 };
 
+type SettingsTabId =
+  | "branding"
+  | "printing"
+  | "display"
+  | "menu"
+  | "marquee"
+  | "reservations"
+  | "sounds"
+  | "cfd"
+  | "devices"
+  | "general"
+  | "security";
+
 export function SettingsView({
   menuItems = [],
   categories = [],
@@ -81,6 +94,21 @@ export function SettingsView({
   const [bridgeTestMessage, setBridgeTestMessage] = useState<string | null>(null);
   const [bridgeTesting, setBridgeTesting] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTabId>("printing");
+
+  const settingsTabs: { id: SettingsTabId; labelKey: TranslationKey }[] = [
+    { id: "branding", labelKey: "settingsTabBranding" },
+    { id: "printing", labelKey: "settingsTabPrinting" },
+    { id: "display", labelKey: "settingsTabDisplay" },
+    { id: "menu", labelKey: "settingsTabMenu" },
+    { id: "marquee", labelKey: "settingsTabMarquee" },
+    { id: "reservations", labelKey: "settingsTabReservations" },
+    { id: "sounds", labelKey: "settingsTabSounds" },
+    { id: "cfd", labelKey: "settingsTabCfd" },
+    { id: "devices", labelKey: "settingsTabDevices" },
+    { id: "general", labelKey: "settingsTabGeneral" },
+    { id: "security", labelKey: "settingsTabSecurity" },
+  ];
 
   const weekdayLabels: Record<WeekdayKey, string> = {
     monday: translate("settingsDayMonday"),
@@ -267,15 +295,41 @@ export function SettingsView({
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto p-4 md:p-6">
-        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2">
-          {settingsError && (
-            <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 md:col-span-2 dark:bg-red-950 dark:text-red-300">
-              {settingsError}
-            </p>
-          )}
+      <div className="shrink-0 border-b border-gray-200 bg-white px-3 dark:border-gray-800 dark:bg-gray-900 sm:px-6">
+        <nav
+          className="-mb-px flex gap-1 overflow-x-auto pb-px pt-1"
+          aria-label={translate("settings")}
+        >
+          {settingsTabs.map((tab) => {
+            const active = activeSettingsTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveSettingsTab(tab.id)}
+                className={`shrink-0 rounded-t-lg px-3 py-2.5 text-sm font-semibold transition-colors ${
+                  active
+                    ? "bg-gray-50 text-emerald-700 ring-1 ring-inset ring-gray-200 dark:bg-gray-950 dark:text-emerald-400 dark:ring-gray-700"
+                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                }`}
+              >
+                {translate(tab.labelKey)}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
 
-          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6 md:col-span-2">
+      <div className="flex-1 overflow-auto p-4 md:p-6">
+        {settingsError && (
+          <p className="mx-auto mb-4 max-w-5xl rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+            {settingsError}
+          </p>
+        )}
+
+        {activeSettingsTab === "branding" && (
+        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6">
+          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("settingsBusinessBranding")}</h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{translate("settingsBusinessBrandingHint")}</p>
 
@@ -325,8 +379,12 @@ export function SettingsView({
               />
             </div>
           </section>
+        </div>
+        )}
 
-          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6 md:col-span-2">
+        {activeSettingsTab === "printing" && (
+        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6">
+          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("settingsReceiptPrinting")}</h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{translate("settingsPrinterHint")}</p>
 
@@ -482,19 +540,23 @@ export function SettingsView({
                         {translate("settingsPrinterRoles")}
                       </span>
                       <div className="mt-2 flex flex-wrap gap-3">
-                        {(["receipt", "kitchen"] as PrinterRole[]).map((role) => (
-                          <label key={role} className="inline-flex items-center gap-2 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={printer.roles.includes(role)}
-                              onChange={() => togglePrinterRole(printer.id, role)}
-                              className="h-4 w-4 rounded border-gray-300"
-                            />
-                            {role === "receipt"
-                              ? translate("settingsPrinterRoleReceipt")
-                              : translate("settingsPrinterRoleKitchen")}
-                          </label>
-                        ))}
+                        {(["receipt", "kitchen", "kitchen-message"] as PrinterRole[]).map(
+                          (role) => (
+                            <label key={role} className="inline-flex items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={printer.roles.includes(role)}
+                                onChange={() => togglePrinterRole(printer.id, role)}
+                                className="h-4 w-4 rounded border-gray-300"
+                              />
+                              {role === "receipt"
+                                ? translate("settingsPrinterRoleReceipt")
+                                : role === "kitchen"
+                                  ? translate("settingsPrinterRoleKitchen")
+                                  : translate("settingsPrinterRoleKitchenMessage")}
+                            </label>
+                          ),
+                        )}
                       </div>
                     </div>
                   </div>
@@ -775,7 +837,12 @@ export function SettingsView({
             </div>
           </section>
 
-          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6 md:col-span-2">
+        </div>
+        )}
+
+        {activeSettingsTab === "display" && (
+        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6">
+          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">
               {translate("settingsDisplayCurrency")}
             </h2>
@@ -870,17 +937,61 @@ export function SettingsView({
             )}
           </section>
 
-          {(menuItems.length > 0 || categories.length > 0) && (
-            <div className="md:col-span-2">
-              <MenuCustomizationManager
-                menuItems={menuItems}
-                categories={categories}
-                onChange={() => onMenuChange?.()}
-              />
+          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("receiptCurrency")}</h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              EUR display is configured above. USD remains a receipt-only option on this device.
+            </p>
+            <div className="mt-4 space-y-3">
+              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
+                <span className="text-sm text-gray-800 dark:text-gray-200">{translate("showUsdOnReceipt")}</span>
+                <input
+                  type="checkbox"
+                  checked={receiptShowUsd}
+                  onChange={(event) => setReceiptShowUsd(event.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+              </label>
             </div>
-          )}
+            {receiptShowUsd && (
+              <div className="mt-4">
+                <label className="block text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">{translate("usdRate")}</span>
+                  <div className="mt-1 flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      step={0.01}
+                      value={usdRate}
+                      onChange={(event) => setUsdRate(Number(event.target.value))}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                    />
+                    <span className="shrink-0 text-gray-600 dark:text-gray-300">Kč</span>
+                  </div>
+                </label>
+              </div>
+            )}
+          </section>
+        </div>
+        )}
 
-          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6 md:col-span-2">
+        {activeSettingsTab === "menu" && (
+        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6">
+          {(menuItems.length > 0 || categories.length > 0) ? (
+            <MenuCustomizationManager
+              menuItems={menuItems}
+              categories={categories}
+              onChange={() => onMenuChange?.()}
+            />
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400">{translate("settingsTabMenuEmpty")}</p>
+          )}
+        </div>
+        )}
+
+        {activeSettingsTab === "marquee" && (
+        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6">
+          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">
               {translate("settingsMarquee")}
             </h2>
@@ -900,6 +1011,40 @@ export function SettingsView({
                   className="h-4 w-4 rounded border-gray-300"
                 />
               </label>
+
+              <div className="rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                  {translate("settingsMarqueeSurfaces")}
+                </p>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {translate("settingsMarqueeSurfacesHint")}
+                </p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {(
+                    [
+                      ["marqueeOnPos", "settingsMarqueeOnPos"],
+                      ["marqueeOnClient", "settingsMarqueeOnClient"],
+                      ["marqueeOnKds", "settingsMarqueeOnKds"],
+                      ["marqueeOnBar", "settingsMarqueeOnBar"],
+                    ] as const
+                  ).map(([key, labelKey]) => (
+                    <label
+                      key={key}
+                      className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-50 px-3 py-2 dark:border-gray-800"
+                    >
+                      <span className="text-sm text-gray-800 dark:text-gray-200">
+                        {translate(labelKey)}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={draft[key]}
+                        onChange={(event) => updateDraft(key, event.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
 
               <label className="block text-sm">
                 <span className="text-gray-500 dark:text-gray-400">{translate("settingsMarqueeText")}</span>
@@ -976,16 +1121,16 @@ export function SettingsView({
                   </p>
                   <div
                     className="overflow-hidden py-2"
-                    style={{ fontFamily: RECEIPT_FONT_OPTIONS.find((f) => f.id === draft.marqueeFontFamily)?.stack }}
+                    style={{
+                      fontFamily: RECEIPT_FONT_OPTIONS.find((f) => f.id === draft.marqueeFontFamily)
+                        ?.stack,
+                    }}
                   >
                     <div
-                      className="pos-marquee-track flex w-max items-center"
+                      className="pos-marquee-track inline-block whitespace-nowrap pl-[100%]"
                       style={{ animationDuration: `${draft.marqueeDurationSeconds}s` }}
                     >
-                      <span className="pos-marquee-segment px-6 text-sm font-semibold text-amber-950 dark:text-amber-100">
-                        {draft.marqueeText.trim()}
-                      </span>
-                      <span className="pos-marquee-segment px-6 text-sm font-semibold text-amber-950 dark:text-amber-100" aria-hidden>
+                      <span className="px-6 text-sm font-semibold text-amber-950 dark:text-amber-100">
                         {draft.marqueeText.trim()}
                       </span>
                     </div>
@@ -995,7 +1140,12 @@ export function SettingsView({
             </div>
           </section>
 
-          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6 md:col-span-2">
+        </div>
+        )}
+
+        {activeSettingsTab === "reservations" && (
+        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6">
+          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">
               {translate("settingsReservationSlots")}
             </h2>
@@ -1101,7 +1251,12 @@ export function SettingsView({
             </div>
           </section>
 
-          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+        </div>
+        )}
+
+        {activeSettingsTab === "sounds" && (
+        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2">
+          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800 md:col-span-2">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("settingsCustomSound")}</h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{translate("settingsSoundPreview")}</p>
 
@@ -1138,7 +1293,96 @@ export function SettingsView({
             </div>
           </section>
 
-          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800 md:col-span-2">
+          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">
+              {translate("soundSettingsTitle")}
+            </h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {translate("soundSettingsHint")}
+            </p>
+            <div className="mt-4 space-y-3">
+              {(
+                [
+                  {
+                    key: "callWaiter" as const,
+                    label: translate("soundCallWaiter"),
+                  },
+                  {
+                    key: "newOrder" as const,
+                    label: translate("soundNewOrder"),
+                  },
+                  {
+                    key: "paymentSuccess" as const,
+                    label: translate("soundPaymentSuccess"),
+                  },
+                ] as const
+              ).map((row) => (
+                <label key={row.key} className="block text-sm">
+                  <span className="text-gray-700 dark:text-gray-300">{row.label}</span>
+                  <div className="mt-1 flex gap-2">
+                    <select
+                      value={draft.soundConfigs[row.key]}
+                      onChange={(event) =>
+                        updateDraft("soundConfigs", {
+                          ...draft.soundConfigs,
+                          [row.key]: event.target.value,
+                        })
+                      }
+                      className="pos-input flex-1"
+                    >
+                      {SOUND_FILE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => playTestAlertSound(draft.soundConfigs[row.key])}
+                      className="shrink-0 rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold dark:border-gray-600"
+                    >
+                      Test
+                    </button>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">
+              {translate("soundNotifications")}
+            </h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Toggle bell sounds on this device. Visual toasts still appear when sound is off.
+            </p>
+            <div className="mt-4 space-y-3">
+              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
+                <span className="text-sm text-gray-800 dark:text-gray-200">{translate("soundMainPos")}</span>
+                <input
+                  type="checkbox"
+                  checked={soundMainEnabled}
+                  onChange={(event) => setSoundMainEnabled(event.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+              </label>
+              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
+                <span className="text-sm text-gray-800 dark:text-gray-200">{translate("soundKitchen")}</span>
+                <input
+                  type="checkbox"
+                  checked={soundKitchenEnabled}
+                  onChange={(event) => setSoundKitchenEnabled(event.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+              </label>
+            </div>
+          </section>
+        </div>
+        )}
+
+        {activeSettingsTab === "cfd" && (
+        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6">
+          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("settingsCustomerDisplay")}</h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{translate("settingsCustomerDisplayHint")}</p>
 
@@ -1240,7 +1484,11 @@ export function SettingsView({
               </div>
             </div>
           </section>
+        </div>
+        )}
 
+        {activeSettingsTab === "devices" && (
+        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6">
           <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("devices")}</h2>
             <ul className="mt-4 space-y-2">
@@ -1260,135 +1508,18 @@ export function SettingsView({
               ))}
             </ul>
           </section>
+        </div>
+        )}
 
+        {activeSettingsTab === "general" && (
+        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2">
           <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("language")}</h2>
             <LanguageSelector variant="flag-menu" className="mt-3" />
           </section>
 
           <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-            <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("receiptCurrency")}</h2>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              EUR display is configured in Display &amp; currency above. USD remains a receipt-only option on this device.
-            </p>
-            <div className="mt-4 space-y-3">
-              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
-                <span className="text-sm text-gray-800 dark:text-gray-200">{translate("showUsdOnReceipt")}</span>
-                <input
-                  type="checkbox"
-                  checked={receiptShowUsd}
-                  onChange={(event) => setReceiptShowUsd(event.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300"
-                />
-              </label>
-            </div>
-            {receiptShowUsd && (
-              <div className="mt-4">
-                <label className="block text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">{translate("usdRate")}</span>
-                  <div className="mt-1 flex items-center gap-2">
-                    <input
-                      type="number"
-                      min={1}
-                      step={0.01}
-                      value={usdRate}
-                      onChange={(event) => setUsdRate(Number(event.target.value))}
-                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-                    />
-                    <span className="shrink-0 text-gray-600 dark:text-gray-300">Kč</span>
-                  </div>
-                </label>
-              </div>
-            )}
-          </section>
-
-          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-            <h2 className="font-semibold text-gray-900 dark:text-gray-100">
-              🔊 {translate("soundSettingsTitle")}
-            </h2>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {translate("soundSettingsHint")}
-            </p>
-            <div className="mt-4 space-y-3">
-              {(
-                [
-                  {
-                    key: "callWaiter" as const,
-                    label: translate("soundCallWaiter"),
-                  },
-                  {
-                    key: "newOrder" as const,
-                    label: translate("soundNewOrder"),
-                  },
-                  {
-                    key: "paymentSuccess" as const,
-                    label: translate("soundPaymentSuccess"),
-                  },
-                ] as const
-              ).map((row) => (
-                <label key={row.key} className="block text-sm">
-                  <span className="text-gray-700 dark:text-gray-300">{row.label}</span>
-                  <div className="mt-1 flex gap-2">
-                    <select
-                      value={draft.soundConfigs[row.key]}
-                      onChange={(event) =>
-                        updateDraft("soundConfigs", {
-                          ...draft.soundConfigs,
-                          [row.key]: event.target.value,
-                        })
-                      }
-                      className="pos-input flex-1"
-                    >
-                      {SOUND_FILE_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => playTestAlertSound(draft.soundConfigs[row.key])}
-                      className="shrink-0 rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold dark:border-gray-600"
-                    >
-                      Test
-                    </button>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </section>
-
-          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-            <h2 className="font-semibold text-gray-900 dark:text-gray-100">
-              {translate("soundNotifications")}
-            </h2>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Toggle bell sounds on this device. Visual toasts still appear when sound is off.
-            </p>
-            <div className="mt-4 space-y-3">
-              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
-                <span className="text-sm text-gray-800 dark:text-gray-200">{translate("soundMainPos")}</span>
-                <input
-                  type="checkbox"
-                  checked={soundMainEnabled}
-                  onChange={(event) => setSoundMainEnabled(event.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300"
-                />
-              </label>
-              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
-                <span className="text-sm text-gray-800 dark:text-gray-200">{translate("soundKitchen")}</span>
-                <input
-                  type="checkbox"
-                  checked={soundKitchenEnabled}
-                  onChange={(event) => setSoundKitchenEnabled(event.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300"
-                />
-              </label>
-            </div>
-          </section>
-
-          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-            <h2 className="font-semibold text-gray-900 dark:text-gray-100">Theme</h2>
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("settingsTabTheme")}</h2>
             <button
               type="button"
               onClick={() => setTheme(theme === "light" ? "dark" : "light")}
@@ -1397,8 +1528,12 @@ export function SettingsView({
               {theme === "light" ? translate("darkMode") : translate("lightMode")}
             </button>
           </section>
+        </div>
+        )}
 
-          <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30 sm:p-6 md:col-span-2">
+        {activeSettingsTab === "security" && (
+        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6">
+          <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30 sm:p-6">
             <h2 className="font-semibold text-amber-900 dark:text-amber-200">
               {translate("settingsAdminSecurity")}
             </h2>
@@ -1426,6 +1561,7 @@ export function SettingsView({
             </p>
           </section>
         </div>
+        )}
       </div>
     </div>
   );

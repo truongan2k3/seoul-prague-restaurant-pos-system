@@ -51,7 +51,7 @@ export type ReceiptFontFamily =
 export type MenuItemLayout = "vertical" | "horizontal";
 
 /** Roles a network thermal printer can serve. */
-export type PrinterRole = "receipt" | "kitchen";
+export type PrinterRole = "receipt" | "kitchen" | "kitchen-message";
 
 /** LAN thermal printer targeted via the local print bridge. */
 export interface NetworkPrinter {
@@ -85,7 +85,7 @@ export interface AppSettings {
   printBridgeUrl: string;
   /** If silent print fails, fall back to browser print dialog. */
   browserPrintFallback: boolean;
-  /** Configured LAN printers (receipt / kitchen roles). */
+  /** Configured LAN printers (receipt / kitchen / kitchen-message roles). */
   printers: NetworkPrinter[];
   autoPrintOnPayment: boolean;
   /** Print kitchen ticket when staff sends order. */
@@ -136,11 +136,19 @@ export interface AppSettings {
   /** Scrolling announcement banner on main POS tabs */
   marqueeEnabled: boolean;
   marqueeText: string;
-  /** Seconds for one full scroll loop (lower = faster) */
+  /** Seconds for one full scroll across the screen (lower = faster) */
   marqueeDurationSeconds: number;
   marqueeFontFamily: ReceiptFontFamily;
   /** ISO datetime — hide marquee after this moment (empty = no expiry) */
   marqueeEndAt: string;
+  /** Show on main POS tabs */
+  marqueeOnPos: boolean;
+  /** Show on /client customer display */
+  marqueeOnClient: boolean;
+  /** Show on /kds kitchen display */
+  marqueeOnKds: boolean;
+  /** Show on /bar display */
+  marqueeOnBar: boolean;
 }
 
 export type StaffRole = "admin" | "manager" | "server" | "kitchen" | "bar";

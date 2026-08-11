@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bell, User } from "lucide-react";
+import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { CancelReasonModal } from "@/components/cancel-reason-modal";
 import { NewOrderNotificationListener } from "@/components/new-order-notification-listener";
 import { LanguageSelector } from "@/components/language-selector";
@@ -345,6 +346,7 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
   return (
     <div className={shellClass}>
       <NewOrderNotificationListener station={station} tables={tables} menuItems={menuItems} />
+      <AnnouncementMarquee surface={station === "kitchen" ? "kds" : "bar"} tone="dark" />
       <header
         className={`flex shrink-0 flex-wrap items-center justify-between gap-4 border-b-2 px-6 py-5 ${headerBorder}`}
       >

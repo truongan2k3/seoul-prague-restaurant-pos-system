@@ -266,7 +266,7 @@ export function DashboardShell() {
       <CallWaiterListener />
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <AnnouncementMarquee />
+        <AnnouncementMarquee surface="pos" />
         <main className="flex-1 overflow-hidden">{content}</main>
       </div>
       {tableOrder.tableOrderModals}

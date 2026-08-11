@@ -29,15 +29,24 @@ function lanIPv4Addresses() {
   return out;
 }
 
-function sendJson(res, status, payload) {
-  const body = JSON.stringify(payload);
-  res.writeHead(status, {
-    "Content-Type": "application/json",
+/** CORS + Chrome Private Network Access (HTTPS Vercel → http://127.0.0.1). */
+function corsHeaders() {
+  return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Private-Network": "true",
+  };
+}
+
+function sendJson(res, status, payload) {
+  const body = JSON.stringify(payload);
+  const headers = {
+    ...corsHeaders(),
+    "Content-Type": "application/json",
     "Content-Length": Buffer.byteLength(body),
-  });
+  };
+  res.writeHead(status, headers);
   res.end(body);
 }
 
@@ -73,11 +82,7 @@ function tcpSend(host, port, data) {
 
 const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") {
-    res.writeHead(204, {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    });
+    res.writeHead(204, corsHeaders());
     res.end();
     return;
   }
@@ -139,13 +144,14 @@ server.listen(PORT, HOST, () => {
     console.log("  LAN IP:  (not found — check Wi‑Fi)");
   } else {
     for (const ip of ips) {
-      console.log(`  Phone/tablet Bridge URL:`);
-      console.log(`           http://${ip}:${PORT}`);
+      console.log(`  LAN:     http://${ip}:${PORT}`);
     }
   }
   console.log("");
-  console.log("  Keep this window OPEN while the restaurant is open.");
-  console.log("  In POS Settings → Print bridge URL → paste the URL above.");
+  console.log("  Print Station setup:");
+  console.log("  1) Keep this window OPEN");
+  console.log("  2) On THIS PC open POS → /print-station");
+  console.log("  3) Settings → Print bridge URL = http://127.0.0.1:" + PORT);
   console.log("  Printer IP (e.g. 192.168.1.202) goes under Network printers.");
   console.log("========================================");
   console.log("");

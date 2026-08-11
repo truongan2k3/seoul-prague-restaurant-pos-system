@@ -1,42 +1,49 @@
-# Print Bridge + Print Station (máy Windows quán)
+# Print Bridge cho máy Windows (silent print, **không cần Node**)
 
-Điện thoại / tablet **chỉ đặt món**. PC Windows giữ **1 tab Print Station** + chạy folder nhỏ này.
+Điện thoại chỉ đặt món. PC Windows chạy **1 file** + mở tab Print Station.
 
-## Cài 1 lần trên PC Windows
+## Cài / chạy trên PC Windows (không cài Node)
 
-1. Cài [Node.js LTS](https://nodejs.org) (Next → Next → Finish)
-2. Copy **cả folder `print-bridge`** sang PC (USB / Drive / tải từ GitHub)
-   - Ví dụ: `C:\pos-print-bridge\`
-3. Double-click **`start-bridge.bat`**
-4. Giữ cửa sổ đen mở suốt giờ làm
+1. Copy folder `print-bridge` sang PC (USB / Drive), ví dụ `C:\pos-print-bridge\`
+2. Double-click **`start-bridge.bat`**
+3. Giữ cửa sổ đen mở suốt giờ làm  
+   → dùng **PowerShell có sẵn trên Windows** (`print-bridge.ps1`)
 
-## Mỗi ngày trên PC Windows
+Nếu Windows hỏi quyền chạy script: chọn **Open** / cho phép — bat đã dùng `-ExecutionPolicy Bypass`.
 
-1. Bridge đang chạy (`start-bridge.bat`)
-2. Mở Chrome → đăng nhập POS → mở **`/print-station`** (Settings → Devices → Print Station)
-3. Để tab đó mở (có thể thu nhỏ cửa sổ)
+## Mỗi ngày
 
-## Settings trên POS (web)
+1. `start-bridge.bat` đang chạy  
+2. Chrome trên **cùng PC** → mở **`/print-station`**  
+3. Để tab đó mở
 
-| Ô | Điền gì |
-|---|--------|
+## Settings POS
+
+| Ô | Điền |
+|---|------|
 | Silent network print | **Bật** |
-| Print bridge URL | `http://127.0.0.1:39100` (vì Print Station chạy **trên cùng PC** với bridge) |
-| Network printers → IP | IP máy in bếp, vd `192.168.1.202` |
+| Print bridge URL | `http://127.0.0.1:39100` |
+| Network printers → IP | IP máy in bếp (vd `192.168.1.202`) |
 | Port | `9100` |
-| Role | Kitchen (và/hoặc Receipt) |
-| Kitchen print on Send | **Bật** |
-| Print from Print Station tab | **Bật** (mặc định) |
+| Role | Kitchen |
+| Print from Print Station | **Bật** |
 
-Điện thoại cùng Wi‑Fi → đặt món → Send → tab Print Station trên PC in ra máy bếp.
+## Kiểm tra bridge
+
+Trên Chrome **của PC Windows** mở:
+
+`http://127.0.0.1:39100/health`
+
+Phải thấy `"ok": true`.
 
 ## Không cần
 
-- Cài driver máy in trên điện thoại  
-- Copy cả project `pos-app`  
-- Điền IP LAN của PC vào Bridge URL (dùng `127.0.0.1` là đủ khi dùng Print Station)  
+- Cài Node.js  
+- Driver máy in trên điện thoại  
+- Copy cả project `pos-app`
 
 ## Lỗi thường gặp
 
-- In ra chữ `OPTIONS /print...` → Bridge URL đang nhầm thành IP máy in `:9100`. Sửa lại `http://127.0.0.1:39100`.
-- Không in → PC chưa mở `/print-station`, hoặc chưa chạy bridge, hoặc khác Wi‑Fi / Realtime tắt.
+- Print Station **Not ready / Bridge unreachable** → chưa chạy `start-bridge.bat`, hoặc mở `/print-station` trên **điện thoại** (phải mở trên PC).  
+- In ra `OPTIONS /print` → Bridge URL nhầm thành IP máy in `:9100`.  
+- PowerShell bị chặn → chuột phải `print-bridge.ps1` → Properties → Unblock, hoặc chạy lại `start-bridge.bat`.

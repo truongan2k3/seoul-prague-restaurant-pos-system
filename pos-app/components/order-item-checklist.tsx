@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { ElapsedTimer } from "@/components/live-clock";
 import { WaiterNoteDisplay } from "@/components/waiter-note-display";
 import { resolveKitchenStatus } from "@/lib/auto-serve";
+import { resolveUnitIds } from "@/lib/order-item-aggregate";
 import { orderItemDualDisplay } from "@/lib/menu-display";
 import { isItemSlaBreached } from "@/lib/order-sla";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
@@ -19,10 +20,10 @@ interface OrderItemChecklistProps {
   lateIds?: Set<string>;
   onToggle?: (itemId: string) => void;
   onToggleAll?: () => void;
-  onMarkReady?: (itemId: string) => void;
-  onUndoReady?: (itemId: string) => void;
-  onCancelItem?: (itemId: string) => void;
-  onAcknowledgeCancel?: (itemId: string) => void;
+  onMarkReady?: (itemIds: string[]) => void;
+  onUndoReady?: (itemIds: string[]) => void;
+  onCancelItem?: (itemIds: string[]) => void;
+  onAcknowledgeCancel?: (itemIds: string[]) => void;
   variant?: "kitchen" | "floor";
   dense?: boolean;
   interactive?: boolean;
@@ -65,7 +66,10 @@ export function OrderItemChecklist({
   const allSelected =
     !useTapWorkflow &&
     items.length > 0 &&
-    items.every((item) => item.id && selectedIds.has(item.id));
+    items.every((item) => {
+      const ids = resolveUnitIds(item);
+      return ids.length > 0 && ids.every((id) => selectedIds.has(id));
+    });
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {
@@ -74,15 +78,17 @@ export function OrderItemChecklist({
     }
   };
 
-  const handleKitchenPointerDown = (itemId: string) => {
+  const handleKitchenPointerDown = (item: OrderItem) => {
     if (!useTapWorkflow) return;
     longPressTriggeredRef.current = false;
     clearLongPressTimer();
     if (!onCancelItem) return;
+    const ids = resolveUnitIds(item);
+    if (ids.length === 0) return;
 
     longPressTimerRef.current = setTimeout(() => {
       longPressTriggeredRef.current = true;
-      onCancelItem(itemId);
+      onCancelItem(ids);
     }, LONG_PRESS_MS);
   };
 
@@ -91,7 +97,8 @@ export function OrderItemChecklist({
   };
 
   const handleKitchenClick = (item: OrderItem) => {
-    if (!useTapWorkflow || !item.id || longPressTriggeredRef.current) {
+    const ids = resolveUnitIds(item);
+    if (!useTapWorkflow || ids.length === 0 || longPressTriggeredRef.current) {
       longPressTriggeredRef.current = false;
       return;
     }
@@ -99,19 +106,32 @@ export function OrderItemChecklist({
     const kitchenStatus = resolveKitchenStatus(item);
     if (kitchenStatus === "cancelled") return;
     if (kitchenStatus === "pending") {
-      onMarkReady?.(item.id);
+      onMarkReady?.(ids);
     }
   };
 
   const handleKitchenDoubleClick = (item: OrderItem) => {
-    if (!useTapWorkflow || !item.id) return;
+    const ids = resolveUnitIds(item);
+    if (!useTapWorkflow || ids.length === 0) return;
 
     longPressTriggeredRef.current = false;
 
     if (resolveKitchenStatus(item) === "ready") {
-      onUndoReady?.(item.id);
+      onUndoReady?.(ids);
     }
   };
+
+  const toggleGroup = (item: OrderItem) => {
+    for (const id of resolveUnitIds(item)) onToggle?.(id);
+  };
+
+  const isGroupSelected = (item: OrderItem) => {
+    const ids = resolveUnitIds(item);
+    return ids.length > 0 && ids.every((id) => selectedIds.has(id));
+  };
+
+  const isGroupLate = (item: OrderItem) =>
+    resolveUnitIds(item).some((id) => lateIds.has(id));
 
   return (
     <div className="space-y-2">
@@ -135,12 +155,13 @@ export function OrderItemChecklist({
           const isCancelled = kitchenStatus === "cancelled" || Boolean(item.isCancelled);
           const isReady = !isCancelled && (kitchenStatus === "ready" || status === "ready");
           const isServed = !isCancelled && (kitchenStatus === "served" || status === "served");
-          const isLate = item.id ? lateIds.has(item.id) : false;
+          const isLate = isGroupLate(item);
           const slaBreached = isItemSlaBreached(item);
           const kitchenDone = variant === "kitchen" && isReady;
           const timerStart = itemTimerStart(item);
+          const unitIds = resolveUnitIds(item);
           const rowInteractive =
-            useTapWorkflow && Boolean(item.id) && !isServed && !isCancelled;
+            useTapWorkflow && unitIds.length > 0 && !isServed && !isCancelled;
 
           const rowClass = `${
             rowInteractive ? "cursor-pointer select-none active:scale-[0.99]" : ""
@@ -161,9 +182,9 @@ export function OrderItemChecklist({
               {!useTapWorkflow && !isCancelled && (
                 <input
                   type="checkbox"
-                  checked={kitchenDone || (item.id ? selectedIds.has(item.id) : false)}
-                  disabled={!item.id || kitchenDone || isServed}
-                  onChange={() => item.id && onToggle?.(item.id)}
+                  checked={kitchenDone || isGroupSelected(item)}
+                  disabled={unitIds.length === 0 || kitchenDone || isServed}
+                  onChange={() => toggleGroup(item)}
                   className="mt-1 h-5 w-5 shrink-0 rounded border-gray-300"
                 />
               )}
@@ -227,16 +248,16 @@ export function OrderItemChecklist({
                       </p>
                     )
                   ))}
-                {isCancelled && variant === "kitchen" && item.id && onAcknowledgeCancel && (
+                {isCancelled && variant === "kitchen" && unitIds.length > 0 && onAcknowledgeCancel && (
                   <button
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      onAcknowledgeCancel(item.id!);
+                      onAcknowledgeCancel(unitIds);
                     }}
                     className="mt-3 min-h-[44px] w-full rounded-lg bg-white px-3 py-2 text-sm font-black uppercase tracking-wide text-red-700"
                   >
-                    Đã rõ / Acknowledge
+                    {translate("acknowledgeCancel")}
                   </button>
                 )}
               </div>
@@ -245,12 +266,12 @@ export function OrderItemChecklist({
 
           if (rowInteractive) {
             return (
-              <li key={item.id ?? `${item.name}-${index}`}>
+              <li key={item.unitIds?.join("-") ?? item.id ?? `${item.name}-${index}`}>
                 <button
                   type="button"
                   onClick={() => handleKitchenClick(item)}
                   onDoubleClick={() => handleKitchenDoubleClick(item)}
-                  onPointerDown={() => item.id && handleKitchenPointerDown(item.id)}
+                  onPointerDown={() => handleKitchenPointerDown(item)}
                   onPointerUp={handleKitchenPointerUp}
                   onPointerLeave={handleKitchenPointerUp}
                   onPointerCancel={handleKitchenPointerUp}
@@ -263,7 +284,10 @@ export function OrderItemChecklist({
           }
 
           return (
-            <li key={item.id ?? `${item.name}-${index}`} className={rowClass}>
+            <li
+              key={item.unitIds?.join("-") ?? item.id ?? `${item.name}-${index}`}
+              className={rowClass}
+            >
               {rowBody}
             </li>
           );

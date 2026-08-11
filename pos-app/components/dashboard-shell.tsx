@@ -15,6 +15,7 @@ import { Sidebar } from "@/components/sidebar";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { useTableOrderWorkflow } from "@/hooks/use-table-order-workflow";
 import { useApp } from "@/contexts/app-context";
+import { AUTO_SERVE_POLL_MS } from "@/lib/auto-serve";
 import { canAccessNavTab } from "@/lib/staff-roles";
 import {
   fetchCategories,
@@ -35,6 +36,7 @@ import {
   subscribeToTableChanges,
   type SupabaseOrderItemRow,
 } from "@/src/lib/supabase-data";
+import { autoServeExpiredReadyItems } from "@/src/lib/table-actions";
 import { supabase } from "@/src/lib/supabase";
 import type { InventoryItem, MenuCategoryRecord, MenuItem, RestaurantTable, SaleRecord, OrderItem, NavId } from "@/lib/types";
 
@@ -142,6 +144,24 @@ export function DashboardShell() {
     ];
     return () => unsubs.forEach((u) => u());
   }, [loading, error, reloadTables, reloadOrderItems, reloadMenu, reloadCategories, reloadInventory]);
+
+  // Floor also runs auto-serve so paid tables clear ~3 min after ready even if KDS is closed.
+  useEffect(() => {
+    if (loading || error) return;
+    let cancelled = false;
+    const run = async () => {
+      const { servedIds } = await autoServeExpiredReadyItems();
+      if (cancelled || servedIds.length === 0) return;
+      void reloadTables();
+      void reloadOrderItems();
+    };
+    void run();
+    const timer = window.setInterval(() => void run(), AUTO_SERVE_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [loading, error, reloadTables, reloadOrderItems]);
 
   useEffect(() => {
     if (!currentStaffUser) return;

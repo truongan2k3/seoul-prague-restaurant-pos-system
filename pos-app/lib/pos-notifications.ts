@@ -38,7 +38,7 @@ export async function broadcastCallWaiter(input: {
     tableId: input.tableId,
     tableLabel: input.tableLabel,
     station: input.station,
-    message: input.message ?? "Bếp gọi phục vụ!",
+    message: input.message ?? "Kitchen is calling for a waiter!",
     at: new Date().toISOString(),
   };
 

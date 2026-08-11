@@ -1,4 +1,4 @@
-import type { AppSettings, MenuItemLayout, ReservationOperatingHours, SoundConfigs, TerminalConnectionMode, TerminalType } from "@/lib/types";
+import type { AppSettings, KitchenPrintLanguage, MenuItemLayout, ReservationOperatingHours, SoundConfigs, TerminalConnectionMode, TerminalType } from "@/lib/types";
 import { DEFAULT_SOUND_CONFIGS, parseSoundConfigs, soundConfigsToDb } from "@/lib/auto-serve";
 import { DEFAULT_RESERVATION_OPERATING_HOURS } from "@/lib/reservation-slots";
 import {
@@ -16,6 +16,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   printerIp: "192.168.1.200",
   printerPort: "9100",
   autoPrintOnPayment: true,
+  kitchenPrintEnabled: true,
+  kitchenPrintPrimaryLang: "zh",
+  kitchenPrintSecondaryLang: "en",
   receiptHeaderTitle: "JIN CHENG",
   receiptLegalName: "JING DE INTER.TRADE, s.r.o.",
   receiptAddress: "Václavské nám. 819, 110 00 Praha",
@@ -59,6 +62,9 @@ type SettingsRow = {
   printer_ip: string;
   printer_port: string;
   auto_print_on_payment: boolean;
+  kitchen_print_enabled?: boolean | null;
+  kitchen_print_primary_lang?: string | null;
+  kitchen_print_secondary_lang?: string | null;
   receipt_header_title: string;
   receipt_legal_name?: string | null;
   receipt_address: string;
@@ -137,11 +143,26 @@ function parseMenuItemLayout(value: string | null | undefined): MenuItemLayout {
   return value === "horizontal" ? "horizontal" : "vertical";
 }
 
+function parseKitchenPrintPrimary(value: string | null | undefined): KitchenPrintLanguage {
+  if (value === "en" || value === "cs" || value === "zh") return value;
+  return DEFAULT_APP_SETTINGS.kitchenPrintPrimaryLang;
+}
+
+function parseKitchenPrintSecondary(
+  value: string | null | undefined,
+): KitchenPrintLanguage | "none" {
+  if (value === "none" || value === "en" || value === "cs" || value === "zh") return value;
+  return DEFAULT_APP_SETTINGS.kitchenPrintSecondaryLang;
+}
+
 function mapSettingsRow(row: SettingsRow): AppSettings {
   return {
     printerIp: row.printer_ip,
     printerPort: row.printer_port,
     autoPrintOnPayment: row.auto_print_on_payment,
+    kitchenPrintEnabled: row.kitchen_print_enabled ?? DEFAULT_APP_SETTINGS.kitchenPrintEnabled,
+    kitchenPrintPrimaryLang: parseKitchenPrintPrimary(row.kitchen_print_primary_lang),
+    kitchenPrintSecondaryLang: parseKitchenPrintSecondary(row.kitchen_print_secondary_lang),
     receiptHeaderTitle: row.receipt_header_title,
     receiptLegalName: row.receipt_legal_name ?? DEFAULT_APP_SETTINGS.receiptLegalName,
     receiptAddress: row.receipt_address,
@@ -190,6 +211,13 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   if (partial.printerIp !== undefined) payload.printer_ip = partial.printerIp;
   if (partial.printerPort !== undefined) payload.printer_port = partial.printerPort;
   if (partial.autoPrintOnPayment !== undefined) payload.auto_print_on_payment = partial.autoPrintOnPayment;
+  if (partial.kitchenPrintEnabled !== undefined) payload.kitchen_print_enabled = partial.kitchenPrintEnabled;
+  if (partial.kitchenPrintPrimaryLang !== undefined) {
+    payload.kitchen_print_primary_lang = partial.kitchenPrintPrimaryLang;
+  }
+  if (partial.kitchenPrintSecondaryLang !== undefined) {
+    payload.kitchen_print_secondary_lang = partial.kitchenPrintSecondaryLang;
+  }
   if (partial.receiptHeaderTitle !== undefined) payload.receipt_header_title = partial.receiptHeaderTitle;
   if (partial.receiptLegalName !== undefined) payload.receipt_legal_name = partial.receiptLegalName;
   if (partial.receiptAddress !== undefined) payload.receipt_address = partial.receiptAddress;
@@ -386,6 +414,9 @@ export type PrinterBillSettingsDraft = Pick<
   | "printerIp"
   | "printerPort"
   | "autoPrintOnPayment"
+  | "kitchenPrintEnabled"
+  | "kitchenPrintPrimaryLang"
+  | "kitchenPrintSecondaryLang"
   | "receiptHeaderTitle"
   | "receiptLegalName"
   | "receiptAddress"
@@ -430,6 +461,9 @@ export function pickPrinterBillDraft(settings: AppSettings): PrinterBillSettings
     printerIp: settings.printerIp,
     printerPort: settings.printerPort,
     autoPrintOnPayment: settings.autoPrintOnPayment,
+    kitchenPrintEnabled: settings.kitchenPrintEnabled,
+    kitchenPrintPrimaryLang: settings.kitchenPrintPrimaryLang,
+    kitchenPrintSecondaryLang: settings.kitchenPrintSecondaryLang,
     receiptHeaderTitle: settings.receiptHeaderTitle,
     receiptLegalName: settings.receiptLegalName,
     receiptAddress: settings.receiptAddress,

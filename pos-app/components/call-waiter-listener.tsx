@@ -9,23 +9,30 @@ import { subscribeToCallWaiter } from "@/lib/pos-notifications";
 
 /** Main POS: listen for KDS/Bar "Call Waiter" realtime broadcasts. */
 export function CallWaiterListener() {
-  const { soundMainEnabled } = useApp();
+  const { soundMainEnabled, translate } = useApp();
   const { settings } = useSettings();
   const { pushToast } = useNotifications();
 
   useEffect(() => {
     return subscribeToCallWaiter((payload) => {
-      const tablePart = payload.tableLabel ? ` · Bàn ${payload.tableLabel}` : "";
+      const tablePart = payload.tableLabel
+        ? ` · ${translate("table")} ${payload.tableLabel}`
+        : "";
       pushToast({
         id: `call-waiter-${payload.at}`,
-        message: `🔔 Bếp đang gọi phục vụ!${tablePart}`,
+        message: `🔔 ${translate("callWaiterToast")}${tablePart}`,
       });
 
       if (soundMainEnabled) {
         playCallWaiterSound(settings.soundConfigs.callWaiter);
       }
     });
-  }, [pushToast, soundMainEnabled, settings.soundConfigs.callWaiter]);
+  }, [
+    pushToast,
+    soundMainEnabled,
+    settings.soundConfigs.callWaiter,
+    translate,
+  ]);
 
   return null;
 }

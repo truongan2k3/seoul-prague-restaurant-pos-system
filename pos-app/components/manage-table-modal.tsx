@@ -631,7 +631,7 @@ export function ManageTableModal({
               role="status"
               className="flex w-full cursor-default items-center justify-center gap-2 rounded-xl bg-emerald-600 py-4 text-base font-bold text-white shadow-md"
             >
-              Đã thanh toán
+              {translate("paidBadge")}
             </div>
           ) : (
             <button

@@ -10,6 +10,7 @@ import {
 import { ReceiptPreviewModal } from "@/components/receipt-preview-modal";
 import { settingsToReceiptBusiness, settingsToReceiptTemplate } from "@/src/components/ReceiptPrint";
 import { printReceiptData } from "@/src/lib/printReceipt";
+import { printKitchenMessage, printKitchenTicket } from "@/src/lib/printKitchenTicket";
 import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
 import {
@@ -19,6 +20,7 @@ import {
 } from "@/lib/receipt-calculations";
 import type { CheckoutPaymentRecord } from "@/lib/checkout-calculations";
 import type { MenuItem, OrderItem } from "@/lib/types";
+import { translateNoteToChinese } from "@/src/lib/translator";
 
 interface PrintReceiptInput {
   tableLabel: string;
@@ -33,6 +35,15 @@ interface ReceiptPrintContextValue {
   printReceipt: (input: PrintReceiptInput) => void;
   printTestReceipt: () => void;
   openReceiptPreview: (data: ReceiptData) => void;
+  printKitchenOrder: (input: {
+    tableLabel: string;
+    orders: OrderItem[];
+    menuItems: MenuItem[];
+  }) => Promise<void>;
+  printKitchenStaffMessage: (input: {
+    tableLabel: string;
+    message: string;
+  }) => Promise<void>;
 }
 
 const ReceiptPrintContext = createContext<ReceiptPrintContextValue | null>(null);
@@ -90,6 +101,31 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
     openReceiptPreview(buildTestReceiptData(business));
   }, [business, openReceiptPreview]);
 
+  const printKitchenOrder = useCallback(
+    async (input: { tableLabel: string; orders: OrderItem[]; menuItems: MenuItem[] }) => {
+      await printKitchenTicket({
+        tableLabel: input.tableLabel,
+        orders: input.orders,
+        menuItems: input.menuItems,
+        settings,
+      });
+    },
+    [settings],
+  );
+
+  const printKitchenStaffMessage = useCallback(
+    async (input: { tableLabel: string; message: string }) => {
+      const messageZh = await translateNoteToChinese(input.message);
+      await printKitchenMessage({
+        tableLabel: input.tableLabel,
+        message: input.message,
+        messageZh,
+        settings,
+      });
+    },
+    [settings],
+  );
+
   const handlePrintFromPreview = useCallback(() => {
     setPreviewOpen(false);
     if (receiptData) {
@@ -108,7 +144,15 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
   ]);
 
   return (
-    <ReceiptPrintContext.Provider value={{ printReceipt, printTestReceipt, openReceiptPreview }}>
+    <ReceiptPrintContext.Provider
+      value={{
+        printReceipt,
+        printTestReceipt,
+        openReceiptPreview,
+        printKitchenOrder,
+        printKitchenStaffMessage,
+      }}
+    >
       {children}
       <ReceiptPreviewModal
         open={previewOpen}

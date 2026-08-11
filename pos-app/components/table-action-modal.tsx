@@ -51,7 +51,7 @@ export function TableActionModal({
             className="flex flex-col items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-600 p-5 text-white dark:border-emerald-800"
           >
             <CreditCard className="h-6 w-6" />
-            <span className="font-semibold">Đã thanh toán</span>
+            <span className="font-semibold">{translate("paidBadge")}</span>
           </div>
         ) : (
           <button

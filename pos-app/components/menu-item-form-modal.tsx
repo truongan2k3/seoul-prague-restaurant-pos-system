@@ -6,17 +6,8 @@ import { Modal } from "@/components/modal";
 import { useApp } from "@/contexts/app-context";
 import { DEFAULT_MENU_CATEGORY } from "@/lib/menu-categories";
 import { resolveStation } from "@/lib/order-routing";
-import { segmentButtonClass } from "@/lib/theme-classes";
 import type { MenuCategoryRecord, MenuItem, Station } from "@/lib/types";
 import { emptyMenuItemInput, type MenuItemInput } from "@/src/lib/menu-actions";
-
-type LocaleTab = "en" | "cz" | "zh";
-
-const localeTabs: { id: LocaleTab; label: string }[] = [
-  { id: "en", label: "English" },
-  { id: "cz", label: "Czech" },
-  { id: "zh", label: "Chinese" },
-];
 
 interface MenuItemFormModalProps {
   open: boolean;
@@ -37,13 +28,11 @@ export function MenuItemFormModal({
 }: MenuItemFormModalProps) {
   const { translate } = useApp();
   const [form, setForm] = useState<MenuItemInput>(emptyMenuItemInput);
-  const [activeTab, setActiveTab] = useState<LocaleTab>("en");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setError(null);
-    setActiveTab("en");
     if (item) {
       setForm({
         nameEn: item.nameEn,
@@ -77,9 +66,12 @@ export function MenuItemFormModal({
   }, [open, item, categories]);
 
   const handleSubmit = async () => {
-    if (!form.nameEn.trim()) {
-      setError("English name is required");
-      setActiveTab("en");
+    const nameEn = form.nameEn.trim() || form.nameCz.trim() || form.nameZh.trim();
+    const nameCz = form.nameCz.trim() || form.nameEn.trim() || form.nameZh.trim();
+    const nameZh = form.nameZh.trim() || form.nameEn.trim() || form.nameCz.trim();
+
+    if (!nameEn) {
+      setError("Enter at least one language name");
       return;
     }
     if (!form.category.trim()) {
@@ -91,7 +83,12 @@ export function MenuItemFormModal({
       return;
     }
     setError(null);
-    await onSave(form);
+    await onSave({
+      ...form,
+      nameEn,
+      nameCz,
+      nameZh,
+    });
   };
 
   const selectedCategoryId =
@@ -101,10 +98,6 @@ export function MenuItemFormModal({
 
   const defaultStation = resolveStation(form.category, form.itemType);
   const selectedStation: Station = form.station ?? defaultStation;
-
-  const nameKey = activeTab === "en" ? "nameEn" : activeTab === "cz" ? "nameCz" : "nameZh";
-  const descriptionKey =
-    activeTab === "en" ? "descriptionEn" : activeTab === "cz" ? "descriptionCz" : "descriptionZh";
 
   return (
     <Modal
@@ -132,56 +125,57 @@ export function MenuItemFormModal({
         </div>
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-5">
         {error && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
             {error}
           </p>
         )}
 
-        <div className="pos-segment">
-          {localeTabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 px-3 py-2 text-sm ${segmentButtonClass(activeTab === tab.id)}`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-            Name ({activeTab.toUpperCase()})
-          </span>
-          <input
-            value={form[nameKey]}
-            onChange={(e) => setForm((f) => ({ ...f, [nameKey]: e.target.value }))}
-            className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100"
-          />
-        </label>
-
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-            Description ({activeTab.toUpperCase()})
-          </span>
-          <textarea
-            rows={3}
-            value={form[descriptionKey] ?? ""}
-            onChange={(e) => setForm((f) => ({ ...f, [descriptionKey]: e.target.value }))}
-            placeholder="Optional description for staff and receipts"
-            className="mt-1 w-full resize-none rounded-lg border border-zinc-200 px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100"
-          />
-        </label>
-
-        <div className="border-t border-zinc-200 pt-4 dark:border-zinc-700">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-            Item details
+        <section className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            1. Names (EN / CS / ZH)
           </p>
+          <div className="grid gap-3 md:grid-cols-3">
+            {(
+              [
+                ["nameEn", "descriptionEn", "English"],
+                ["nameCz", "descriptionCz", "Czech"],
+                ["nameZh", "descriptionZh", "Chinese"],
+              ] as const
+            ).map(([nameKey, descKey, label]) => (
+              <div
+                key={nameKey}
+                className="space-y-2 rounded-xl border border-zinc-200 p-3 dark:border-zinc-700"
+              >
+                <p className="text-xs font-bold text-zinc-700 dark:text-zinc-200">{label}</p>
+                <label className="block">
+                  <span className="text-[11px] text-zinc-500">Name</span>
+                  <input
+                    value={form[nameKey]}
+                    onChange={(e) => setForm((f) => ({ ...f, [nameKey]: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[11px] text-zinc-500">Description</span>
+                  <textarea
+                    rows={3}
+                    value={form[descKey] ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, [descKey]: e.target.value }))}
+                    className="mt-1 w-full resize-none rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+                  />
+                </label>
+              </div>
+            ))}
+          </div>
+        </section>
 
-          <div className="space-y-4">
+        <section className="space-y-3 border-t border-zinc-200 pt-4 dark:border-zinc-700">
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            2. Category & price
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Category</span>
               <select
@@ -198,7 +192,7 @@ export function MenuItemFormModal({
                     station: resolveStation(category.name, itemType),
                   }));
                 }}
-                className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100"
+                className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
               >
                 {categories.length === 0 ? (
                   <option value="">{DEFAULT_MENU_CATEGORY}</option>
@@ -220,23 +214,23 @@ export function MenuItemFormModal({
                 step={1}
                 value={form.price}
                 onChange={(e) => setForm((f) => ({ ...f, price: Number(e.target.value) }))}
-                className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100"
+                className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
               />
             </label>
 
-            <label className="block">
+            <label className="block sm:col-span-2">
               <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Image URL</span>
               <input
                 type="url"
                 value={form.imageUrl ?? ""}
                 onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
                 placeholder="https://..."
-                className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100"
+                className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
               />
             </label>
 
-            {form.imageUrl && (
-              <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700">
+            {form.imageUrl ? (
+              <div className="overflow-hidden rounded-lg border border-zinc-200 sm:col-span-2 dark:border-zinc-700">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={form.imageUrl}
@@ -247,9 +241,9 @@ export function MenuItemFormModal({
                   }}
                 />
               </div>
-            )}
+            ) : null}
 
-            <label className="flex items-center gap-2">
+            <label className="flex items-center gap-2 sm:col-span-2">
               <input
                 type="checkbox"
                 checked={form.isAvailable}
@@ -259,7 +253,7 @@ export function MenuItemFormModal({
               <span className="text-sm text-zinc-700 dark:text-zinc-300">Available on menu</span>
             </label>
 
-            <label className="block">
+            <label className="block sm:col-span-2">
               <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
                 {translate("menuItemRoute")}
               </span>
@@ -268,24 +262,26 @@ export function MenuItemFormModal({
                 onChange={(e) =>
                   setForm((f) => ({ ...f, station: e.target.value as Station }))
                 }
-                className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100"
+                className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
               >
                 <option value="kitchen">{translate("menuItemRouteKitchen")}</option>
                 <option value="bar">{translate("menuItemRouteBar")}</option>
               </select>
-              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                {translate("menuItemRouteHint")}
-              </p>
             </label>
           </div>
-        </div>
+        </section>
 
-        <MenuCustomizationEditor
-          value={form.customizationConfig}
-          onChange={(customizationConfig) =>
-            setForm((current) => ({ ...current, customizationConfig }))
-          }
-        />
+        <section className="border-t border-zinc-200 pt-4 dark:border-zinc-700">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            3. Options / add-ons
+          </p>
+          <MenuCustomizationEditor
+            value={form.customizationConfig}
+            onChange={(customizationConfig) =>
+              setForm((current) => ({ ...current, customizationConfig }))
+            }
+          />
+        </section>
       </div>
     </Modal>
   );

@@ -11,6 +11,7 @@ import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
 import { useStationScreen } from "@/contexts/station-screen-context";
 import { filterItemsForBoard, sortKitchenTickets, ticketHasOpenKitchenWork } from "@/lib/order-board";
+import { aggregateDisplayItems } from "@/lib/order-item-aggregate";
 import {
   AUTO_SERVE_POLL_MS,
   isCancelledKitchenItem,
@@ -67,10 +68,10 @@ function TicketCard({
   menuItems: MenuItem[];
   language: ReturnType<typeof useStationScreen>["language"];
   translate: ReturnType<typeof useStationScreen>["translate"];
-  onMarkReady: (tableId: string, itemId: string) => void;
-  onUndoReady: (tableId: string, itemId: string) => void;
-  onCancelItem?: (tableId: string, itemId: string) => void;
-  onAcknowledgeCancel?: (tableId: string, itemId: string) => void;
+  onMarkReady: (tableId: string, itemIds: string[]) => void;
+  onUndoReady: (tableId: string, itemIds: string[]) => void;
+  onCancelItem?: (tableId: string, itemIds: string[]) => void;
+  onAcknowledgeCancel?: (tableId: string, itemIds: string[]) => void;
   busy: boolean;
   showCancel: boolean;
 }) {
@@ -111,23 +112,23 @@ function TicketCard({
           translate={translate}
           variant="kitchen"
           interactive
-          onMarkReady={(itemId) => {
-            if (!busy) onMarkReady(ticket.table.id, itemId);
+          onMarkReady={(itemIds) => {
+            if (!busy) onMarkReady(ticket.table.id, itemIds);
           }}
-          onUndoReady={(itemId) => {
-            if (!busy) onUndoReady(ticket.table.id, itemId);
+          onUndoReady={(itemIds) => {
+            if (!busy) onUndoReady(ticket.table.id, itemIds);
           }}
           onCancelItem={
             showCancel && onCancelItem
-              ? (itemId) => {
-                  if (!busy) onCancelItem(ticket.table.id, itemId);
+              ? (itemIds) => {
+                  if (!busy) onCancelItem(ticket.table.id, itemIds);
                 }
               : undefined
           }
           onAcknowledgeCancel={
             onAcknowledgeCancel
-              ? (itemId) => {
-                  if (!busy) onAcknowledgeCancel(ticket.table.id, itemId);
+              ? (itemIds) => {
+                  if (!busy) onAcknowledgeCancel(ticket.table.id, itemIds);
                 }
               : undefined
           }
@@ -261,7 +262,9 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
       const table = tableMap.get(tableId);
       if (!table || table.status === "empty") continue;
 
-      const filtered = filterItemsForBoard(tableItems, "kitchen") as StationOrderItem[];
+      const filtered = aggregateDisplayItems(
+        filterItemsForBoard(tableItems, "kitchen"),
+      ) as StationOrderItem[];
       if (filtered.length === 0) continue;
 
       result.push({
@@ -273,24 +276,25 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
     return sortKitchenTickets(result);
   }, [items, tables]);
 
-  const handleMarkItemReady = async (tableId: string, itemId: string) => {
-    if (busy) return;
+  const handleMarkItemReady = async (tableId: string, itemIds: string[]) => {
+    if (busy || itemIds.length === 0) return;
     setBusy(true);
-    await markItemsReady([itemId], actor, tableId);
+    await markItemsReady(itemIds, actor, tableId);
     setBusy(false);
     void reload();
   };
 
-  const handleUndoItemReady = async (tableId: string, itemId: string) => {
-    if (busy) return;
+  const handleUndoItemReady = async (tableId: string, itemIds: string[]) => {
+    if (busy || itemIds.length === 0) return;
     setBusy(true);
-    await markItemsPreparing([itemId], actor, tableId);
+    await markItemsPreparing(itemIds, actor, tableId);
     setBusy(false);
     void reload();
   };
 
-  const handleCancelItemRequest = (tableId: string, itemId: string) => {
-    requestPin(() => setCancelTarget({ tableId, itemIds: [itemId] }));
+  const handleCancelItemRequest = (tableId: string, itemIds: string[]) => {
+    if (itemIds.length === 0) return;
+    requestPin(() => setCancelTarget({ tableId, itemIds }));
   };
 
   const handleCancelConfirm = async (reason: string) => {
@@ -302,10 +306,10 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
     void reload();
   };
 
-  const handleAcknowledgeCancel = async (tableId: string, itemId: string) => {
-    if (busy) return;
+  const handleAcknowledgeCancel = async (tableId: string, itemIds: string[]) => {
+    if (busy || itemIds.length === 0) return;
     setBusy(true);
-    await acknowledgeCancelledItems([itemId], actor);
+    await acknowledgeCancelledItems(itemIds, actor);
     setBusy(false);
     void reload();
   };
@@ -321,7 +325,7 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
         tableId: focusTicket?.table.id,
         tableLabel: focusTicket?.table.label,
         station,
-        message: station === "bar" ? "Quầy bar gọi phục vụ!" : "Bếp gọi phục vụ!",
+        message: translate("callWaiterToast"),
       });
     } catch (error) {
       console.warn("[CallWaiter] Broadcast failed:", error);
@@ -360,7 +364,7 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
             className="inline-flex min-h-[48px] items-center gap-2 rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-black uppercase tracking-wide text-zinc-950 shadow-lg shadow-amber-500/30 transition hover:bg-amber-300 disabled:opacity-60"
           >
             <Bell className="h-5 w-5" />
-            {callingWaiter ? "Đang gọi…" : "Gọi Phục Vụ (Call Waiter)"}
+            {callingWaiter ? translate("callingWaiter") : translate("callWaiter")}
           </button>
           <LanguageSelector
             variant="flag-menu"
@@ -394,10 +398,12 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
               menuItems={menuItems}
               language={language}
               translate={translate}
-              onMarkReady={(tableId, itemId) => void handleMarkItemReady(tableId, itemId)}
-              onUndoReady={(tableId, itemId) => void handleUndoItemReady(tableId, itemId)}
+              onMarkReady={(tableId, itemIds) => void handleMarkItemReady(tableId, itemIds)}
+              onUndoReady={(tableId, itemIds) => void handleUndoItemReady(tableId, itemIds)}
               onCancelItem={handleCancelItemRequest}
-              onAcknowledgeCancel={(tableId, itemId) => void handleAcknowledgeCancel(tableId, itemId)}
+              onAcknowledgeCancel={(tableId, itemIds) =>
+                void handleAcknowledgeCancel(tableId, itemIds)
+              }
               busy={busy}
               showCancel={canCancel}
             />

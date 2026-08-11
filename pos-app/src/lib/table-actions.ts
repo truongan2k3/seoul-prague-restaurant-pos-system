@@ -94,11 +94,13 @@ function isBillableOrderItem(
   return kitchenStatus !== "cancelled" && kitchenStatus !== "archived" && !item.isCancelled;
 }
 
+/** Still cooking / waiting to auto-serve — cancelled alerts must NOT block floor close. */
 function isKitchenStillOpen(
   item: Pick<OrderItem, "kitchenStatus" | "status" | "isCancelled">,
 ): boolean {
+  if (item.isCancelled) return false;
   const kitchenStatus = resolveKitchenStatus(item);
-  return kitchenStatus === "pending" || kitchenStatus === "ready" || kitchenStatus === "cancelled";
+  return kitchenStatus === "pending" || kitchenStatus === "ready";
 }
 
 async function syncTableOrdersFromDb(tableId: string) {
@@ -342,6 +344,13 @@ export async function updateTableOrders(tableId: string, orders: OrderItem[]) {
 }
 
 export async function clearTable(tableId: string) {
+  // Soft-archive cancel alerts first so KDS can drop them; then wipe the table.
+  await supabase
+    .from("order_items")
+    .update({ kitchen_status: "archived", updated_at: new Date().toISOString() })
+    .eq("table_id", tableId)
+    .eq("kitchen_status", "cancelled");
+
   await supabase.from("order_items").delete().eq("table_id", tableId);
 
   return supabase
@@ -356,6 +365,11 @@ export async function clearTable(tableId: string) {
     .eq("id", tableId)
     .select("*")
     .single();
+}
+
+/** Staff force-close when bill is empty/paid and kitchen is idle (or stuck). */
+export async function forceCloseTable(tableId: string) {
+  return clearTable(tableId);
 }
 
 /**

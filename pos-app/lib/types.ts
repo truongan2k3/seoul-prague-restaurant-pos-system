@@ -63,10 +63,19 @@ export interface SoundConfigs {
   paymentSuccess: string;
 }
 
+/** Languages printed on kitchen tickets (large primary + optional secondary). */
+export type KitchenPrintLanguage = "zh" | "en" | "cs";
+
 export interface AppSettings {
   printerIp: string;
   printerPort: string;
   autoPrintOnPayment: boolean;
+  /** Print kitchen ticket when staff sends order. */
+  kitchenPrintEnabled: boolean;
+  /** Large text language on kitchen ticket. */
+  kitchenPrintPrimaryLang: KitchenPrintLanguage;
+  /** Smaller text under primary (optional secondary). */
+  kitchenPrintSecondaryLang: KitchenPrintLanguage | "none";
   receiptHeaderTitle: string;
   receiptLegalName: string;
   receiptAddress: string;
@@ -221,6 +230,8 @@ export interface OrderItem {
   tableId?: string;
   createdAt?: string;
   modifiers?: OrderLineModifiers;
+  /** When display-aggregated, all underlying DB row ids. */
+  unitIds?: string[];
 }
 
 export interface RestaurantTable {

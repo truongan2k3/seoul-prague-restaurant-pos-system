@@ -127,7 +127,7 @@ export function TableCard({
       {table.status !== "empty" && isPaidInProgress && (
         <p className="mt-auto shrink-0 pt-1">
           <span className="inline-flex rounded-md bg-emerald-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-            Đã thanh toán
+            {translate("paidBadge")}
           </span>
         </p>
       )}

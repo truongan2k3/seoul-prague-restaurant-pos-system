@@ -17,7 +17,7 @@ const LOCAL_DICT: Record<string, string> = {
 };
 
 const MYMEMORY_URL = "https://api.mymemory.translated.net/get";
-const API_TIMEOUT_MS = 3000;
+const API_TIMEOUT_MS = 4000;
 
 function cleanNoteText(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
@@ -29,29 +29,61 @@ interface MyMemoryResponse {
   };
 }
 
-export async function translateNoteToChinese(text: string): Promise<string> {
-  const cleaned = cleanNoteText(text);
-  if (!cleaned) return text.trim();
+function detectSourceLang(text: string): "en" | "cs" | "vi" {
+  if (/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(text)) {
+    return "vi";
+  }
+  if (/[ěščřžýáíéúůďťňó]/i.test(text)) {
+    return "cs";
+  }
+  return "en";
+}
 
+async function translateViaMyMemory(text: string, langpair: string): Promise<string | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  try {
+    const url = `${MYMEMORY_URL}?q=${encodeURIComponent(text.trim())}&langpair=${encodeURIComponent(langpair)}`;
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as MyMemoryResponse;
+    const translated = payload.responseData?.translatedText?.trim();
+    return translated || null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** Translate free-text notes / kitchen messages to Simplified Chinese. */
+export async function translateNoteToChinese(text: string): Promise<string> {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+
+  const cleaned = cleanNoteText(trimmed);
   const localMatch = LOCAL_DICT[cleaned];
   if (localMatch) return localMatch;
 
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-
-    const url = `${MYMEMORY_URL}?q=${encodeURIComponent(text.trim())}&langpair=en|zh-CN`;
-    const response = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeout);
-
-    if (!response.ok) return text.trim();
-
-    const payload = (await response.json()) as MyMemoryResponse;
-    const translated = payload.responseData?.translatedText?.trim();
-    if (!translated) return text.trim();
-
-    return translated;
-  } catch {
-    return text.trim();
+  // Already Chinese-looking
+  if (/[\u4e00-\u9fff]/.test(trimmed) && !/[a-zàáạảãâầấ]/i.test(trimmed)) {
+    return trimmed;
   }
+
+  const source = detectSourceLang(trimmed);
+  const pairs =
+    source === "cs"
+      ? ["cs|zh-CN", "en|zh-CN"]
+      : source === "vi"
+        ? ["en|zh-CN", "vi|zh-CN"]
+        : ["en|zh-CN", "cs|zh-CN"];
+
+  for (const pair of pairs) {
+    const translated = await translateViaMyMemory(trimmed, pair);
+    if (translated && translated.toLowerCase() !== cleaned) {
+      return translated;
+    }
+  }
+
+  return trimmed;
 }

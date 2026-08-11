@@ -10,6 +10,7 @@ import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { filterItemsForBoard } from "@/lib/order-board";
+import { aggregateDisplayItems } from "@/lib/order-item-aggregate";
 import { resolveActionItemIds, resolveSelectedItemIds } from "@/lib/order-item-selection";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
 import { isTablePaidInProgress } from "@/lib/table-payment";
@@ -83,7 +84,7 @@ function OrderCard({
         <div className="text-right">
           {isPaidInProgress ? (
             <p className="inline-flex rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-white">
-              Đã thanh toán
+              {translate("paidBadge")}
             </p>
           ) : (
             <p
@@ -264,9 +265,11 @@ export function OrderView({
         ) : (
           <div className="mx-auto max-w-[1600px] columns-1 gap-4 md:columns-2 lg:columns-3 xl:columns-4">
             {activeTables.map((table) => {
-              const itemsForTable = filterItemsForBoard(
-                orderItems.filter((item) => item.tableId === table.id),
-                "floor",
+              const itemsForTable = aggregateDisplayItems(
+                filterItemsForBoard(
+                  orderItems.filter((item) => item.tableId === table.id),
+                  "floor",
+                ),
               );
               const total = itemsForTable.reduce((s, i) => s + i.price * i.quantity, 0);
               const showDelay = itemsForTable.some(

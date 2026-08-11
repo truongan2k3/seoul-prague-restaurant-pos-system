@@ -1,15 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, Minus, Plus, Search, X } from "lucide-react";
+import { Check, ChevronRight, MessageSquare, Minus, Plus, Search, X } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { useApp } from "@/contexts/app-context";
+import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { useSettings } from "@/contexts/settings-context";
+import { resolveKitchenStatus } from "@/lib/auto-serve";
+import { aggregateDisplayItems } from "@/lib/order-item-aggregate";
 import { categoriesForOrdering } from "@/lib/category-utils";
 import { formatPosPrice, priceDisplayOptionsFromSettings } from "@/lib/price-display";
 import {
   cartLineDisplayName,
   menuItemDisplayName,
+  orderItemDisplayName,
 } from "@/lib/menu-display";
 import {
   buildCustomizationSignature,
@@ -18,7 +22,20 @@ import {
 } from "@/lib/menu-customization";
 import { finalizeNoteTranslation, presetLabel, togglePresetId } from "@/lib/note-presets";
 import { resolveOrderLineStation, resolveStation } from "@/lib/order-routing";
-import type { LanguageCode, MenuCategoryRecord, MenuItem, MenuItemLayout, NotePreset, OrderItem, SelectedMenuOption, Station } from "@/lib/types";
+import { normalizeOrderItemStatus, statusTranslationKey } from "@/lib/order-status";
+import { matchesFoldedSearch } from "@/lib/search-normalize";
+import { isTablePaidInProgress } from "@/lib/table-payment";
+import type {
+  LanguageCode,
+  MenuCategoryRecord,
+  MenuItem,
+  MenuItemLayout,
+  NotePreset,
+  OrderItem,
+  RestaurantTable,
+  SelectedMenuOption,
+  Station,
+} from "@/lib/types";
 import { filterButtonClass } from "@/lib/theme-classes";
 import { ItemCustomizeModal, type CustomizeResult } from "@/components/item-customize-modal";
 import { GrillGuestCountModal } from "@/components/grill-guest-count-modal";
@@ -58,12 +75,16 @@ interface CartLine {
 interface NewOrderModalProps {
   open: boolean;
   tableLabel: string;
+  table?: RestaurantTable;
   menuItems: MenuItem[];
   categories?: MenuCategoryRecord[];
   mode?: "new" | "append";
   existingOrders?: OrderItem[];
   onClose: () => void;
   onSendToKitchen: (orders: OrderItem[]) => void | Promise<void>;
+  onCheckout?: (orders: OrderItem[]) => void | Promise<void>;
+  onCloseTable?: () => void | Promise<void>;
+  onManage?: () => void;
   isSaving?: boolean;
 }
 
@@ -258,16 +279,21 @@ function MenuOrderItemButton({
 export function NewOrderModal({
   open,
   tableLabel,
+  table,
   menuItems,
   categories = [],
   mode = "new",
   existingOrders = [],
   onClose,
   onSendToKitchen,
+  onCheckout,
+  onCloseTable,
+  onManage,
   isSaving = false,
 }: NewOrderModalProps) {
   const { translate, language } = useApp();
   const { settings } = useSettings();
+  const { printKitchenStaffMessage } = useReceiptPrint();
   const priceOptions = priceDisplayOptionsFromSettings(settings);
   const formatOrderPrice = (amount: number) => formatPosPrice(amount, priceOptions);
   const showMenuPrices = settings.showPricesOnOrderScreen;
@@ -290,6 +316,10 @@ export function NewOrderModal({
   const [pendingGrillItem, setPendingGrillItem] = useState<MenuItem | null>(null);
   const [pendingCustomizeResult, setPendingCustomizeResult] = useState<CustomizeResult | null>(null);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
+  const [kitchenMessageOpen, setKitchenMessageOpen] = useState(false);
+  const [kitchenMessageDraft, setKitchenMessageDraft] = useState("");
+  const [kitchenMessageBusy, setKitchenMessageBusy] = useState(false);
+  const [kitchenMessageError, setKitchenMessageError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -317,6 +347,10 @@ export function NewOrderModal({
     setPendingGrillItem(null);
     setPendingCustomizeResult(null);
     setDiscardConfirmOpen(false);
+    setKitchenMessageOpen(false);
+    setKitchenMessageDraft("");
+    setKitchenMessageBusy(false);
+    setKitchenMessageError(null);
   }, [open]);
 
   useEffect(() => {
@@ -355,7 +389,7 @@ export function NewOrderModal({
   const categoryOptions = useMemo(() => categoriesForOrdering(categories), [categories]);
 
   const filteredItems = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = search.trim();
     return menuItems.filter((item) => {
       const matchesCategory =
         activeCategory === "__all__" ||
@@ -365,17 +399,53 @@ export function NewOrderModal({
       const label = menuItemDisplayName(item, language);
       const matchesSearch =
         !query ||
-        label.toLowerCase().includes(query) ||
-        item.nameEn.toLowerCase().includes(query) ||
-        item.nameCz.toLowerCase().includes(query) ||
-        item.nameZh.toLowerCase().includes(query) ||
-        item.id.toLowerCase().includes(query);
+        matchesFoldedSearch(label, query) ||
+        matchesFoldedSearch(item.nameEn, query) ||
+        matchesFoldedSearch(item.nameCz, query) ||
+        matchesFoldedSearch(item.nameZh, query) ||
+        matchesFoldedSearch(item.id, query);
       return matchesCategory && matchesSearch;
     });
   }, [menuItems, activeCategory, search, language, categoryOptions]);
 
+  const submittedOrdersRaw = useMemo(
+    () =>
+      existingOrders.filter((item) => {
+        const kitchen = resolveKitchenStatus(item);
+        return kitchen !== "archived" && !item.isCancelled && kitchen !== "cancelled";
+      }),
+    [existingOrders],
+  );
+
+  const submittedOrders = useMemo(
+    () => aggregateDisplayItems(submittedOrdersRaw),
+    [submittedOrdersRaw],
+  );
+
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   const cartTotal = cart.reduce((sum, line) => sum + line.price * line.quantity, 0);
+  const submittedTotal = submittedOrders.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0,
+  );
+  const billTotal = submittedTotal + cartTotal;
+
+  const hasKitchenWork = submittedOrders.some((item) => {
+    const kitchen = resolveKitchenStatus(item);
+    return kitchen === "pending" || kitchen === "ready";
+  });
+
+  const isPaid = table ? isTablePaidInProgress(table) : false;
+  const canCheckout =
+    Boolean(onCheckout) &&
+    submittedOrders.length > 0 &&
+    !isPaid &&
+    cart.length === 0;
+  const canCloseTable =
+    Boolean(onCloseTable) &&
+    cart.length === 0 &&
+    !hasKitchenWork &&
+    (isPaid || (mode === "append" && submittedOrders.length === 0));
 
   const cartQtyByMenuId = useMemo(() => {
     const totals = new Map<string, number>();
@@ -595,6 +665,28 @@ export function NewOrderModal({
     closeNoteModal();
   };
 
+  const handleSendKitchenMessage = async () => {
+    const message = kitchenMessageDraft.trim();
+    if (!message || kitchenMessageBusy) return;
+
+    if (!settings.kitchenPrintEnabled) {
+      setKitchenMessageError(translate("kitchenPrintDisabled"));
+      return;
+    }
+
+    setKitchenMessageBusy(true);
+    setKitchenMessageError(null);
+    try {
+      await printKitchenStaffMessage({ tableLabel, message });
+      setKitchenMessageOpen(false);
+      setKitchenMessageDraft("");
+    } catch (error) {
+      setKitchenMessageError(error instanceof Error ? error.message : "Print failed");
+    } finally {
+      setKitchenMessageBusy(false);
+    }
+  };
+
   const updateCartQty = (lineId: string, delta: number) => {
     setCart((prev) =>
       prev
@@ -669,7 +761,12 @@ export function NewOrderModal({
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || noteLineId) return;
+      if (event.key !== "Escape") return;
+      if (kitchenMessageOpen) {
+        if (!kitchenMessageBusy) setKitchenMessageOpen(false);
+        return;
+      }
+      if (noteLineId) return;
       if (discardConfirmOpen) {
         setDiscardConfirmOpen(false);
         return;
@@ -678,134 +775,219 @@ export function NewOrderModal({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, noteLineId, discardConfirmOpen, cart.length, onClose]);
+  }, [open, noteLineId, discardConfirmOpen, cart.length, onClose, kitchenMessageOpen, kitchenMessageBusy]);
 
   const renderCartPanel = (showCloseButton: boolean) => (
     <>
-      <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-4 dark:border-gray-700">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-          {translate("cart")}
-        </h3>
-        {showCloseButton && (
-          <button
-            type="button"
-            onClick={() => setCartOpen(false)}
-            className="touch-target flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-          >
-            <X className="h-6 w-6" />
-          </button>
-        )}
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 px-4 py-3 dark:border-gray-700">
+        <div className="min-w-0">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            {translate("table")} {tableLabel}
+          </h3>
+          {isPaid && (
+            <span className="mt-1 inline-flex rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+              {translate("paidBadge")}
+            </span>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {onManage && mode === "append" && (
+            <button
+              type="button"
+              onClick={onManage}
+              className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-700 dark:border-gray-600 dark:text-gray-200"
+            >
+              {translate("manageOrder")}
+            </button>
+          )}
+          {showCloseButton && (
+            <button
+              type="button"
+              onClick={() => setCartOpen(false)}
+              className="touch-target flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
-        {cart.length === 0 ? (
-          <p className="text-center text-sm text-gray-500 dark:text-gray-400">Cart is empty</p>
-        ) : (
-          <ul className="space-y-3">
-            {cart.map((line) => {
-              const lineLabel = line.name.includes("·")
-                ? line.name
-                : cartLineDisplayName(line, menuItems, language);
-              const presetText = (line.specialRequestIds ?? [])
-                .map((id) => {
-                  const preset = notePresets.find((entry) => entry.id === id);
-                  return preset ? presetLabel(preset, language) : null;
-                })
-                .filter(Boolean)
-                .join(", ");
-              const noteTextParts = [presetText, line.note].filter(Boolean);
-              const noteText =
-                line.noteTranslated && noteTextParts.length > 0
-                  ? `${line.noteTranslated}${line.note ? ` · ${line.note}` : ""}`
-                  : noteTextParts.join(", ");
-              return (
-                <li
-                  key={line.lineId}
-                  className="rounded-xl border border-gray-200 p-3 dark:border-gray-700"
-                >
-                  <div className="flex gap-3">
-                    <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
-                      {line.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={line.imageUrl}
-                          alt={lineLabel}
-                          className="h-full w-full object-cover"
-                        />
+      <div className="flex-1 space-y-4 overflow-y-auto p-4">
+        {submittedOrders.length > 0 && (
+          <section>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+              {translate("currentOrder")}
+            </p>
+            <ul className="space-y-2">
+              {submittedOrders.map((item, index) => {
+                const kitchen = resolveKitchenStatus(item);
+                const isDone = kitchen === "ready" || kitchen === "served";
+                const statusKey = statusTranslationKey(normalizeOrderItemStatus(item.status));
+                return (
+                  <li
+                    key={item.id ?? `${item.name}-${index}`}
+                    className={`rounded-xl border px-3 py-2.5 ${
+                      isDone
+                        ? "border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40"
+                        : "border-amber-200 bg-amber-50/80 dark:border-amber-900 dark:bg-amber-950/30"
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      {isDone ? (
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center text-sm text-gray-400">
-                          {lineLabel.charAt(0)}
-                        </div>
+                        <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500" />
                       )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <button
-                        type="button"
-                        onClick={() => openNoteModal(line)}
-                        className="cursor-pointer text-left text-sm font-semibold text-gray-900 hover:text-blue-600 dark:text-gray-100 dark:hover:text-blue-400"
-                      >
-                        {lineLabel}
-                      </button>
-                      {(noteTextParts.length > 0 || line.noteTranslated) && (
-                        <p className="mt-1 text-xs italic text-gray-500 dark:text-gray-400">
-                          {translate("specialRequests")}: {noteText}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          {item.quantity}× {orderItemDisplayName(item, menuItems, language)}
                         </p>
-                      )}
-                      {line.isPrintedNote && (
-                        <p className="mt-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
-                          {translate("printOnReceipt")}
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                          {translate(statusKey)}
+                          {kitchen === "ready" ? ` · ${translate("done")}` : ""}
                         </p>
-                      )}
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
-                        {formatOrderPrice(line.price * line.quantity)}
+                      </div>
+                      <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                        {formatOrderPrice(item.price * item.quantity)}
                       </span>
-                      <div className="inline-flex items-center overflow-hidden rounded-lg border border-gray-200 dark:border-gray-600">
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        <section>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+            {translate("newItems")}
+          </p>
+          {cart.length === 0 ? (
+            <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+              {translate("cartEmpty")}
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {cart.map((line) => {
+                const lineLabel = line.name.includes("·")
+                  ? line.name
+                  : cartLineDisplayName(line, menuItems, language);
+                const presetText = (line.specialRequestIds ?? [])
+                  .map((id) => {
+                    const preset = notePresets.find((entry) => entry.id === id);
+                    return preset ? presetLabel(preset, language) : null;
+                  })
+                  .filter(Boolean)
+                  .join(", ");
+                const noteTextParts = [presetText, line.note].filter(Boolean);
+                const noteText =
+                  line.noteTranslated && noteTextParts.length > 0
+                    ? `${line.noteTranslated}${line.note ? ` · ${line.note}` : ""}`
+                    : noteTextParts.join(", ");
+                return (
+                  <li
+                    key={line.lineId}
+                    className="rounded-xl border border-gray-200 p-3 dark:border-gray-700"
+                  >
+                    <div className="flex gap-3">
+                      <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
+                        {line.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={line.imageUrl}
+                            alt={lineLabel}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-sm text-gray-400">
+                            {lineLabel.charAt(0)}
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
                         <button
                           type="button"
-                          onClick={() => updateCartQty(line.lineId, -1)}
-                          className="touch-target flex h-8 w-8 items-center justify-center text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
-                          aria-label={`Decrease ${lineLabel}`}
+                          onClick={() => openNoteModal(line)}
+                          className="cursor-pointer text-left text-sm font-semibold text-gray-900 hover:text-blue-600 dark:text-gray-100 dark:hover:text-blue-400"
                         >
-                          <Minus className="h-3.5 w-3.5" />
+                          {lineLabel}
                         </button>
-                        <span className="flex h-8 min-w-[2rem] items-center justify-center border-x border-gray-200 px-1 text-sm font-semibold tabular-nums dark:border-gray-600">
-                          {line.quantity}
+                        {(noteTextParts.length > 0 || line.noteTranslated) && (
+                          <p className="mt-1 text-xs italic text-gray-500 dark:text-gray-400">
+                            {translate("specialRequests")}: {noteText}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                          {formatOrderPrice(line.price * line.quantity)}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => updateCartQty(line.lineId, 1)}
-                          className="touch-target flex h-8 w-8 items-center justify-center text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
-                          aria-label={`Increase ${lineLabel}`}
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="inline-flex items-center overflow-hidden rounded-lg border border-gray-200 dark:border-gray-600">
+                          <button
+                            type="button"
+                            onClick={() => updateCartQty(line.lineId, -1)}
+                            className="touch-target flex h-8 w-8 items-center justify-center text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+                            aria-label={`Decrease ${lineLabel}`}
+                          >
+                            <Minus className="h-3.5 w-3.5" />
+                          </button>
+                          <span className="flex h-8 min-w-[2rem] items-center justify-center border-x border-gray-200 px-1 text-sm font-semibold tabular-nums dark:border-gray-600">
+                            {line.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateCartQty(line.lineId, 1)}
+                            className="touch-target flex h-8 w-8 items-center justify-center text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+                            aria-label={`Increase ${lineLabel}`}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
       </div>
 
-      <div className="shrink-0 border-t border-gray-200 p-4 dark:border-gray-700">
-        <div className="mb-4 flex items-center justify-between">
+      <div className="shrink-0 space-y-2 border-t border-gray-200 p-4 dark:border-gray-700">
+        <div className="mb-1 flex items-center justify-between">
           <span className="text-sm text-gray-500 dark:text-gray-400">{translate("total")}</span>
           <span className="text-xl font-bold text-gray-900 dark:text-gray-100">
-            {formatOrderPrice(cartTotal)}
+            {formatOrderPrice(billTotal)}
           </span>
         </div>
         <button
           type="button"
           disabled={cart.length === 0 || isSaving}
           onClick={() => void handleSend()}
-          className="min-h-[52px] w-full rounded-xl bg-emerald-600 py-3.5 text-base font-semibold text-white disabled:opacity-40"
+          className="min-h-[48px] w-full rounded-xl bg-blue-600 py-3 text-base font-semibold text-white disabled:opacity-40"
         >
           {isSaving ? "..." : translate("sendToKitchen")}
         </button>
+        {onCheckout && (
+          <button
+            type="button"
+            disabled={!canCheckout || isSaving}
+            onClick={() => void onCheckout(submittedOrdersRaw)}
+            className="min-h-[48px] w-full rounded-xl bg-emerald-600 py-3 text-base font-semibold text-white disabled:opacity-40"
+          >
+            {translate("checkout")}
+          </button>
+        )}
+        {canCloseTable && (
+          <button
+            type="button"
+            disabled={isSaving}
+            onClick={() => void onCloseTable?.()}
+            className="min-h-[44px] w-full rounded-xl border border-gray-300 py-2.5 text-sm font-semibold text-gray-800 dark:border-gray-600 dark:text-gray-100"
+          >
+            {translate("closeTable")}
+          </button>
+        )}
       </div>
     </>
   );
@@ -838,13 +1020,26 @@ export function NewOrderModal({
                 {translate("orderTapHint")}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={requestClose}
-              className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-            >
-              <X className="h-6 w-6" />
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setKitchenMessageError(null);
+                  setKitchenMessageOpen(true);
+                }}
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-200"
+              >
+                <MessageSquare className="h-4 w-4" />
+                <span>{translate("kitchenMessage")}</span>
+              </button>
+              <button
+                type="button"
+                onClick={requestClose}
+                className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
           </div>
 
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
@@ -923,7 +1118,7 @@ export function NewOrderModal({
               >
                 {filteredItems.length === 0 ? (
                   <div className="flex h-full min-h-[200px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-                    No items match your search
+                    {translate("noSearchResults")}
                   </div>
                 ) : (
                   <div
@@ -1107,6 +1302,81 @@ export function NewOrderModal({
         />
       )}
 
+      {kitchenMessageOpen && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:p-4">
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 bg-black/50"
+            onClick={() => {
+              if (!kitchenMessageBusy) setKitchenMessageOpen(false);
+            }}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="kitchen-message-title"
+            className="relative z-10 w-full max-w-lg rounded-t-2xl border border-gray-200 bg-white p-4 shadow-xl sm:rounded-2xl dark:border-gray-700 dark:bg-gray-900 sm:p-5"
+          >
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <h3
+                  id="kitchen-message-title"
+                  className="text-lg font-semibold text-gray-900 dark:text-gray-100"
+                >
+                  {translate("kitchenMessageTitle")}
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {translate("table")} {tableLabel}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={kitchenMessageBusy}
+                onClick={() => setKitchenMessageOpen(false)}
+                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <textarea
+              rows={4}
+              value={kitchenMessageDraft}
+              onChange={(event) => setKitchenMessageDraft(event.target.value)}
+              placeholder={translate("kitchenMessagePlaceholder")}
+              disabled={kitchenMessageBusy}
+              className="min-h-[120px] w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-base text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+              autoFocus
+            />
+
+            {kitchenMessageError && (
+              <p className="mt-2 text-sm text-red-600 dark:text-red-400">{kitchenMessageError}</p>
+            )}
+
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                disabled={kitchenMessageBusy}
+                onClick={() => setKitchenMessageOpen(false)}
+                className="min-h-[48px] flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold dark:border-gray-700"
+              >
+                {translate("cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={kitchenMessageBusy || !kitchenMessageDraft.trim()}
+                onClick={() => void handleSendKitchenMessage()}
+                className="min-h-[48px] flex-1 rounded-xl bg-orange-600 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+              >
+                {kitchenMessageBusy
+                  ? translate("kitchenMessageSending")
+                  : translate("kitchenMessageSend")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <GrillGuestCountModal
         open={grillGuestModalOpen}
         itemLabel={
@@ -1130,7 +1400,7 @@ export function NewOrderModal({
               id="discard-cart-title"
               className="text-sm leading-relaxed text-gray-800 dark:text-gray-100"
             >
-              Bạn có chắc chắn muốn thoát? Các món chưa lưu sẽ bị xóa.
+              {translate("discardCartTitle")}
             </p>
             <div className="mt-5 flex gap-2">
               <button
@@ -1138,14 +1408,14 @@ export function NewOrderModal({
                 onClick={() => setDiscardConfirmOpen(false)}
                 className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-800 dark:border-gray-700 dark:text-gray-100"
               >
-                Hủy
+                {translate("discardStay")}
               </button>
               <button
                 type="button"
                 onClick={handleClose}
                 className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white"
               >
-                Thoát
+                {translate("discardLeave")}
               </button>
             </div>
           </div>

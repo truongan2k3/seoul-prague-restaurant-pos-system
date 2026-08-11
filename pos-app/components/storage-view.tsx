@@ -5,7 +5,6 @@ import { FolderTree } from "lucide-react";
 import { CategoryManagerModal } from "@/components/category-manager-modal";
 import { LiveClock } from "@/components/live-clock";
 import { InventoryManager } from "@/components/inventory-manager";
-import { MenuCustomizationManager } from "@/components/menu-customization-manager";
 import { MenuManager } from "@/components/menu-manager";
 import { NotePresetManager } from "@/components/note-preset-manager";
 import { useApp } from "@/contexts/app-context";
@@ -65,12 +64,6 @@ export function StorageView({
       <div className="flex-1 overflow-auto p-6">
         <div className="mx-auto max-w-6xl space-y-6">
           <MenuManager menuItems={menuItems} categories={categories} onChange={onRefresh} />
-
-          <MenuCustomizationManager
-            menuItems={menuItems}
-            categories={categories}
-            onChange={onRefresh}
-          />
 
           <NotePresetManager
             presets={notePresets}

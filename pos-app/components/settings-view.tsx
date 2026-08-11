@@ -335,6 +335,67 @@ export function SettingsView({
               />
             </label>
 
+            <label className="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
+              <div className="min-w-0">
+                <span className="block text-sm text-gray-800 dark:text-gray-200">
+                  {translate("settingsKitchenPrint")}
+                </span>
+                <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+                  {translate("settingsKitchenPrintHint")}
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={draft.kitchenPrintEnabled}
+                onChange={(event) => updateDraft("kitchenPrintEnabled", event.target.checked)}
+                className="h-4 w-4 shrink-0 rounded border-gray-300"
+              />
+            </label>
+
+            {draft.kitchenPrintEnabled && (
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="block text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {translate("settingsKitchenPrintPrimary")}
+                  </span>
+                  <select
+                    value={draft.kitchenPrintPrimaryLang}
+                    onChange={(event) =>
+                      updateDraft(
+                        "kitchenPrintPrimaryLang",
+                        event.target.value as SettingsPageDraft["kitchenPrintPrimaryLang"],
+                      )
+                    }
+                    className="pos-input mt-1"
+                  >
+                    <option value="zh">中文</option>
+                    <option value="en">English</option>
+                    <option value="cs">Čeština</option>
+                  </select>
+                </label>
+                <label className="block text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {translate("settingsKitchenPrintSecondary")}
+                  </span>
+                  <select
+                    value={draft.kitchenPrintSecondaryLang}
+                    onChange={(event) =>
+                      updateDraft(
+                        "kitchenPrintSecondaryLang",
+                        event.target.value as SettingsPageDraft["kitchenPrintSecondaryLang"],
+                      )
+                    }
+                    className="pos-input mt-1"
+                  >
+                    <option value="en">English</option>
+                    <option value="zh">中文</option>
+                    <option value="cs">Čeština</option>
+                    <option value="none">{translate("settingsKitchenPrintLangNone")}</option>
+                  </select>
+                </label>
+              </div>
+            )}
+
             <h3 className="mt-6 text-sm font-semibold text-gray-900 dark:text-gray-100">
               {translate("settingsReceiptPrintQuality")}
             </h3>
@@ -997,25 +1058,25 @@ export function SettingsView({
 
           <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">
-              🔊 Cài đặt Âm thanh (Sound Settings)
+              🔊 {translate("soundSettingsTitle")}
             </h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Chọn file trong <code className="rounded bg-gray-100 px-1 dark:bg-gray-900">/public/sounds</code> cho từng sự kiện.
+              {translate("soundSettingsHint")}
             </p>
             <div className="mt-4 space-y-3">
               {(
                 [
                   {
                     key: "callWaiter" as const,
-                    label: "Chuông gọi phục vụ (Call Waiter)",
+                    label: translate("soundCallWaiter"),
                   },
                   {
                     key: "newOrder" as const,
-                    label: "Có đơn mới (New Order)",
+                    label: translate("soundNewOrder"),
                   },
                   {
                     key: "paymentSuccess" as const,
-                    label: "Thanh toán thành công (Payment Success)",
+                    label: translate("soundPaymentSuccess"),
                   },
                 ] as const
               ).map((row) => (

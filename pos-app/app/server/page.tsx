@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useApp } from "@/contexts/app-context";
+import { useReceiptPrint } from "@/contexts/receipt-print-context";
+import { useSettings } from "@/contexts/settings-context";
 import { NewOrderModal } from "@/components/new-order-modal";
 import { LanguageSelector } from "@/components/language-selector";
 import type { MenuCategoryRecord, MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
@@ -25,6 +27,8 @@ type OrderModalState = {
 
 function ServerApp() {
   const { translate, staff, logAction, language, setLanguage } = useApp();
+  const { settings } = useSettings();
+  const { printKitchenOrder } = useReceiptPrint();
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<MenuCategoryRecord[]>([]);
@@ -66,6 +70,17 @@ function ServerApp() {
     if (error) return;
 
     logAction(isAppend ? "server add items" : "server order", `Table ${orderModal.table.label}`);
+
+    if (settings.kitchenPrintEnabled) {
+      void printKitchenOrder({
+        tableLabel: orderModal.table.label,
+        orders,
+        menuItems,
+      }).catch((printError) => {
+        console.warn("[KitchenPrint] Failed:", printError);
+      });
+    }
+
     setOrderModal(null);
     void reload();
   };

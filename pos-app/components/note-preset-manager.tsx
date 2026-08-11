@@ -66,18 +66,20 @@ function NotePresetFormModal({
       }
     >
       <div className="space-y-3">
-        <label className="block text-sm">
-          English
-          <input value={labelEn} onChange={(e) => setLabelEn(e.target.value)} className="pos-input mt-1" />
-        </label>
-        <label className="block text-sm">
-          Čeština
-          <input value={labelCz} onChange={(e) => setLabelCz(e.target.value)} className="pos-input mt-1" />
-        </label>
-        <label className="block text-sm">
-          中文 (kitchen)
-          <input value={labelZh} onChange={(e) => setLabelZh(e.target.value)} className="pos-input mt-1" />
-        </label>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label className="block text-sm">
+            English
+            <input value={labelEn} onChange={(e) => setLabelEn(e.target.value)} className="pos-input mt-1" />
+          </label>
+          <label className="block text-sm">
+            Čeština
+            <input value={labelCz} onChange={(e) => setLabelCz(e.target.value)} className="pos-input mt-1" />
+          </label>
+          <label className="block text-sm">
+            中文 (kitchen)
+            <input value={labelZh} onChange={(e) => setLabelZh(e.target.value)} className="pos-input mt-1" />
+          </label>
+        </div>
         <label className="block text-sm">
           Order
           <input

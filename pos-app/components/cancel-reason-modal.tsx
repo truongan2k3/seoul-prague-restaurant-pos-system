@@ -1,14 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Modal } from "@/components/modal";
+import type { TranslationKey } from "@/lib/i18n/translations";
 
-const QUICK_REASONS = ["Khách đổi ý", "Hết đồ", "Nhầm món", "Khác"] as const;
+const QUICK_REASON_KEYS = [
+  "cancelReasonGuestChanged",
+  "cancelReasonOutOfStock",
+  "cancelReasonWrongItem",
+  "cancelReasonOther",
+] as const satisfies readonly TranslationKey[];
 
 interface CancelReasonModalProps {
   open: boolean;
   itemCount: number;
-  translate: (key: import("@/lib/i18n/translations").TranslationKey) => string;
+  translate: (key: TranslationKey) => string;
   onClose: () => void;
   onConfirm: (reason: string) => void | Promise<void>;
   isSaving?: boolean;
@@ -23,22 +29,31 @@ export function CancelReasonModal({
   isSaving = false,
 }: CancelReasonModalProps) {
   const [reason, setReason] = useState("");
-  const [quick, setQuick] = useState<string>("Khách đổi ý");
+  const [quickKey, setQuickKey] = useState<(typeof QUICK_REASON_KEYS)[number]>(
+    "cancelReasonGuestChanged",
+  );
+
+  const quickLabel = translate(quickKey);
 
   const handleClose = () => {
     setReason("");
-    setQuick("Khách đổi ý");
+    setQuickKey("cancelReasonGuestChanged");
     onClose();
   };
 
-  const resolvedReason = (reason.trim() || quick).trim();
+  const resolvedReason = (reason.trim() || quickLabel).trim();
 
   const handleConfirm = async () => {
     if (!resolvedReason) return;
     await onConfirm(resolvedReason);
     setReason("");
-    setQuick("Khách đổi ý");
+    setQuickKey("cancelReasonGuestChanged");
   };
+
+  const labels = useMemo(
+    () => QUICK_REASON_KEYS.map((key) => ({ key, label: translate(key) })),
+    [translate],
+  );
 
   return (
     <Modal open={open} onClose={handleClose} title={translate("cancelReason")} size="lg">
@@ -47,16 +62,16 @@ export function CancelReasonModal({
       </p>
 
       <div className="mb-3 flex flex-wrap gap-2">
-        {QUICK_REASONS.map((label) => (
+        {labels.map(({ key, label }) => (
           <button
-            key={label}
+            key={key}
             type="button"
             onClick={() => {
-              setQuick(label);
-              if (label !== "Khác") setReason("");
+              setQuickKey(key);
+              if (key !== "cancelReasonOther") setReason("");
             }}
             className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-              quick === label
+              quickKey === key
                 ? "bg-red-600 text-white"
                 : "border border-gray-200 text-gray-700 dark:border-gray-700 dark:text-gray-200"
             }`}
@@ -70,7 +85,7 @@ export function CancelReasonModal({
         value={reason}
         onChange={(event) => {
           setReason(event.target.value);
-          setQuick("Khác");
+          setQuickKey("cancelReasonOther");
         }}
         placeholder={translate("cancelReasonPlaceholder")}
         rows={3}

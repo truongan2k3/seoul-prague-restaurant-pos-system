@@ -15,6 +15,7 @@ import type { MenuCategoryRecord, MenuItem, OrderItem, RestaurantTable } from "@
 import {
   appendOrdersToTable,
   checkoutTable,
+  forceCloseTable,
   occupyTable,
   transferTable,
   updateTableOrders,
@@ -46,7 +47,7 @@ export function useTableOrderWorkflow({
 }: UseTableOrderWorkflowOptions) {
   const { staff, logAction } = useApp();
   const { settings } = useSettings();
-  const { printReceipt } = useReceiptPrint();
+  const { printReceipt, printKitchenOrder } = useReceiptPrint();
   const [modal, setModal] = useState<TableOrderModalState>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -63,11 +64,12 @@ export function useTableOrderWorkflow({
     setModal({ type: "new-order", tableId, mode });
   };
 
+  /** Empty → new order; occupied → split menu + current bill (Send / Checkout). */
   const handleTableClick = (table: RestaurantTable) => {
     if (table.status === "empty") {
       openNewOrder(table.id, "new");
     } else {
-      openManageTable(table.id);
+      openNewOrder(table.id, "append");
     }
   };
 
@@ -91,9 +93,20 @@ export function useTableOrderWorkflow({
 
     logAction(isAppend ? "add items" : "new order", `Table ${selectedTable?.label}`);
 
+    if (settings.kitchenPrintEnabled && selectedTable) {
+      void printKitchenOrder({
+        tableLabel: selectedTable.label,
+        orders,
+        menuItems,
+      }).catch((printError) => {
+        console.warn("[KitchenPrint] Failed:", printError);
+      });
+    }
+
     const updatedTable = mapTableRow(data);
     setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
-    setModal(null);
+    // Stay on the table screen after send so staff can checkout or add more.
+    setModal({ type: "new-order", tableId: modal.tableId, mode: "append" });
     onRefresh();
   };
 
@@ -123,13 +136,14 @@ export function useTableOrderWorkflow({
   };
 
   const handleProceedToCheckout = async (orders: OrderItem[]) => {
-    if (!modal || modal.type !== "manage-table" || !selectedTable) return;
-    if (orders.length === 0) return;
+    if (!selectedTable || orders.length === 0) return;
     if (selectedTable.paymentStatus === "paid") return;
+
+    const tableId = modal?.tableId ?? selectedTable.id;
 
     setIsSaving(true);
     setActionError(null);
-    const { data, error } = await updateTableOrders(modal.tableId, orders);
+    const { data, error } = await updateTableOrders(tableId, orders);
     setIsSaving(false);
 
     if (error) {
@@ -139,10 +153,29 @@ export function useTableOrderWorkflow({
 
     if (data) {
       const updatedTable = mapTableRow(data);
-      setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
+      setTables((prev) => prev.map((t) => (t.id === tableId ? updatedTable : t)));
     }
 
-    setModal({ type: "checkout", tableId: modal.tableId, orders });
+    setModal({ type: "checkout", tableId, orders });
+  };
+
+  const handleForceCloseTable = async () => {
+    if (!modal || (modal.type !== "new-order" && modal.type !== "manage-table")) return;
+    setIsSaving(true);
+    setActionError(null);
+    const { data, error } = await forceCloseTable(modal.tableId);
+    setIsSaving(false);
+    if (error) {
+      setActionError(error.message);
+      return;
+    }
+    logAction("close table", `Table ${selectedTable?.label}`);
+    if (data) {
+      const updatedTable = mapTableRow(data);
+      setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
+    }
+    setModal(null);
+    onRefresh();
   };
 
   const handleCheckout = async (payload: CheckoutSubmitPayload) => {
@@ -187,7 +220,7 @@ export function useTableOrderWorkflow({
     if (data) {
       const updatedTable = mapTableRow(data);
       setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
-      // Return to floor map — paid tables stay visible with "Đã thanh toán" until auto-serve clears.
+      // Paid tables stay visible until kitchen idle / auto-serve clears.
       setModal(null);
     } else if (payload.closeTable) {
       setTables((prev) =>
@@ -218,9 +251,13 @@ export function useTableOrderWorkflow({
             : t,
         ),
       );
-      setModal(remainingOrders.length === 0 ? null : { type: "manage-table", tableId: modal.tableId });
+      setModal(
+        remainingOrders.length === 0
+          ? null
+          : { type: "new-order", tableId: modal.tableId, mode: "append" },
+      );
     } else {
-      setModal({ type: "manage-table", tableId: modal.tableId });
+      setModal({ type: "new-order", tableId: modal.tableId, mode: "append" });
     }
 
     onRefresh();
@@ -241,6 +278,12 @@ export function useTableOrderWorkflow({
     onRefresh();
   };
 
+  const floorItemsForTable = (tableId: string) =>
+    filterItemsForBoard(
+      orderItems.filter((item) => item.tableId === tableId),
+      "floor",
+    );
+
   const modals = (
     <>
       {selectedTable && modal?.type === "manage-table" && (
@@ -249,11 +292,8 @@ export function useTableOrderWorkflow({
           table={selectedTable}
           allTables={tables}
           menuItems={menuItems}
-          orderItems={filterItemsForBoard(
-            orderItems.filter((item) => item.tableId === selectedTable.id),
-            "floor",
-          )}
-          onClose={() => setModal(null)}
+          orderItems={floorItemsForTable(selectedTable.id)}
+          onClose={() => setModal({ type: "new-order", tableId: selectedTable.id, mode: "append" })}
           onSaveOrders={handleSaveOrders}
           onTransfer={handleTransfer}
           onProceedToCheckout={handleProceedToCheckout}
@@ -271,7 +311,7 @@ export function useTableOrderWorkflow({
           orders={modal.orders}
           menuItems={menuItems}
           onClose={() => setModal(null)}
-          onBack={() => setModal({ type: "manage-table", tableId: modal.tableId })}
+          onBack={() => setModal({ type: "new-order", tableId: modal.tableId, mode: "append" })}
           onConfirm={handleCheckout}
           isSaving={isSaving}
           error={actionError}
@@ -281,13 +321,17 @@ export function useTableOrderWorkflow({
       {selectedTable && modal?.type === "new-order" && (
         <NewOrderModal
           open
+          table={selectedTable}
           tableLabel={selectedTable.label}
           menuItems={menuItems}
           categories={categories}
           mode={modal.mode}
-          existingOrders={orderItems.filter((item) => item.tableId === selectedTable.id)}
+          existingOrders={floorItemsForTable(selectedTable.id)}
           onClose={() => setModal(null)}
           onSendToKitchen={handleSendToKitchen}
+          onCheckout={handleProceedToCheckout}
+          onCloseTable={handleForceCloseTable}
+          onManage={() => openManageTable(selectedTable.id)}
           isSaving={isSaving}
         />
       )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { ArrowLeft, ArrowRight, ChevronDown, Printer, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Printer } from "lucide-react";
 import { CardPaymentModal } from "@/components/card-payment-modal";
 import { NumericInputField } from "@/components/numeric-input-field";
 import { PercentPresetButtons } from "@/components/percent-preset-buttons";
@@ -10,7 +10,6 @@ import { usePinGate } from "@/contexts/pin-gate-context";
 import { useSettings } from "@/contexts/settings-context";
 import {
   buildCheckoutTotals,
-  calcChangeDue,
   calcTipFromPercent,
   lineTotal,
   ordersFromLines,
@@ -41,30 +40,35 @@ interface CheckoutPanelProps {
   confirmLabel?: string;
 }
 
-function AccordionToggle({
+function AccordionTabBar({
   active,
-  onClick,
-  children,
+  onChange,
+  tabs,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
+  active: AccordionPanel | null;
+  onChange: (panel: AccordionPanel) => void;
+  tabs: { id: AccordionPanel; label: string }[];
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex w-full items-center justify-between rounded-xl border px-4 py-2.5 text-left text-sm font-semibold transition-colors ${
-        active
-          ? "border-blue-300 bg-blue-50 text-blue-900 dark:border-blue-700 dark:bg-blue-950/50 dark:text-blue-100"
-          : "border-gray-200 bg-gray-50 text-gray-800 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-200 dark:hover:bg-gray-800"
-      }`}
-    >
-      <span>{children}</span>
-      <ChevronDown
-        className={`h-4 w-4 shrink-0 transition-transform duration-300 ${active ? "rotate-180" : ""}`}
-      />
-    </button>
+    <div className="flex gap-1 rounded-xl border border-gray-200 bg-gray-100 p-1 dark:border-gray-700 dark:bg-gray-900">
+      {tabs.map((tab) => {
+        const isActive = active === tab.id;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onChange(tab.id)}
+            className={`min-h-[40px] flex-1 rounded-lg px-2 py-2 text-center text-xs font-semibold transition-colors sm:text-sm ${
+              isActive
+                ? "bg-white text-blue-900 shadow-sm dark:bg-gray-800 dark:text-blue-100"
+                : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+            }`}
+          >
+            {tab.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -133,7 +137,7 @@ export function CheckoutPanel({
     [priceOptions],
   );
   const scrollRef = useRef<HTMLDivElement>(null);
-  const accordionRefs = useRef<Partial<Record<AccordionPanel, HTMLDivElement | null>>>({});
+  const optionsRef = useRef<HTMLDivElement | null>(null);
 
   const [accordion, setAccordion] = useState<AccordionPanel | null>(null);
   const [discountType, setDiscountType] = useState<DiscountType>("percent");
@@ -143,8 +147,8 @@ export function CheckoutPanel({
   const [tipPreset, setTipPreset] = useState<number | null>(null);
   const [customTip, setCustomTip] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
-  const [amountGiven, setAmountGiven] = useState("");
-  const [tipFromChange, setTipFromChange] = useState(0);
+  /** Amount the guest actually tenders / is charged — excess over bill auto-becomes tip. */
+  const [customerPays, setCustomerPays] = useState("");
   const [splitMode, setSplitMode] = useState<SplitMode>("total");
   const [splitCount, setSplitCount] = useState(2);
   const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
@@ -173,8 +177,7 @@ export function CheckoutPanel({
     setTipPreset(null);
     setTipMode("custom");
     setPaymentMethod("cash");
-    setAmountGiven("");
-    setTipFromChange(0);
+    setCustomerPays("");
     setSplitCount(2);
     setSplitMode("total");
     setAccordion(null);
@@ -191,14 +194,13 @@ export function CheckoutPanel({
 
   useEffect(() => {
     if (!accordion) return;
-
-    const scrollTarget = accordionRefs.current[accordion];
     const container = scrollRef.current;
-    if (!scrollTarget || !container) return;
+    const target = optionsRef.current;
+    if (!container || !target) return;
 
     const timer = window.setTimeout(() => {
       const containerRect = container.getBoundingClientRect();
-      const targetRect = scrollTarget.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
       const offset = targetRect.top - containerRect.top + container.scrollTop - 8;
       container.scrollTo({ top: Math.max(0, offset), behavior: "smooth" });
     }, 320);
@@ -206,28 +208,59 @@ export function CheckoutPanel({
     return () => window.clearTimeout(timer);
   }, [accordion, splitMode]);
 
+  const baseTotals = useMemo(
+    () =>
+      buildCheckoutTotals({
+        lines,
+        discountType,
+        discountValue,
+        tip: 0,
+        splitMode,
+        splitCount,
+        selectedLineIds,
+        allLines: lines,
+        enablePriceRounding: settings.enablePriceRounding,
+      }),
+    [
+      lines,
+      discountType,
+      discountValue,
+      splitMode,
+      splitCount,
+      selectedLineIds,
+      settings.enablePriceRounding,
+    ],
+  );
+
+  const customerPaysNum =
+    customerPays.trim() === "" ? null : Math.max(0, Number(customerPays) || 0);
+  const usingCustomerPays = customerPaysNum !== null;
+
+  const manualTip =
+    tipMode === "preset" && tipPreset !== null
+      ? calcTipFromPercent(baseTotals.afterDiscount, tipPreset)
+      : customTip;
+
+  const autoTipFromPayment = usingCustomerPays
+    ? Math.max(0, customerPaysNum - baseTotals.amountDueNow)
+    : 0;
+
+  const tipAmount = usingCustomerPays ? autoTipFromPayment : Math.max(0, manualTip);
+
   const totals = useMemo(() => {
-    const tip =
-      tipMode === "preset" && tipPreset !== null
-        ? calcTipFromPercent(
-            buildCheckoutTotals({
-              lines,
-              discountType,
-              discountValue,
-              tip: 0,
-              splitMode: "total",
-              splitCount: 1,
-              enablePriceRounding: settings.enablePriceRounding,
-            }).afterDiscount,
-            tipPreset,
-          )
-        : customTip;
+    if (usingCustomerPays) {
+      return {
+        ...baseTotals,
+        grandTotal: baseTotals.afterDiscount + tipAmount,
+        amountDueNow: customerPaysNum,
+      };
+    }
 
     return buildCheckoutTotals({
       lines,
       discountType,
       discountValue,
-      tip,
+      tip: tipAmount,
       splitMode,
       splitCount,
       selectedLineIds,
@@ -235,28 +268,22 @@ export function CheckoutPanel({
       enablePriceRounding: settings.enablePriceRounding,
     });
   }, [
+    usingCustomerPays,
+    baseTotals,
+    tipAmount,
+    customerPaysNum,
     lines,
     discountType,
     discountValue,
-    tipMode,
-    tipPreset,
-    customTip,
     splitMode,
     splitCount,
     selectedLineIds,
     settings.enablePriceRounding,
   ]);
 
-  const changeDue =
-    paymentMethod === "cash" && amountGiven !== ""
-      ? calcChangeDue(Number(amountGiven), totals.amountDueNow)
-      : 0;
-
-  const maxTipFromChange = changeDue;
-  const effectiveTipFromChange = Math.min(Math.max(0, tipFromChange), maxTipFromChange);
-  const changeReturned = Math.max(0, changeDue - effectiveTipFromChange);
-  const configuredTip = Math.max(0, totals.grandTotal - totals.afterDiscount);
-  const totalTip = configuredTip + effectiveTipFromChange;
+  const totalTip = tipAmount;
+  const insufficientPayment =
+    usingCustomerPays && customerPaysNum < baseTotals.amountDueNow;
 
   useEffect(() => {
     if (!onCfdUpdate || !tableLabel) return;
@@ -285,10 +312,7 @@ export function CheckoutPanel({
     totalTip,
   ]);
 
-  const insufficientCash =
-    paymentMethod === "cash" &&
-    amountGiven !== "" &&
-    Number(amountGiven) < totals.amountDueNow;
+  const insufficientCash = insufficientPayment;
 
   const remainingBillLines = useMemo(
     () => lines.filter((line) => !selectedLineIds.includes(line.lineId)),
@@ -325,19 +349,30 @@ export function CheckoutPanel({
   };
 
   const handleTipPreset = (percent: number) => {
+    setCustomerPays("");
     setTipMode("preset");
     setTipPreset(percent);
     setCustomTip(0);
   };
 
   const handleCustomTipChange = (raw: string) => {
+    setCustomerPays("");
     setTipMode("custom");
     setTipPreset(null);
     setCustomTip(Math.max(0, Number(raw) || 0));
   };
 
+  const handleCustomerPaysChange = (raw: string) => {
+    setCustomerPays(raw);
+    if (raw.trim() !== "") {
+      setTipMode("custom");
+      setTipPreset(null);
+      setCustomTip(0);
+    }
+  };
+
   const customTipDisplay =
-    tipMode === "custom" && customTip > 0 ? String(customTip) : "";
+    !usingCustomerPays && tipMode === "custom" && customTip > 0 ? String(customTip) : "";
 
   const discountValueDisplay =
     discountValue > 0 ? String(discountValue) : "";
@@ -355,13 +390,15 @@ export function CheckoutPanel({
       return;
     }
 
-    if (insufficientCash) {
+    if (insufficientPayment) {
       setLocalError(translate("insufficientCash"));
       return;
     }
 
     const paidOrders = ordersFromLines(totals.payableLines);
     const remaining = splitMode === "items" ? remainingLines(lines, selectedLineIds) : undefined;
+
+    const chargeAmount = totals.amountDueNow;
 
     const payment = {
       paymentMethod,
@@ -370,13 +407,12 @@ export function CheckoutPanel({
       discountValue,
       discountAmount: totals.discountAmount,
       tip: totalTip,
-      grandTotal: totals.grandTotal,
-      amountDueNow: totals.amountDueNow,
+      grandTotal: usingCustomerPays ? chargeAmount : totals.grandTotal,
+      amountDueNow: chargeAmount,
       amountGiven:
-        paymentMethod === "cash" && amountGiven !== "" ? Number(amountGiven) : undefined,
-      changeDue:
-        paymentMethod === "cash" && amountGiven !== "" ? changeReturned : undefined,
-      tipFromChange: effectiveTipFromChange > 0 ? effectiveTipFromChange : undefined,
+        paymentMethod === "cash" && usingCustomerPays ? customerPaysNum : undefined,
+      changeDue: paymentMethod === "cash" && usingCustomerPays ? 0 : undefined,
+      tipFromChange: usingCustomerPays && autoTipFromPayment > 0 ? autoTipFromPayment : undefined,
       splitMode,
       splitCount: splitMode === "equal" ? splitCount : 1,
     };
@@ -396,7 +432,7 @@ export function CheckoutPanel({
       setPendingCheckout(payload);
       setCardTerminalOpen(true);
       setTerminalBusy(true);
-      void sendCfdEvent("TERMINAL_PENDING", { amount: totals.amountDueNow });
+      void sendCfdEvent("TERMINAL_PENDING", { amount: chargeAmount });
       return;
     }
 
@@ -455,7 +491,7 @@ export function CheckoutPanel({
   const tipControls = (
     <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/80 p-3 dark:border-gray-700 dark:bg-gray-900/40">
       <PercentPresetButtons
-        selected={tipMode === "preset" ? tipPreset : null}
+        selected={!usingCustomerPays && tipMode === "preset" ? tipPreset : null}
         onSelect={handleTipPreset}
       />
       <label className="block">
@@ -468,8 +504,19 @@ export function CheckoutPanel({
           className="mt-1"
         />
       </label>
+      {usingCustomerPays && (
+        <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+          {translate("autoTipFromPayment")}: {displayPrice(autoTipFromPayment)}
+        </p>
+      )}
     </div>
   );
+
+  const optionTabs = [
+    { id: "split" as const, label: `✂️ ${translate("splitBill")}` },
+    { id: "discount" as const, label: `🏷️ ${translate("discount")}` },
+    { id: "tip" as const, label: `💡 ${translate("tip")}` },
+  ];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-inherit text-gray-800 dark:text-gray-200">
@@ -521,187 +568,174 @@ export function CheckoutPanel({
           </div>
         </section>
 
-        <section className="space-y-1.5">
-          <div ref={(el) => { accordionRefs.current.split = el; }}>
-            <AccordionToggle active={accordion === "split"} onClick={() => toggleAccordion("split")}>
-              ✂️ {translate("splitBill")}
-            </AccordionToggle>
-            <CollapseSection open={accordion === "split"}>
-              <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900/30">
-                <div className="flex flex-wrap gap-2">
-                  {(
-                    [
-                      ["total", translate("payTotal")],
-                      ["equal", translate("splitEqually")],
-                      ["items", translate("payByItem")],
-                    ] as const
-                  ).map(([mode, label]) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setSplitMode(mode)}
-                      className={filterButtonClass(splitMode === mode)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+        <section ref={optionsRef} className="space-y-1.5">
+          <AccordionTabBar
+            active={accordion}
+            onChange={toggleAccordion}
+            tabs={optionTabs}
+          />
 
-                {splitMode === "equal" && (
-                  <div className="flex flex-wrap items-center gap-3">
-                    <label className="text-xs text-gray-500 dark:text-gray-400">
-                      {translate("splitCount")}
-                    </label>
-                    <NumericInputField
-                      value={String(splitCount)}
-                      onChange={(raw) => {
-                        const next = Math.min(20, Math.max(2, Number(raw) || 2));
-                        setSplitCount(next);
-                      }}
-                      allowDecimal={false}
-                      inputClassName="w-20 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-                    />
-                    <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                      {translate("perPerson")}: {displayPrice(totals.amountDueNow)}
-                    </span>
-                  </div>
-                )}
-
-                {splitMode === "items" && (
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div className="rounded-lg border border-gray-200 dark:border-gray-700">
-                      <p className="border-b border-gray-200 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
-                        {translate("remainingItems")}
-                      </p>
-                      <ul className="max-h-[260px] space-y-1 overflow-y-auto p-2">
-                        {remainingBillLines.length === 0 ? (
-                          <li className="py-6 text-center text-[11px] text-gray-400">—</li>
-                        ) : (
-                          remainingBillLines.map((line) => (
-                            <li key={line.lineId}>
-                              <button
-                                type="button"
-                                onClick={() => moveToBill(line.lineId)}
-                                className="flex w-full items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-left text-[11px] hover:border-blue-400 dark:border-gray-600 dark:bg-gray-900 dark:hover:border-blue-600"
-                              >
-                                <span className="min-w-0 flex-1 truncate text-gray-900 dark:text-gray-100">
-                                  {line.name}
-                                </span>
-                                <span className="shrink-0 tabular-nums text-gray-500">
-                                  {displayPrice(lineTotal(line))}
-                                </span>
-                                <ArrowRight className="h-3.5 w-3.5 shrink-0 text-blue-600" />
-                              </button>
-                            </li>
-                          ))
-                        )}
-                      </ul>
-                    </div>
-
-                    <div className="rounded-lg border-2 border-blue-300 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20">
-                      <p className="border-b border-blue-200 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-blue-800 dark:border-blue-900 dark:text-blue-200">
-                        {translate("currentBill")}
-                      </p>
-                      <ul className="max-h-[260px] space-y-1 overflow-y-auto p-2">
-                        {currentBillLines.length === 0 ? (
-                          <li className="py-6 text-center text-[11px] text-gray-400">
-                            {translate("selectItemsToPay")}
-                          </li>
-                        ) : (
-                          currentBillLines.map((line) => (
-                            <li key={line.lineId}>
-                              <button
-                                type="button"
-                                onClick={() => moveToRemaining(line.lineId)}
-                                className="flex w-full items-center gap-1 rounded-lg border border-blue-200 bg-white px-2 py-1.5 text-left text-[11px] dark:border-blue-900 dark:bg-gray-900"
-                              >
-                                <ArrowLeft className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-                                <span className="min-w-0 flex-1 truncate text-gray-900 dark:text-gray-100">
-                                  {line.name}
-                                </span>
-                                <span className="shrink-0 tabular-nums text-gray-500">
-                                  {displayPrice(lineTotal(line))}
-                                </span>
-                              </button>
-                            </li>
-                          ))
-                        )}
-                      </ul>
-                      <div className="space-y-2 border-t border-blue-200 p-2 dark:border-blue-900">
-                        <SummaryRow label={translate("subtotal")} value={displayPrice(totals.subtotal)} />
-                        {tipControls}
-                      </div>
-                    </div>
-                  </div>
-                )}
+          <CollapseSection open={accordion === "split"}>
+            <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900/30">
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    ["total", translate("payTotal")],
+                    ["equal", translate("splitEqually")],
+                    ["items", translate("payByItem")],
+                  ] as const
+                ).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setSplitMode(mode)}
+                    className={filterButtonClass(splitMode === mode)}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
-            </CollapseSection>
-          </div>
 
-          <div ref={(el) => { accordionRefs.current.discount = el; }}>
-            <AccordionToggle
-              active={accordion === "discount"}
-              onClick={() => toggleAccordion("discount")}
-            >
-              🏷️ {translate("discount")}
-            </AccordionToggle>
-            <CollapseSection open={accordion === "discount"}>
-              <div className="space-y-2 rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900/30">
-                <div className="flex flex-wrap gap-2">
-                  {(
-                    [
-                      ["percent", translate("discountPercent")],
-                      ["fixed", translate("discountFixed")],
-                    ] as const
-                  ).map(([type, label]) => (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() => {
-                        setDiscountType(type);
-                        setDiscountPreset(null);
-                      }}
-                      className={`flex-1 rounded-lg py-2 text-xs font-medium ${
-                        discountType === type
-                          ? "bg-orange-600 text-white"
-                          : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                {discountType === "percent" && (
-                  <PercentPresetButtons
-                    selected={discountPreset}
-                    onSelect={handleDiscountPreset}
-                    activeClassName="bg-orange-600 text-white"
-                    inactiveClassName="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+              {splitMode === "equal" && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="text-xs text-gray-500 dark:text-gray-400">
+                    {translate("splitCount")}
+                  </label>
+                  <NumericInputField
+                    value={String(splitCount)}
+                    onChange={(raw) => {
+                      const next = Math.min(20, Math.max(2, Number(raw) || 2));
+                      setSplitCount(next);
+                    }}
+                    allowDecimal={false}
+                    inputClassName="w-20 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                   />
-                )}
-                <NumericInputField
-                  value={discountValueDisplay}
-                  onChange={(raw) => {
-                    if (discountType === "percent") {
-                      handleDiscountValueChange(raw);
-                      return;
-                    }
-                    setDiscountPreset(null);
-                    setDiscountValue(Math.max(0, Number(raw) || 0));
-                  }}
-                  allowDecimal={discountType !== "percent"}
-                  placeholder={discountType === "percent" ? "0 %" : "0 Kč"}
-                />
-              </div>
-            </CollapseSection>
-          </div>
+                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                    {translate("perPerson")}: {displayPrice(baseTotals.amountDueNow)}
+                  </span>
+                </div>
+              )}
 
-          <div ref={(el) => { accordionRefs.current.tip = el; }}>
-            <AccordionToggle active={accordion === "tip"} onClick={() => toggleAccordion("tip")}>
-              💡 {translate("tip")}
-            </AccordionToggle>
-            <CollapseSection open={accordion === "tip"}>{tipControls}</CollapseSection>
-          </div>
+              {splitMode === "items" && (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700">
+                    <p className="border-b border-gray-200 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                      {translate("remainingItems")}
+                    </p>
+                    <ul className="max-h-[260px] space-y-1 overflow-y-auto p-2">
+                      {remainingBillLines.length === 0 ? (
+                        <li className="py-6 text-center text-[11px] text-gray-400">—</li>
+                      ) : (
+                        remainingBillLines.map((line) => (
+                          <li key={line.lineId}>
+                            <button
+                              type="button"
+                              onClick={() => moveToBill(line.lineId)}
+                              className="flex w-full items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-left text-[11px] hover:border-blue-400 dark:border-gray-600 dark:bg-gray-900 dark:hover:border-blue-600"
+                            >
+                              <span className="min-w-0 flex-1 truncate text-gray-900 dark:text-gray-100">
+                                {line.name}
+                              </span>
+                              <span className="shrink-0 tabular-nums text-gray-500">
+                                {displayPrice(lineTotal(line))}
+                              </span>
+                              <ArrowRight className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+                            </button>
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  </div>
+
+                  <div className="rounded-lg border-2 border-blue-300 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20">
+                    <p className="border-b border-blue-200 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-blue-800 dark:border-blue-900 dark:text-blue-200">
+                      {translate("currentBill")}
+                    </p>
+                    <ul className="max-h-[260px] space-y-1 overflow-y-auto p-2">
+                      {currentBillLines.length === 0 ? (
+                        <li className="py-6 text-center text-[11px] text-gray-400">
+                          {translate("selectItemsToPay")}
+                        </li>
+                      ) : (
+                        currentBillLines.map((line) => (
+                          <li key={line.lineId}>
+                            <button
+                              type="button"
+                              onClick={() => moveToRemaining(line.lineId)}
+                              className="flex w-full items-center gap-1 rounded-lg border border-blue-200 bg-white px-2 py-1.5 text-left text-[11px] dark:border-blue-900 dark:bg-gray-900"
+                            >
+                              <ArrowLeft className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                              <span className="min-w-0 flex-1 truncate text-gray-900 dark:text-gray-100">
+                                {line.name}
+                              </span>
+                              <span className="shrink-0 tabular-nums text-gray-500">
+                                {displayPrice(lineTotal(line))}
+                              </span>
+                            </button>
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                    <div className="space-y-2 border-t border-blue-200 p-2 dark:border-blue-900">
+                      <SummaryRow label={translate("subtotal")} value={displayPrice(totals.subtotal)} />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CollapseSection>
+
+          <CollapseSection open={accordion === "discount"}>
+            <div className="space-y-2 rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900/30">
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    ["percent", translate("discountPercent")],
+                    ["fixed", translate("discountFixed")],
+                  ] as const
+                ).map(([type, label]) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => {
+                      setDiscountType(type);
+                      setDiscountPreset(null);
+                    }}
+                    className={`flex-1 rounded-lg py-2 text-xs font-medium ${
+                      discountType === type
+                        ? "bg-orange-600 text-white"
+                        : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {discountType === "percent" && (
+                <PercentPresetButtons
+                  selected={discountPreset}
+                  onSelect={handleDiscountPreset}
+                  activeClassName="bg-orange-600 text-white"
+                  inactiveClassName="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                />
+              )}
+              <NumericInputField
+                value={discountValueDisplay}
+                onChange={(raw) => {
+                  if (discountType === "percent") {
+                    handleDiscountValueChange(raw);
+                    return;
+                  }
+                  setDiscountPreset(null);
+                  setDiscountValue(Math.max(0, Number(raw) || 0));
+                }}
+                allowDecimal={discountType !== "percent"}
+                placeholder={discountType === "percent" ? "0 %" : "0 Kč"}
+              />
+            </div>
+          </CollapseSection>
+
+          <CollapseSection open={accordion === "tip"}>{tipControls}</CollapseSection>
         </section>
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-gray-50/50 p-3 dark:border-gray-700 dark:bg-gray-900/30">
@@ -723,50 +757,37 @@ export function CheckoutPanel({
             </div>
           </div>
 
-          {paymentMethod === "cash" && (
+          <label className="block">
+            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+              {translate("customerPaysAmount")}
+            </span>
+            <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
+              {translate("customerPaysHint")}
+            </p>
+            <NumericInputField
+              value={customerPays}
+              onChange={handleCustomerPaysChange}
+              allowDecimal={false}
+              placeholder={`${baseTotals.amountDueNow || 0} Kč`}
+              className={`mt-1 ${insufficientPayment ? "[&_input]:border-red-400 dark:[&_input]:border-red-600" : ""}`}
+            />
+          </label>
+
+          {usingCustomerPays && !insufficientPayment && (
             <div className="grid gap-2 sm:grid-cols-2">
-              <label className="block">
-                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                  {translate("amountPaidByGuest")}
-                </span>
-                <NumericInputField
-                  value={amountGiven}
-                  onChange={(raw) => {
-                    setAmountGiven(raw);
-                    setTipFromChange(0);
-                  }}
-                  allowDecimal={false}
-                  placeholder="0 Kč"
-                  className={`mt-1 ${insufficientCash ? "[&_input]:border-red-400 dark:[&_input]:border-red-600" : ""}`}
+              <div className="rounded-xl border border-gray-200 bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-900/40">
+                <SummaryRow
+                  label={translate("amountDueNow")}
+                  value={displayPrice(baseTotals.amountDueNow)}
                 />
-              </label>
-              {amountGiven !== "" && !insufficientCash && (
-                <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-800 dark:bg-emerald-950/40">
-                  <SummaryRow
-                    label={translate("changeDue")}
-                    value={displayPrice(changeReturned)}
-                    highlight
-                  />
-                </div>
-              )}
-              {changeDue > 0 && !insufficientCash && (
-                <label className="block sm:col-span-2">
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                    {translate("tipFromChange")}
-                  </span>
-                  <NumericInputField
-                    value={tipFromChange > 0 ? String(tipFromChange) : ""}
-                    onChange={(raw) =>
-                      setTipFromChange(
-                        Math.min(maxTipFromChange, Math.max(0, Number(raw) || 0)),
-                      )
-                    }
-                    allowDecimal={false}
-                    placeholder="0 Kč"
-                    className="mt-1"
-                  />
-                </label>
-              )}
+              </div>
+              <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-800 dark:bg-emerald-950/40">
+                <SummaryRow
+                  label={translate("autoTipFromPayment")}
+                  value={displayPrice(autoTipFromPayment)}
+                  highlight
+                />
+              </div>
             </div>
           )}
         </section>

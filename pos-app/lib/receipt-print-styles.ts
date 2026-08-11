@@ -6,39 +6,45 @@ export interface ReceiptFontOption {
   sample: string;
 }
 
+/** CJK fallbacks — monospace Latin fonts often omit Chinese glyphs (prints as blank). */
+const CJK_FONT_FALLBACK =
+  "'PingFang SC', 'Hiragino Sans GB', 'Heiti SC', 'Microsoft YaHei', 'Noto Sans SC', 'Source Han Sans SC', 'WenQuanYi Micro Hei', sans-serif";
+
 /** System font stacks — no web fonts, reliable on thermal printers & Windows POS. */
 export const RECEIPT_FONT_OPTIONS: ReceiptFontOption[] = [
   {
     id: "consolas",
-    stack: "Consolas, 'Lucida Console', 'Courier New', monospace",
+    stack: `Consolas, 'Lucida Console', 'Courier New', monospace, ${CJK_FONT_FALLBACK}`,
     sample: "Consolas",
   },
   {
     id: "courier",
-    stack: "'Courier New', Courier, monospace",
+    stack: `'Courier New', Courier, monospace, ${CJK_FONT_FALLBACK}`,
     sample: "Courier New",
   },
   {
     id: "arial",
-    stack: "Arial, Helvetica, 'Segoe UI', sans-serif",
+    stack: `Arial, Helvetica, 'Segoe UI', ${CJK_FONT_FALLBACK}`,
     sample: "Arial",
   },
   {
     id: "tahoma",
-    stack: "Tahoma, Verdana, 'Segoe UI', sans-serif",
+    stack: `Tahoma, Verdana, 'Segoe UI', ${CJK_FONT_FALLBACK}`,
     sample: "Tahoma",
   },
   {
     id: "lucida",
-    stack: "'Lucida Sans', 'Lucida Grande', 'Lucida Sans Unicode', sans-serif",
+    stack: `'Lucida Sans', 'Lucida Grande', 'Lucida Sans Unicode', ${CJK_FONT_FALLBACK}`,
     sample: "Lucida Sans",
   },
   {
     id: "georgia",
-    stack: "Georgia, 'Times New Roman', Times, serif",
+    stack: `Georgia, 'Times New Roman', Times, ${CJK_FONT_FALLBACK}`,
     sample: "Georgia",
   },
 ];
+
+export const KITCHEN_TICKET_FONT_STACK = CJK_FONT_FALLBACK;
 
 export interface ReceiptTypography {
   fontFamily: string;

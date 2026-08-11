@@ -32,8 +32,16 @@ export async function finalizeNoteTranslation(
 ): Promise<{ note: string; noteTranslated: string }> {
   const selected = presets.filter((preset) => selectedIds.includes(preset.id));
   const presetLabels = selected.map((preset) => presetLabel(preset, language));
-  const presetZh = selected.map((preset) => preset.labelZh.trim());
   const trimmedFree = freeText.trim();
+
+  const presetZh = await Promise.all(
+    selected.map(async (preset) => {
+      const zh = preset.labelZh.trim();
+      if (zh) return zh;
+      const source = preset.labelEn.trim() || preset.labelCz.trim();
+      return source ? translateNoteToChinese(source) : "";
+    }),
+  );
 
   let translatedFree = "";
   if (trimmedFree) {
@@ -41,7 +49,7 @@ export async function finalizeNoteTranslation(
   }
 
   const note = [...presetLabels, trimmedFree].filter(Boolean).join(", ");
-  const noteTranslated = [...presetZh, translatedFree || trimmedFree].filter(Boolean).join(", ");
+  const noteTranslated = [...presetZh, translatedFree].filter(Boolean).join(", ");
 
   return { note, noteTranslated };
 }

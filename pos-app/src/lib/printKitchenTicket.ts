@@ -1,5 +1,7 @@
+import { isGrillGuestPrepOrder } from "@/lib/grill-guest-count";
 import { aggregateDisplayItems } from "@/lib/order-item-aggregate";
 import { menuItemDisplayName, resolveMenuItemForOrder } from "@/lib/menu-display";
+import { KITCHEN_TICKET_FONT_STACK } from "@/lib/receipt-print-styles";
 import type {
   AppSettings,
   KitchenPrintLanguage,
@@ -17,7 +19,7 @@ function escapeHtml(value: string): string {
 }
 
 function langLabel(lang: KitchenPrintLanguage): string {
-  if (lang === "zh") return "中文";
+  if (lang === "zh") return "ZH 中文";
   if (lang === "cs") return "CS";
   return "EN";
 }
@@ -27,6 +29,11 @@ function itemNameForLang(
   menuItems: MenuItem[],
   lang: KitchenPrintLanguage,
 ): string {
+  if (isGrillGuestPrepOrder(item)) {
+    if (lang === "zh") return "准备烤肉蘸料";
+    if (lang === "cs") return "Příprava omáčky ke grilu";
+    return "BBQ dipping sauce prep";
+  }
   const menu = resolveMenuItemForOrder(item, menuItems);
   if (menu) return menuItemDisplayName(menu, lang);
   return item.name;
@@ -104,22 +111,23 @@ export function buildKitchenTicketHtml(input: {
 
   return `
     <style>
-      .kitchen-ticket { width: 72mm; max-width: 72mm; font-family: sans-serif; color: #000; }
+      .kitchen-ticket, .kitchen-ticket * {
+        font-family: ${KITCHEN_TICKET_FONT_STACK} !important;
+        color: #000;
+      }
+      .kitchen-ticket { width: 72mm; max-width: 72mm; }
       .kitchen-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; }
       .kitchen-table { font-size: 28px; font-weight: 900; letter-spacing: 0.04em; }
       .kitchen-meta { font-size: 12px; margin-top: 4px; }
       .kitchen-item { border-bottom: 1px dashed #000; padding: 8px 0; }
       .kitchen-item-row { display: flex; gap: 6px; align-items: flex-start; }
       .kitchen-qty { font-size: 22px; font-weight: 900; min-width: 2.2em; }
-      .kitchen-name-primary { font-size: 22px; font-weight: 900; line-height: 1.2; }
-      .kitchen-name-secondary { font-size: 13px; margin: 2px 0 0 2.4em; }
+      .kitchen-name-primary { font-size: 22px; font-weight: 900; line-height: 1.25; word-break: break-word; }
+      .kitchen-name-secondary { font-size: 13px; margin: 2px 0 0 2.4em; word-break: break-word; }
       .kitchen-note { margin: 4px 0 0 2.4em; }
-      .kitchen-note-primary { font-size: 14px; font-weight: 700; }
-      .kitchen-note-secondary { font-size: 11px; margin-top: 2px; }
+      .kitchen-note-primary { font-size: 14px; font-weight: 700; word-break: break-word; }
+      .kitchen-note-secondary { font-size: 11px; margin-top: 2px; word-break: break-word; }
       .kitchen-footer { margin-top: 10px; text-align: center; font-size: 11px; }
-      .kitchen-message-box { border: 2px solid #000; padding: 10px 8px; margin-top: 8px; }
-      .kitchen-message-zh { font-size: 22px; font-weight: 900; line-height: 1.35; text-align: center; }
-      .kitchen-message-src { font-size: 12px; margin-top: 8px; text-align: center; }
     </style>
     <div class="kitchen-ticket">
       <div class="kitchen-header">
@@ -146,13 +154,17 @@ export function buildKitchenMessageHtml(input: {
 
   return `
     <style>
-      .kitchen-ticket { width: 72mm; max-width: 72mm; font-family: sans-serif; color: #000; }
+      .kitchen-ticket, .kitchen-ticket * {
+        font-family: ${KITCHEN_TICKET_FONT_STACK} !important;
+        color: #000;
+      }
+      .kitchen-ticket { width: 72mm; max-width: 72mm; }
       .kitchen-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; }
       .kitchen-table { font-size: 28px; font-weight: 900; letter-spacing: 0.04em; }
       .kitchen-meta { font-size: 12px; margin-top: 4px; }
       .kitchen-message-box { border: 2px solid #000; padding: 12px 8px; margin-top: 8px; }
-      .kitchen-message-zh { font-size: 22px; font-weight: 900; line-height: 1.35; text-align: center; }
-      .kitchen-message-src { font-size: 12px; margin-top: 10px; text-align: center; }
+      .kitchen-message-zh { font-size: 22px; font-weight: 900; line-height: 1.35; text-align: center; word-break: break-word; }
+      .kitchen-message-src { font-size: 12px; margin-top: 10px; text-align: center; word-break: break-word; }
       .kitchen-footer { margin-top: 10px; text-align: center; font-size: 11px; }
     </style>
     <div class="kitchen-ticket">

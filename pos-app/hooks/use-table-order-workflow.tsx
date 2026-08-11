@@ -93,7 +93,7 @@ export function useTableOrderWorkflow({
 
     logAction(isAppend ? "add items" : "new order", `Table ${selectedTable?.label}`);
 
-    if (settings.kitchenPrintEnabled && selectedTable) {
+    if (settings.kitchenPrintEnabled && !settings.kitchenPrintViaStation && selectedTable) {
       void printKitchenOrder({
         tableLabel: selectedTable.label,
         orders,

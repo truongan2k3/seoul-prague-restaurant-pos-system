@@ -90,6 +90,11 @@ export interface AppSettings {
   autoPrintOnPayment: boolean;
   /** Print kitchen ticket when staff sends order. */
   kitchenPrintEnabled: boolean;
+  /**
+   * When true, phones/tablets do not print; keep `/print-station` open on the
+   * Windows PC so it prints via the local bridge (127.0.0.1).
+   */
+  kitchenPrintViaStation: boolean;
   /** Large text language on kitchen ticket. */
   kitchenPrintPrimaryLang: KitchenPrintLanguage;
   /** Smaller text under primary (optional secondary). */

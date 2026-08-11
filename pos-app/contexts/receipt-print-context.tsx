@@ -20,6 +20,7 @@ import {
 } from "@/lib/receipt-calculations";
 import type { CheckoutPaymentRecord } from "@/lib/checkout-calculations";
 import type { MenuItem, OrderItem } from "@/lib/types";
+import { broadcastKitchenPrintMessage } from "@/lib/pos-notifications";
 import { translateNoteToChinese } from "@/src/lib/translator";
 
 interface PrintReceiptInput {
@@ -124,6 +125,14 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
   const printKitchenStaffMessage = useCallback(
     async (input: { tableLabel: string; message: string }) => {
       const messageZh = await translateNoteToChinese(input.message);
+      if (settings.kitchenPrintViaStation) {
+        await broadcastKitchenPrintMessage({
+          tableLabel: input.tableLabel,
+          message: input.message,
+          messageZh,
+        });
+        return;
+      }
       await printKitchenMessage({
         tableLabel: input.tableLabel,
         message: input.message,

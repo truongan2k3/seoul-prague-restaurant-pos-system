@@ -71,7 +71,7 @@ function ServerApp() {
 
     logAction(isAppend ? "server add items" : "server order", `Table ${orderModal.table.label}`);
 
-    if (settings.kitchenPrintEnabled) {
+    if (settings.kitchenPrintEnabled && !settings.kitchenPrintViaStation) {
       void printKitchenOrder({
         tableLabel: orderModal.table.label,
         orders,

@@ -91,6 +91,7 @@ async function ensureSettingsForBusiness(businessId: string) {
       printers: DEFAULT_APP_SETTINGS.printers,
       auto_print_on_payment: DEFAULT_APP_SETTINGS.autoPrintOnPayment,
       kitchen_print_enabled: DEFAULT_APP_SETTINGS.kitchenPrintEnabled,
+      kitchen_print_via_station: DEFAULT_APP_SETTINGS.kitchenPrintViaStation,
       kitchen_print_primary_lang: DEFAULT_APP_SETTINGS.kitchenPrintPrimaryLang,
       kitchen_print_secondary_lang: DEFAULT_APP_SETTINGS.kitchenPrintSecondaryLang,
       kitchen_print_order_font_size: DEFAULT_APP_SETTINGS.kitchenPrintOrderFontSize,

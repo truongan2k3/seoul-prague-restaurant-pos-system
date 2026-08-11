@@ -32,7 +32,7 @@ import {
   clearBusinessLogoAction,
   uploadBusinessLogoAction,
 } from "@/src/lib/business-auth-actions";
-import { Monitor, Plus, Save, Tablet, Trash2, Tv } from "lucide-react";
+import { Monitor, Plus, Printer, Save, Tablet, Trash2, Tv } from "lucide-react";
 
 const RECEIPT_FONT_LABEL_KEYS: Record<ReceiptFontFamily, TranslationKey> = {
   consolas: "settingsReceiptFontConsolas",
@@ -235,6 +235,12 @@ export function SettingsView({
   const devices = [
     { href: "/", label: translate("posWindows"), icon: Monitor, desc: "Cashier & floor manager" },
     { href: "/server", label: translate("tabletServer"), icon: Tablet, desc: "Table ordering" },
+    {
+      href: "/print-station",
+      label: translate("printStation"),
+      icon: Printer,
+      desc: translate("printStationDeviceHint"),
+    },
     { href: "/kds", label: translate("tabletKds"), icon: Tablet, desc: "Kitchen display" },
     { href: "/bar", label: translate("barScreen"), icon: Tv, desc: "Bar display" },
     { href: "/client", label: translate("customerDisplay"), icon: Monitor, desc: translate("settingsCfdDeviceHint") },
@@ -353,6 +359,9 @@ export function SettingsView({
                     className="pos-input mt-1"
                     placeholder="http://127.0.0.1:39100"
                   />
+                  <span className="mt-1 block text-xs text-amber-700 dark:text-amber-300">
+                    {translate("settingsPrintBridgeUrlWarning")}
+                  </span>
                 </label>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -531,7 +540,27 @@ export function SettingsView({
             </label>
 
             {draft.kitchenPrintEnabled && (
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="mt-3 space-y-3">
+                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
+                  <div className="min-w-0">
+                    <span className="block text-sm text-gray-800 dark:text-gray-200">
+                      {translate("settingsKitchenPrintViaStation")}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+                      {translate("settingsKitchenPrintViaStationHint")}
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={draft.kitchenPrintViaStation}
+                    onChange={(event) =>
+                      updateDraft("kitchenPrintViaStation", event.target.checked)
+                    }
+                    className="h-4 w-4 shrink-0 rounded border-gray-300"
+                  />
+                </label>
+
+                <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block text-sm">
                   <span className="text-gray-500 dark:text-gray-400">
                     {translate("settingsKitchenPrintPrimary")}
@@ -609,6 +638,7 @@ export function SettingsView({
                     <option value="xxlarge">{translate("settingsKitchenPrintFontXXLarge")}</option>
                   </select>
                 </label>
+                </div>
               </div>
             )}
 

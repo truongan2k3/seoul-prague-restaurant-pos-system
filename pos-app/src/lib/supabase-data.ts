@@ -469,9 +469,12 @@ export function subscribeToOrderItemUpdates(
   };
 }
 
-export function subscribeToOrderItemInserts(onInsert: (row: SupabaseOrderItemRow) => void) {
+export function subscribeToOrderItemInserts(
+  onInsert: (row: SupabaseOrderItemRow) => void,
+  channelName = "order-items-inserts",
+) {
   const channel = supabase
-    .channel("order-items-inserts")
+    .channel(channelName)
     .on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "order_items" },

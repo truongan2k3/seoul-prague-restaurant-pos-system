@@ -6,13 +6,60 @@ export type PrintDispatchSettings = Pick<
   "silentPrintEnabled" | "printBridgeUrl" | "browserPrintFallback" | "printers"
 >;
 
+const RAW_PRINTER_PORTS = new Set([9100, 9101, 9102, 9103]);
+
 function printersForRole(settings: PrintDispatchSettings, role: PrinterRole): NetworkPrinter[] {
   return (settings.printers ?? []).filter(
     (printer) => printer.enabled && printer.roles.includes(role),
   );
 }
 
+/** Reject URLs that point at a raw thermal port (common misconfig). */
+export function validatePrintBridgeUrl(bridgeUrl: string): { ok: boolean; message: string } {
+  const trimmed = bridgeUrl.trim();
+  if (!trimmed) {
+    return { ok: false, message: "Print bridge URL is empty" };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return { ok: false, message: "Invalid bridge URL" };
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return { ok: false, message: "Bridge URL must start with http:// or https://" };
+  }
+
+  const port = parsed.port
+    ? Number(parsed.port)
+    : parsed.protocol === "https:"
+      ? 443
+      : 80;
+
+  if (RAW_PRINTER_PORTS.has(port)) {
+    return {
+      ok: false,
+      message:
+        "Bridge URL must NOT be the printer IP:9100. Use the PC running print-bridge (e.g. http://127.0.0.1:39100). Put printer IP only in Network printers.",
+    };
+  }
+
+  if (parsed.pathname.replace(/\/$/, "") === "/print") {
+    return {
+      ok: false,
+      message: "Use the bridge base URL only (e.g. http://127.0.0.1:39100), without /print",
+    };
+  }
+
+  return { ok: true, message: "Bridge URL looks valid" };
+}
+
 export async function pingPrintBridge(bridgeUrl: string): Promise<{ ok: boolean; message: string }> {
+  const check = validatePrintBridgeUrl(bridgeUrl);
+  if (!check.ok) return check;
+
   const base = bridgeUrl.replace(/\/$/, "");
   try {
     const response = await fetch(`${base}/health`, { method: "GET" });
@@ -27,7 +74,9 @@ export async function pingPrintBridge(bridgeUrl: string): Promise<{ ok: boolean;
   } catch (error) {
     return {
       ok: false,
-      message: error instanceof Error ? error.message : "Bridge unreachable",
+      message:
+        (error instanceof Error ? error.message : "Bridge unreachable") +
+        " — start: node print-bridge/server.mjs",
     };
   }
 }
@@ -37,6 +86,11 @@ async function sendRawToPrinter(
   printer: NetworkPrinter,
   data: Uint8Array,
 ): Promise<void> {
+  const check = validatePrintBridgeUrl(bridgeUrl);
+  if (!check.ok) {
+    throw new Error(check.message);
+  }
+
   const base = bridgeUrl.replace(/\/$/, "");
   const response = await fetch(`${base}/print`, {
     method: "POST",
@@ -66,6 +120,11 @@ export async function silentPrintEscPos(
 ): Promise<{ sent: boolean; error?: string }> {
   if (!settings.silentPrintEnabled) {
     return { sent: false };
+  }
+
+  const check = validatePrintBridgeUrl(settings.printBridgeUrl);
+  if (!check.ok) {
+    return { sent: false, error: check.message };
   }
 
   const targets = printersForRole(settings, role);

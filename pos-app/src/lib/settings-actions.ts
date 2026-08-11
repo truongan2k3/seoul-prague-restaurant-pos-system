@@ -51,6 +51,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   printers: createDefaultPrinters(),
   autoPrintOnPayment: true,
   kitchenPrintEnabled: true,
+  kitchenPrintViaStation: true,
   kitchenPrintPrimaryLang: "zh",
   kitchenPrintSecondaryLang: "en",
   kitchenPrintOrderFontSize: "xlarge",
@@ -98,6 +99,7 @@ type SettingsRow = {
   printers?: NetworkPrinter[] | unknown | null;
   auto_print_on_payment: boolean;
   kitchen_print_enabled?: boolean | null;
+  kitchen_print_via_station?: boolean | null;
   kitchen_print_primary_lang?: string | null;
   kitchen_print_secondary_lang?: string | null;
   kitchen_print_order_font_size?: string | null;
@@ -237,6 +239,8 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     printers: parsePrinters(row.printers, printerIp, printerPort),
     autoPrintOnPayment: row.auto_print_on_payment,
     kitchenPrintEnabled: row.kitchen_print_enabled ?? DEFAULT_APP_SETTINGS.kitchenPrintEnabled,
+    kitchenPrintViaStation:
+      row.kitchen_print_via_station ?? DEFAULT_APP_SETTINGS.kitchenPrintViaStation,
     kitchenPrintPrimaryLang: parseKitchenPrintPrimary(row.kitchen_print_primary_lang),
     kitchenPrintSecondaryLang: parseKitchenPrintSecondary(row.kitchen_print_secondary_lang),
     kitchenPrintOrderFontSize: parseKitchenPrintFontSize(row.kitchen_print_order_font_size),
@@ -295,6 +299,9 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   if (partial.printers !== undefined) payload.printers = partial.printers;
   if (partial.autoPrintOnPayment !== undefined) payload.auto_print_on_payment = partial.autoPrintOnPayment;
   if (partial.kitchenPrintEnabled !== undefined) payload.kitchen_print_enabled = partial.kitchenPrintEnabled;
+  if (partial.kitchenPrintViaStation !== undefined) {
+    payload.kitchen_print_via_station = partial.kitchenPrintViaStation;
+  }
   if (partial.kitchenPrintPrimaryLang !== undefined) {
     payload.kitchen_print_primary_lang = partial.kitchenPrintPrimaryLang;
   }
@@ -501,6 +508,7 @@ export type PrinterBillSettingsDraft = Pick<
   | "printers"
   | "autoPrintOnPayment"
   | "kitchenPrintEnabled"
+  | "kitchenPrintViaStation"
   | "kitchenPrintPrimaryLang"
   | "kitchenPrintSecondaryLang"
   | "kitchenPrintOrderFontSize"
@@ -549,6 +557,7 @@ export function pickPrinterBillDraft(settings: AppSettings): PrinterBillSettings
     printers: settings.printers,
     autoPrintOnPayment: settings.autoPrintOnPayment,
     kitchenPrintEnabled: settings.kitchenPrintEnabled,
+    kitchenPrintViaStation: settings.kitchenPrintViaStation,
     kitchenPrintPrimaryLang: settings.kitchenPrintPrimaryLang,
     kitchenPrintSecondaryLang: settings.kitchenPrintSecondaryLang,
     kitchenPrintOrderFontSize: settings.kitchenPrintOrderFontSize,

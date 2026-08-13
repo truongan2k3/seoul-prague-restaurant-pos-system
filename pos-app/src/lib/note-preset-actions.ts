@@ -1,5 +1,6 @@
 import type { NotePreset } from "@/lib/types";
 import { supabase } from "@/src/lib/supabase";
+import { ensureStorageCatalogSynced } from "@/src/lib/sync-storage-catalog";
 
 export type NotePresetInput = {
   labelEn: string;
@@ -28,6 +29,7 @@ function mapRow(row: {
 }
 
 export async function fetchNotePresets() {
+  await ensureStorageCatalogSynced();
   return supabase
     .from("note_presets")
     .select("*")
@@ -43,6 +45,7 @@ export function mapNotePresetsResponse(
 }
 
 export async function fetchAllNotePresetsAdmin() {
+  await ensureStorageCatalogSynced();
   return supabase.from("note_presets").select("*").order("display_order").order("label_en");
 }
 

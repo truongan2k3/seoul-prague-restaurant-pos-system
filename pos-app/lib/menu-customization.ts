@@ -3,14 +3,131 @@ import type {
   MenuCustomizationConfig,
   MenuItem,
   MenuOptionChoice,
+  MenuOptionGroup,
+  OptionGroupLibraryEntry,
   SelectedMenuOption,
 } from "@/lib/types";
+
+export function libraryEntryToOptionGroup(
+  entry: OptionGroupLibraryEntry,
+): MenuOptionGroup {
+  return {
+    id: entry.id,
+    nameEn: entry.nameEn,
+    nameCz: entry.nameCz,
+    nameZh: entry.nameZh,
+    required: entry.required,
+    multi: entry.multi,
+    options: entry.options.map((option) => ({ ...option })),
+  };
+}
+
+/**
+ * Resolve library references into embedded optionGroups for order/print/customize.
+ * Legacy inline-only configs (no optionGroupLibraryIds) pass through unchanged.
+ */
+type LegacyCustomizationConfig = MenuCustomizationConfig & {
+  freeAddOn?: unknown;
+};
+
+function stripLegacyFreeAddOn(config: LegacyCustomizationConfig): MenuCustomizationConfig {
+  const { freeAddOn: _ignored, ...rest } = config;
+  return rest;
+}
+
+export function resolveCustomizationConfig(
+  config: MenuCustomizationConfig | undefined,
+  library: OptionGroupLibraryEntry[],
+): MenuCustomizationConfig | undefined {
+  if (!config) return undefined;
+  config = stripLegacyFreeAddOn(config as LegacyCustomizationConfig);
+
+  const libraryIds = config.optionGroupLibraryIds ?? [];
+  if (libraryIds.length === 0) {
+    const hasContent = config.optionGroups && config.optionGroups.length > 0;
+    return hasContent ? config : undefined;
+  }
+
+  const byId = new Map(library.map((entry) => [entry.id, entry]));
+  const fromLibrary: MenuOptionGroup[] = [];
+  for (const id of libraryIds) {
+    const entry = byId.get(id);
+    if (entry && entry.active !== false) {
+      fromLibrary.push(libraryEntryToOptionGroup(entry));
+    }
+  }
+
+  const libraryIdSet = new Set(libraryIds);
+  const inlineOnly = (config.optionGroups ?? []).filter(
+    (group) => !libraryIdSet.has(group.id),
+  );
+
+  const optionGroups = [...fromLibrary, ...inlineOnly];
+  const resolved: MenuCustomizationConfig = {
+    ...config,
+    optionGroups,
+  };
+
+  const hasContent =
+    optionGroups.length > 0 || (resolved.allowedSpecialRequestIds?.length ?? 0) > 0;
+  return hasContent ? resolved : { ...resolved, optionGroups };
+}
+
+export function applyOptionGroupLibrary(
+  item: MenuItem,
+  library: OptionGroupLibraryEntry[],
+): MenuItem {
+  if (!item.customizationConfig) return item;
+  const resolved = resolveCustomizationConfig(item.customizationConfig, library);
+  if (resolved === item.customizationConfig) return item;
+  return { ...item, customizationConfig: resolved };
+}
+
+export function applyOptionGroupLibraryToItems(
+  items: MenuItem[],
+  library: OptionGroupLibraryEntry[],
+): MenuItem[] {
+  if (!library.length) return items;
+  return items.map((item) => applyOptionGroupLibrary(item, library));
+}
+
+/** Strip resolved library groups before save so DB keeps references + true inline only. */
+export function customizationConfigForSave(
+  config: MenuCustomizationConfig | undefined,
+): MenuCustomizationConfig | undefined {
+  if (!config) return undefined;
+  const libraryIds = config.optionGroupLibraryIds ?? [];
+  const libraryIdSet = new Set(libraryIds);
+  const inlineOnly = (config.optionGroups ?? []).filter(
+    (group) => !libraryIdSet.has(group.id),
+  );
+
+  const next: MenuCustomizationConfig = {
+    ...config,
+    optionGroupLibraryIds: libraryIds.length > 0 ? libraryIds : undefined,
+    optionGroups: inlineOnly.length > 0 ? inlineOnly : undefined,
+  };
+
+  if (!next.optionGroupLibraryIds) delete next.optionGroupLibraryIds;
+  if (!next.optionGroups?.length) delete next.optionGroups;
+  if (next.allowedSpecialRequestIds == null) delete next.allowedSpecialRequestIds;
+  delete (next as LegacyCustomizationConfig).freeAddOn;
+  if (!next.basePriceFromOptions) delete next.basePriceFromOptions;
+
+  const hasContent =
+    Boolean(next.optionGroups?.length) ||
+    Boolean(next.optionGroupLibraryIds?.length) ||
+    next.allowedSpecialRequestIds != null;
+
+  return hasContent ? next : undefined;
+}
 
 export function hasCustomization(item: MenuItem): boolean {
   const config = item.customizationConfig;
   if (!config) return false;
   return Boolean(
-    (config.optionGroups && config.optionGroups.length > 0) || config.freeAddOn,
+    (config.optionGroups && config.optionGroups.length > 0) ||
+      (config.optionGroupLibraryIds && config.optionGroupLibraryIds.length > 0),
   );
 }
 
@@ -108,55 +225,47 @@ export function optionLabel(
 export function buildCustomizationSignature(
   menuItemId: string,
   selections: Record<string, string>,
-  freeAddOnSelected: boolean,
 ): string {
-  return JSON.stringify({ menuItemId, selections, freeAddOnSelected });
+  return JSON.stringify({ menuItemId, selections });
 }
 
 export function buildLineDisplayName(
   baseName: string,
   selected: SelectedMenuOption[],
   language: LanguageCode,
-  freeAddOnSelected?: boolean,
-  freeAddOn?: MenuCustomizationConfig["freeAddOn"],
 ): string {
   const parts = [baseName];
   for (const entry of selected) {
     parts.push(optionLabel(entry, language));
   }
-  if (freeAddOnSelected && freeAddOn) {
-    parts.push(optionLabel(freeAddOn, language));
-  }
   return parts.join(" · ");
 }
 
-export function buildKitchenModifierText(
-  selected: SelectedMenuOption[],
-  freeAddOnSelected: boolean,
-  freeAddOn?: MenuCustomizationConfig["freeAddOn"],
-): string {
-  const parts: string[] = [];
-  for (const entry of selected) {
-    parts.push(entry.nameZh.trim() || entry.nameEn);
-  }
-  if (freeAddOnSelected && freeAddOn) {
-    parts.push(freeAddOn.nameZh.trim() || freeAddOn.nameEn);
-  }
-  return parts.join(" · ");
+export function buildKitchenModifierText(selected: SelectedMenuOption[]): string {
+  return selected.map((entry) => entry.nameZh.trim() || entry.nameEn).join(" · ");
+}
+
+export function buildKitchenModifierTextEn(selected: SelectedMenuOption[]): string {
+  return selected.map((entry) => entry.nameEn.trim() || entry.nameCz.trim() || entry.nameZh).join(" · ");
 }
 
 export function mergeNoteWithKitchenModifiers(
   note: string | undefined,
   noteTranslated: string | undefined,
-  kitchenModifiers: string,
+  kitchenModifiersZh: string,
+  kitchenModifiersEn?: string,
 ): { notes?: string; notesTranslated?: string } {
-  if (!kitchenModifiers) {
+  const zhPart = kitchenModifiersZh.trim();
+  const enPart = (kitchenModifiersEn ?? kitchenModifiersZh).trim();
+
+  if (!zhPart && !enPart) {
     return {
       notes: note?.trim() || undefined,
       notesTranslated: noteTranslated?.trim() || undefined,
     };
   }
-  const notes = [kitchenModifiers, note?.trim()].filter(Boolean).join(" · ");
-  const notesTranslated = [kitchenModifiers, noteTranslated?.trim()].filter(Boolean).join(" · ");
+
+  const notes = [enPart, note?.trim()].filter(Boolean).join(" · ");
+  const notesTranslated = [zhPart, noteTranslated?.trim()].filter(Boolean).join(" · ");
   return { notes: notes || undefined, notesTranslated: notesTranslated || undefined };
 }

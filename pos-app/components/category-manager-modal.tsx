@@ -26,6 +26,8 @@ interface CategoryManagerModalProps {
   categories: MenuCategoryRecord[];
   onClose: () => void;
   onChange: () => void;
+  /** Render inline (Storage tab) instead of modal overlay */
+  embedded?: boolean;
 }
 
 interface DraftCategory {
@@ -45,6 +47,7 @@ export function CategoryManagerModal({
   categories,
   onClose,
   onChange,
+  embedded = false,
 }: CategoryManagerModalProps) {
   const { translate } = useApp();
   const [drafts, setDrafts] = useState<DraftCategory[]>([]);
@@ -231,26 +234,10 @@ export function CategoryManagerModal({
     onChange();
   };
 
-  return (
-    <>
-      <Modal
-        open={open}
-        onClose={onClose}
-        size="lg"
-        title={translate("manageCategories")}
-        footer={
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-zinc-200 px-4 py-2 text-sm dark:border-zinc-700"
-            >
-              {translate("close")}
-            </button>
-          </div>
-        }
-      >
-        <div className="space-y-4">
+  if (!open && !embedded) return null;
+
+  const panel = (
+    <div className="space-y-4">
           {error && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
               {error}
@@ -407,7 +394,33 @@ export function CategoryManagerModal({
             </div>
           </div>
         </div>
-      </Modal>
+  );
+
+  return (
+    <>
+      {embedded ? (
+        panel
+      ) : (
+        <Modal
+          open={open}
+          onClose={onClose}
+          size="lg"
+          title={translate("manageCategories")}
+          footer={
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg border border-zinc-200 px-4 py-2 text-sm dark:border-zinc-700"
+              >
+                {translate("close")}
+              </button>
+            </div>
+          }
+        >
+          {panel}
+        </Modal>
+      )}
 
       <Modal
         open={deleteTarget != null}

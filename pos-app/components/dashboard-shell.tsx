@@ -20,12 +20,11 @@ import { canAccessNavTabForMember, firstAccessibleNavTab } from "@/lib/staff-rol
 import {
   fetchCategories,
   fetchInventory,
-  fetchMenuItems,
   fetchSales,
   fetchTables,
+  loadMenuItemsResolved,
   mapCategoriesResponse,
   mapInventoryResponse,
-  mapMenuItemsResponse,
   mapOrderItemRow,
   mapSalesResponse,
   mapTablesResponse,
@@ -69,8 +68,8 @@ export function DashboardShell() {
   }, []);
 
   const reloadMenu = useCallback(async () => {
-    const { data, error: err } = await fetchMenuItems();
-    if (!err) setMenuItems(mapMenuItemsResponse(data));
+    const { data, error: err } = await loadMenuItemsResolved();
+    if (!err && data) setMenuItems(data);
   }, []);
 
   const reloadCategories = useCallback(async () => {
@@ -104,7 +103,7 @@ export function DashboardShell() {
       setLoading(true);
       const [t, m, c, o, s, i] = await Promise.all([
         fetchTables(),
-        fetchMenuItems(),
+        loadMenuItemsResolved(),
         fetchCategories(),
         supabase.from("order_items").select("*").order("created_at"),
         fetchSales((() => {
@@ -118,7 +117,7 @@ export function DashboardShell() {
       if (t.error) { setError(t.error.message); setLoading(false); return; }
       if (m.error) { setError(m.error.message); setLoading(false); return; }
       setTables(mapTablesResponse(t.data));
-      setMenuItems(mapMenuItemsResponse(m.data));
+      if (m.data) setMenuItems(m.data);
       if (!c.error) setCategories(mapCategoriesResponse(c.data));
       if (!o.error) {
         setOrderItems((o.data as SupabaseOrderItemRow[] | null)?.map(mapOrderItemRow) ?? []);

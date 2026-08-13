@@ -5,14 +5,14 @@ import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
 import { LanguageSelector } from "@/components/language-selector";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
+import { shouldPrintKitchenOnSend } from "@/lib/kitchen-fulfillment-mode";
 import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
 import { subscribeToKitchenPrintMessage } from "@/lib/pos-notifications";
 import { pingPrintBridge } from "@/src/lib/print-bridge-client";
 import { printKitchenMessage, printKitchenTicket } from "@/src/lib/printKitchenTicket";
 import {
-  fetchMenuItems,
   fetchTables,
-  mapMenuItemRow,
+  loadMenuItemsResolved,
   mapOrderItemRow,
   mapTableRow,
   subscribeToOrderItemInserts,
@@ -115,10 +115,15 @@ export function PrintStationView() {
   const queueInsert = useCallback(
     (row: SupabaseOrderItemRow) => {
       const cfg = settingsRef.current;
-      if (!cfg.kitchenPrintEnabled || !cfg.kitchenPrintViaStation) return;
+      if (!shouldPrintKitchenOnSend(cfg) || !cfg.kitchenPrintViaStation) return;
 
       const status = normalizeOrderItemStatus(row.status);
-      if (status !== "preparing" && status !== "pending") return;
+      const paperMode = cfg.kitchenFulfillmentMode === "paper";
+      const printableStatus =
+        status === "preparing" ||
+        status === "pending" ||
+        (paperMode && status === "served");
+      if (!printableStatus) return;
       if (row.is_cancelled) return;
       if (row.skip_print) return;
       if (seenIdsRef.current.has(row.id)) return;
@@ -149,10 +154,13 @@ export function PrintStationView() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [tablesRes, menuRes] = await Promise.all([fetchTables(), fetchMenuItems()]);
+      const [tablesRes, menuRes] = await Promise.all([
+        fetchTables(),
+        loadMenuItemsResolved(),
+      ]);
       if (cancelled) return;
       if (tablesRes.data) setTables(tablesRes.data.map(mapTableRow));
-      if (menuRes.data) setMenuItems(menuRes.data.map(mapMenuItemRow));
+      if (menuRes.data) setMenuItems(menuRes.data);
     })();
     return () => {
       cancelled = true;
@@ -183,7 +191,7 @@ export function PrintStationView() {
   }, [settings.silentPrintEnabled, settings.printBridgeUrl, translate]);
 
   useEffect(() => {
-    if (!settings.kitchenPrintEnabled || !settings.kitchenPrintViaStation) {
+    if (!shouldPrintKitchenOnSend(settings) || !settings.kitchenPrintViaStation) {
       setListening(false);
       return;
     }
@@ -195,7 +203,7 @@ export function PrintStationView() {
     );
     const unsubMessages = subscribeToKitchenPrintMessage((payload) => {
       const cfg = settingsRef.current;
-      if (!cfg.kitchenPrintEnabled || !cfg.kitchenPrintViaStation) return;
+      if (!shouldPrintKitchenOnSend(cfg) || !cfg.kitchenPrintViaStation) return;
       enqueuePrint(async () => {
         try {
           await printKitchenMessage({
@@ -229,6 +237,7 @@ export function PrintStationView() {
       batchesRef.current.clear();
     };
   }, [
+    settings.kitchenFulfillmentMode,
     settings.kitchenPrintEnabled,
     settings.kitchenPrintViaStation,
     queueInsert,
@@ -238,12 +247,12 @@ export function PrintStationView() {
   ]);
 
   const statusReady =
-    settings.kitchenPrintEnabled &&
+    shouldPrintKitchenOnSend(settings) &&
     settings.kitchenPrintViaStation &&
     listening &&
     (!settings.silentPrintEnabled || bridgeOk === true);
 
-  const notReadyReason = !settings.kitchenPrintEnabled
+  const notReadyReason = !shouldPrintKitchenOnSend(settings)
     ? translate("printStationNeedKitchenPrint")
     : !settings.kitchenPrintViaStation
       ? translate("printStationNeedViaStation")
@@ -302,7 +311,7 @@ export function PrintStationView() {
           <ul className="mt-4 space-y-2 text-sm text-zinc-700 dark:text-zinc-300">
             <li>
               {translate("settingsKitchenPrint")}:{" "}
-              {settings.kitchenPrintEnabled ? "ON" : "OFF"}
+              {shouldPrintKitchenOnSend(settings) ? "ON" : "OFF"}
             </li>
             <li>
               {translate("settingsKitchenPrintViaStation")}:{" "}

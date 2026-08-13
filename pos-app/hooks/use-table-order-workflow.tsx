@@ -8,7 +8,12 @@ import type { CheckoutSubmitPayload } from "@/components/checkout-panel";
 import { useApp } from "@/contexts/app-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { useSettings } from "@/contexts/settings-context";
+import {
+  applyFulfillmentModeToNewOrders,
+  shouldPrintKitchenOnSend,
+} from "@/lib/kitchen-fulfillment-mode";
 import { ordersFromLines } from "@/lib/checkout-calculations";
+import { finalizeBillOnlyOrder } from "@/lib/menu-item-dispatch";
 import { filterItemsForBoard } from "@/lib/order-board";
 import { sendCfdEvent } from "@/lib/cfd-display";
 import type { MenuCategoryRecord, MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
@@ -79,10 +84,26 @@ export function useTableOrderWorkflow({
     setIsSaving(true);
     setActionError(null);
 
+    const preparedOrders = applyFulfillmentModeToNewOrders(
+      orders,
+      settings.kitchenFulfillmentMode,
+    );
     const isAppend = modal.mode === "append";
     const { data, error } = isAppend
-      ? await appendOrdersToTable(modal.tableId, orders, staff?.id, staff?.name)
-      : await occupyTable(modal.tableId, orders, staff?.id, staff?.name);
+      ? await appendOrdersToTable(
+          modal.tableId,
+          preparedOrders,
+          staff?.id,
+          staff?.name,
+          selectedTable?.label,
+        )
+      : await occupyTable(
+          modal.tableId,
+          preparedOrders,
+          staff?.id,
+          staff?.name,
+          selectedTable?.label,
+        );
 
     setIsSaving(false);
 
@@ -93,10 +114,10 @@ export function useTableOrderWorkflow({
 
     logAction(isAppend ? "add items" : "new order", `Table ${selectedTable?.label}`);
 
-    if (settings.kitchenPrintEnabled && !settings.kitchenPrintViaStation && selectedTable) {
+    if (shouldPrintKitchenOnSend(settings) && !settings.kitchenPrintViaStation && selectedTable) {
       void printKitchenOrder({
         tableLabel: selectedTable.label,
-        orders,
+        orders: preparedOrders,
         menuItems,
       }).catch((printError) => {
         console.warn("[KitchenPrint] Failed:", printError);
@@ -110,11 +131,69 @@ export function useTableOrderWorkflow({
     onRefresh();
   };
 
-  const handleSaveOrders = async (orders: OrderItem[]) => {
-    if (!modal || modal.type !== "manage-table") return;
+  const handleAppendCartNoPrint = async (orders: OrderItem[]) => {
+    if (!modal || modal.type !== "new-order") return;
+
     setIsSaving(true);
     setActionError(null);
-    const { data, error } = await updateTableOrders(modal.tableId, orders);
+
+    const silentOrders = orders.map((item) =>
+      finalizeBillOnlyOrder({
+        ...item,
+        skipPrint: true,
+        hideOnKds: true,
+      }),
+    );
+
+    const isAppend = modal.mode === "append";
+    const { data, error } = isAppend
+      ? await appendOrdersToTable(
+          modal.tableId,
+          silentOrders,
+          staff?.id,
+          staff?.name,
+          selectedTable?.label,
+        )
+      : await occupyTable(
+          modal.tableId,
+          silentOrders,
+          staff?.id,
+          staff?.name,
+          selectedTable?.label,
+        );
+
+    setIsSaving(false);
+
+    if (error || !data) {
+      setActionError(error?.message ?? "Failed to save order.");
+      return;
+    }
+
+    logAction(isAppend ? "save no print" : "save no print (new table)", `Table ${selectedTable?.label}`);
+
+    const updatedTable = mapTableRow(data);
+    setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
+    setModal({ type: "new-order", tableId: modal.tableId, mode: "append" });
+    onRefresh();
+  };
+
+  const handleSaveOrders = async (
+    orders: OrderItem[],
+    tableId?: string,
+    options?: { silent?: boolean; printOrders?: OrderItem[] },
+  ) => {
+    const targetTableId =
+      tableId ?? (modal?.type === "manage-table" || modal?.type === "new-order" ? modal.tableId : undefined);
+    if (!targetTableId) return;
+    setIsSaving(true);
+    setActionError(null);
+    const { data, error } = await updateTableOrders(targetTableId, orders, {
+      staffId: staff?.id,
+      staffName: staff?.name,
+      tableLabel: selectedTable?.label,
+      silent: options?.silent,
+      printOrders: options?.printOrders,
+    });
     setIsSaving(false);
     if (error) {
       setActionError(error.message);
@@ -123,13 +202,32 @@ export function useTableOrderWorkflow({
     if (orders.length === 0) {
       logAction("clear table", `Table ${selectedTable?.label}`);
     } else {
-      logAction("update table order", `Table ${selectedTable?.label}`);
+      logAction(
+        options?.silent ? "save table order (no print)" : "send table order changes",
+        `Table ${selectedTable?.label}`,
+      );
     }
     if (data) {
       const updatedTable = mapTableRow(data);
-      setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
+      setTables((prev) => prev.map((t) => (t.id === targetTableId ? updatedTable : t)));
     }
-    if (orders.length === 0) {
+    if (
+      !options?.silent &&
+      options?.printOrders &&
+      options.printOrders.length > 0 &&
+      shouldPrintKitchenOnSend(settings) &&
+      !settings.kitchenPrintViaStation &&
+      selectedTable
+    ) {
+      void printKitchenOrder({
+        tableLabel: selectedTable.label,
+        orders: options.printOrders,
+        menuItems,
+      }).catch((printError) => {
+        console.warn("[KitchenPrint] Failed:", printError);
+      });
+    }
+    if (modal?.type === "manage-table" && orders.length === 0) {
       setModal(null);
     }
     onRefresh();
@@ -143,7 +241,11 @@ export function useTableOrderWorkflow({
 
     setIsSaving(true);
     setActionError(null);
-    const { data, error } = await updateTableOrders(tableId, orders);
+    const { data, error } = await updateTableOrders(tableId, orders, {
+      staffId: staff?.id,
+      staffName: staff?.name,
+      tableLabel: selectedTable?.label,
+    });
     setIsSaving(false);
 
     if (error) {
@@ -329,9 +431,14 @@ export function useTableOrderWorkflow({
           existingOrders={floorItemsForTable(selectedTable.id)}
           onClose={() => setModal(null)}
           onSendToKitchen={handleSendToKitchen}
+          onAppendCartNoPrint={handleAppendCartNoPrint}
           onCheckout={handleProceedToCheckout}
           onCloseTable={handleForceCloseTable}
           onManage={() => openManageTable(selectedTable.id)}
+          onSaveExistingOrders={(orders, options) =>
+            handleSaveOrders(orders, selectedTable.id, options)
+          }
+          onRefreshExistingOrders={onRefresh}
           isSaving={isSaving}
         />
       )}

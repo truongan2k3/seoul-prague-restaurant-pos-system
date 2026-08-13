@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Printer, Trash2, X } from "lucide-react";
 import { useAdminDeletionGate } from "@/contexts/admin-deletion-gate-context";
 import { NumericInputField } from "@/components/numeric-input-field";
+import { TableActivityLogPanel } from "@/components/table-activity-log-panel";
 import { useApp } from "@/contexts/app-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
@@ -11,26 +12,9 @@ import { canManageStaff } from "@/lib/staff-roles";
 import { sumLines } from "@/lib/checkout-calculations";
 import type { CheckoutPaymentRecord } from "@/lib/checkout-calculations";
 import { formatCzk } from "@/lib/currency";
-import type { TranslationKey } from "@/lib/i18n/translations";
 import { generateOrderNumber } from "@/lib/receipt-calculations";
-import type { MenuItem, OrderItem, OrderLogEntry, SaleRecord } from "@/lib/types";
-import { fetchOrderLogsForItems } from "@/src/lib/order-log-actions";
+import type { MenuItem, OrderItem, SaleRecord } from "@/lib/types";
 import { deleteSaleRecords, updateSaleRecord } from "@/src/lib/sales-actions";
-
-const LOG_ACTION_KEYS: Record<string, TranslationKey> = {
-  pending: "ordered",
-  held: "hold",
-  preparing: "preparing",
-  ready: "ready",
-  served: "served",
-  late: "delayed",
-};
-
-function translateLogAction(action: string, translate: (key: TranslationKey) => string) {
-  if (action.startsWith("cancelled:")) return translate("cancel");
-  const key = LOG_ACTION_KEYS[action] ?? "preparing";
-  return translate(key);
-}
 
 function saleToPaymentRecord(sale: SaleRecord): CheckoutPaymentRecord {
   return {
@@ -70,8 +54,6 @@ export function OrderHistoryModal({
   const { printReceipt } = useReceiptPrint();
   const { pushNotification } = useNotifications();
   const { requestDeletion } = useAdminDeletionGate();
-  const [logs, setLogs] = useState<OrderLogEntry[]>([]);
-  const [logsLoading, setLogsLoading] = useState(true);
   const [editMode, setEditMode] = useState(initialEditMode);
   const [editItems, setEditItems] = useState<OrderItem[]>(sale.items);
   const [editDiscount, setEditDiscount] = useState(sale.discountAmount);
@@ -96,28 +78,6 @@ export function OrderHistoryModal({
     setEditTip(sale.tip);
     setSaveError(null);
   }, [sale, initialEditMode]);
-
-  useEffect(() => {
-    if (sale.activityLog && sale.activityLog.length > 0) {
-      setLogs(sale.activityLog);
-      setLogsLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    async function loadLogs() {
-      setLogsLoading(true);
-      const { data } = await fetchOrderLogsForItems(orderItemIds);
-      if (!cancelled) {
-        setLogs(data);
-        setLogsLoading(false);
-      }
-    }
-    void loadLogs();
-    return () => {
-      cancelled = true;
-    };
-  }, [orderItemIds, sale.activityLog]);
 
   const editSubtotal = useMemo(() => sumLines(editItems), [editItems]);
   const editGrandTotal = useMemo(
@@ -181,8 +141,6 @@ export function OrderHistoryModal({
       onDeleted?.(sale.id);
     });
   };
-
-  const formatLogLabel = (action: string) => translateLogAction(action, translate);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -333,42 +291,13 @@ export function OrderHistoryModal({
             )}
           </section>
 
-          <section>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {translate("activityLog")}
-            </h3>
-            {logsLoading ? (
-              <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">{translate("loading")}</p>
-            ) : logs.length === 0 ? (
-              <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
-                {translate("noActivityLog")}
-              </p>
-            ) : (
-              <ol className="relative mt-4 space-y-4 border-l border-gray-200 pl-4 dark:border-gray-700">
-                {logs.map((entry) => {
-                  const itemName = itemNameById.get(entry.orderId);
-                  return (
-                    <li key={entry.id} className="relative">
-                      <span className="absolute -left-[1.3rem] top-1.5 h-2.5 w-2.5 rounded-full bg-blue-500 ring-4 ring-white dark:ring-gray-900" />
-                      <p className="text-sm text-gray-900 dark:text-gray-100">
-                        <span className="font-medium tabular-nums">
-                          {entry.createdAt.toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                        {": "}
-                        {formatLogLabel(entry.action)}
-                        {itemName ? ` · ${itemName}` : ""}
-                        {" "}
-                        {translate("byStaff")} {entry.staffName}
-                      </p>
-                    </li>
-                  );
-                })}
-              </ol>
-            )}
-          </section>
+          <TableActivityLogPanel
+            tableId={sale.id}
+            snapshot={sale.activityLog}
+            orderItemIds={orderItemIds}
+            itemNameByOrderId={itemNameById}
+            defaultOpen
+          />
         </div>
 
         <div className="flex flex-wrap items-center gap-3 border-t border-gray-200 px-6 py-4 dark:border-gray-800">

@@ -141,6 +141,7 @@ export function PaymentModal({
         )}
 
         <CheckoutPanel
+          className="min-h-0 flex-1"
           lines={lines}
           orderSummary={orders}
           menuItems={menuItems}

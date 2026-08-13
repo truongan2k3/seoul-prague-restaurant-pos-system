@@ -89,6 +89,21 @@ export function canVoidOrderItems(role: StaffRole | undefined): boolean {
   return role === "admin" || role === "manager";
 }
 
-export function roleRequiresPin(role: StaffRole): boolean {
+/** Staff who can approve sensitive actions (manager/admin with PIN set). */
+export function roleCanApproveWithPin(role: StaffRole): boolean {
   return role === "admin" || role === "manager";
+}
+
+/** @deprecated Use roleCanApproveWithPin */
+export function roleRequiresPin(role: StaffRole): boolean {
+  return roleCanApproveWithPin(role);
+}
+
+/** Logged-in staff skip PIN unless explicitly required in staff permissions. */
+export function staffRequiresPinGate(member: StaffMember | null | undefined): boolean {
+  return member?.requirePinForActions === true;
+}
+
+export function staffBypassesPinGate(member: StaffMember | null | undefined): boolean {
+  return !staffRequiresPinGate(member);
 }

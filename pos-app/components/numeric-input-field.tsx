@@ -1,9 +1,12 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { createPortal } from "react-dom";
 import { Calculator } from "lucide-react";
 import { useApp } from "@/contexts/app-context";
 import { OnScreenNumericKeyboard } from "@/components/on-screen-numeric-keyboard";
+
+const NUMERIC_KEYBOARD_OPEN_EVENT = "pos:numeric-keyboard-open";
 
 interface NumericInputFieldProps {
   value: string;
@@ -14,6 +17,8 @@ interface NumericInputFieldProps {
   allowDecimal?: boolean;
   previewLabel?: string;
   id?: string;
+  /** Render keyboard in a fixed dock (e.g. above checkout footer) instead of inline */
+  keyboardPortalTargetId?: string;
 }
 
 export function NumericInputField({
@@ -25,11 +30,38 @@ export function NumericInputField({
   allowDecimal = true,
   previewLabel,
   id,
+  keyboardPortalTargetId,
 }: NumericInputFieldProps) {
   const { translate } = useApp();
   const autoId = useId();
   const inputId = id ?? autoId;
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOtherOpen = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      if (detail !== inputId) {
+        setKeyboardOpen(false);
+      }
+    };
+    window.addEventListener(NUMERIC_KEYBOARD_OPEN_EVENT, handleOtherOpen);
+    return () => window.removeEventListener(NUMERIC_KEYBOARD_OPEN_EVENT, handleOtherOpen);
+  }, [inputId]);
+
+  useEffect(() => {
+    if (!keyboardOpen || !keyboardPortalTargetId) return;
+    document.getElementById(inputId)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [keyboardOpen, keyboardPortalTargetId, inputId]);
+
+  const toggleKeyboard = () => {
+    setKeyboardOpen((open) => {
+      const next = !open;
+      if (next) {
+        window.dispatchEvent(new CustomEvent(NUMERIC_KEYBOARD_OPEN_EVENT, { detail: inputId }));
+      }
+      return next;
+    });
+  };
 
   const sanitize = (raw: string) => {
     let next = raw.replace(/[^\d.]/g, "");
@@ -58,7 +90,7 @@ export function NumericInputField({
         />
         <button
           type="button"
-          onClick={() => setKeyboardOpen((open) => !open)}
+          onClick={toggleKeyboard}
           aria-label={keyboardOpen ? translate("hideKeyboard") : translate("showNumericKeyboard")}
           aria-pressed={keyboardOpen}
           className={`inline-flex shrink-0 items-center justify-center rounded-lg border px-3 transition-colors ${
@@ -70,15 +102,27 @@ export function NumericInputField({
           <Calculator className="h-4 w-4" />
         </button>
       </div>
-      {keyboardOpen && (
-        <OnScreenNumericKeyboard
-          value={value}
-          onChange={(next) => onChange(sanitize(next))}
-          onHide={() => setKeyboardOpen(false)}
-          allowDecimal={allowDecimal}
-          previewLabel={previewLabel}
-        />
-      )}
+      {keyboardOpen &&
+        (() => {
+          const keyboard = (
+            <OnScreenNumericKeyboard
+              value={value}
+              onChange={(next) => onChange(sanitize(next))}
+              onHide={() => setKeyboardOpen(false)}
+              allowDecimal={allowDecimal}
+              previewLabel={previewLabel}
+            />
+          );
+
+          if (keyboardPortalTargetId && typeof document !== "undefined") {
+            const target = document.getElementById(keyboardPortalTargetId);
+            if (target) {
+              return createPortal(keyboard, target);
+            }
+          }
+
+          return keyboard;
+        })()}
     </div>
   );
 }

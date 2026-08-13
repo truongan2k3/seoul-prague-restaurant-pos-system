@@ -1,20 +1,23 @@
 import { MENU_CATEGORIES } from "@/lib/menu-categories";
-import type { MenuCategoryRecord, MenuItem } from "@/lib/types";
+import { sortCategoriesForDisplay } from "@/lib/menu-sort";
+import type { MenuCategoryRecord, MenuItem, MenuSortMode } from "@/lib/types";
 
 export type ItemTypeFilter = "all" | "dish" | "drink";
 
-export function categoriesForOrdering(categories: MenuCategoryRecord[]): MenuCategoryRecord[] {
+export function categoriesForOrdering(
+  categories: MenuCategoryRecord[],
+  sortMode: MenuSortMode = "custom",
+): MenuCategoryRecord[] {
   if (categories.length === 0) {
-    return MENU_CATEGORIES.map((name, index) => ({
+    const legacy = MENU_CATEGORIES.map((name, index) => ({
       id: `legacy-${index}`,
       name,
-      type: name.startsWith("Drinks") ? "drink" : "dish",
+      type: name.startsWith("Drinks") ? ("drink" as const) : ("dish" as const),
       displayOrder: index,
     }));
+    return sortCategoriesForDisplay(legacy, sortMode);
   }
-  return [...categories].sort(
-    (a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name),
-  );
+  return sortCategoriesForDisplay(categories, sortMode);
 }
 
 export function categoryNameById(

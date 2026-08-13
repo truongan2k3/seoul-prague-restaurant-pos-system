@@ -35,6 +35,7 @@ interface CheckoutPanelProps {
   onCheckout: (payload: CheckoutSubmitPayload) => void | Promise<void>;
   onCfdUpdate?: (payload: CfdCheckoutPayload) => void;
   confirmLabel?: string;
+  className?: string;
 }
 
 function AccordionTabBar({
@@ -121,6 +122,7 @@ export function CheckoutPanel({
   onCheckout,
   onCfdUpdate,
   confirmLabel,
+  className = "",
 }: CheckoutPanelProps) {
   const { translate } = useApp();
   const { settings } = useSettings();
@@ -134,6 +136,7 @@ export function CheckoutPanel({
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const optionsRef = useRef<HTMLDivElement | null>(null);
+  const keyboardPortalTargetId = "checkout-numeric-keyboard-dock";
 
   const [accordion, setAccordion] = useState<AccordionPanel | null>(null);
   const [discountType, setDiscountType] = useState<DiscountType>("percent");
@@ -143,8 +146,10 @@ export function CheckoutPanel({
   const [tipPreset, setTipPreset] = useState<number | null>(null);
   const [customTip, setCustomTip] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
-  /** Amount the guest actually tenders / is charged — excess over bill auto-becomes tip. */
-  const [customerPays, setCustomerPays] = useState("");
+  /** Cash handed by guest — excess over bill (+ tip) is change to return. */
+  const [cashGiven, setCashGiven] = useState("");
+  /** Guest rounds up total — difference from bill becomes tip, no change. */
+  const [roundUpTotal, setRoundUpTotal] = useState("");
   const [splitMode, setSplitMode] = useState<SplitMode>("total");
   const [splitCount, setSplitCount] = useState(2);
   const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
@@ -170,7 +175,8 @@ export function CheckoutPanel({
     setTipPreset(null);
     setTipMode("custom");
     setPaymentMethod("cash");
-    setCustomerPays("");
+    setCashGiven("");
+    setRoundUpTotal("");
     setSplitCount(2);
     setSplitMode("total");
     setAccordion(null);
@@ -225,27 +231,31 @@ export function CheckoutPanel({
     ],
   );
 
-  const customerPaysNum =
-    customerPays.trim() === "" ? null : Math.max(0, Number(customerPays) || 0);
-  const usingCustomerPays = customerPaysNum !== null;
+  const parseAmountField = (raw: string) =>
+    raw.trim() === "" ? null : Math.max(0, Number(raw) || 0);
+
+  const cashGivenNum = parseAmountField(cashGiven);
+  const roundUpNum = parseAmountField(roundUpTotal);
+  const usingCashGiven = cashGivenNum !== null;
+  const usingRoundUp = roundUpNum !== null;
 
   const manualTip =
     tipMode === "preset" && tipPreset !== null
       ? calcTipFromPercent(baseTotals.afterDiscount, tipPreset)
       : customTip;
 
-  const autoTipFromPayment = usingCustomerPays
-    ? Math.max(0, customerPaysNum - baseTotals.amountDueNow)
-    : 0;
+  const billAmount = baseTotals.amountDueNow;
 
-  const tipAmount = usingCustomerPays ? autoTipFromPayment : Math.max(0, manualTip);
+  const roundUpTip = usingRoundUp ? Math.max(0, roundUpNum - billAmount) : 0;
+
+  const tipAmount = usingRoundUp ? roundUpTip : Math.max(0, manualTip);
 
   const totals = useMemo(() => {
-    if (usingCustomerPays) {
+    if (usingRoundUp) {
       return {
         ...baseTotals,
-        grandTotal: baseTotals.afterDiscount + tipAmount,
-        amountDueNow: customerPaysNum,
+        grandTotal: roundUpNum!,
+        amountDueNow: roundUpNum!,
       };
     }
 
@@ -261,22 +271,28 @@ export function CheckoutPanel({
       enablePriceRounding: settings.enablePriceRounding,
     });
   }, [
-    usingCustomerPays,
+    usingRoundUp,
+    roundUpNum,
     baseTotals,
-    tipAmount,
-    customerPaysNum,
     lines,
     discountType,
     discountValue,
+    tipAmount,
     splitMode,
     splitCount,
     selectedLineIds,
     settings.enablePriceRounding,
   ]);
 
+  const chargeTotal = totals.amountDueNow;
+
+  const changeDueAmount =
+    usingCashGiven && !usingRoundUp ? Math.max(0, cashGivenNum - chargeTotal) : 0;
+
   const totalTip = tipAmount;
   const insufficientPayment =
-    usingCustomerPays && customerPaysNum < baseTotals.amountDueNow;
+    (usingCashGiven && cashGivenNum < chargeTotal) ||
+    (usingRoundUp && roundUpNum < billAmount);
 
   useEffect(() => {
     if (!onCfdUpdate || !tableLabel) return;
@@ -289,6 +305,14 @@ export function CheckoutPanel({
         tip: totalTip,
         grandTotal: totals.grandTotal,
         amountDueNow: totals.amountDueNow,
+        amountGiven:
+          paymentMethod === "cash" && usingCashGiven && !insufficientPayment
+            ? cashGivenNum
+            : undefined,
+        changeDue:
+          paymentMethod === "cash" && usingCashGiven && !usingRoundUp && !insufficientPayment
+            ? changeDueAmount
+            : undefined,
       }),
     );
   }, [
@@ -303,6 +327,12 @@ export function CheckoutPanel({
     totals.grandTotal,
     totals.amountDueNow,
     totalTip,
+    paymentMethod,
+    usingCashGiven,
+    usingRoundUp,
+    insufficientPayment,
+    cashGivenNum,
+    changeDueAmount,
   ]);
 
   const insufficientCash = insufficientPayment;
@@ -342,22 +372,30 @@ export function CheckoutPanel({
   };
 
   const handleTipPreset = (percent: number) => {
-    setCustomerPays("");
+    setRoundUpTotal("");
     setTipMode("preset");
     setTipPreset(percent);
     setCustomTip(0);
   };
 
   const handleCustomTipChange = (raw: string) => {
-    setCustomerPays("");
+    setRoundUpTotal("");
     setTipMode("custom");
     setTipPreset(null);
     setCustomTip(Math.max(0, Number(raw) || 0));
   };
 
-  const handleCustomerPaysChange = (raw: string) => {
-    setCustomerPays(raw);
+  const handleCashGivenChange = (raw: string) => {
+    setCashGiven(raw);
     if (raw.trim() !== "") {
+      setRoundUpTotal("");
+    }
+  };
+
+  const handleRoundUpChange = (raw: string) => {
+    setRoundUpTotal(raw);
+    if (raw.trim() !== "") {
+      setCashGiven("");
       setTipMode("custom");
       setTipPreset(null);
       setCustomTip(0);
@@ -365,7 +403,7 @@ export function CheckoutPanel({
   };
 
   const customTipDisplay =
-    !usingCustomerPays && tipMode === "custom" && customTip > 0 ? String(customTip) : "";
+    !usingRoundUp && tipMode === "custom" && customTip > 0 ? String(customTip) : "";
 
   const discountValueDisplay =
     discountValue > 0 ? String(discountValue) : "";
@@ -391,8 +429,6 @@ export function CheckoutPanel({
     const paidOrders = ordersFromLines(totals.payableLines);
     const remaining = splitMode === "items" ? remainingLines(lines, selectedLineIds) : undefined;
 
-    const chargeAmount = totals.amountDueNow;
-
     const payment = {
       paymentMethod,
       subtotal: totals.subtotal,
@@ -400,12 +436,21 @@ export function CheckoutPanel({
       discountValue,
       discountAmount: totals.discountAmount,
       tip: totalTip,
-      grandTotal: usingCustomerPays ? chargeAmount : totals.grandTotal,
-      amountDueNow: chargeAmount,
+      grandTotal: chargeTotal,
+      amountDueNow: chargeTotal,
       amountGiven:
-        paymentMethod === "cash" && usingCustomerPays ? customerPaysNum : undefined,
-      changeDue: paymentMethod === "cash" && usingCustomerPays ? 0 : undefined,
-      tipFromChange: usingCustomerPays && autoTipFromPayment > 0 ? autoTipFromPayment : undefined,
+        paymentMethod === "cash" && usingCashGiven
+          ? cashGivenNum
+          : usingRoundUp
+            ? roundUpNum
+            : undefined,
+      changeDue:
+        paymentMethod === "cash" && usingCashGiven && !usingRoundUp
+          ? changeDueAmount
+          : usingRoundUp
+            ? 0
+            : undefined,
+      tipFromChange: usingRoundUp && roundUpTip > 0 ? roundUpTip : undefined,
       splitMode,
       splitCount: splitMode === "equal" ? splitCount : 1,
     };
@@ -436,7 +481,7 @@ export function CheckoutPanel({
   const tipControls = (
     <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/80 p-3 dark:border-gray-700 dark:bg-gray-900/40">
       <PercentPresetButtons
-        selected={!usingCustomerPays && tipMode === "preset" ? tipPreset : null}
+        selected={!usingRoundUp && tipMode === "preset" ? tipPreset : null}
         onSelect={handleTipPreset}
       />
       <label className="block">
@@ -447,11 +492,12 @@ export function CheckoutPanel({
           allowDecimal={false}
           placeholder="0 Kč"
           className="mt-1"
+          keyboardPortalTargetId={keyboardPortalTargetId}
         />
       </label>
-      {usingCustomerPays && (
+      {usingRoundUp && (
         <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
-          {translate("autoTipFromPayment")}: {displayPrice(autoTipFromPayment)}
+          {translate("autoTipFromPayment")}: {displayPrice(roundUpTip)}
         </p>
       )}
     </div>
@@ -464,11 +510,11 @@ export function CheckoutPanel({
   ];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-inherit text-gray-800 dark:text-gray-200">
+    <div className={`flex min-h-0 flex-1 flex-col bg-inherit text-gray-800 dark:text-gray-200 ${className}`}>
       {/* Scrollable middle body */}
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 max-h-[calc(92vh-140px)]"
+        className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4"
       >
         {localError && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
@@ -554,6 +600,7 @@ export function CheckoutPanel({
                     }}
                     allowDecimal={false}
                     inputClassName="w-20 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                    keyboardPortalTargetId={keyboardPortalTargetId}
                   />
                   <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
                     {translate("perPerson")}: {displayPrice(baseTotals.amountDueNow)}
@@ -676,6 +723,7 @@ export function CheckoutPanel({
                 }}
                 allowDecimal={discountType !== "percent"}
                 placeholder={discountType === "percent" ? "0 %" : "0 Kč"}
+                keyboardPortalTargetId={keyboardPortalTargetId}
               />
             </div>
           </CollapseSection>
@@ -702,44 +750,89 @@ export function CheckoutPanel({
             </div>
           </div>
 
-          <label className="block">
-            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-              {translate("customerPaysAmount")}
-            </span>
-            <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
-              {translate("customerPaysHint")}
+          <div className="rounded-xl border-2 border-blue-200 bg-blue-50/70 px-4 py-3 dark:border-blue-900 dark:bg-blue-950/30">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-200">
+              {translate("amountDueNow")}
             </p>
-            <NumericInputField
-              value={customerPays}
-              onChange={handleCustomerPaysChange}
-              allowDecimal={false}
-              placeholder={`${baseTotals.amountDueNow || 0} Kč`}
-              className={`mt-1 ${insufficientPayment ? "[&_input]:border-red-400 dark:[&_input]:border-red-600" : ""}`}
-            />
-          </label>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-blue-950 dark:text-blue-50">
+              {displayPrice(billAmount)}
+            </p>
+          </div>
 
-          {usingCustomerPays && !insufficientPayment && (
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div className="rounded-xl border border-gray-200 bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-900/40">
-                <SummaryRow
-                  label={translate("amountDueNow")}
-                  value={displayPrice(baseTotals.amountDueNow)}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {paymentMethod === "cash" && (
+              <label className="block">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                  {translate("amountGiven")}
+                </span>
+                <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
+                  {translate("cashReceivedHint")}
+                </p>
+                <NumericInputField
+                  id="checkout-cash-given"
+                  value={cashGiven}
+                  onChange={handleCashGivenChange}
+                  allowDecimal={false}
+                  placeholder={displayPrice(chargeTotal)}
+                  className={`mt-1 ${insufficientPayment && usingCashGiven ? "[&_input]:border-red-400 dark:[&_input]:border-red-600" : ""}`}
+                  keyboardPortalTargetId={keyboardPortalTargetId}
                 />
-              </div>
-              <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-800 dark:bg-emerald-950/40">
-                <SummaryRow
-                  label={translate("autoTipFromPayment")}
-                  value={displayPrice(autoTipFromPayment)}
-                  highlight
-                />
-              </div>
+              </label>
+            )}
+
+            <label className={`block ${paymentMethod !== "cash" ? "sm:col-span-2" : ""}`}>
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                {translate("roundUpTotal")}
+              </span>
+              <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
+                {translate("roundUpTotalHint")}
+              </p>
+              <NumericInputField
+                id="checkout-round-up"
+                value={roundUpTotal}
+                onChange={handleRoundUpChange}
+                allowDecimal={false}
+                placeholder={displayPrice(billAmount)}
+                className={`mt-1 ${insufficientPayment && usingRoundUp ? "[&_input]:border-red-400 dark:[&_input]:border-red-600" : ""}`}
+                keyboardPortalTargetId={keyboardPortalTargetId}
+              />
+            </label>
+          </div>
+
+          {insufficientPayment && (
+            <p className="text-xs font-medium text-red-600 dark:text-red-400">
+              {translate("insufficientCash")}
+            </p>
+          )}
+
+          {usingCashGiven && !usingRoundUp && !insufficientPayment && changeDueAmount > 0 && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/40">
+              <SummaryRow
+                label={translate("changeDue")}
+                value={displayPrice(changeDueAmount)}
+              />
+            </div>
+          )}
+
+          {usingRoundUp && !insufficientPayment && roundUpTip > 0 && (
+            <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 dark:border-emerald-800 dark:bg-emerald-950/40">
+              <SummaryRow
+                label={translate("tipFromChange")}
+                value={displayPrice(roundUpTip)}
+                highlight
+              />
             </div>
           )}
         </section>
       </div>
 
+      <div
+        id={keyboardPortalTargetId}
+        className="empty:hidden shrink-0 border-t border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-900/80"
+      />
+
       {/* Pinned footer — grand total + confirm */}
-      <footer className="sticky bottom-0 z-10 shrink-0 border-t border-gray-200 bg-inherit p-4 dark:border-gray-700">
+      <footer className="shrink-0 border-t border-gray-200 bg-inherit p-4 dark:border-gray-700">
         <div className="mb-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-900/50">
           <div className="space-y-1">
             <SummaryRow label={translate("subtotal")} value={displayPrice(totals.subtotal)} />

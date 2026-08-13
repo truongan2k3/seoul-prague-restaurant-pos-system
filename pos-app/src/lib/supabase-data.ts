@@ -4,6 +4,7 @@ import type {
   MenuCategoryRecord,
   MenuItem,
   MenuItemAddonGroup,
+  OptionGroupLibraryEntry,
   OrderItem,
   OrderLogEntry,
   RestaurantTable,
@@ -14,10 +15,15 @@ import type {
   TablePaymentStatus,
   TableStatus,
 } from "@/lib/types";
+import { applyOptionGroupLibraryToItems } from "@/lib/menu-customization";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
 import { gridToPosition } from "@/lib/table-layout";
 import { deriveItemType, resolveStation } from "@/lib/order-routing";
 import { normalizeStaffRole, parseAllowedNav } from "@/lib/staff-roles";
+import {
+  fetchOptionGroupLibrary,
+  mapOptionGroupLibraryResponse,
+} from "@/src/lib/option-group-library-actions";
 import { supabase } from "@/src/lib/supabase";
 
 interface SupabaseTableRow {
@@ -57,6 +63,7 @@ interface SupabaseMenuItemRow {
   description_cz?: string | null;
   description_zh?: string | null;
   customization_config?: import("@/lib/types").MenuCustomizationConfig | null;
+  bill_only?: boolean | null;
 }
 
 interface SupabaseCategoryRow {
@@ -172,6 +179,7 @@ export function mapMenuItemRow(row: SupabaseMenuItemRow): MenuItem {
     isAvailable,
     sortOrder: row.display_order ?? row.sort_order ?? 0,
     imageUrl: row.image_url ?? undefined,
+    billOnly: row.bill_only ?? false,
     customizationConfig: row.customization_config ?? undefined,
   };
 }
@@ -284,10 +292,32 @@ export function mapCategoriesResponse(data: SupabaseCategoryRow[] | null) {
     .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name));
 }
 
-export function mapMenuItemsResponse(data: SupabaseMenuItemRow[] | null) {
-  return (data ?? [])
+export function mapMenuItemsResponse(
+  data: SupabaseMenuItemRow[] | null,
+  library: OptionGroupLibraryEntry[] = [],
+) {
+  const items = (data ?? [])
     .map(mapMenuItemRow)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.nameEn.localeCompare(b.nameEn));
+  return applyOptionGroupLibraryToItems(items, library);
+}
+
+/** Fetch menu items with option-group library resolved into customizationConfig. */
+export async function loadMenuItemsResolved() {
+  const [menuRes, libraryRes] = await Promise.all([
+    fetchMenuItems(),
+    fetchOptionGroupLibrary(true),
+  ]);
+  if (menuRes.error) return { data: null as MenuItem[] | null, error: menuRes.error };
+
+  const library = libraryRes.error
+    ? []
+    : mapOptionGroupLibraryResponse(libraryRes.data);
+
+  return {
+    data: mapMenuItemsResponse(menuRes.data, library),
+    error: null,
+  };
 }
 
 export async function fetchOrderItems() {
@@ -325,6 +355,7 @@ export function mapStaffResponse(
         pin?: string | null;
         active?: boolean | null;
         allowed_nav?: unknown;
+        require_pin_for_actions?: boolean | null;
       }[]
     | null,
 ) {
@@ -335,6 +366,7 @@ export function mapStaffResponse(
     pin: s.pin ?? undefined,
     active: s.active ?? true,
     allowedNav: parseAllowedNav(s.allowed_nav),
+    requirePinForActions: s.require_pin_for_actions ?? false,
   }));
 }
 
@@ -380,16 +412,21 @@ export function mapSalesResponse(
       id: string;
       orderId?: string;
       order_id?: string;
+      itemName?: string;
+      item_name?: string;
       action: string;
       staffName?: string;
       staff_name?: string;
+      meta?: Record<string, unknown> | null;
       createdAt?: string;
       created_at?: string;
     }> | null) ?? []).map((entry) => ({
       id: entry.id,
       orderId: entry.orderId ?? entry.order_id ?? "",
+      itemName: entry.itemName ?? entry.item_name,
       action: entry.action,
       staffName: entry.staffName ?? entry.staff_name ?? "",
+      meta: entry.meta ?? undefined,
       createdAt: new Date(entry.createdAt ?? entry.created_at ?? Date.now()),
     })),
     closedAt: new Date(s.closed_at),

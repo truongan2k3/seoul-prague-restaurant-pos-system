@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LanguageSelector } from "@/components/language-selector";
+import { KitchenPrintLayoutEditor } from "@/components/kitchen-print-layout-editor";
 import { LiveClock } from "@/components/live-clock";
 import { MenuCustomizationManager } from "@/components/menu-customization-manager";
 import { useApp } from "@/contexts/app-context";
@@ -26,8 +27,8 @@ import {
 } from "@/lib/marquee-settings";
 import type { TranslationKey } from "@/lib/i18n/translations";
 import { pingPrintBridge } from "@/src/lib/print-bridge-client";
-import { isCfdGifMedia } from "@/lib/cfd-display";
 import type { NetworkPrinter, PrinterRole, ReceiptFontFamily, WeekdayKey } from "@/lib/types";
+import { CfdSlideshowManager } from "@/components/cfd-slideshow-manager";
 import {
   clearBusinessLogoAction,
   uploadBusinessLogoAction,
@@ -78,14 +79,13 @@ export function SettingsView({
     setSoundMainEnabled,
     setSoundKitchenEnabled,
   } = useApp();
-  const { settings, saving, error: settingsError, saveSettingsPageDraft, uploadAlertSound, uploadCfdAdVideo, uploadCfdReviewQrImage, saveSettings } =
+  const { settings, saving, error: settingsError, saveSettingsPageDraft, uploadAlertSound, uploadCfdReviewQrImage, saveSettings } =
     useSettings();
   const { business, updateBranding } = useAuth();
   const { pushNotification } = useNotifications();
   const { printTestReceipt } = useReceiptPrint();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
-  const cfdVideoInputRef = useRef<HTMLInputElement>(null);
   const cfdQrInputRef = useRef<HTMLInputElement>(null);
   const audioPreviewRef = useRef<HTMLAudioElement>(null);
 
@@ -167,22 +167,11 @@ export function SettingsView({
     event.target.value = "";
   };
 
-  const handleCfdVideoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    await uploadCfdAdVideo(file);
-    event.target.value = "";
-  };
-
   const handleCfdQrUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     await uploadCfdReviewQrImage(file);
     event.target.value = "";
-  };
-
-  const clearCfdVideo = async () => {
-    await saveSettings({ cfdAdVideoUrl: "" });
   };
 
   const clearCfdQrImage = async () => {
@@ -586,24 +575,77 @@ export function SettingsView({
               />
             </label>
 
-            <label className="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
-              <div className="min-w-0">
-                <span className="block text-sm text-gray-800 dark:text-gray-200">
-                  {translate("settingsKitchenPrint")}
-                </span>
-                <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
-                  {translate("settingsKitchenPrintHint")}
-                </span>
+            <div className="mt-4 rounded-lg border border-gray-100 p-4 dark:border-gray-700">
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {translate("settingsFulfillmentMode")}
+              </p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {translate("settingsFulfillmentModeHint")}
+              </p>
+              <div className="mt-3 space-y-2">
+                {(
+                  [
+                    ["both", "settingsFulfillmentModeBoth"],
+                    ["screen", "settingsFulfillmentModeScreen"],
+                    ["paper", "settingsFulfillmentModePaper"],
+                  ] as const
+                ).map(([value, labelKey]) => (
+                  <label
+                    key={value}
+                    className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 ${
+                      draft.kitchenFulfillmentMode === value
+                        ? "border-emerald-400 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-950/30"
+                        : "border-gray-200 dark:border-gray-700"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="kitchenFulfillmentMode"
+                      checked={draft.kitchenFulfillmentMode === value}
+                      onChange={() => updateDraft("kitchenFulfillmentMode", value)}
+                      className="mt-1"
+                    />
+                    <span className="text-sm text-gray-800 dark:text-gray-200">
+                      {translate(labelKey)}
+                    </span>
+                  </label>
+                ))}
               </div>
-              <input
-                type="checkbox"
-                checked={draft.kitchenPrintEnabled}
-                onChange={(event) => updateDraft("kitchenPrintEnabled", event.target.checked)}
-                className="h-4 w-4 shrink-0 rounded border-gray-300"
-              />
-            </label>
+            </div>
 
-            {draft.kitchenPrintEnabled && (
+            {draft.kitchenFulfillmentMode === "both" && (
+              <label className="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
+                <div className="min-w-0">
+                  <span className="block text-sm text-gray-800 dark:text-gray-200">
+                    {translate("settingsKitchenPrint")}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+                    {translate("settingsKitchenPrintHint")}
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draft.kitchenPrintEnabled}
+                  onChange={(event) => updateDraft("kitchenPrintEnabled", event.target.checked)}
+                  className="h-4 w-4 shrink-0 rounded border-gray-300"
+                />
+              </label>
+            )}
+
+            {draft.kitchenFulfillmentMode === "screen" && (
+              <p className="mt-3 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
+                {translate("settingsFulfillmentModeScreenNote")}
+              </p>
+            )}
+
+            {draft.kitchenFulfillmentMode === "paper" && (
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                {translate("settingsFulfillmentModePaperNote")}
+              </p>
+            )}
+
+            {((draft.kitchenFulfillmentMode === "both" && draft.kitchenPrintEnabled) ||
+              draft.kitchenFulfillmentMode === "paper") && (
               <div className="mt-3 space-y-3">
                 <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
                   <div className="min-w-0">
@@ -702,7 +744,50 @@ export function SettingsView({
                     <option value="xxlarge">{translate("settingsKitchenPrintFontXXLarge")}</option>
                   </select>
                 </label>
+                <label className="block text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {translate("settingsKitchenPrintOrderFontWeight")}
+                  </span>
+                  <select
+                    value={draft.kitchenPrintOrderFontWeight}
+                    onChange={(event) =>
+                      updateDraft(
+                        "kitchenPrintOrderFontWeight",
+                        event.target.value as SettingsPageDraft["kitchenPrintOrderFontWeight"],
+                      )
+                    }
+                    className="pos-input mt-1"
+                  >
+                    <option value="normal">{translate("settingsReceiptWeightNormal")}</option>
+                    <option value="bold">{translate("settingsReceiptWeightBold")}</option>
+                    <option value="extrabold">{translate("settingsReceiptWeightExtraBold")}</option>
+                  </select>
+                </label>
+                <label className="block text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {translate("settingsKitchenPrintMessageFontWeight")}
+                  </span>
+                  <select
+                    value={draft.kitchenPrintMessageFontWeight}
+                    onChange={(event) =>
+                      updateDraft(
+                        "kitchenPrintMessageFontWeight",
+                        event.target.value as SettingsPageDraft["kitchenPrintMessageFontWeight"],
+                      )
+                    }
+                    className="pos-input mt-1"
+                  >
+                    <option value="normal">{translate("settingsReceiptWeightNormal")}</option>
+                    <option value="bold">{translate("settingsReceiptWeightBold")}</option>
+                    <option value="extrabold">{translate("settingsReceiptWeightExtraBold")}</option>
+                  </select>
+                </label>
                 </div>
+                <KitchenPrintLayoutEditor
+                  layout={draft.kitchenPrintLayout}
+                  onChange={(layout) => updateDraft("kitchenPrintLayout", layout)}
+                  translate={translate}
+                />
               </div>
             )}
 
@@ -979,15 +1064,11 @@ export function SettingsView({
 
         {activeSettingsTab === "menu" && (
         <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6">
-          {(menuItems.length > 0 || categories.length > 0) ? (
-            <MenuCustomizationManager
-              menuItems={menuItems}
-              categories={categories}
-              onChange={() => onMenuChange?.()}
-            />
-          ) : (
-            <p className="text-sm text-gray-500 dark:text-gray-400">{translate("settingsTabMenuEmpty")}</p>
-          )}
+          <MenuCustomizationManager
+            menuItems={menuItems}
+            categories={categories}
+            onChange={() => onMenuChange?.()}
+          />
         </div>
         )}
 
@@ -1388,101 +1469,57 @@ export function SettingsView({
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("settingsCustomerDisplay")}</h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{translate("settingsCustomerDisplayHint")}</p>
 
-            <div className="mt-4 grid gap-6 lg:grid-cols-2">
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{translate("settingsCfdAdVideo")}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{translate("settingsCfdAdVideoHint")}</p>
-                {settings.cfdAdVideoUrl ? (
-                  isCfdGifMedia(settings.cfdAdVideoUrl) ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={settings.cfdAdVideoUrl}
-                      alt="Promotional GIF preview"
-                      className="mt-2 max-h-48 w-full rounded-lg border border-gray-200 bg-black object-contain dark:border-gray-700"
-                    />
-                  ) : (
-                    <video
-                      src={settings.cfdAdVideoUrl}
-                      controls
-                      muted
-                      playsInline
-                      className="mt-2 max-h-48 w-full rounded-lg border border-gray-200 bg-black dark:border-gray-700"
-                    />
-                  )
-                ) : (
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{translate("settingsCfdNoVideo")}</p>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => cfdVideoInputRef.current?.click()}
-                    className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
-                  >
-                    {translate("settingsCfdUploadVideo")}
-                  </button>
-                  {settings.cfdAdVideoUrl && (
-                    <button
-                      type="button"
-                      onClick={() => void clearCfdVideo()}
-                      className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold dark:border-gray-600"
-                    >
-                      {translate("settingsCfdRemoveVideo")}
-                    </button>
-                  )}
-                  <input
-                    ref={cfdVideoInputRef}
-                    type="file"
-                    accept=".mp4,.webm,.gif,video/mp4,video/webm,image/gif"
-                    className="hidden"
-                    onChange={(event) => void handleCfdVideoUpload(event)}
-                  />
-                </div>
-              </div>
+            <div className="mt-6 space-y-3">
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{translate("settingsCfdAdVideo")}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{translate("settingsCfdAdVideoHint")}</p>
+              <CfdSlideshowManager embedded />
+            </div>
+          </section>
 
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{translate("settingsCfdReviewQr")}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{translate("settingsCfdReviewQrHint")}</p>
-                {settings.cfdReviewQrImageUrl.trim() ? (
-                  <div className="mt-2 inline-block rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={settings.cfdReviewQrImageUrl}
-                      alt="Review QR"
-                      width={160}
-                      height={160}
-                      className="h-40 w-40 object-contain"
-                    />
-                  </div>
-                ) : (
-                  <p className="text-xs text-amber-700 dark:text-amber-300">{translate("settingsCfdNoQr")}</p>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => cfdQrInputRef.current?.click()}
-                    className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
-                  >
-                    {settings.cfdReviewQrImageUrl.trim()
-                      ? translate("settingsCfdChangeQr")
-                      : translate("settingsCfdUploadQr")}
-                  </button>
-                  {settings.cfdReviewQrImageUrl.trim() && (
-                    <button
-                      type="button"
-                      onClick={() => void clearCfdQrImage()}
-                      className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold dark:border-gray-600"
-                    >
-                      {translate("settingsCfdRemoveQr")}
-                    </button>
-                  )}
-                  <input
-                    ref={cfdQrInputRef}
-                    type="file"
-                    accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={(event) => void handleCfdQrUpload(event)}
+          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{translate("settingsCfdReviewQr")}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{translate("settingsCfdReviewQrHint")}</p>
+              {settings.cfdReviewQrImageUrl.trim() ? (
+                <div className="mt-2 inline-block rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={settings.cfdReviewQrImageUrl}
+                    alt="Review QR"
+                    width={160}
+                    height={160}
+                    className="h-40 w-40 object-contain"
                   />
                 </div>
+              ) : (
+                <p className="text-xs text-amber-700 dark:text-amber-300">{translate("settingsCfdNoQr")}</p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => cfdQrInputRef.current?.click()}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  {settings.cfdReviewQrImageUrl.trim()
+                    ? translate("settingsCfdChangeQr")
+                    : translate("settingsCfdUploadQr")}
+                </button>
+                {settings.cfdReviewQrImageUrl.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => void clearCfdQrImage()}
+                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold dark:border-gray-600"
+                  >
+                    {translate("settingsCfdRemoveQr")}
+                  </button>
+                )}
+                <input
+                  ref={cfdQrInputRef}
+                  type="file"
+                  accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(event) => void handleCfdQrUpload(event)}
+                />
               </div>
             </div>
           </section>
@@ -1559,7 +1596,7 @@ export function SettingsView({
             </div>
 
             <p className="mt-4 text-xs text-amber-800 dark:text-amber-400">
-              {translate("managerPin")}: Demo PIN <strong>1234</strong> — voids, discounts.
+              {translate("staffPinGateSettingsHint")}
             </p>
           </section>
         </div>

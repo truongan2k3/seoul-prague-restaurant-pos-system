@@ -26,6 +26,10 @@ export interface CfdCheckoutPayload {
   tip: number;
   total: number;
   amountDueNow: number;
+  /** Cash tendered by guest (staff entered). */
+  amountGiven?: number;
+  /** Change to return when amountGiven exceeds the charge. */
+  changeDue?: number;
 }
 
 export interface CfdEventPayload {
@@ -58,6 +62,8 @@ export function buildCfdCheckoutPayload(
     tip: number;
     grandTotal: number;
     amountDueNow: number;
+    amountGiven?: number;
+    changeDue?: number;
   },
 ): CfdCheckoutPayload {
   const menuById = new Map(menuItems.map((item) => [item.id, item]));
@@ -93,6 +99,8 @@ export function buildCfdCheckoutPayload(
     tip: totals.tip,
     total: totals.grandTotal,
     amountDueNow: totals.amountDueNow,
+    amountGiven: totals.amountGiven,
+    changeDue: totals.changeDue,
   };
 }
 

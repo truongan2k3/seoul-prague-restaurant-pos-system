@@ -10,7 +10,9 @@ import { LiveClock } from "@/components/live-clock";
 import { OrderItemChecklist } from "@/components/order-item-checklist";
 import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
+import { useSettings } from "@/contexts/settings-context";
 import { useStationScreen } from "@/contexts/station-screen-context";
+import { usesKitchenScreen } from "@/lib/kitchen-fulfillment-mode";
 import { filterItemsForBoard, sortKitchenTickets, ticketHasOpenKitchenWork } from "@/lib/order-board";
 import { aggregateDisplayItems } from "@/lib/order-item-aggregate";
 import {
@@ -24,9 +26,8 @@ import { STATION_BOARD_KITCHEN_STATUSES, STATION_BOARD_STATUSES } from "@/lib/or
 import { canVoidOrderItems } from "@/lib/staff-roles";
 import type { MenuItem, OrderItem, RestaurantTable, Station } from "@/lib/types";
 import {
-  fetchMenuItems,
   fetchTables,
-  mapMenuItemsResponse,
+  loadMenuItemsResolved,
   mapOrderItemRow,
   mapTablesResponse,
   subscribeToOrderItemChanges,
@@ -146,6 +147,8 @@ interface StationBoardProps {
 
 export function StationBoard({ station, variant = station }: StationBoardProps) {
   const { language, staffName, setStaffName, setLanguage, translate } = useStationScreen();
+  const { settings } = useSettings();
+  const screenEnabled = usesKitchenScreen(settings.kitchenFulfillmentMode);
   const { currentStaffUser } = useApp();
   const { requestPin } = usePinGate();
   const canCancel = canVoidOrderItems(currentStaffUser?.role);
@@ -182,10 +185,10 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
           .order("created_at")
       : kitchenStatusQuery;
 
-    const [tablesRes, menuRes] = await Promise.all([fetchTables(), fetchMenuItems()]);
+    const [tablesRes, menuRes] = await Promise.all([fetchTables(), loadMenuItemsResolved()]);
 
     if (!tablesRes.error) setTables(mapTablesResponse(tablesRes.data));
-    if (!menuRes.error) setMenuItems(mapMenuItemsResponse(menuRes.data));
+    if (!menuRes.error && menuRes.data) setMenuItems(menuRes.data);
     setItems(
       ((itemsRes.data as SupabaseOrderItemRow[] | null) ?? []).map((row) => ({
         ...mapOrderItemRow(row),
@@ -342,6 +345,37 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
   const headerBorder = isKitchen ? "border-zinc-700" : "border-slate-700";
   const title = station === "kitchen" ? translate("kitchen") : translate("bar");
   const totalPreparing = items.filter((i) => resolveKitchenStatus(i) === "pending").length;
+
+  if (!screenEnabled) {
+    return (
+      <div className={shellClass}>
+        <header
+          className={`flex shrink-0 items-center justify-between gap-4 border-b-2 px-6 py-5 ${headerBorder}`}
+        >
+          <div>
+            <h1 className="text-3xl font-black uppercase tracking-tight">{title} KDS</h1>
+            <p className="mt-1 text-sm font-medium text-zinc-400">
+              {translate("settingsFulfillmentModePaper")}
+            </p>
+          </div>
+          <LanguageSelector
+            variant="flag-menu"
+            tone="dark"
+            language={language}
+            onLanguageChange={setLanguage}
+          />
+        </header>
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <p className="max-w-md text-lg font-medium text-zinc-300">
+            {translate("kitchenScreenDisabledPaperMode")}
+          </p>
+          <p className="max-w-md text-sm text-zinc-500">
+            {translate("kitchenScreenDisabledPaperModeHint")}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={shellClass}>

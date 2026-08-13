@@ -6,6 +6,7 @@ import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
 import {
   buildLineDisplayName,
+  buildKitchenModifierText,
   computeCustomizedPrice,
   getDefaultSelections,
   optionLabel,
@@ -18,7 +19,6 @@ import type { MenuItem, SelectedMenuOption } from "@/lib/types";
 export interface CustomizeResult {
   selectedOptions: SelectedMenuOption[];
   selections: Record<string, string>;
-  freeAddOnSelected: boolean;
   price: number;
   displayName: string;
   kitchenModifierText: string;
@@ -40,13 +40,11 @@ export function ItemCustomizeModal({ open, item, onClose, onConfirm }: ItemCusto
   const config = item.customizationConfig;
 
   const [selections, setSelections] = useState<Record<string, string>>({});
-  const [freeAddOnSelected, setFreeAddOnSelected] = useState(false);
   const [itemNote, setItemNote] = useState("");
 
   useEffect(() => {
     if (!open || !config) return;
     setSelections(getDefaultSelections(config, item));
-    setFreeAddOnSelected(false);
     setItemNote("");
   }, [open, item, config]);
 
@@ -61,22 +59,9 @@ export function ItemCustomizeModal({ open, item, onClose, onConfirm }: ItemCusto
   );
 
   const baseName = menuItemDisplayName(item, language);
-  const displayName = buildLineDisplayName(
-    baseName,
-    selectedOptions,
-    language,
-    freeAddOnSelected,
-    config?.freeAddOn,
-  );
+  const displayName = buildLineDisplayName(baseName, selectedOptions, language);
 
-  const kitchenModifierText = selectedOptions
-    .map((entry) => entry.nameZh.trim() || entry.nameEn)
-    .concat(
-      freeAddOnSelected && config?.freeAddOn
-        ? [config.freeAddOn.nameZh.trim() || config.freeAddOn.nameEn]
-        : [],
-    )
-    .join(" · ");
+  const kitchenModifierText = buildKitchenModifierText(selectedOptions);
 
   const canConfirm = useMemo(() => {
     if (!config?.optionGroups?.length) return true;
@@ -92,7 +77,6 @@ export function ItemCustomizeModal({ open, item, onClose, onConfirm }: ItemCusto
     onConfirm({
       selectedOptions,
       selections,
-      freeAddOnSelected,
       price,
       displayName,
       kitchenModifierText,
@@ -183,25 +167,6 @@ export function ItemCustomizeModal({ open, item, onClose, onConfirm }: ItemCusto
             </div>
           </section>
         ))}
-
-        {config.freeAddOn && (
-          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/30">
-            <input
-              type="checkbox"
-              checked={freeAddOnSelected}
-              onChange={(event) => setFreeAddOnSelected(event.target.checked)}
-              className="mt-1 h-5 w-5 rounded border-gray-300"
-            />
-            <div>
-              <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-                {optionLabel(config.freeAddOn, language)}
-              </p>
-              <p className="text-xs text-amber-800/80 dark:text-amber-300/80">
-                {translate("freeAddOnHint")}
-              </p>
-            </div>
-          </label>
-        )}
 
         <label className="block">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">

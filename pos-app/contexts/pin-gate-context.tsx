@@ -15,15 +15,21 @@ const PinGateContext = createContext<PinGateContextValue | null>(null);
 export function PinGateProvider({
   children,
   verifyPin,
+  bypassPin = false,
 }: {
   children: ReactNode;
   verifyPin: (pin: string) => boolean;
+  bypassPin?: boolean;
 }) {
   const [pinOpen, setPinOpen] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
   const [onSuccess, setOnSuccess] = useState<(() => void) | null>(null);
 
   const requestPin = (callback: () => void) => {
+    if (bypassPin) {
+      callback();
+      return;
+    }
     setPinError(null);
     setOnSuccess(() => callback);
     setPinOpen(true);
@@ -33,11 +39,12 @@ export function PinGateProvider({
     if (verifyPin(pin)) {
       setPinOpen(false);
       setPinError(null);
-      onSuccess?.();
+      const callback = onSuccess;
       setOnSuccess(null);
+      callback?.();
       return;
     }
-    setPinError("Invalid PIN");
+    setPinError("invalid");
   };
 
   const cancelPin = () => {

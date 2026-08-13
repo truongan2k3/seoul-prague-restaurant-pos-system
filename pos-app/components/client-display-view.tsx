@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { LanguageSelector } from "@/components/language-selector";
 import {
@@ -9,9 +9,13 @@ import {
   type CfdCheckoutPayload,
   type CfdClientState,
 } from "@/lib/cfd-display";
+import {
+  cfdSlideshowItemDuration,
+  resolveCfdSlideshow,
+} from "@/lib/cfd-slideshow";
 import { formatCzk } from "@/lib/checkout-calculations";
 import { t, type TranslationKey } from "@/lib/i18n/translations";
-import type { LanguageCode } from "@/lib/types";
+import type { CfdSlideshowItem, LanguageCode } from "@/lib/types";
 import { useSettings } from "@/contexts/settings-context";
 
 const THANK_YOU_SECONDS = 20;
@@ -176,6 +180,22 @@ function CheckoutView({
               {formatCzk(displayTotal)} CZK
             </span>
           </div>
+          {checkout.amountGiven != null && checkout.amountGiven > 0 && (
+            <div className="flex justify-between pt-1 text-zinc-400">
+              <span>{translate("amountGiven")}</span>
+              <span className="tabular-nums">{formatCzk(checkout.amountGiven)}</span>
+            </div>
+          )}
+          {checkout.changeDue != null && checkout.changeDue > 0 && (
+            <div className="mt-3 flex items-end justify-between rounded-2xl border-2 border-amber-500/60 bg-amber-500/10 px-4 py-4">
+              <span className="text-lg font-bold uppercase tracking-wide text-amber-200 sm:text-xl">
+                {translate("changeDue")}
+              </span>
+              <span className="text-4xl font-black tabular-nums text-amber-300 sm:text-5xl">
+                {formatCzk(checkout.changeDue)} CZK
+              </span>
+            </div>
+          )}
         </div>
       </footer>
     </div>
@@ -224,28 +244,64 @@ function ThankYouView({
   );
 }
 
+function CfdSlideshowPlayer({ items }: { items: CfdSlideshowItem[] }) {
+  const [index, setIndex] = useState(0);
+  const item = items[index % items.length];
+  const mediaClass = "max-h-full max-w-full object-contain";
+
+  useEffect(() => {
+    setIndex(0);
+  }, [items]);
+
+  useEffect(() => {
+    if (items.length <= 1) return;
+    if (item.type === "video") return;
+
+    const ms = cfdSlideshowItemDuration(item) * 1000;
+    const timer = window.setTimeout(() => {
+      setIndex((current) => (current + 1) % items.length);
+    }, ms);
+    return () => window.clearTimeout(timer);
+  }, [index, item, items.length]);
+
+  const goNext = useCallback(() => {
+    setIndex((current) => (current + 1) % items.length);
+  }, [items.length]);
+
+  return (
+    <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-zinc-950 px-4 py-4 sm:px-6 sm:py-6">
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-zinc-800 bg-black">
+        {item.type === "video" ? (
+          <video
+            key={item.url}
+            src={item.url}
+            autoPlay
+            muted
+            playsInline
+            onEnded={goNext}
+            className={mediaClass}
+          />
+        ) : item.type === "gif" || isCfdGifMedia(item.url) ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img key={item.url} src={item.url} alt="Promotional display" className={mediaClass} />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img key={item.url} src={item.url} alt="Promotional display" className={mediaClass} />
+        )}
+      </div>
+    </main>
+  );
+}
+
 function IdleDisplayView({
-  videoUrl,
+  slides,
   translate,
 }: {
-  videoUrl: string;
+  slides: CfdSlideshowItem[];
   translate: (key: TranslationKey) => string;
 }) {
-  if (videoUrl.trim()) {
-    const mediaClass = "max-h-full max-w-full object-contain";
-
-    return (
-      <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-zinc-950 px-4 py-4 sm:px-6 sm:py-6">
-        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-zinc-800 bg-black">
-          {isCfdGifMedia(videoUrl) ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img key={videoUrl} src={videoUrl} alt="Promotional display" className={mediaClass} />
-          ) : (
-            <video key={videoUrl} src={videoUrl} autoPlay loop muted playsInline className={mediaClass} />
-          )}
-        </div>
-      </main>
-    );
+  if (slides.length > 0) {
+    return <CfdSlideshowPlayer items={slides} />;
   }
 
   return (
@@ -263,7 +319,7 @@ export function ClientDisplayView() {
   const [checkout, setCheckout] = useState<CfdCheckoutPayload | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(THANK_YOU_SECONDS);
 
-  const adVideoUrl = settings.cfdAdVideoUrl.trim();
+  const slideshow = useMemo(() => resolveCfdSlideshow(settings), [settings]);
   const reviewQrImageUrl = settings.cfdReviewQrImageUrl.trim();
 
   useEffect(() => {
@@ -306,7 +362,7 @@ export function ClientDisplayView() {
       <AnnouncementMarquee surface="client" tone="dark" />
       <CfdHeader language={language} onLanguageChange={setLanguage} translate={translate} />
 
-      {clientState === "idle" && <IdleDisplayView videoUrl={adVideoUrl} translate={translate} />}
+      {clientState === "idle" && <IdleDisplayView slides={slideshow} translate={translate} />}
 
       {clientState === "checkout" && checkout && (
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -319,7 +375,7 @@ export function ClientDisplayView() {
           <ThankYouView
             secondsLeft={secondsLeft}
             reviewQrImageUrl={reviewQrImageUrl}
-            hasAdVideo={Boolean(adVideoUrl)}
+            hasAdVideo={slideshow.length > 0}
             translate={translate}
           />
         </main>

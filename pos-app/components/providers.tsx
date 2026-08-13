@@ -4,6 +4,7 @@ import { AppProvider, useApp } from "@/contexts/app-context";
 import { AuthProvider } from "@/contexts/auth-context";
 import { AdminDeletionGateProvider } from "@/contexts/admin-deletion-gate-context";
 import { PinGateProvider } from "@/contexts/pin-gate-context";
+import { staffBypassesPinGate } from "@/lib/staff-roles";
 import { ReceiptPrintProvider } from "@/contexts/receipt-print-context";
 import { NotificationProvider } from "@/contexts/notification-context";
 import { SettingsProvider, useSettings } from "@/contexts/settings-context";
@@ -12,9 +13,12 @@ import { FullscreenToggle } from "@/components/fullscreen-toggle";
 import { ManagerPinModal } from "@/components/manager-pin-modal";
 
 function PinGateWrapper({ children }: { children: React.ReactNode }) {
-  const { verifyManagerPin } = useApp();
+  const { verifyManagerPin, currentStaffUser } = useApp();
   return (
-    <PinGateProvider verifyPin={verifyManagerPin}>
+    <PinGateProvider
+      verifyPin={verifyManagerPin}
+      bypassPin={staffBypassesPinGate(currentStaffUser)}
+    >
       {children}
       <ManagerPinModal />
     </PinGateProvider>

@@ -9,15 +9,15 @@ import { LanguageSelector } from "@/components/language-selector";
 import type { MenuCategoryRecord, MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
 import {
   fetchCategories,
-  fetchMenuItems,
   fetchTables,
+  loadMenuItemsResolved,
   mapCategoriesResponse,
-  mapMenuItemsResponse,
   mapTablesResponse,
   subscribeToCategoryChanges,
   subscribeToMenuChanges,
   subscribeToTableChanges,
 } from "@/src/lib/supabase-data";
+import { shouldPrintKitchenOnSend, applyFulfillmentModeToNewOrders } from "@/lib/kitchen-fulfillment-mode";
 import { appendOrdersToTable, occupyTable } from "@/src/lib/table-actions";
 
 type OrderModalState = {
@@ -36,9 +36,13 @@ function ServerApp() {
   const [isSaving, setIsSaving] = useState(false);
 
   const reload = useCallback(async () => {
-    const [t, m, c] = await Promise.all([fetchTables(), fetchMenuItems(), fetchCategories()]);
+    const [t, m, c] = await Promise.all([
+      fetchTables(),
+      loadMenuItemsResolved(),
+      fetchCategories(),
+    ]);
     if (!t.error) setTables(mapTablesResponse(t.data));
-    if (!m.error) setMenuItems(mapMenuItemsResponse(m.data));
+    if (!m.error && m.data) setMenuItems(m.data);
     if (!c.error) setCategories(mapCategoriesResponse(c.data));
   }, []);
 
@@ -61,20 +65,36 @@ function ServerApp() {
     if (!orderModal) return;
     setIsSaving(true);
 
+    const preparedOrders = applyFulfillmentModeToNewOrders(
+      orders,
+      settings.kitchenFulfillmentMode,
+    );
     const isAppend = orderModal.mode === "append";
     const { error } = isAppend
-      ? await appendOrdersToTable(orderModal.table.id, orders, staff?.id, staff?.name)
-      : await occupyTable(orderModal.table.id, orders, staff?.id, staff?.name);
+      ? await appendOrdersToTable(
+          orderModal.table.id,
+          preparedOrders,
+          staff?.id,
+          staff?.name,
+          orderModal.table.label,
+        )
+      : await occupyTable(
+          orderModal.table.id,
+          preparedOrders,
+          staff?.id,
+          staff?.name,
+          orderModal.table.label,
+        );
 
     setIsSaving(false);
     if (error) return;
 
     logAction(isAppend ? "server add items" : "server order", `Table ${orderModal.table.label}`);
 
-    if (settings.kitchenPrintEnabled && !settings.kitchenPrintViaStation) {
+    if (shouldPrintKitchenOnSend(settings) && !settings.kitchenPrintViaStation) {
       void printKitchenOrder({
         tableLabel: orderModal.table.label,
-        orders,
+        orders: preparedOrders,
         menuItems,
       }).catch((printError) => {
         console.warn("[KitchenPrint] Failed:", printError);

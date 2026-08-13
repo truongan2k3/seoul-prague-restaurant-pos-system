@@ -1,5 +1,6 @@
 import type { MenuCustomizationConfig, MenuItem } from "@/lib/types";
 import { DEFAULT_MENU_CATEGORY, type MenuCategory } from "@/lib/menu-categories";
+import { customizationConfigForSave } from "@/lib/menu-customization";
 import { deriveItemType, resolveStation } from "@/lib/order-routing";
 import { supabase } from "@/src/lib/supabase";
 
@@ -18,6 +19,7 @@ export type MenuItemInput = {
   sortOrder?: number;
   station?: MenuItem["station"];
   itemType?: MenuItem["itemType"];
+  billOnly?: boolean;
   customizationConfig?: MenuCustomizationConfig;
 };
 
@@ -48,7 +50,8 @@ function toDbRow(input: MenuItemInput) {
     display_order: displayOrder,
     image_url: input.imageUrl?.trim() || null,
     description: input.descriptionEn?.trim() || null,
-    customization_config: input.customizationConfig ?? null,
+    customization_config: customizationConfigForSave(input.customizationConfig) ?? null,
+    bill_only: input.billOnly ?? false,
   };
 }
 

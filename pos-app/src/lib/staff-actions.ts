@@ -9,6 +9,7 @@ export interface StaffInput {
   active: boolean;
   /** Custom tab permissions; empty = role defaults */
   allowedNav: NavId[];
+  requirePinForActions: boolean;
 }
 
 function staffRowPayload(input: StaffInput) {
@@ -19,6 +20,7 @@ function staffRowPayload(input: StaffInput) {
     pin: input.pin.trim() || null,
     active: input.active,
     allowed_nav: allowedNav ?? null,
+    require_pin_for_actions: input.requirePinForActions,
   };
 }
 

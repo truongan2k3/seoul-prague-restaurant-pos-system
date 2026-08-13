@@ -11,6 +11,7 @@ import { GripVertical, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { MenuItemFormModal } from "@/components/menu-item-form-modal";
 import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
+import { useSettings } from "@/contexts/settings-context";
 import {
   categoriesForOrdering,
   filterMenuItems,
@@ -18,9 +19,10 @@ import {
   resolveItemCategoryName,
   type ItemTypeFilter,
 } from "@/lib/category-utils";
+import { sortMenuItemsForDisplay } from "@/lib/menu-sort";
 import { formatPrice } from "@/lib/i18n/translations";
 import { filterButtonClass } from "@/lib/theme-classes";
-import type { MenuCategoryRecord, MenuItem } from "@/lib/types";
+import type { MenuCategoryRecord, MenuItem, NotePreset, OptionGroupLibraryEntry } from "@/lib/types";
 import {
   createMenuItem,
   deleteMenuItem,
@@ -29,6 +31,14 @@ import {
   updateMenuSortOrders,
   type MenuItemInput,
 } from "@/src/lib/menu-actions";
+import {
+  fetchAllNotePresetsAdmin,
+  mapNotePresetsResponse,
+} from "@/src/lib/note-preset-actions";
+import {
+  fetchOptionGroupLibrary,
+  mapOptionGroupLibraryResponse,
+} from "@/src/lib/option-group-library-actions";
 
 interface MenuManagerProps {
   menuItems: MenuItem[];
@@ -38,6 +48,7 @@ interface MenuManagerProps {
 
 export function MenuManager({ menuItems, categories, onChange }: MenuManagerProps) {
   const { translate, logAction } = useApp();
+  const { settings } = useSettings();
   const { requestPin } = usePinGate();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<MenuItem | null>(null);
@@ -48,6 +59,28 @@ export function MenuManager({ menuItems, categories, onChange }: MenuManagerProp
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [localItems, setLocalItems] = useState(menuItems);
   const [isMobileList, setIsMobileList] = useState(false);
+  const [libraryGroups, setLibraryGroups] = useState<OptionGroupLibraryEntry[]>([]);
+  const [notePresets, setNotePresets] = useState<NotePreset[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const [libraryRes, presetsRes] = await Promise.all([
+        fetchOptionGroupLibrary(true),
+        fetchAllNotePresetsAdmin(),
+      ]);
+      if (cancelled) return;
+      if (!libraryRes.error) {
+        setLibraryGroups(mapOptionGroupLibraryResponse(libraryRes.data));
+      }
+      if (!presetsRes.error) {
+        setNotePresets(mapNotePresetsResponse(presetsRes.data));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     setLocalItems(menuItems);
@@ -61,17 +94,21 @@ export function MenuManager({ menuItems, categories, onChange }: MenuManagerProp
     return () => media.removeEventListener("change", update);
   }, []);
 
-  const orderedCategories = useMemo(() => categoriesForOrdering(categories), [categories]);
-
-  const filteredItems = useMemo(
-    () =>
-      filterMenuItems(localItems, orderedCategories, {
-        search,
-        typeFilter,
-        categoryFilter,
-      }),
-    [localItems, orderedCategories, search, typeFilter, categoryFilter],
+  const orderedCategories = useMemo(
+    () => categoriesForOrdering(categories, settings.menuCategorySortMode),
+    [categories, settings.menuCategorySortMode],
   );
+
+  const filteredItems = useMemo(() => {
+    const filtered = filterMenuItems(localItems, orderedCategories, {
+      search,
+      typeFilter,
+      categoryFilter,
+    });
+    return sortMenuItemsForDisplay(filtered, settings.menuItemSortMode);
+  }, [localItems, orderedCategories, search, typeFilter, categoryFilter, settings.menuItemSortMode]);
+
+  const dragReorderEnabled = settings.menuItemSortMode === "custom";
 
   const openCreate = () => {
     setEditing(null);
@@ -133,6 +170,7 @@ export function MenuManager({ menuItems, categories, onChange }: MenuManagerProp
   };
 
   const handleDragEnd = async (result: DropResult) => {
+    if (!dragReorderEnabled) return;
     if (!result.destination) return;
     if (result.source.index === result.destination.index) return;
 
@@ -283,7 +321,12 @@ export function MenuManager({ menuItems, categories, onChange }: MenuManagerProp
                     filteredItems.map((item, index) => {
                       const categoryLabel = resolveItemCategoryName(item, orderedCategories);
                       return (
-                        <Draggable key={item.id} draggableId={item.id} index={index}>
+                        <Draggable
+                          key={item.id}
+                          draggableId={item.id}
+                          index={index}
+                          isDragDisabled={!dragReorderEnabled}
+                        >
                           {(dragProvided, snapshot) => (
                             <tr
                               ref={dragProvided.innerRef}
@@ -392,7 +435,12 @@ export function MenuManager({ menuItems, categories, onChange }: MenuManagerProp
                   filteredItems.map((item, index) => {
                     const categoryLabel = resolveItemCategoryName(item, orderedCategories);
                     return (
-                      <Draggable key={item.id} draggableId={item.id} index={index}>
+                      <Draggable
+                        key={item.id}
+                        draggableId={item.id}
+                        index={index}
+                        isDragDisabled={!dragReorderEnabled}
+                      >
                         {(dragProvided, snapshot) => (
                           <article
                             ref={dragProvided.innerRef}
@@ -469,6 +517,8 @@ export function MenuManager({ menuItems, categories, onChange }: MenuManagerProp
         open={formOpen}
         item={editing}
         categories={orderedCategories}
+        libraryGroups={libraryGroups}
+        notePresets={notePresets}
         onClose={() => {
           setFormOpen(false);
           setEditing(null);

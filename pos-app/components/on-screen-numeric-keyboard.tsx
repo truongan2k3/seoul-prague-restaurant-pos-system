@@ -39,7 +39,7 @@ export function OnScreenNumericKeyboard({
   const clear = () => onChange("");
 
   return (
-    <div className="mt-2 shrink-0 rounded-xl border border-gray-200 bg-gray-100 px-1.5 py-2 sm:px-2 dark:border-gray-700 dark:bg-gray-900">
+    <div className="shrink-0 rounded-xl border border-gray-200 bg-gray-100 px-1.5 py-2 sm:px-2 dark:border-gray-700 dark:bg-gray-900 [&:not(:first-child)]:mt-2">
       <div className="mb-2 flex items-center justify-between gap-2 px-0.5 sm:px-1">
         <p className="min-w-0 flex-1 truncate text-xs font-medium tabular-nums text-gray-500 dark:text-gray-400">
           {value || previewLabel || "0"}

@@ -1,14 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronRight, MessageSquare, Minus, Plus, Search, X } from "lucide-react";
+import { CancelReasonModal } from "@/components/cancel-reason-modal";
+import { ItemCustomizeModal, type CustomizeResult } from "@/components/item-customize-modal";
+import { GrillGuestCountModal } from "@/components/grill-guest-count-modal";
+import { LinePriceEditor } from "@/components/line-price-editor";
 import { Modal } from "@/components/modal";
+import { OnScreenKeyboard } from "@/components/on-screen-keyboard";
+import { OrderLineToolbar } from "@/components/order-line-toolbar";
+import { TableActivityLogPanel } from "@/components/table-activity-log-panel";
 import { useApp } from "@/contexts/app-context";
+import { usePinGate } from "@/contexts/pin-gate-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { useSettings } from "@/contexts/settings-context";
+import { shouldPrintKitchenOnSend } from "@/lib/kitchen-fulfillment-mode";
 import { resolveKitchenStatus } from "@/lib/auto-serve";
-import { aggregateDisplayItems } from "@/lib/order-item-aggregate";
 import { categoriesForOrdering } from "@/lib/category-utils";
+import { sortMenuItemsForDisplay } from "@/lib/menu-sort";
 import { formatPosPrice, priceDisplayOptionsFromSettings } from "@/lib/price-display";
 import {
   cartLineDisplayName,
@@ -17,12 +26,37 @@ import {
 } from "@/lib/menu-display";
 import {
   buildCustomizationSignature,
+  buildKitchenModifierText,
+  buildKitchenModifierTextEn,
   hasCustomization,
   mergeNoteWithKitchenModifiers,
 } from "@/lib/menu-customization";
-import { finalizeNoteTranslation, presetLabel, togglePresetId } from "@/lib/note-presets";
+import { finalizeNoteTranslation, presetLabel, presetsForMenuItem, togglePresetId } from "@/lib/note-presets";
 import { resolveOrderLineStation, resolveStation } from "@/lib/order-routing";
-import { normalizeOrderItemStatus, statusTranslationKey } from "@/lib/order-status";
+import {
+  finalizeBillOnlyOrder,
+  isBillOnlyOrderLine,
+  orderDispatchFromMenuItem,
+} from "@/lib/menu-item-dispatch";
+import {
+  editableLinesToOrders,
+  isSubmittedLineDirty,
+  kitchenPrintDelta,
+  submittedOrdersDirty,
+  toEditableLines,
+  type EditableLine,
+} from "@/lib/editable-order-lines";
+import {
+  isLinePriceAdjusted,
+  resolveOriginalUnitPrice,
+  withAdjustedLinePrice,
+  withResetLinePrice,
+  type LinePriceAdjustMode,
+} from "@/lib/order-line-pricing";
+import {
+  isManageTableLineEditable,
+  isManageTablePriceEditable,
+} from "@/lib/order-sla";
 import { matchesFoldedSearch } from "@/lib/search-normalize";
 import { isTablePaidInProgress } from "@/lib/table-payment";
 import type {
@@ -37,9 +71,7 @@ import type {
   Station,
 } from "@/lib/types";
 import { filterButtonClass } from "@/lib/theme-classes";
-import { ItemCustomizeModal, type CustomizeResult } from "@/components/item-customize-modal";
-import { GrillGuestCountModal } from "@/components/grill-guest-count-modal";
-import { OnScreenKeyboard } from "@/components/on-screen-keyboard";
+import { cancelOrderItems } from "@/src/lib/table-actions";
 import {
   buildGrillGuestPrepOrder,
   cartHasGrillItems,
@@ -66,11 +98,11 @@ interface CartLine {
   imageUrl?: string;
   customizationSignature?: string;
   selectedOptions?: SelectedMenuOption[];
-  freeAddOnSelected?: boolean;
   kitchenModifierText?: string;
   specialRequestIds?: string[];
-  isFreeAddOnLine?: boolean;
   isCustomItem?: boolean;
+  skipPrint?: boolean;
+  hideOnKds?: boolean;
 }
 
 interface NewOrderModalProps {
@@ -83,20 +115,31 @@ interface NewOrderModalProps {
   existingOrders?: OrderItem[];
   onClose: () => void;
   onSendToKitchen: (orders: OrderItem[]) => void | Promise<void>;
+  /** Append cart lines to bill only — no kitchen print / KDS */
+  onAppendCartNoPrint?: (orders: OrderItem[]) => void | Promise<void>;
   onCheckout?: (orders: OrderItem[]) => void | Promise<void>;
   onCloseTable?: () => void | Promise<void>;
   onManage?: () => void;
+  onSaveExistingOrders?: (
+    orders: OrderItem[],
+    options?: { silent?: boolean; printOrders?: OrderItem[] },
+  ) => void | Promise<void>;
+  onRefreshExistingOrders?: () => void;
   isSaving?: boolean;
 }
 
 function cartLinesToOrders(lines: CartLine[]): OrderItem[] {
   return lines.map((line) => {
+    const selected = line.selectedOptions ?? [];
+    const kitchenZh = line.kitchenModifierText ?? buildKitchenModifierText(selected);
+    const kitchenEn = buildKitchenModifierTextEn(selected);
     const merged = mergeNoteWithKitchenModifiers(
       line.note.trim() || undefined,
       line.noteTranslated,
-      line.kitchenModifierText ?? "",
+      kitchenZh,
+      kitchenEn,
     );
-    return {
+    return finalizeBillOnlyOrder({
       menuItemId: line.menuItemId,
       name: line.name,
       price: line.price,
@@ -107,12 +150,13 @@ function cartLinesToOrders(lines: CartLine[]): OrderItem[] {
       isPrintedNote: line.isPrintedNote,
       station: resolveOrderLineStation(line),
       status: "preparing",
+      skipPrint: line.skipPrint,
+      hideOnKds: line.hideOnKds,
       modifiers: {
         selectedOptions: line.selectedOptions,
-        freeAddOnSelected: line.freeAddOnSelected,
         specialRequestIds: line.specialRequestIds,
       },
-    };
+    });
   });
 }
 
@@ -127,36 +171,9 @@ function findDefaultLine(cart: CartLine[], menuItemId: string, signature?: strin
       line.menuItemId === menuItemId &&
       line.note === "" &&
       !line.isPrintedNote &&
-      !line.isFreeAddOnLine &&
       !line.isCustomItem &&
       (signature ? line.customizationSignature === signature : !line.customizationSignature),
   );
-}
-
-function buildFreeAddOnLine(item: MenuItem, language: LanguageCode): CartLine | null {
-  const addOn = item.customizationConfig?.freeAddOn;
-  if (!addOn) return null;
-  const label =
-    language === "cs"
-      ? addOn.nameCz
-      : language === "zh"
-        ? addOn.nameZh
-        : addOn.nameEn;
-  return {
-    lineId: newLineId(),
-    menuItemId: item.id,
-    name: `${label} (${language === "cs" ? "zdarma" : language === "zh" ? "免费" : "free"})`,
-    price: 0,
-    quantity: 1,
-    category: item.category,
-    itemType: item.itemType,
-    station: item.station,
-    note: "",
-    isPrintedNote: false,
-    imageUrl: item.imageUrl,
-    isFreeAddOnLine: true,
-    kitchenModifierText: addOn.nameZh.trim() || addOn.nameEn,
-  };
 }
 
 function MenuItemImage({ item, label }: { item: MenuItem; label: string }) {
@@ -289,12 +306,16 @@ export function NewOrderModal({
   existingOrders = [],
   onClose,
   onSendToKitchen,
+  onAppendCartNoPrint,
   onCheckout,
   onCloseTable,
   onManage,
+  onSaveExistingOrders,
+  onRefreshExistingOrders,
   isSaving = false,
 }: NewOrderModalProps) {
-  const { translate, language } = useApp();
+  const { translate, language, currentStaffUser } = useApp();
+  const { requestPin } = usePinGate();
   const { settings } = useSettings();
   const { printKitchenStaffMessage } = useReceiptPrint();
   const priceOptions = priceDisplayOptionsFromSettings(settings);
@@ -302,8 +323,23 @@ export function NewOrderModal({
   const showMenuPrices = settings.showPricesOnOrderScreen;
   const menuItemLayout = settings.menuItemLayout;
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [sendSkipPrint, setSendSkipPrint] = useState(false);
-  const [sendHideOnKds, setSendHideOnKds] = useState(false);
+  const [submittedLines, setSubmittedLines] = useState<EditableLine[]>([]);
+  const [submittedBaseline, setSubmittedBaseline] = useState<OrderItem[]>([]);
+  const [pendingCancels, setPendingCancels] = useState<Array<{ itemId: string; reason: string }>>(
+    [],
+  );
+  const [selectedSubmittedLineId, setSelectedSubmittedLineId] = useState<string | null>(null);
+  const [submittedPriceEditLineId, setSubmittedPriceEditLineId] = useState<string | null>(null);
+  const [submittedNoteLineId, setSubmittedNoteLineId] = useState<string | null>(null);
+  const [submittedNoteDraft, setSubmittedNoteDraft] = useState("");
+  const [submittedNoteDraftTranslated, setSubmittedNoteDraftTranslated] = useState("");
+  const [submittedNotePresetIds, setSubmittedNotePresetIds] = useState<string[]>([]);
+  const [submittedNoteTranslating, setSubmittedNoteTranslating] = useState(false);
+  const [submittedCancelTarget, setSubmittedCancelTarget] = useState<{
+    lineId: string;
+    itemId: string;
+  } | null>(null);
+  const [submittedLineError, setSubmittedLineError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [searchKeyboardOpen, setSearchKeyboardOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>("__all__");
@@ -321,6 +357,9 @@ export function NewOrderModal({
   const [pendingGrillItem, setPendingGrillItem] = useState<MenuItem | null>(null);
   const [pendingCustomizeResult, setPendingCustomizeResult] = useState<CustomizeResult | null>(null);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
+  const [unsavedConfirmMode, setUnsavedConfirmMode] = useState<"close" | "outside" | null>(null);
+  const orderPanelRef = useRef<HTMLDivElement | null>(null);
+  const wasOpenRef = useRef(false);
   const [kitchenMessageOpen, setKitchenMessageOpen] = useState(false);
   const [kitchenMessageDraft, setKitchenMessageDraft] = useState("");
   const [kitchenMessageBusy, setKitchenMessageBusy] = useState(false);
@@ -368,6 +407,13 @@ export function NewOrderModal({
     setCustomItemQty("1");
     setCustomItemStation("kitchen");
     setCustomItemError(null);
+    setSelectedSubmittedLineId(null);
+    setSubmittedPriceEditLineId(null);
+    setSubmittedNoteLineId(null);
+    setSubmittedLineError(null);
+    setSubmittedBaseline([]);
+    setPendingCancels([]);
+    setUnsavedConfirmMode(null);
   }, [open]);
 
   useEffect(() => {
@@ -403,11 +449,14 @@ export function NewOrderModal({
     };
   }, [noteDraft]);
 
-  const categoryOptions = useMemo(() => categoriesForOrdering(categories), [categories]);
+  const categoryOptions = useMemo(
+    () => categoriesForOrdering(categories, settings.menuCategorySortMode),
+    [categories, settings.menuCategorySortMode],
+  );
 
   const filteredItems = useMemo(() => {
     const query = search.trim();
-    return menuItems.filter((item) => {
+    const filtered = menuItems.filter((item) => {
       const matchesCategory =
         activeCategory === "__all__" ||
         item.categoryId === activeCategory ||
@@ -423,7 +472,15 @@ export function NewOrderModal({
         matchesFoldedSearch(item.id, query);
       return matchesCategory && matchesSearch;
     });
-  }, [menuItems, activeCategory, search, language, categoryOptions]);
+    return sortMenuItemsForDisplay(filtered, settings.menuItemSortMode);
+  }, [
+    menuItems,
+    activeCategory,
+    search,
+    language,
+    categoryOptions,
+    settings.menuItemSortMode,
+  ]);
 
   const submittedOrdersRaw = useMemo(
     () =>
@@ -434,35 +491,275 @@ export function NewOrderModal({
     [existingOrders],
   );
 
-  const submittedOrders = useMemo(
-    () => aggregateDisplayItems(submittedOrdersRaw),
-    [submittedOrdersRaw],
-  );
+  useEffect(() => {
+    const justOpened = open && !wasOpenRef.current;
+    wasOpenRef.current = open;
+
+    if (!open || mode !== "append") {
+      if (!open) {
+        setSubmittedLines([]);
+        setSubmittedBaseline([]);
+        setPendingCancels([]);
+      }
+      return;
+    }
+
+    const syncFromServer = () => {
+      const lines = toEditableLines(submittedOrdersRaw, [], menuItems);
+      setSubmittedLines(lines);
+      setSubmittedBaseline(submittedOrdersRaw);
+      setPendingCancels([]);
+      setSelectedSubmittedLineId((current) =>
+        current && lines.some((line) => line.lineId === current) ? current : null,
+      );
+    };
+
+    if (justOpened) {
+      syncFromServer();
+      return;
+    }
+
+    if (cart.length > 0 || pendingCancels.length > 0) return;
+
+    const draftOrders = editableLinesToOrders(submittedLines);
+    if (submittedOrdersDirty(draftOrders, submittedBaseline)) return;
+
+    if (submittedOrdersDirty(submittedOrdersRaw, submittedBaseline)) {
+      syncFromServer();
+    }
+  }, [
+    open,
+    mode,
+    submittedOrdersRaw,
+    menuItems,
+    cart.length,
+    pendingCancels.length,
+    submittedLines,
+    submittedBaseline,
+  ]);
 
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   const cartTotal = cart.reduce((sum, line) => sum + line.price * line.quantity, 0);
-  const submittedTotal = submittedOrders.reduce(
+  const submittedTotal = submittedLines.reduce(
     (sum, item) => sum + item.price * item.quantity,
     0,
   );
   const billTotal = submittedTotal + cartTotal;
 
-  const hasKitchenWork = submittedOrders.some((item) => {
+  const hasKitchenWork = submittedLines.some((item) => {
     const kitchen = resolveKitchenStatus(item);
     return kitchen === "pending" || kitchen === "ready";
   });
 
   const isPaid = table ? isTablePaidInProgress(table) : false;
+
+  const selectedSubmittedLine = submittedLines.find(
+    (line) => line.lineId === selectedSubmittedLineId,
+  );
+  const submittedNoteLine = submittedLines.find(
+    (line) => line.lineId === submittedNoteLineId,
+  );
+  const submittedNoteMenuItem = submittedNoteLine?.menuItemId
+    ? menuItems.find((item) => item.id === submittedNoteLine.menuItemId)
+    : undefined;
+  const submittedNoteLinePresets = submittedNoteMenuItem
+    ? presetsForMenuItem(notePresets, submittedNoteMenuItem)
+    : notePresets;
+
+  const submittedDraftOrders = useMemo(
+    () => editableLinesToOrders(submittedLines),
+    [submittedLines],
+  );
+
+  const hasSubmittedChanges =
+    pendingCancels.length > 0 ||
+    submittedOrdersDirty(submittedDraftOrders, submittedBaseline);
+
+  const hasPendingSend =
+    mode === "append" ? cart.length > 0 || hasSubmittedChanges : cart.length > 0;
+
+  const hasUnsavedChanges = cart.length > 0 || hasSubmittedChanges;
+
   const canCheckout =
     Boolean(onCheckout) &&
-    submittedOrders.length > 0 &&
+    submittedLines.length > 0 &&
     !isPaid &&
-    cart.length === 0;
-  const canCloseTable =
-    Boolean(onCloseTable) &&
     cart.length === 0 &&
-    !hasKitchenWork &&
-    (isPaid || (mode === "append" && submittedOrders.length === 0));
+    !hasSubmittedChanges;
+
+  const persistSubmittedLines = async (
+    nextLines: EditableLine[],
+    options: { silent: boolean },
+  ) => {
+    if (!onSaveExistingOrders) return;
+    setSubmittedLineError(null);
+    const orders = editableLinesToOrders(nextLines).map((item) => ({
+      ...item,
+      skipPrint: options.silent,
+      hideOnKds: options.silent,
+    }));
+    const printOrders = options.silent
+      ? undefined
+      : kitchenPrintDelta(submittedBaseline, orders);
+    try {
+      await onSaveExistingOrders(orders, {
+        silent: options.silent,
+        printOrders,
+      });
+      setSubmittedBaseline(orders);
+      setPendingCancels([]);
+      onRefreshExistingOrders?.();
+    } catch (error) {
+      setSubmittedLineError(error instanceof Error ? error.message : "Failed to save order.");
+      throw error;
+    }
+  };
+
+  const handleSaveSubmittedChanges = async (options: {
+    silent: boolean;
+  }): Promise<boolean> => {
+    if (!onSaveExistingOrders || !table || !hasSubmittedChanges) return true;
+    setSubmittedLineError(null);
+    try {
+      const actor = currentStaffUser?.name?.trim() || "Staff";
+      const cancelsByReason = new Map<string, string[]>();
+      for (const entry of pendingCancels) {
+        const ids = cancelsByReason.get(entry.reason) ?? [];
+        ids.push(entry.itemId);
+        cancelsByReason.set(entry.reason, ids);
+      }
+      for (const [reason, ids] of cancelsByReason) {
+        const { error } = await cancelOrderItems(ids, table.id, reason, actor);
+        if (error) throw error;
+      }
+      await persistSubmittedLines(submittedLines, options);
+      return true;
+    } catch (error) {
+      setSubmittedLineError(error instanceof Error ? error.message : "Failed to save order.");
+      return false;
+    }
+  };
+
+  const revertSubmittedChanges = () => {
+    const lines = toEditableLines(submittedBaseline, [], menuItems);
+    setSubmittedLines(lines);
+    setSubmittedBaseline(submittedBaseline);
+    setPendingCancels([]);
+    setSelectedSubmittedLineId(null);
+    setSubmittedPriceEditLineId(null);
+    setSubmittedNoteLineId(null);
+    setSubmittedLineError(null);
+  };
+
+  const applySubmittedQuantityChange = (lineId: string, delta: number) => {
+    setSubmittedPriceEditLineId(null);
+    const next = submittedLines
+      .map((line) =>
+        line.lineId === lineId ? { ...line, quantity: line.quantity + delta } : line,
+      )
+      .filter((line) => line.quantity > 0);
+    setSubmittedLines(next);
+    if (next.length === 0) setSelectedSubmittedLineId(null);
+  };
+
+  const adjustSubmittedQuantity = (lineId: string, delta: number) => {
+    if (delta < 0) {
+      const line = submittedLines.find((entry) => entry.lineId === lineId);
+      if (line?.id) {
+        requestPin(() => applySubmittedQuantityChange(lineId, delta));
+        return;
+      }
+    }
+    applySubmittedQuantityChange(lineId, delta);
+  };
+
+  const applySubmittedPriceEdit = (
+    lineId: string,
+    mode: LinePriceAdjustMode,
+    value: number,
+  ) => {
+    const next = submittedLines.map((line) =>
+      line.lineId === lineId
+        ? { ...line, ...withAdjustedLinePrice(line, menuItems, mode, value) }
+        : line,
+    );
+    setSubmittedLines(next);
+    setSubmittedPriceEditLineId(null);
+  };
+
+  const resetSubmittedLinePrice = (lineId: string) => {
+    const next = submittedLines.map((line) =>
+      line.lineId === lineId ? { ...line, ...withResetLinePrice(line, menuItems) } : line,
+    );
+    setSubmittedLines(next);
+    setSubmittedPriceEditLineId(null);
+  };
+
+  const openSubmittedNoteModal = (line: EditableLine) => {
+    setSubmittedNoteLineId(line.lineId);
+    setSubmittedNoteDraft(line.notes ?? "");
+    setSubmittedNoteDraftTranslated(line.notesTranslated ?? "");
+    setSubmittedNotePresetIds(line.modifiers?.specialRequestIds ?? []);
+  };
+
+  const closeSubmittedNoteModal = () => {
+    setSubmittedNoteLineId(null);
+    setSubmittedNoteDraft("");
+    setSubmittedNoteDraftTranslated("");
+    setSubmittedNotePresetIds([]);
+    setSubmittedNoteTranslating(false);
+  };
+
+  const handleSaveSubmittedNote = async () => {
+    if (!submittedNoteLineId) return;
+    const { note, noteTranslated } = await finalizeNoteTranslation(
+      notePresets,
+      submittedNotePresetIds,
+      submittedNoteDraft,
+      language,
+    );
+    const next = submittedLines.map((line) =>
+      line.lineId === submittedNoteLineId
+        ? {
+            ...line,
+            notes: note || undefined,
+            notesTranslated: noteTranslated || undefined,
+            modifiers: {
+              ...line.modifiers,
+              specialRequestIds:
+                submittedNotePresetIds.length > 0 ? submittedNotePresetIds : undefined,
+            },
+          }
+        : line,
+    );
+    setSubmittedLines(next);
+    closeSubmittedNoteModal();
+  };
+
+  const requestRemoveSubmittedLine = (line: EditableLine) => {
+    if (!line.id) {
+      adjustSubmittedQuantity(line.lineId, -line.quantity);
+      return;
+    }
+    requestPin(() => setSubmittedCancelTarget({ lineId: line.lineId, itemId: line.id! }));
+  };
+
+  const handleSubmittedCancelConfirm = (reason: string) => {
+    if (!submittedCancelTarget) return;
+    setSubmittedLineError(null);
+    setPendingCancels((prev) => [
+      ...prev,
+      { itemId: submittedCancelTarget.itemId, reason },
+    ]);
+    const next = submittedLines.filter(
+      (line) => line.lineId !== submittedCancelTarget.lineId,
+    );
+    setSubmittedLines(next);
+    if (selectedSubmittedLineId === submittedCancelTarget.lineId) {
+      setSelectedSubmittedLineId(null);
+    }
+    setSubmittedCancelTarget(null);
+  };
 
   const cartQtyByMenuId = useMemo(() => {
     const totals = new Map<string, number>();
@@ -474,6 +771,13 @@ export function NewOrderModal({
   }, [cart]);
 
   const noteLine = noteLineId ? cart.find((line) => line.lineId === noteLineId) : undefined;
+  const noteLineMenuItem = noteLine
+    ? menuItems.find((item) => item.id === noteLine.menuItemId)
+    : undefined;
+  const noteLinePresets = useMemo(
+    () => presetsForMenuItem(notePresets, noteLineMenuItem),
+    [notePresets, noteLineMenuItem],
+  );
 
   const modalTitle =
     mode === "append"
@@ -506,6 +810,7 @@ export function NewOrderModal({
 
   const addItemToCart = (item: MenuItem) => {
     const label = menuItemDisplayName(item, language);
+    const dispatch = orderDispatchFromMenuItem(item);
     setCart((prev) => {
       const existing = findDefaultLine(prev, item.id);
       if (existing) {
@@ -529,23 +834,21 @@ export function NewOrderModal({
           note: "",
           isPrintedNote: false,
           imageUrl: item.imageUrl,
+          ...dispatch,
         },
       ];
     });
   };
 
   const applyCustomizeResult = async (item: MenuItem, result: CustomizeResult) => {
-    const signature = buildCustomizationSignature(
-      item.id,
-      result.selections,
-      result.freeAddOnSelected,
-    );
+    const signature = buildCustomizationSignature(item.id, result.selections);
 
     let itemNoteTranslated = "";
     if (result.itemNote) {
       itemNoteTranslated = await translateNoteToChinese(result.itemNote);
     }
 
+    const dispatch = orderDispatchFromMenuItem(item);
     const mainLine: CartLine = {
       lineId: newLineId(),
       menuItemId: item.id,
@@ -561,36 +864,20 @@ export function NewOrderModal({
       imageUrl: item.imageUrl,
       customizationSignature: signature,
       selectedOptions: result.selectedOptions,
-      freeAddOnSelected: result.freeAddOnSelected,
       kitchenModifierText: result.kitchenModifierText,
+      ...dispatch,
     };
 
     setCart((prev) => {
       const existing = findDefaultLine(prev, item.id, signature);
-      const next = existing
-        ? prev.map((line) =>
-            line.lineId === existing.lineId
-              ? { ...line, quantity: line.quantity + 1 }
-              : line,
-          )
-        : [...prev, mainLine];
-
-      if (!result.freeAddOnSelected) return next;
-
-      const freeLine = buildFreeAddOnLine(item, language);
-      if (!freeLine) return next;
-
-      const existingFree = next.find(
-        (line) => line.isFreeAddOnLine && line.menuItemId === item.id,
-      );
-      if (existingFree) {
-        return next.map((line) =>
-          line.lineId === existingFree.lineId
+      if (existing) {
+        return prev.map((line) =>
+          line.lineId === existing.lineId
             ? { ...line, quantity: line.quantity + 1 }
             : line,
         );
       }
-      return [...next, freeLine];
+      return [...prev, mainLine];
     });
   };
 
@@ -687,7 +974,7 @@ export function NewOrderModal({
     const message = kitchenMessageDraft.trim();
     if (!message || kitchenMessageBusy) return;
 
-    if (!settings.kitchenPrintEnabled) {
+    if (!shouldPrintKitchenOnSend(settings)) {
       setKitchenMessageError(translate("kitchenPrintDisabled"));
       return;
     }
@@ -753,8 +1040,7 @@ export function NewOrderModal({
     setCartOpen(true);
   };
 
-  const handleSend = async () => {
-    if (cart.length === 0 || isSaving) return;
+  const buildCartOrdersFromLines = async (): Promise<OrderItem[]> => {
     const orders: OrderItem[] = await Promise.all(
       cart.map(async (line) => {
         const { note, noteTranslated } = await finalizeNoteTranslation(
@@ -763,12 +1049,23 @@ export function NewOrderModal({
           line.note,
           language,
         );
+        const selected = line.selectedOptions ?? [];
+        const kitchenZh = line.kitchenModifierText ?? buildKitchenModifierText(selected);
+        const kitchenEn = buildKitchenModifierTextEn(selected);
         const merged = mergeNoteWithKitchenModifiers(
           note,
           noteTranslated,
-          line.kitchenModifierText ?? "",
+          kitchenZh,
+          kitchenEn,
         );
-        return {
+        const menuItem = line.menuItemId
+          ? menuItems.find((entry) => entry.id === line.menuItemId)
+          : undefined;
+        const dispatch =
+          line.skipPrint != null || line.hideOnKds != null
+            ? { skipPrint: line.skipPrint, hideOnKds: line.hideOnKds }
+            : orderDispatchFromMenuItem(menuItem);
+        return finalizeBillOnlyOrder({
           menuItemId: line.menuItemId,
           name: line.name,
           price: line.price,
@@ -777,49 +1074,110 @@ export function NewOrderModal({
           notes: merged.notes,
           notesTranslated: merged.notesTranslated,
           isPrintedNote: line.isPrintedNote,
-          skipPrint: sendSkipPrint,
-          hideOnKds: sendHideOnKds,
           station: resolveOrderLineStation(line),
           status: "preparing" as const,
+          ...dispatch,
           modifiers: {
             selectedOptions: line.selectedOptions,
-            freeAddOnSelected: line.freeAddOnSelected,
             specialRequestIds: line.specialRequestIds,
           },
-        };
+        });
       }),
     );
 
     if (grillGuestCount !== null && cartHasGrillItems(cart)) {
-      orders.unshift({
-        ...buildGrillGuestPrepOrder(grillGuestCount),
-        skipPrint: sendSkipPrint,
-        hideOnKds: sendHideOnKds,
-      });
+      orders.unshift(buildGrillGuestPrepOrder(grillGuestCount));
     }
 
+    return orders;
+  };
+
+  const dismissSubmittedLineSelection = () => {
+    setSelectedSubmittedLineId(null);
+    setSubmittedPriceEditLineId(null);
+  };
+
+  const handleSend = async () => {
+    if (!hasPendingSend || isSaving) return;
+
+    if (hasSubmittedChanges) {
+      const saved = await handleSaveSubmittedChanges({ silent: false });
+      if (!saved) return;
+    }
+
+    if (cart.length === 0) return;
+
+    const orders = await buildCartOrdersFromLines();
     await onSendToKitchen(orders);
     setCart([]);
     setCartOpen(false);
     setGrillGuestCount(null);
-    setSendSkipPrint(false);
-    setSendHideOnKds(false);
+  };
+
+  const handleSaveNoPrint = async () => {
+    if (isSaving) return;
+    if (!hasSubmittedChanges && cart.length === 0) return;
+
+    if (hasSubmittedChanges && mode === "append") {
+      const saved = await handleSaveSubmittedChanges({ silent: true });
+      if (!saved) return;
+    }
+
+    if (cart.length > 0) {
+      if (!onAppendCartNoPrint) return;
+      const orders = await buildCartOrdersFromLines();
+      await onAppendCartNoPrint(orders);
+      setCart([]);
+      setGrillGuestCount(null);
+      onRefreshExistingOrders?.();
+    }
   };
 
   const handleClose = () => {
     setDiscardConfirmOpen(false);
+    setUnsavedConfirmMode(null);
     setCart([]);
-    setSendSkipPrint(false);
-    setSendHideOnKds(false);
     onClose();
   };
 
+  const openUnsavedConfirm = (mode: "close" | "outside") => {
+    setUnsavedConfirmMode(mode);
+    setDiscardConfirmOpen(true);
+  };
+
   const requestClose = () => {
-    if (cart.length > 0) {
-      setDiscardConfirmOpen(true);
+    if (hasUnsavedChanges) {
+      openUnsavedConfirm("close");
       return;
     }
     handleClose();
+  };
+
+  const handleUnsavedDiscard = () => {
+    const mode = unsavedConfirmMode;
+    revertSubmittedChanges();
+    setCart([]);
+    setDiscardConfirmOpen(false);
+    setUnsavedConfirmMode(null);
+    if (mode === "close") {
+      handleClose();
+    }
+  };
+
+  const handleUnsavedSave = async () => {
+    const mode = unsavedConfirmMode;
+    setDiscardConfirmOpen(false);
+    setUnsavedConfirmMode(null);
+    if (hasSubmittedChanges) {
+      const saved = await handleSaveSubmittedChanges({ silent: true });
+      if (!saved) return;
+    }
+    if (mode === "close") {
+      if (cart.length > 0) {
+        await handleSend();
+      }
+      handleClose();
+    }
   };
 
   useEffect(() => {
@@ -833,19 +1191,59 @@ export function NewOrderModal({
       if (noteLineId) return;
       if (discardConfirmOpen) {
         setDiscardConfirmOpen(false);
+        setUnsavedConfirmMode(null);
+        return;
+      }
+      if (selectedSubmittedLineId) {
+        dismissSubmittedLineSelection();
         return;
       }
       requestClose();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, noteLineId, discardConfirmOpen, cart.length, onClose, kitchenMessageOpen, kitchenMessageBusy]);
+  }, [
+    open,
+    noteLineId,
+    discardConfirmOpen,
+    cart.length,
+    onClose,
+    kitchenMessageOpen,
+    kitchenMessageBusy,
+    selectedSubmittedLineId,
+  ]);
+
+  const orderItemIdsForLog = useMemo(
+    () => submittedLines.map((line) => line.id).filter((id): id is string => Boolean(id)),
+    [submittedLines],
+  );
+
+  const itemNameByOrderId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const line of submittedLines) {
+      if (line.id) {
+        map.set(line.id, orderItemDisplayName(line, menuItems, language));
+      }
+    }
+    return map;
+  }, [submittedLines, menuItems, language]);
+
+  const isLineSentToKitchen = (line: OrderItem) => {
+    if (line.isCancelled || line.hideOnKds || line.skipPrint) return false;
+    const kitchen = resolveKitchenStatus(line);
+    return kitchen !== "archived" && kitchen !== "cancelled";
+  };
+
+  const canSaveNoPrint =
+    !isSaving &&
+    ((mode === "append" && hasSubmittedChanges && Boolean(onSaveExistingOrders)) ||
+      (cart.length > 0 && Boolean(onAppendCartNoPrint)));
 
   const renderCartPanel = (showCloseButton: boolean) => (
     <>
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 px-4 py-3 dark:border-gray-700">
         <div className="min-w-0">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
             {translate("table")} {tableLabel}
           </h3>
           {isPaid && (
@@ -861,7 +1259,7 @@ export function NewOrderModal({
               onClick={onManage}
               className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-700 dark:border-gray-600 dark:text-gray-200"
             >
-              {translate("manageOrder")}
+              {translate("changeTable")}
             </button>
           )}
           {showCloseButton && (
@@ -876,205 +1274,226 @@ export function NewOrderModal({
         </div>
       </div>
 
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
-        {submittedOrders.length > 0 && (
-          <section>
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
-              {translate("currentOrder")}
-            </p>
-            <ul className="space-y-2">
-              {submittedOrders.map((item, index) => {
-                const kitchen = resolveKitchenStatus(item);
-                const isDone = kitchen === "ready" || kitchen === "served";
-                const statusKey = statusTranslationKey(normalizeOrderItemStatus(item.status));
-                return (
-                  <li
-                    key={item.id ?? `${item.name}-${index}`}
-                    className={`rounded-xl border px-3 py-2.5 ${
-                      isDone
-                        ? "border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40"
-                        : "border-amber-200 bg-amber-50/80 dark:border-amber-900 dark:bg-amber-950/30"
-                    }`}
-                  >
-                    <div className="flex items-start gap-2">
-                      {isDone ? (
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                      ) : (
-                        <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                          {item.quantity}× {orderItemDisplayName(item, menuItems, language)}
-                        </p>
-                        <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                          {translate(statusKey)}
-                          {kitchen === "ready" ? ` · ${translate("done")}` : ""}
-                        </p>
-                      </div>
-                      <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
-                        {formatOrderPrice(item.price * item.quantity)}
-                      </span>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
+      <div className="flex-1 overflow-y-auto p-3">
+        {submittedLineError && (
+          <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+            {submittedLineError}
+          </p>
         )}
 
-        <section>
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
-            {translate("newItems")}
+        {submittedLines.length === 0 && cart.length === 0 ? (
+          <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+            {translate("cartEmpty")}
           </p>
-          {cart.length === 0 ? (
-            <p className="text-center text-sm text-gray-500 dark:text-gray-400">
-              {translate("cartEmpty")}
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {cart.map((line) => {
-                const lineLabel = line.name.includes("·")
-                  ? line.name
-                  : cartLineDisplayName(line, menuItems, language);
-                const presetText = (line.specialRequestIds ?? [])
-                  .map((id) => {
-                    const preset = notePresets.find((entry) => entry.id === id);
-                    return preset ? presetLabel(preset, language) : null;
-                  })
-                  .filter(Boolean)
-                  .join(", ");
-                const noteTextParts = [presetText, line.note].filter(Boolean);
-                const noteText =
-                  line.noteTranslated && noteTextParts.length > 0
-                    ? `${line.noteTranslated}${line.note ? ` · ${line.note}` : ""}`
-                    : noteTextParts.join(", ");
-                return (
-                  <li
-                    key={line.lineId}
-                    className="rounded-xl border border-gray-200 p-3 dark:border-gray-700"
+        ) : (
+          <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+            {submittedLines.map((line) => {
+              const selected = line.lineId === selectedSubmittedLineId;
+              const displayName = orderItemDisplayName(line, menuItems, language);
+              const linePending =
+                hasSubmittedChanges && isSubmittedLineDirty(line, submittedBaseline);
+              const showTick = !linePending && isLineSentToKitchen(line);
+              const priceChanged = isLinePriceAdjusted(line, menuItems);
+              const originalPrice = resolveOriginalUnitPrice(line, menuItems);
+
+              return (
+                <li key={line.lineId}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedSubmittedLineId((current) =>
+                        current === line.lineId ? null : line.lineId,
+                      );
+                      setSubmittedPriceEditLineId(null);
+                    }}
+                    className={`flex w-full items-start gap-2 px-2 py-3 text-left transition ${
+                      selected ? "bg-blue-50 dark:bg-blue-950/30" : "hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                    } ${linePending ? "text-orange-700 dark:text-orange-300" : "text-gray-900 dark:text-gray-100"}`}
                   >
-                    <div className="flex gap-3">
-                      <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
-                        {line.imageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={line.imageUrl}
-                            alt={lineLabel}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-sm text-gray-400">
-                            {lineLabel.charAt(0)}
-                          </div>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
+                    <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center">
+                      {showTick ? (
+                        <Check className="h-5 w-5 text-emerald-600" strokeWidth={3} />
+                      ) : null}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-base font-semibold leading-snug">
+                        {line.quantity}× {displayName}
+                      </p>
+                      {(line.notes || line.notesTranslated) && (
+                        <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+                          {line.notesTranslated || line.notes}
+                        </p>
+                      )}
+                      {priceChanged && (
+                        <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-300">
+                          <span className="line-through opacity-70">
+                            {formatOrderPrice(originalPrice)}
+                          </span>{" "}
+                          {formatOrderPrice(line.price)}
+                        </p>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-base font-bold tabular-nums">
+                      {formatOrderPrice(line.price * line.quantity)}
+                    </span>
+                  </button>
+                  {selected && onSaveExistingOrders && (
+                    <OrderLineToolbar
+                      layout="inline"
+                      translate={translate}
+                      qtyEditable={isManageTableLineEditable(line.status)}
+                      priceEditable={isManageTablePriceEditable(line.status)}
+                      priceActive={submittedPriceEditLineId === line.lineId}
+                      disabled={isSaving}
+                      onDismiss={dismissSubmittedLineSelection}
+                      onSpecialRequest={() => openSubmittedNoteModal(line)}
+                      onEditPrice={() =>
+                        requestPin(() =>
+                          setSubmittedPriceEditLineId((current) =>
+                            current === line.lineId ? null : line.lineId,
+                          ),
+                        )
+                      }
+                      onIncrease={() => adjustSubmittedQuantity(line.lineId, 1)}
+                      onDecrease={() => adjustSubmittedQuantity(line.lineId, -1)}
+                      onDelete={() => requestRemoveSubmittedLine(line)}
+                    />
+                  )}
+                  {submittedPriceEditLineId === line.lineId && (
+                    <div className="px-2 pb-2">
+                      <LinePriceEditor
+                        line={line}
+                        menuItems={menuItems}
+                        translate={translate}
+                        formatOrderPrice={formatOrderPrice}
+                        onApply={(mode, value) => applySubmittedPriceEdit(line.lineId, mode, value)}
+                        onReset={() => resetSubmittedLinePrice(line.lineId)}
+                        onCancel={() => setSubmittedPriceEditLineId(null)}
+                      />
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+
+            {cart.map((line) => {
+              const lineLabel = line.name.includes("·")
+                ? line.name
+                : cartLineDisplayName(line, menuItems, language);
+              const presetText = (line.specialRequestIds ?? [])
+                .map((id) => {
+                  const preset = notePresets.find((entry) => entry.id === id);
+                  return preset ? presetLabel(preset, language) : null;
+                })
+                .filter(Boolean)
+                .join(", ");
+              const noteTextParts = [presetText, line.note].filter(Boolean);
+              const noteText =
+                line.noteTranslated && noteTextParts.length > 0
+                  ? `${line.noteTranslated}${line.note ? ` · ${line.note}` : ""}`
+                  : noteTextParts.join(", ");
+
+              return (
+                <li key={line.lineId} className="px-2 py-3">
+                  <div className="flex items-start gap-2">
+                    <span className="mt-1 h-5 w-5 shrink-0" aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <button
+                        type="button"
+                        onClick={() => openNoteModal(line)}
+                        className="text-left text-base font-semibold leading-snug text-gray-900 hover:text-blue-600 dark:text-gray-100 dark:hover:text-blue-400"
+                      >
+                        {line.quantity}× {lineLabel}
+                      </button>
+                      {noteText && (
+                        <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{noteText}</p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1.5">
+                      <span className="text-base font-bold tabular-nums text-gray-900 dark:text-gray-100">
+                        {formatOrderPrice(line.price * line.quantity)}
+                      </span>
+                      <div className="inline-flex items-center overflow-hidden rounded-md border border-gray-200 dark:border-gray-600">
                         <button
                           type="button"
-                          onClick={() => openNoteModal(line)}
-                          className="cursor-pointer text-left text-sm font-semibold text-gray-900 hover:text-blue-600 dark:text-gray-100 dark:hover:text-blue-400"
+                          onClick={() => updateCartQty(line.lineId, -1)}
+                          className="flex h-8 w-8 items-center justify-center text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+                          aria-label={`Decrease ${lineLabel}`}
                         >
-                          {lineLabel}
+                          <Minus className="h-3.5 w-3.5" />
                         </button>
-                        {(noteTextParts.length > 0 || line.noteTranslated) && (
-                          <p className="mt-1 text-xs italic text-gray-500 dark:text-gray-400">
-                            {translate("specialRequests")}: {noteText}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
-                          {formatOrderPrice(line.price * line.quantity)}
+                        <span className="flex h-8 min-w-[1.75rem] items-center justify-center border-x border-gray-200 px-1 text-sm font-semibold tabular-nums dark:border-gray-600">
+                          {line.quantity}
                         </span>
-                        <div className="inline-flex items-center overflow-hidden rounded-lg border border-gray-200 dark:border-gray-600">
-                          <button
-                            type="button"
-                            onClick={() => updateCartQty(line.lineId, -1)}
-                            className="touch-target flex h-8 w-8 items-center justify-center text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
-                            aria-label={`Decrease ${lineLabel}`}
-                          >
-                            <Minus className="h-3.5 w-3.5" />
-                          </button>
-                          <span className="flex h-8 min-w-[2rem] items-center justify-center border-x border-gray-200 px-1 text-sm font-semibold tabular-nums dark:border-gray-600">
-                            {line.quantity}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => updateCartQty(line.lineId, 1)}
-                            className="touch-target flex h-8 w-8 items-center justify-center text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
-                            aria-label={`Increase ${lineLabel}`}
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => updateCartQty(line.lineId, 1)}
+                          className="flex h-8 w-8 items-center justify-center text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+                          aria-label={`Increase ${lineLabel}`}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
-      <div className="shrink-0 space-y-2 border-t border-gray-200 p-4 dark:border-gray-700">
-        <div className="mb-1 flex items-center justify-between">
-          <span className="text-sm text-gray-500 dark:text-gray-400">{translate("total")}</span>
-          <span className="text-xl font-bold text-gray-900 dark:text-gray-100">
+      <div className="shrink-0 border-t border-gray-200 p-3 dark:border-gray-700">
+        <div className="mb-3 flex items-center justify-between px-1">
+          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+            {translate("total")}
+          </span>
+          <span className="text-2xl font-bold tabular-nums text-gray-900 dark:text-gray-100">
             {formatOrderPrice(billTotal)}
           </span>
         </div>
-        {cart.length > 0 && (
-          <div className="space-y-1.5 rounded-xl border border-gray-200 px-3 py-2 dark:border-gray-700">
-            <label className="flex min-h-[40px] cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
-              <input
-                type="checkbox"
-                checked={sendSkipPrint}
-                onChange={(event) => setSendSkipPrint(event.target.checked)}
-                className="h-4 w-4 rounded border-gray-300"
-              />
-              {translate("sendSkipPrint")}
-            </label>
-            <label className="flex min-h-[40px] cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
-              <input
-                type="checkbox"
-                checked={sendHideOnKds}
-                onChange={(event) => setSendHideOnKds(event.target.checked)}
-                className="h-4 w-4 rounded border-gray-300"
-              />
-              {translate("sendHideOnKds")}
-            </label>
-          </div>
-        )}
-        <button
-          type="button"
-          disabled={cart.length === 0 || isSaving}
-          onClick={() => void handleSend()}
-          className="min-h-[48px] w-full rounded-xl bg-blue-600 py-3 text-base font-semibold text-white disabled:opacity-40"
-        >
-          {isSaving ? "..." : translate("sendToKitchen")}
-        </button>
-        {onCheckout && (
+
+        <div className="grid grid-cols-3 gap-2">
           <button
             type="button"
-            disabled={!canCheckout || isSaving}
-            onClick={() => void onCheckout(submittedOrdersRaw)}
-            className="min-h-[48px] w-full rounded-xl bg-emerald-600 py-3 text-base font-semibold text-white disabled:opacity-40"
+            disabled={!canSaveNoPrint}
+            onClick={() => void handleSaveNoPrint()}
+            className="min-h-[52px] rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm font-semibold text-gray-800 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
           >
-            {translate("checkout")}
+            {isSaving ? "…" : translate("saveNoPrint")}
           </button>
-        )}
-        {canCloseTable && (
           <button
             type="button"
-            disabled={isSaving}
-            onClick={() => void onCloseTable?.()}
-            className="min-h-[44px] w-full rounded-xl border border-gray-300 py-2.5 text-sm font-semibold text-gray-800 dark:border-gray-600 dark:text-gray-100"
+            disabled={!hasPendingSend || isSaving}
+            onClick={() => void handleSend()}
+            className="min-h-[52px] rounded-lg bg-blue-600 px-2 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {translate("closeTable")}
+            {isSaving ? "…" : translate("sendToKitchen")}
           </button>
-        )}
+          {onCheckout ? (
+            <button
+              type="button"
+              disabled={!canCheckout || isSaving}
+              onClick={() => void onCheckout(submittedOrdersRaw)}
+              className="min-h-[52px] rounded-lg bg-emerald-600 px-2 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {translate("payButton")}
+            </button>
+          ) : (
+            <span />
+          )}
+        </div>
       </div>
+
+      {table?.id && mode === "append" ? (
+        <TableActivityLogPanel
+          compact
+          tableId={table.id}
+          since={table.occupiedAt}
+          orderItemIds={orderItemIdsForLog}
+          itemNameByOrderId={itemNameByOrderId}
+        />
+      ) : null}
     </>
   );
 
@@ -1093,7 +1512,7 @@ export function NewOrderModal({
           className="absolute inset-0 bg-black/65"
         />
 
-        <div className="relative z-10 flex h-[100dvh] max-h-[100dvh] w-full max-w-6xl flex-col overflow-hidden rounded-none border border-gray-200 bg-white shadow-2xl sm:h-[min(94vh,920px)] sm:max-h-[min(94vh,920px)] sm:rounded-2xl dark:border-gray-700 dark:bg-gray-900">
+        <div className="relative z-10 flex h-[100dvh] max-h-[100dvh] w-full max-w-[1400px] flex-col overflow-hidden rounded-none border border-gray-200 bg-white shadow-2xl sm:h-[min(94vh,920px)] sm:max-h-[min(94vh,920px)] sm:rounded-2xl dark:border-gray-700 dark:bg-gray-900">
           <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700 sm:px-5 sm:py-4">
             <div>
               <h2
@@ -1128,7 +1547,16 @@ export function NewOrderModal({
             </div>
           </div>
 
-        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+        <div
+          className="relative flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row"
+          onClickCapture={(event) => {
+            if (!hasSubmittedChanges || discardConfirmOpen) return;
+            const panel = orderPanelRef.current;
+            if (!panel || panel.contains(event.target as Node)) return;
+            event.stopPropagation();
+            openUnsavedConfirm("outside");
+          }}
+        >
           <aside className="hidden w-36 shrink-0 flex-col border-r border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-950/50 md:flex sm:w-44 lg:w-52">
             <p className="px-3 py-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
               Categories
@@ -1154,7 +1582,7 @@ export function NewOrderModal({
             </nav>
           </aside>
 
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col md:max-w-[68%]">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:max-w-[58%]">
             <div className="shrink-0 border-b border-gray-200 md:hidden dark:border-gray-700">
               <div className="flex gap-2 overflow-x-auto px-3 py-2 no-scrollbar">
                 <button
@@ -1265,12 +1693,17 @@ export function NewOrderModal({
             </main>
           </div>
 
-          <aside className="hidden w-[32%] min-w-[280px] max-w-md shrink-0 flex-col border-l border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 md:flex md:min-h-0">
-            {renderCartPanel(false)}
+          <aside className="hidden w-[42%] min-w-[300px] max-w-xl shrink-0 flex-col border-l border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 md:flex md:min-h-0 lg:min-w-[340px]">
+            <div ref={orderPanelRef} className="flex min-h-0 flex-1 flex-col">
+              {renderCartPanel(false)}
+            </div>
           </aside>
 
           {cartOpen && (
-            <div className="fixed inset-0 z-40 flex min-h-0 flex-col bg-white dark:bg-gray-900 md:hidden">
+            <div
+              ref={orderPanelRef}
+              className="fixed inset-0 z-40 flex min-h-0 flex-col bg-white dark:bg-gray-900 md:hidden"
+            >
               {renderCartPanel(true)}
             </div>
           )}
@@ -1324,25 +1757,31 @@ export function NewOrderModal({
                   {translate("specialRequests")}
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {notePresets.map((preset) => {
-                    const active = notePresetIds.includes(preset.id);
-                    return (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        onClick={() =>
-                          setNotePresetIds((prev) => togglePresetId(prev, preset.id))
-                        }
-                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                          active
-                            ? "bg-emerald-600 text-white"
-                            : "border border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
-                        }`}
-                      >
-                        {presetLabel(preset, language)}
-                      </button>
-                    );
-                  })}
+                  {noteLinePresets.length === 0 ? (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {translate("noSpecialRequestsForItem")}
+                    </p>
+                  ) : (
+                    noteLinePresets.map((preset) => {
+                      const active = notePresetIds.includes(preset.id);
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() =>
+                            setNotePresetIds((prev) => togglePresetId(prev, preset.id))
+                          }
+                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                            active
+                              ? "bg-emerald-600 text-white"
+                              : "border border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                          }`}
+                        >
+                          {presetLabel(preset, language)}
+                        </button>
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
@@ -1391,6 +1830,92 @@ export function NewOrderModal({
           </Modal>
         </div>
       )}
+
+      {submittedNoteLine && (
+        <div className="relative z-[60]">
+          <Modal
+            open
+            onClose={closeSubmittedNoteModal}
+            title={translate("specialRequests")}
+            footer={
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={closeSubmittedNoteModal}
+                  className="min-h-[44px] flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold dark:border-gray-700"
+                >
+                  {translate("cancel")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSaveSubmittedNote()}
+                  className="min-h-[44px] flex-1 rounded-xl bg-gray-900 py-2.5 text-sm font-semibold text-white dark:bg-gray-100 dark:text-gray-900"
+                >
+                  {translate("saveNote")}
+                </button>
+              </div>
+            }
+          >
+            <div className="space-y-4">
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {orderItemDisplayName(submittedNoteLine, menuItems, language)}
+              </p>
+              <div>
+                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  {translate("specialRequests")}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {submittedNoteLinePresets.length === 0 ? (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {translate("noSpecialRequestsForItem")}
+                    </p>
+                  ) : (
+                    submittedNoteLinePresets.map((preset) => {
+                      const active = submittedNotePresetIds.includes(preset.id);
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() =>
+                            setSubmittedNotePresetIds((prev) => togglePresetId(prev, preset.id))
+                          }
+                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                            active
+                              ? "bg-emerald-600 text-white"
+                              : "border border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                          }`}
+                        >
+                          {presetLabel(preset, language)}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+              <label className="block">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {translate("internalNote")}
+                </span>
+                <textarea
+                  rows={3}
+                  value={submittedNoteDraft}
+                  onChange={(e) => setSubmittedNoteDraft(e.target.value)}
+                  placeholder={translate("notePlaceholder")}
+                  className="mt-2 min-h-[96px] w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-base text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                />
+              </label>
+            </div>
+          </Modal>
+        </div>
+      )}
+
+      <CancelReasonModal
+        open={submittedCancelTarget !== null}
+        itemCount={1}
+        translate={translate}
+        onClose={() => setSubmittedCancelTarget(null)}
+        onConfirm={handleSubmittedCancelConfirm}
+      />
 
       {customizeItem && (
         <ItemCustomizeModal
@@ -1588,29 +2113,46 @@ export function NewOrderModal({
           <div
             role="alertdialog"
             aria-modal="true"
-            aria-labelledby="discard-cart-title"
+            aria-labelledby="unsaved-changes-title"
             className="relative z-10 w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-700 dark:bg-gray-900"
           >
             <p
-              id="discard-cart-title"
+              id="unsaved-changes-title"
               className="text-sm leading-relaxed text-gray-800 dark:text-gray-100"
             >
-              {translate("discardCartTitle")}
+              {hasSubmittedChanges
+                ? translate("unsavedChangesTitle")
+                : translate("discardCartTitle")}
             </p>
-            <div className="mt-5 flex gap-2">
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+              {hasSubmittedChanges && (
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => void handleUnsavedSave()}
+                  className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+                >
+                  {translate("unsavedChangesSave")}
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => setDiscardConfirmOpen(false)}
+                onClick={() => {
+                  setDiscardConfirmOpen(false);
+                  setUnsavedConfirmMode(null);
+                }}
                 className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-800 dark:border-gray-700 dark:text-gray-100"
               >
                 {translate("discardStay")}
               </button>
               <button
                 type="button"
-                onClick={handleClose}
+                onClick={handleUnsavedDiscard}
                 className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white"
               >
-                {translate("discardLeave")}
+                {hasSubmittedChanges
+                  ? translate("unsavedChangesDiscard")
+                  : translate("discardLeave")}
               </button>
             </div>
           </div>

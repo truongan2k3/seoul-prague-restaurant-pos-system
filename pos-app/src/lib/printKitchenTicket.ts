@@ -1,12 +1,22 @@
 import { isGrillGuestPrepOrder } from "@/lib/grill-guest-count";
 import { aggregateDisplayItems } from "@/lib/order-item-aggregate";
 import { menuItemDisplayName, resolveMenuItemForOrder } from "@/lib/menu-display";
+import {
+  DEFAULT_KITCHEN_PRINT_LAYOUT,
+  layoutPx,
+  sortLayoutBlocks,
+  type KitchenPrintLayout,
+  type KitchenPrintLayoutElement,
+} from "@/lib/kitchen-print-layout";
+import { kitchenBitmapWeights, type KitchenBitmapWeight } from "@/lib/receipt-print-styles";
+import { shouldPrintKitchenOnSend } from "@/lib/kitchen-fulfillment-mode";
 import type {
   AppSettings,
   KitchenPrintFontSize,
   KitchenPrintLanguage,
   MenuItem,
   OrderItem,
+  ReceiptFontWeight,
 } from "@/lib/types";
 import { printReceiptHTML } from "@/src/lib/printReceipt";
 import {
@@ -142,7 +152,7 @@ function bmp(
   opts: {
     width: number;
     size: number;
-    weight?: 400 | 600 | 700;
+    weight?: KitchenBitmapWeight;
     align?: "left" | "center";
   },
   sink?: string[],
@@ -161,10 +171,14 @@ function bmp(
 export type KitchenPrintSettings = Pick<
   AppSettings,
   | "kitchenPrintEnabled"
+  | "kitchenFulfillmentMode"
   | "kitchenPrintPrimaryLang"
   | "kitchenPrintSecondaryLang"
   | "kitchenPrintOrderFontSize"
   | "kitchenPrintMessageFontSize"
+  | "kitchenPrintOrderFontWeight"
+  | "kitchenPrintMessageFontWeight"
+  | "kitchenPrintLayout"
   | "receiptFontSize"
   | "receiptFontWeight"
   | "receiptFontFamily"
@@ -235,6 +249,36 @@ function kitchenTicketCss(qtyPx: number): string {
     </style>`;
 }
 
+function drawLayoutLine(
+  draw: (
+    text: string,
+    opts: {
+      width: number;
+      size: number;
+      weight?: KitchenBitmapWeight;
+      align?: "left" | "center";
+    },
+  ) => string,
+  text: string,
+  element: KitchenPrintLayoutElement,
+  opts: {
+    width: number;
+    baseSize: number;
+    weight: KitchenBitmapWeight;
+    className?: string;
+  },
+): string {
+  if (!element.show || !text) return "";
+  const img = draw(text, {
+    width: opts.width,
+    size: layoutPx(opts.baseSize, element),
+    weight: opts.weight,
+    align: element.align,
+  });
+  if (!opts.className) return img;
+  return `<div class="${opts.className}">${img}</div>`;
+}
+
 export async function buildKitchenTicketHtml(input: {
   tableLabel: string;
   orders: OrderItem[];
@@ -242,17 +286,22 @@ export async function buildKitchenTicketHtml(input: {
   primaryLang: KitchenPrintLanguage;
   secondaryLang: KitchenPrintLanguage | "none";
   fontSize?: KitchenPrintFontSize;
+  fontWeight?: ReceiptFontWeight;
+  layout?: KitchenPrintLayout;
   stationLabel?: string;
 }): Promise<{ html: string; pngs: string[] }> {
   await ensureCjkPrintFont();
   const s = scaleFor(input.fontSize);
+  const weights = kitchenBitmapWeights(input.fontWeight ?? "bold");
+  const layout = input.layout ?? DEFAULT_KITCHEN_PRINT_LAYOUT;
+  const orderLayout = layout.orderTicket;
   const pngs: string[] = [];
   const draw = (
     text: string,
     opts: {
       width: number;
       size: number;
-      weight?: 400 | 600 | 700;
+      weight?: KitchenBitmapWeight;
       align?: "left" | "center";
     },
   ) => bmp(text, opts, pngs);
@@ -267,81 +316,105 @@ export async function buildKitchenTicketHtml(input: {
     minute: "2-digit",
   });
 
+  const headerBlocks = sortLayoutBlocks([
+    {
+      order: orderLayout.tableLabel.order,
+      html: drawLayoutLine(draw, `Table: ${input.tableLabel}`, orderLayout.tableLabel, {
+        width: FULL_WIDTH_PX,
+        baseSize: s.table,
+        weight: weights.primary,
+      }),
+    },
+    {
+      order: orderLayout.printedAt.order,
+      html: drawLayoutLine(draw, printedAt, orderLayout.printedAt, {
+        width: FULL_WIDTH_PX,
+        baseSize: s.meta,
+        weight: weights.secondary,
+      }),
+    },
+  ])
+    .map((block) => block.html)
+    .filter(Boolean)
+    .join('<div class="kitchen-meta-gap"></div>');
+
   // Kitchen order ticket is always ZH (large) + EN (small), per kitchen template.
   const itemBlocks = lines
     .map((item) => {
       const { primary, secondary } = dualItemNames(item, input.menuItems, "zh", "en");
       const { zh: noteZh, en: noteEn } = dualNotes(item);
 
-      const namePrimaryHtml = draw(`${item.quantity}× ${primary}`, {
-        width: FULL_WIDTH_PX,
-        size: s.namePrimary,
-        weight: 700,
-      });
-      const nameSecondaryHtml = secondary
-        ? `<div class="kitchen-name-secondary">${draw(secondary, {
-            width: NAME_WIDTH_PX,
-            size: s.nameSecondary,
-            weight: 600,
-          })}</div>`
-        : "";
+      const itemLines = sortLayoutBlocks([
+        {
+          order: orderLayout.itemNamePrimary.order,
+          html: drawLayoutLine(
+            draw,
+            `${item.quantity}× ${primary}`,
+            orderLayout.itemNamePrimary,
+            {
+              width: FULL_WIDTH_PX,
+              baseSize: s.namePrimary,
+              weight: weights.primary,
+            },
+          ),
+        },
+        {
+          order: orderLayout.itemNameSecondary.order,
+          html: secondary
+            ? drawLayoutLine(draw, secondary, orderLayout.itemNameSecondary, {
+                width: NAME_WIDTH_PX,
+                baseSize: s.nameSecondary,
+                weight: weights.secondary,
+                className: "kitchen-name-secondary",
+              })
+            : "",
+        },
+        {
+          order: orderLayout.itemNotePrimary.order,
+          html: noteZh
+            ? drawLayoutLine(draw, noteZh, orderLayout.itemNotePrimary, {
+                width: FULL_WIDTH_PX,
+                baseSize: s.namePrimary,
+                weight: weights.primary,
+                className: "kitchen-note kitchen-note-primary",
+              })
+            : "",
+        },
+        {
+          order: orderLayout.itemNoteSecondary.order,
+          html: noteEn
+            ? drawLayoutLine(draw, noteEn, orderLayout.itemNoteSecondary, {
+                width: FULL_WIDTH_PX,
+                baseSize: s.noteSecondary,
+                weight: weights.secondary,
+                className: "kitchen-note kitchen-note-secondary",
+              })
+            : "",
+        },
+      ])
+        .map((block) => block.html)
+        .filter(Boolean)
+        .join("");
 
-      const noteHtml =
-        noteZh || noteEn
-          ? `<div class="kitchen-note">
-              ${
-                noteZh
-                  ? `<div class="kitchen-note-primary">${draw(`※ ${noteZh}`, {
-                      width: FULL_WIDTH_PX,
-                      size: s.notePrimary,
-                      weight: 700,
-                    })}</div>`
-                  : ""
-              }
-              ${
-                noteEn
-                  ? `<div class="kitchen-note-secondary">${draw(noteEn, {
-                      width: FULL_WIDTH_PX,
-                      size: s.noteSecondary,
-                      weight: 600,
-                    })}</div>`
-                  : ""
-              }
-            </div>`
-          : "";
+      if (!itemLines) return "";
 
       return `
         <div class="kitchen-item">
           <div class="kitchen-name-col">
-            ${namePrimaryHtml}
-            ${nameSecondaryHtml}
+            ${itemLines}
           </div>
-          ${noteHtml}
         </div>`;
     })
+    .filter(Boolean)
     .join("");
 
   const html = `
     ${kitchenTicketCss(s.qty)}
     <div class="kitchen-ticket">
-      <div class="kitchen-header">
-        ${draw(`Table: ${input.tableLabel}`, {
-          width: FULL_WIDTH_PX,
-          size: s.table,
-          weight: 700,
-          align: "center",
-        })}
-        <div class="kitchen-meta-gap"></div>
-        ${draw(printedAt, {
-          width: FULL_WIDTH_PX,
-          size: s.meta,
-          weight: 600,
-          align: "center",
-        })}
-      </div>
+      ${headerBlocks ? `<div class="kitchen-header">${headerBlocks}</div>` : ""}
       ${
         itemBlocks ||
-        `<div class="kitchen-item">${draw("—", { width: FULL_WIDTH_PX, size: s.empty })}</div>`
+        `<div class="kitchen-item">${draw("—", { width: FULL_WIDTH_PX, size: s.empty, weight: weights.primary })}</div>`
       }
     </div>`;
 
@@ -353,16 +426,20 @@ export async function buildKitchenMessageHtml(input: {
   message: string;
   messageZh: string;
   fontSize?: KitchenPrintFontSize;
+  fontWeight?: ReceiptFontWeight;
+  layout?: KitchenPrintLayout;
 }): Promise<{ html: string; pngs: string[] }> {
   await ensureCjkPrintFont();
   const s = scaleFor(input.fontSize);
+  const weights = kitchenBitmapWeights(input.fontWeight ?? "bold");
+  const layout = (input.layout ?? DEFAULT_KITCHEN_PRINT_LAYOUT).messageTicket;
   const pngs: string[] = [];
   const draw = (
     text: string,
     opts: {
       width: number;
       size: number;
-      weight?: 400 | 600 | 700;
+      weight?: KitchenBitmapWeight;
       align?: "left" | "center";
     },
   ) => bmp(text, opts, pngs);
@@ -372,43 +449,63 @@ export async function buildKitchenMessageHtml(input: {
   const zh = input.messageZh.trim() || input.message.trim();
   const src = input.message.trim();
 
+  const headerBlocks = sortLayoutBlocks([
+    {
+      order: layout.tableLabel.order,
+      html: drawLayoutLine(draw, `TABLE ${input.tableLabel}`, layout.tableLabel, {
+        width: FULL_WIDTH_PX,
+        baseSize: s.table,
+        weight: weights.primary,
+      }),
+    },
+    {
+      order: layout.messageMeta.order,
+      html: drawLayoutLine(draw, `MESSAGE · ${time}`, layout.messageMeta, {
+        width: FULL_WIDTH_PX,
+        baseSize: s.meta,
+        weight: weights.secondary,
+      }),
+    },
+  ])
+    .map((block) => block.html)
+    .filter(Boolean)
+    .join('<div class="kitchen-meta-gap"></div>');
+
+  const bodyBlocks = sortLayoutBlocks([
+    {
+      order: layout.messageBody.order,
+      html: drawLayoutLine(draw, zh, layout.messageBody, {
+        width: FULL_WIDTH_PX - 20,
+        baseSize: s.message,
+        weight: weights.primary,
+      }),
+    },
+    {
+      order: layout.messageSource.order,
+      html:
+        src && src !== zh
+          ? drawLayoutLine(draw, src, layout.messageSource, {
+              width: FULL_WIDTH_PX - 20,
+              baseSize: s.messageSrc,
+              weight: weights.secondary,
+            })
+          : "",
+    },
+  ])
+    .map((block) => block.html)
+    .filter(Boolean)
+    .join('<div class="kitchen-meta-gap"></div>');
+
+  const footerHtml = layout.footer.show
+    ? `<div class="kitchen-footer">*** STAFF MESSAGE ***</div>`
+    : "";
+
   const html = `
     ${kitchenTicketCss(s.qty)}
     <div class="kitchen-ticket">
-      <div class="kitchen-header">
-        ${draw(`TABLE ${input.tableLabel}`, {
-          width: FULL_WIDTH_PX,
-          size: s.table,
-          weight: 700,
-          align: "center",
-        })}
-        <div class="kitchen-meta-gap"></div>
-        ${draw(`MESSAGE · ${time}`, {
-          width: FULL_WIDTH_PX,
-          size: s.meta,
-          weight: 600,
-          align: "center",
-        })}
-      </div>
-      <div class="kitchen-message-box">
-        ${draw(zh, {
-          width: FULL_WIDTH_PX - 20,
-          size: s.message,
-          weight: 700,
-          align: "center",
-        })}
-        ${
-          src && src !== zh
-            ? `<div class="kitchen-meta-gap"></div>${draw(src, {
-                width: FULL_WIDTH_PX - 20,
-                size: s.messageSrc,
-                weight: 600,
-                align: "center",
-              })}`
-            : ""
-        }
-      </div>
-      <div class="kitchen-footer">*** STAFF MESSAGE ***</div>
+      ${headerBlocks ? `<div class="kitchen-header">${headerBlocks}</div>` : ""}
+      ${bodyBlocks ? `<div class="kitchen-message-box">${bodyBlocks}</div>` : ""}
+      ${footerHtml}
     </div>`;
 
   return { html, pngs };
@@ -477,6 +574,8 @@ async function printStationTicket(input: {
     primaryLang: input.settings.kitchenPrintPrimaryLang,
     secondaryLang: input.settings.kitchenPrintSecondaryLang,
     fontSize: input.settings.kitchenPrintOrderFontSize,
+    fontWeight: input.settings.kitchenPrintOrderFontWeight,
+    layout: input.settings.kitchenPrintLayout,
     stationLabel: input.stationLabel,
   });
 
@@ -490,7 +589,7 @@ export async function printKitchenTicket(input: {
   settings: KitchenPrintSettings;
   stationLabel?: string;
 }): Promise<void> {
-  if (!input.settings.kitchenPrintEnabled || input.orders.length === 0) return;
+  if (!shouldPrintKitchenOnSend(input.settings) || input.orders.length === 0) return;
 
   const kitchenOrders = input.orders.filter(
     (order) => order.station !== "bar" && !order.skipPrint,
@@ -520,12 +619,14 @@ export async function printKitchenMessage(input: {
   messageZh: string;
   settings: KitchenPrintSettings;
 }): Promise<void> {
-  if (!input.settings.kitchenPrintEnabled) return;
+  if (!shouldPrintKitchenOnSend(input.settings)) return;
   const { html, pngs } = await buildKitchenMessageHtml({
     tableLabel: input.tableLabel,
     message: input.message,
     messageZh: input.messageZh,
     fontSize: input.settings.kitchenPrintMessageFontSize,
+    fontWeight: input.settings.kitchenPrintMessageFontWeight,
+    layout: input.settings.kitchenPrintLayout,
   });
   await dispatchKitchenPrint(input.settings, html, pngs, "kitchen-message");
 }

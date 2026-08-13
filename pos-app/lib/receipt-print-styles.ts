@@ -103,6 +103,30 @@ const WEIGHT_SCALE: Record<ReceiptFontWeight, Pick<ReceiptTypography, "bodyWeigh
   extrabold: { bodyWeight: 800, itemWeight: 800 },
 };
 
+export type KitchenBitmapWeight = 400 | 600 | 700;
+
+function capBitmapWeight(weight: number): KitchenBitmapWeight {
+  if (weight <= 450) return 400;
+  if (weight <= 650) return 600;
+  return 700;
+}
+
+/** Primary (large) and secondary (small) weights for kitchen ticket bitmap text. */
+export function kitchenBitmapWeights(
+  weight: ReceiptFontWeight,
+): { primary: KitchenBitmapWeight; secondary: KitchenBitmapWeight } {
+  const scale = WEIGHT_SCALE[weight] ?? WEIGHT_SCALE.bold;
+  const primary = capBitmapWeight(scale.itemWeight);
+  const rawSecondary =
+    scale.bodyWeight < scale.itemWeight
+      ? scale.bodyWeight
+      : Math.max(400, scale.itemWeight - 100);
+  return {
+    primary,
+    secondary: capBitmapWeight(rawSecondary),
+  };
+}
+
 const FONT_STACK: Record<ReceiptFontFamily, string> = Object.fromEntries(
   RECEIPT_FONT_OPTIONS.map((option) => [option.id, option.stack]),
 ) as Record<ReceiptFontFamily, string>;

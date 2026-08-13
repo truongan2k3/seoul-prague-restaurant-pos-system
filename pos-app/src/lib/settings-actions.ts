@@ -1,8 +1,10 @@
 import type {
   AppSettings,
+  CfdSlideshowItem,
   KitchenPrintFontSize,
   KitchenPrintLanguage,
   MenuItemLayout,
+  MenuSortMode,
   NetworkPrinter,
   PrinterRole,
   ReservationOperatingHours,
@@ -19,6 +21,12 @@ import {
   parseReceiptFontSize,
   parseReceiptFontWeight,
 } from "@/lib/receipt-print-styles";
+import { DEFAULT_KITCHEN_PRINT_LAYOUT, parseKitchenPrintLayout } from "@/lib/kitchen-print-layout";
+import { inferCfdMediaType } from "@/lib/cfd-slideshow";
+import {
+  parseKitchenFulfillmentMode,
+  type KitchenFulfillmentMode,
+} from "@/lib/kitchen-fulfillment-mode";
 import { supabase } from "@/src/lib/supabase";
 
 export function createDefaultPrinters(host = "192.168.1.200", port = "9100"): NetworkPrinter[] {
@@ -59,11 +67,15 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   printers: createDefaultPrinters(),
   autoPrintOnPayment: true,
   kitchenPrintEnabled: true,
+  kitchenFulfillmentMode: "both" as KitchenFulfillmentMode,
   kitchenPrintViaStation: true,
   kitchenPrintPrimaryLang: "zh",
   kitchenPrintSecondaryLang: "en",
   kitchenPrintOrderFontSize: "xlarge",
   kitchenPrintMessageFontSize: "xlarge",
+  kitchenPrintOrderFontWeight: "bold",
+  kitchenPrintMessageFontWeight: "bold",
+  kitchenPrintLayout: DEFAULT_KITCHEN_PRINT_LAYOUT,
   receiptHeaderTitle: "JIN CHENG",
   receiptLegalName: "JING DE INTER.TRADE, s.r.o.",
   receiptAddress: "Václavské nám. 819, 110 00 Praha",
@@ -88,6 +100,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   receiptFontFamily: "consolas",
   adminDeletionPassword: "1234",
   cfdAdVideoUrl: "",
+  cfdAdSlideshow: [],
+  menuCategorySortMode: "custom",
+  menuItemSortMode: "custom",
   cfdReviewUrl:
     "https://www.google.com/maps/search/?api=1&query=Seoul+Prague+Restaurant",
   cfdReviewQrImageUrl: "",
@@ -111,11 +126,15 @@ type SettingsRow = {
   printers?: NetworkPrinter[] | unknown | null;
   auto_print_on_payment: boolean;
   kitchen_print_enabled?: boolean | null;
+  kitchen_fulfillment_mode?: string | null;
   kitchen_print_via_station?: boolean | null;
   kitchen_print_primary_lang?: string | null;
   kitchen_print_secondary_lang?: string | null;
   kitchen_print_order_font_size?: string | null;
   kitchen_print_message_font_size?: string | null;
+  kitchen_print_order_font_weight?: string | null;
+  kitchen_print_message_font_weight?: string | null;
+  kitchen_print_layout?: unknown;
   receipt_header_title: string;
   receipt_legal_name?: string | null;
   receipt_address: string;
@@ -141,6 +160,9 @@ type SettingsRow = {
   receipt_font_family?: string | null;
   admin_deletion_password?: string | null;
   cfd_ad_video_url?: string | null;
+  cfd_ad_slideshow?: unknown;
+  menu_category_sort_mode?: string | null;
+  menu_item_sort_mode?: string | null;
   cfd_review_url?: string | null;
   cfd_review_qr_image_url?: string | null;
   marquee_enabled?: boolean | null;
@@ -247,6 +269,37 @@ function parseKitchenPrintFontSize(value: string | null | undefined): KitchenPri
   return DEFAULT_APP_SETTINGS.kitchenPrintOrderFontSize;
 }
 
+function parseMenuSortMode(value: string | null | undefined): MenuSortMode {
+  return value === "alphabetical" ? "alphabetical" : "custom";
+}
+
+function parseCfdSlideshow(value: unknown): CfdSlideshowItem[] {
+  if (!Array.isArray(value)) return [];
+  const items: CfdSlideshowItem[] = [];
+  for (const row of value) {
+    if (!row || typeof row !== "object") continue;
+    const record = row as Record<string, unknown>;
+    const url = typeof record.url === "string" ? record.url.trim() : "";
+    if (!url) continue;
+    const id =
+      typeof record.id === "string" && record.id.trim()
+        ? record.id.trim()
+        : `slide-${items.length}-${Date.now()}`;
+    const rawType = record.type;
+    const type =
+      rawType === "image" || rawType === "video" || rawType === "gif"
+        ? rawType
+        : inferCfdMediaType(url);
+    const durationRaw = record.durationSeconds;
+    const durationSeconds =
+      typeof durationRaw === "number" && Number.isFinite(durationRaw) && durationRaw > 0
+        ? durationRaw
+        : undefined;
+    items.push({ id, url, type, durationSeconds });
+  }
+  return items;
+}
+
 function mapSettingsRow(row: SettingsRow): AppSettings {
   const printerIp = row.printer_ip || DEFAULT_APP_SETTINGS.printerIp;
   const printerPort = row.printer_port || DEFAULT_APP_SETTINGS.printerPort;
@@ -260,6 +313,7 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     printers: parsePrinters(row.printers, printerIp, printerPort),
     autoPrintOnPayment: row.auto_print_on_payment,
     kitchenPrintEnabled: row.kitchen_print_enabled ?? DEFAULT_APP_SETTINGS.kitchenPrintEnabled,
+    kitchenFulfillmentMode: parseKitchenFulfillmentMode(row.kitchen_fulfillment_mode),
     kitchenPrintViaStation:
       row.kitchen_print_via_station ?? DEFAULT_APP_SETTINGS.kitchenPrintViaStation,
     kitchenPrintPrimaryLang: parseKitchenPrintPrimary(row.kitchen_print_primary_lang),
@@ -268,6 +322,11 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     kitchenPrintMessageFontSize: parseKitchenPrintFontSize(
       row.kitchen_print_message_font_size ?? row.kitchen_print_order_font_size,
     ),
+    kitchenPrintOrderFontWeight: parseReceiptFontWeight(row.kitchen_print_order_font_weight),
+    kitchenPrintMessageFontWeight: parseReceiptFontWeight(
+      row.kitchen_print_message_font_weight ?? row.kitchen_print_order_font_weight,
+    ),
+    kitchenPrintLayout: parseKitchenPrintLayout(row.kitchen_print_layout),
     receiptHeaderTitle: row.receipt_header_title,
     receiptLegalName: row.receipt_legal_name ?? DEFAULT_APP_SETTINGS.receiptLegalName,
     receiptAddress: row.receipt_address,
@@ -294,6 +353,9 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     receiptFontFamily: parseReceiptFontFamily(row.receipt_font_family),
     adminDeletionPassword: row.admin_deletion_password ?? DEFAULT_APP_SETTINGS.adminDeletionPassword,
     cfdAdVideoUrl: row.cfd_ad_video_url ?? DEFAULT_APP_SETTINGS.cfdAdVideoUrl,
+    cfdAdSlideshow: parseCfdSlideshow(row.cfd_ad_slideshow),
+    menuCategorySortMode: parseMenuSortMode(row.menu_category_sort_mode),
+    menuItemSortMode: parseMenuSortMode(row.menu_item_sort_mode),
     cfdReviewUrl: row.cfd_review_url ?? DEFAULT_APP_SETTINGS.cfdReviewUrl,
     cfdReviewQrImageUrl: row.cfd_review_qr_image_url ?? DEFAULT_APP_SETTINGS.cfdReviewQrImageUrl,
     marqueeEnabled: row.marquee_enabled ?? DEFAULT_APP_SETTINGS.marqueeEnabled,
@@ -324,6 +386,9 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   if (partial.printers !== undefined) payload.printers = partial.printers;
   if (partial.autoPrintOnPayment !== undefined) payload.auto_print_on_payment = partial.autoPrintOnPayment;
   if (partial.kitchenPrintEnabled !== undefined) payload.kitchen_print_enabled = partial.kitchenPrintEnabled;
+  if (partial.kitchenFulfillmentMode !== undefined) {
+    payload.kitchen_fulfillment_mode = partial.kitchenFulfillmentMode;
+  }
   if (partial.kitchenPrintViaStation !== undefined) {
     payload.kitchen_print_via_station = partial.kitchenPrintViaStation;
   }
@@ -338,6 +403,15 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   }
   if (partial.kitchenPrintMessageFontSize !== undefined) {
     payload.kitchen_print_message_font_size = partial.kitchenPrintMessageFontSize;
+  }
+  if (partial.kitchenPrintOrderFontWeight !== undefined) {
+    payload.kitchen_print_order_font_weight = partial.kitchenPrintOrderFontWeight;
+  }
+  if (partial.kitchenPrintMessageFontWeight !== undefined) {
+    payload.kitchen_print_message_font_weight = partial.kitchenPrintMessageFontWeight;
+  }
+  if (partial.kitchenPrintLayout !== undefined) {
+    payload.kitchen_print_layout = partial.kitchenPrintLayout;
   }
   if (partial.receiptHeaderTitle !== undefined) payload.receipt_header_title = partial.receiptHeaderTitle;
   if (partial.receiptLegalName !== undefined) payload.receipt_legal_name = partial.receiptLegalName;
@@ -376,6 +450,11 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
     payload.admin_deletion_password = partial.adminDeletionPassword;
   }
   if (partial.cfdAdVideoUrl !== undefined) payload.cfd_ad_video_url = partial.cfdAdVideoUrl;
+  if (partial.cfdAdSlideshow !== undefined) payload.cfd_ad_slideshow = partial.cfdAdSlideshow;
+  if (partial.menuCategorySortMode !== undefined) {
+    payload.menu_category_sort_mode = partial.menuCategorySortMode;
+  }
+  if (partial.menuItemSortMode !== undefined) payload.menu_item_sort_mode = partial.menuItemSortMode;
   if (partial.cfdReviewUrl !== undefined) payload.cfd_review_url = partial.cfdReviewUrl;
   if (partial.cfdReviewQrImageUrl !== undefined) {
     payload.cfd_review_qr_image_url = partial.cfdReviewQrImageUrl;
@@ -505,6 +584,18 @@ export async function uploadCfdReviewQrImage(file: File, businessId?: string | n
   return updateAppSettings({ cfdReviewQrImageUrl: url }, businessId);
 }
 
+export async function uploadCfdSlideshowMedia(file: File) {
+  return uploadCfdMediaFile(file, "cfd-slide", [
+    "mp4",
+    "webm",
+    "gif",
+    "png",
+    "jpg",
+    "jpeg",
+    "webp",
+  ]);
+}
+
 export function subscribeToSettingsChanges(onChange: () => void) {
   // Unique channel per subscription — avoids Strict Mode / HMR reusing a subscribed channel.
   const channelName = `settings-realtime-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -537,11 +628,15 @@ export type PrinterBillSettingsDraft = Pick<
   | "printers"
   | "autoPrintOnPayment"
   | "kitchenPrintEnabled"
+  | "kitchenFulfillmentMode"
   | "kitchenPrintViaStation"
   | "kitchenPrintPrimaryLang"
   | "kitchenPrintSecondaryLang"
   | "kitchenPrintOrderFontSize"
   | "kitchenPrintMessageFontSize"
+  | "kitchenPrintOrderFontWeight"
+  | "kitchenPrintMessageFontWeight"
+  | "kitchenPrintLayout"
   | "receiptHeaderTitle"
   | "receiptLegalName"
   | "receiptAddress"
@@ -590,11 +685,15 @@ export function pickPrinterBillDraft(settings: AppSettings): PrinterBillSettings
     printers: settings.printers,
     autoPrintOnPayment: settings.autoPrintOnPayment,
     kitchenPrintEnabled: settings.kitchenPrintEnabled,
+    kitchenFulfillmentMode: settings.kitchenFulfillmentMode,
     kitchenPrintViaStation: settings.kitchenPrintViaStation,
     kitchenPrintPrimaryLang: settings.kitchenPrintPrimaryLang,
     kitchenPrintSecondaryLang: settings.kitchenPrintSecondaryLang,
     kitchenPrintOrderFontSize: settings.kitchenPrintOrderFontSize,
     kitchenPrintMessageFontSize: settings.kitchenPrintMessageFontSize,
+    kitchenPrintOrderFontWeight: settings.kitchenPrintOrderFontWeight,
+    kitchenPrintMessageFontWeight: settings.kitchenPrintMessageFontWeight,
+    kitchenPrintLayout: settings.kitchenPrintLayout,
     receiptHeaderTitle: settings.receiptHeaderTitle,
     receiptLegalName: settings.receiptLegalName,
     receiptAddress: settings.receiptAddress,

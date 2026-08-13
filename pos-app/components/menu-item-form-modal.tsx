@@ -6,13 +6,25 @@ import { Modal } from "@/components/modal";
 import { useApp } from "@/contexts/app-context";
 import { DEFAULT_MENU_CATEGORY } from "@/lib/menu-categories";
 import { resolveStation } from "@/lib/order-routing";
-import type { MenuCategoryRecord, MenuItem, Station } from "@/lib/types";
+import {
+  menuItemInputFromRoute,
+  menuItemRouteFromItem,
+  type MenuItemRoute,
+} from "@/lib/menu-item-dispatch";
+import type {
+  MenuCategoryRecord,
+  MenuItem,
+  NotePreset,
+  OptionGroupLibraryEntry,
+} from "@/lib/types";
 import { emptyMenuItemInput, type MenuItemInput } from "@/src/lib/menu-actions";
 
 interface MenuItemFormModalProps {
   open: boolean;
   item?: MenuItem | null;
   categories: MenuCategoryRecord[];
+  libraryGroups?: OptionGroupLibraryEntry[];
+  notePresets?: NotePreset[];
   onClose: () => void;
   onSave: (input: MenuItemInput) => Promise<void>;
   isSaving?: boolean;
@@ -22,6 +34,8 @@ export function MenuItemFormModal({
   open,
   item,
   categories,
+  libraryGroups = [],
+  notePresets = [],
   onClose,
   onSave,
   isSaving = false,
@@ -49,6 +63,7 @@ export function MenuItemFormModal({
         sortOrder: item.sortOrder,
         station: item.station,
         itemType: item.itemType,
+        billOnly: item.billOnly ?? false,
         customizationConfig: item.customizationConfig,
       });
     } else {
@@ -97,7 +112,10 @@ export function MenuItemFormModal({
     null;
 
   const defaultStation = resolveStation(form.category, form.itemType);
-  const selectedStation: Station = form.station ?? defaultStation;
+  const selectedRoute: MenuItemRoute = menuItemRouteFromItem({
+    billOnly: form.billOnly,
+    station: form.station ?? defaultStation,
+  });
 
   return (
     <Modal
@@ -184,13 +202,26 @@ export function MenuItemFormModal({
                   const category = categories.find((entry) => entry.id === e.target.value);
                   if (!category) return;
                   const itemType = category.type === "drink" ? "drink" : "food";
-                  setForm((f) => ({
-                    ...f,
-                    categoryId: category.id,
-                    category: category.name,
-                    itemType,
-                    station: resolveStation(category.name, itemType),
-                  }));
+                  setForm((f) => {
+                    if (f.billOnly) {
+                      return {
+                        ...f,
+                        categoryId: category.id,
+                        category: category.name,
+                        itemType,
+                      };
+                    }
+                    const routing = menuItemInputFromRoute(
+                      resolveStation(category.name, itemType) === "bar" ? "bar" : "kitchen",
+                    );
+                    return {
+                      ...f,
+                      categoryId: category.id,
+                      category: category.name,
+                      itemType,
+                      ...routing,
+                    };
+                  });
                 }}
                 className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
               >
@@ -258,15 +289,22 @@ export function MenuItemFormModal({
                 {translate("menuItemRoute")}
               </span>
               <select
-                value={selectedStation}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, station: e.target.value as Station }))
-                }
+                value={selectedRoute}
+                onChange={(e) => {
+                  const routing = menuItemInputFromRoute(e.target.value as MenuItemRoute);
+                  setForm((f) => ({ ...f, ...routing }));
+                }}
                 className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
               >
                 <option value="kitchen">{translate("menuItemRouteKitchen")}</option>
                 <option value="bar">{translate("menuItemRouteBar")}</option>
+                <option value="none">{translate("menuItemRouteNone")}</option>
               </select>
+              <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                {translate(
+                  selectedRoute === "none" ? "menuItemRouteNoneHint" : "menuItemRouteHint",
+                )}
+              </p>
             </label>
           </div>
         </section>
@@ -277,6 +315,8 @@ export function MenuItemFormModal({
           </p>
           <MenuCustomizationEditor
             value={form.customizationConfig}
+            libraryGroups={libraryGroups}
+            notePresets={notePresets}
             onChange={(customizationConfig) =>
               setForm((current) => ({ ...current, customizationConfig }))
             }

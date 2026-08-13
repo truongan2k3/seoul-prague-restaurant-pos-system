@@ -30,6 +30,7 @@ const emptyForm = (): StaffInput => ({
   pin: "",
   active: true,
   allowedNav: defaultNavTabsForRole("server"),
+  requirePinForActions: false,
 });
 
 interface StaffFormModalProps {
@@ -73,6 +74,7 @@ export function StaffFormModal({
         allowedNav: member.allowedNav?.length
           ? [...member.allowedNav]
           : defaultNavTabsForRole(member.role),
+        requirePinForActions: member.requirePinForActions ?? false,
       });
     } else {
       setForm(emptyForm());
@@ -185,6 +187,9 @@ export function StaffFormModal({
 
         <label className="block">
           <span className="pos-label">{translate("staffPin")}</span>
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+            {translate("staffPinApproverHint")}
+          </p>
           <input
             type="password"
             inputMode="numeric"
@@ -212,6 +217,29 @@ export function StaffFormModal({
 
         <div className="rounded-lg border border-gray-200 px-3 py-3 dark:border-gray-600">
           <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            {translate("staffPermissions")}
+          </p>
+
+          <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-lg border border-gray-100 px-3 py-3 dark:border-gray-700">
+            <input
+              type="checkbox"
+              checked={form.requirePinForActions}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, requirePinForActions: e.target.checked }))
+              }
+              className="mt-0.5 h-4 w-4 rounded border-gray-300"
+            />
+            <span>
+              <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                {translate("staffRequirePinForActions")}
+              </span>
+              <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+                {translate("staffRequirePinForActionsHint")}
+              </span>
+            </span>
+          </label>
+
+          <p className="mt-4 text-sm font-medium text-gray-900 dark:text-gray-100">
             {translate("staffAllowedTabs")}
           </p>
           <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">

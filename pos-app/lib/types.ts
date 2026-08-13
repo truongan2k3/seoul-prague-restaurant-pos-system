@@ -1,4 +1,6 @@
 import type { MenuCategory } from "@/lib/menu-categories";
+import type { KitchenPrintLayout } from "@/lib/kitchen-print-layout";
+import type { KitchenFulfillmentMode } from "@/lib/kitchen-fulfillment-mode";
 
 export type TableStatus = "empty" | "waiting" | "ready";
 export type TableShape = "square" | "round";
@@ -50,6 +52,18 @@ export type ReceiptFontFamily =
 /** Menu picker tile layout on order screen. */
 export type MenuItemLayout = "vertical" | "horizontal";
 
+export type MenuSortMode = "custom" | "alphabetical";
+
+export type CfdSlideshowMediaType = "image" | "video" | "gif";
+
+export interface CfdSlideshowItem {
+  id: string;
+  url: string;
+  type: CfdSlideshowMediaType;
+  /** Still images default to 12s when omitted */
+  durationSeconds?: number;
+}
+
 /** Roles a network thermal printer can serve. */
 export type PrinterRole = "receipt" | "kitchen" | "kitchen-message" | "bar";
 
@@ -76,6 +90,15 @@ export type KitchenPrintLanguage = "zh" | "en" | "cs";
 /** Bitmap text size for kitchen order / message tickets (Large = minimum). */
 export type KitchenPrintFontSize = "large" | "xlarge" | "xxlarge";
 
+export type {
+  KitchenPrintLayout,
+  KitchenPrintLayoutAlign,
+  KitchenPrintLayoutElement,
+  KitchenPrintLayoutSizeScale,
+  KitchenPrintMessageTicketLayout,
+  KitchenPrintOrderTicketLayout,
+} from "@/lib/kitchen-print-layout";
+
 export interface AppSettings {
   printerIp: string;
   printerPort: string;
@@ -91,6 +114,11 @@ export interface AppSettings {
   /** Print kitchen ticket when staff sends order. */
   kitchenPrintEnabled: boolean;
   /**
+   * Kitchen output mode: KDS/bar screen, paper tickets only, or both.
+   * Paper-only skips KDS/bar and marks sent items done immediately.
+   */
+  kitchenFulfillmentMode: KitchenFulfillmentMode;
+  /**
    * When true, phones/tablets do not print; keep `/print-station` open on the
    * Windows PC so it prints via the local bridge (127.0.0.1).
    */
@@ -103,6 +131,12 @@ export interface AppSettings {
   kitchenPrintOrderFontSize: KitchenPrintFontSize;
   /** Message body size on kitchen staff-message tickets. */
   kitchenPrintMessageFontSize: KitchenPrintFontSize;
+  /** Ink density / boldness for kitchen order ticket bitmap text. */
+  kitchenPrintOrderFontWeight: ReceiptFontWeight;
+  /** Ink density / boldness for kitchen message ticket bitmap text. */
+  kitchenPrintMessageFontWeight: ReceiptFontWeight;
+  /** Per-element layout for kitchen order and message tickets (JSON). */
+  kitchenPrintLayout: KitchenPrintLayout;
   receiptHeaderTitle: string;
   receiptLegalName: string;
   receiptAddress: string;
@@ -127,8 +161,14 @@ export interface AppSettings {
   receiptFontWeight: ReceiptFontWeight;
   receiptFontFamily: ReceiptFontFamily;
   adminDeletionPassword: string;
-  /** Looping ad video on /client after thank-you (public URL) */
+  /** Looping ad video on /client after thank-you (public URL) — legacy single file */
   cfdAdVideoUrl: string;
+  /** Ordered idle slideshow on customer display (videos, GIFs, images) */
+  cfdAdSlideshow: CfdSlideshowItem[];
+  /** Category tabs on order screen: custom drag order or A–Z */
+  menuCategorySortMode: MenuSortMode;
+  /** Menu items within a category: custom drag order or A–Z */
+  menuItemSortMode: MenuSortMode;
   /** Link encoded in review QR when no custom QR image is set */
   cfdReviewUrl: string;
   /** Optional uploaded QR image override */
@@ -171,20 +211,41 @@ export interface MenuOptionGroup {
   nameCz: string;
   nameZh?: string;
   required?: boolean;
+  /** Allow selecting multiple options in the group (future; order UI is single-select today). */
+  multi?: boolean;
   options: MenuOptionChoice[];
 }
 
-export interface MenuFreeAddOn {
+/** Global reusable option group (Settings → Menu catalog). */
+export interface OptionGroupLibraryEntry {
+  id: string;
   nameEn: string;
   nameCz: string;
   nameZh: string;
-  onRequest?: boolean;
+  required: boolean;
+  multi: boolean;
+  options: MenuOptionChoice[];
+  displayOrder: number;
+  active: boolean;
 }
 
 export interface MenuCustomizationConfig {
   basePriceFromOptions?: boolean;
+  /**
+   * Inline / legacy groups embedded on the item.
+   * After library resolve, also includes groups copied from optionGroupLibraryIds.
+   */
   optionGroups?: MenuOptionGroup[];
-  freeAddOn?: MenuFreeAddOn;
+  /**
+   * References into option_group_library. Resolved into optionGroups at menu load
+   * so order / print / customize keep using embedded config.
+   */
+  optionGroupLibraryIds?: string[];
+  /**
+   * Which note_presets apply when adding notes to this item.
+   * undefined = all presets (legacy); [] = none; otherwise filter.
+   */
+  allowedSpecialRequestIds?: string[];
 }
 
 export interface SelectedMenuOption {
@@ -199,7 +260,6 @@ export interface SelectedMenuOption {
 
 export interface OrderLineModifiers {
   selectedOptions?: SelectedMenuOption[];
-  freeAddOnSelected?: boolean;
   specialRequestIds?: string[];
 }
 
@@ -307,6 +367,8 @@ export interface MenuItem {
   station: Station;
   itemType: "food" | "drink";
   sortOrder: number;
+  /** Bill only — no kitchen, bar, or print when ordered. */
+  billOnly?: boolean;
   customizationConfig?: MenuCustomizationConfig;
 }
 
@@ -320,6 +382,8 @@ export interface StaffMember {
    * Custom POS tabs this member may see. When empty/undefined, role defaults apply.
    */
   allowedNav?: NavId[];
+  /** When true, sensitive actions prompt for a manager PIN. Default: off. */
+  requirePinForActions?: boolean;
 }
 
 export type VisitSource = "reservation" | "walk_in";
@@ -398,5 +462,20 @@ export interface OrderLogEntry {
   orderId: string;
   action: string;
   staffName: string;
+  createdAt: Date;
+  /** Denormalized for display (table activity snapshot) */
+  itemName?: string;
+  meta?: Record<string, unknown>;
+}
+
+export interface TableActivityLogEntry {
+  id: string;
+  tableId?: string;
+  tableLabel?: string;
+  orderItemId?: string;
+  itemName?: string;
+  action: string;
+  staffName: string;
+  meta?: Record<string, unknown>;
   createdAt: Date;
 }

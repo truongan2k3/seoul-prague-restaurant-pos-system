@@ -1,4 +1,4 @@
-import type { LanguageCode, NotePreset } from "@/lib/types";
+import type { LanguageCode, MenuItem, NotePreset } from "@/lib/types";
 import { translateNoteToChinese } from "@/src/lib/translator";
 
 export function presetLabel(preset: NotePreset, language: LanguageCode): string {
@@ -58,4 +58,18 @@ export function togglePresetId(selectedIds: string[], presetId: string): string[
   return selectedIds.includes(presetId)
     ? selectedIds.filter((id) => id !== presetId)
     : [...selectedIds, presetId];
+}
+
+/**
+ * Filter note presets for a menu item.
+ * undefined allowedSpecialRequestIds = all presets (legacy default).
+ */
+export function presetsForMenuItem(
+  presets: NotePreset[],
+  item: Pick<MenuItem, "customizationConfig"> | null | undefined,
+): NotePreset[] {
+  const allowed = item?.customizationConfig?.allowedSpecialRequestIds;
+  if (allowed == null) return presets;
+  const allowedSet = new Set(allowed);
+  return presets.filter((preset) => allowedSet.has(preset.id));
 }

@@ -11,7 +11,7 @@ import {
 } from "react";
 import { t, type TranslationKey } from "@/lib/i18n/translations";
 import { DEFAULT_EUR_RATE, DEFAULT_USD_RATE } from "@/lib/currency";
-import { canManageStaff, roleRequiresPin } from "@/lib/staff-roles";
+import { canManageStaff, roleCanApproveWithPin } from "@/lib/staff-roles";
 import type { LanguageCode, StaffMember, ThemeMode } from "@/lib/types";
 import { fetchStaff, mapStaffResponse } from "@/src/lib/supabase-data";
 
@@ -212,7 +212,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (pin: string) =>
       staffList.some(
         (member) =>
-          roleRequiresPin(member.role) && member.active && member.pin === pin,
+          roleCanApproveWithPin(member.role) && member.active && member.pin === pin,
       ),
     [staffList],
   );

@@ -15,6 +15,7 @@ import {
 import { completeReservationForTable, findActiveReservationForTable, mapReservationRow } from "@/src/lib/reservation-actions";
 import { mapOrderItemRow, type SupabaseOrderItemRow } from "@/src/lib/supabase-data";
 import { supabase } from "@/src/lib/supabase";
+import { inferServiceChannel } from "@/lib/tax-summary";
 
 function aggregateOrderItems(items: OrderItem[]): OrderItem[] {
   const merged: OrderItem[] = [];
@@ -178,6 +179,42 @@ async function logAggregatedItemsActivity(
     });
     if (error) {
       console.warn("[TableActivityLog] Failed to write entry:", error.message);
+    }
+  }
+}
+
+async function logCancelledItemsActivity(
+  tableId: string,
+  cancelledRows: Array<{ id: string; name: string }>,
+  staff: { staffId?: string; staffName?: string },
+  tableLabel?: string,
+  reason = "Removed from order",
+) {
+  const actor = staff.staffName?.trim();
+  if (!actor || cancelledRows.length === 0) return;
+
+  const byName = new Map<string, { ids: string[]; count: number }>();
+  for (const row of cancelledRows) {
+    const entry = byName.get(row.name) ?? { ids: [], count: 0 };
+    entry.ids.push(row.id);
+    entry.count += 1;
+    byName.set(row.name, entry);
+  }
+
+  for (const [name, { ids, count }] of byName) {
+    const label = count > 1 ? `${count}× ${name}` : name;
+    const { error } = await logTableActivity({
+      tableId,
+      tableLabel,
+      orderItemId: ids[0],
+      itemName: label,
+      action: "cancel_item",
+      staffId: staff.staffId,
+      staffName: actor,
+      meta: { reason, quantity: count, unitIds: ids },
+    });
+    if (error) {
+      console.warn("[TableActivityLog] Failed to write cancel entry:", error.message);
     }
   }
 }
@@ -379,6 +416,24 @@ export async function updateTableOrders(
         })
         .in("id", openIds);
       if (cancelError) return { data: null, error: cancelError };
+
+      if (options?.staffName) {
+        const cancelledRows = (existingRows ?? [])
+          .filter(
+            (row) =>
+              openIds.includes(row.id) &&
+              !row.is_cancelled &&
+              row.kitchen_status !== "cancelled" &&
+              row.kitchen_status !== "archived",
+          )
+          .map((row) => ({ id: row.id, name: String(row.name) }));
+        await logCancelledItemsActivity(
+          tableId,
+          cancelledRows,
+          staff,
+          options.tableLabel,
+        );
+      }
     }
 
     await syncTableOrdersFromDb(tableId);
@@ -408,6 +463,24 @@ export async function updateTableOrders(
       .eq("is_cancelled", false)
       .neq("kitchen_status", "archived");
     if (cancelError) return { data: null, error: cancelError };
+
+    if (options?.staffName) {
+      const cancelledRows = (existingRows ?? [])
+        .filter(
+          (row) =>
+            idsToCancel.includes(row.id) &&
+            !row.is_cancelled &&
+            row.kitchen_status !== "cancelled" &&
+            row.kitchen_status !== "archived",
+        )
+        .map((row) => ({ id: row.id, name: String(row.name) }));
+      await logCancelledItemsActivity(
+        tableId,
+        cancelledRows,
+        staff,
+        options.tableLabel,
+      );
+    }
   }
 
   for (const unit of desiredUnits) {
@@ -670,6 +743,7 @@ export async function checkoutTable(
     guest_phone: activeReservation?.guestPhone ?? null,
     party_size: activeReservation?.partySize ?? null,
     visit_source: activeReservation?.source ?? null,
+    service_channel: inferServiceChannel(tableLabel),
     activity_log: activityLog,
   });
 
@@ -969,7 +1043,16 @@ export async function cancelOrderItems(
   tableId: string,
   reason: string,
   staffName: string,
+  options?: { tableLabel?: string; staffId?: string },
 ) {
+  if (itemIds.length === 0) return { error: null };
+
+  const { data: rowsToCancel, error: fetchError } = await supabase
+    .from("order_items")
+    .select("id, name")
+    .in("id", itemIds);
+  if (fetchError) return { error: fetchError };
+
   const cancelledAt = new Date().toISOString();
   for (const itemId of itemIds) {
     await logOrderStatusChange(itemId, `cancelled: ${reason}`, staffName);
@@ -985,6 +1068,14 @@ export async function cancelOrderItems(
       .eq("id", itemId);
     if (error) return { error };
   }
+
+  await logCancelledItemsActivity(
+    tableId,
+    (rowsToCancel ?? []).map((row) => ({ id: row.id, name: String(row.name) })),
+    { staffId: options?.staffId, staffName },
+    options?.tableLabel,
+    reason,
+  );
 
   await syncTableOrdersFromDb(tableId);
   return { error: null };

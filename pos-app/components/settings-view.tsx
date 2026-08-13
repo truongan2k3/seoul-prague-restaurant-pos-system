@@ -19,12 +19,7 @@ import {
 } from "@/src/lib/settings-actions";
 import { WEEKDAY_KEYS } from "@/lib/reservation-slots";
 import { RECEIPT_FONT_OPTIONS } from "@/lib/receipt-print-styles";
-import {
-  fromDatetimeLocalValue,
-  MARQUEE_SPEED_MAX,
-  MARQUEE_SPEED_MIN,
-  toDatetimeLocalValue,
-} from "@/lib/marquee-settings";
+import { MarqueeSettingsEditor } from "@/components/marquee-settings-editor";
 import type { TranslationKey } from "@/lib/i18n/translations";
 import { pingPrintBridge } from "@/src/lib/print-bridge-client";
 import type { NetworkPrinter, PrinterRole, ReceiptFontFamily, WeekdayKey } from "@/lib/types";
@@ -566,7 +561,12 @@ export function SettingsView({
             </div>
 
             <label className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
-              <span className="text-sm text-gray-800 dark:text-gray-200">{translate("settingsAutoPrint")}</span>
+              <div>
+                <span className="text-sm text-gray-800 dark:text-gray-200">{translate("settingsAutoPrint")}</span>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {translate("settingsAutoPrintHint")}
+                </p>
+              </div>
               <input
                 type="checkbox"
                 checked={draft.autoPrintOnPayment}
@@ -1082,144 +1082,11 @@ export function SettingsView({
               {translate("settingsMarqueeHint")}
             </p>
 
-            <div className="mt-4 space-y-3">
-              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
-                <span className="text-sm text-gray-800 dark:text-gray-200">
-                  {translate("settingsMarqueeEnabled")}
-                </span>
-                <input
-                  type="checkbox"
-                  checked={draft.marqueeEnabled}
-                  onChange={(event) => updateDraft("marqueeEnabled", event.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300"
-                />
-              </label>
-
-              <div className="rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
-                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
-                  {translate("settingsMarqueeSurfaces")}
-                </p>
-                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                  {translate("settingsMarqueeSurfacesHint")}
-                </p>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {(
-                    [
-                      ["marqueeOnPos", "settingsMarqueeOnPos"],
-                      ["marqueeOnClient", "settingsMarqueeOnClient"],
-                      ["marqueeOnKds", "settingsMarqueeOnKds"],
-                      ["marqueeOnBar", "settingsMarqueeOnBar"],
-                    ] as const
-                  ).map(([key, labelKey]) => (
-                    <label
-                      key={key}
-                      className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-50 px-3 py-2 dark:border-gray-800"
-                    >
-                      <span className="text-sm text-gray-800 dark:text-gray-200">
-                        {translate(labelKey)}
-                      </span>
-                      <input
-                        type="checkbox"
-                        checked={draft[key]}
-                        onChange={(event) => updateDraft(key, event.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300"
-                      />
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <label className="block text-sm">
-                <span className="text-gray-500 dark:text-gray-400">{translate("settingsMarqueeText")}</span>
-                <textarea
-                  value={draft.marqueeText}
-                  onChange={(event) => updateDraft("marqueeText", event.target.value)}
-                  rows={2}
-                  placeholder={translate("settingsMarqueeTextPlaceholder")}
-                  className="pos-input mt-1 min-h-[72px] resize-y"
-                />
-              </label>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">
-                    {translate("settingsMarqueeSpeed")}
-                  </span>
-                  <input
-                    type="number"
-                    min={MARQUEE_SPEED_MIN}
-                    max={MARQUEE_SPEED_MAX}
-                    value={draft.marqueeDurationSeconds}
-                    onChange={(event) =>
-                      updateDraft("marqueeDurationSeconds", Number(event.target.value))
-                    }
-                    className="pos-input mt-1"
-                  />
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    {translate("settingsMarqueeSpeedHint")}
-                  </p>
-                </label>
-
-                <label className="block text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">
-                    {translate("settingsMarqueeFont")}
-                  </span>
-                  <select
-                    value={draft.marqueeFontFamily}
-                    onChange={(event) =>
-                      updateDraft("marqueeFontFamily", event.target.value as ReceiptFontFamily)
-                    }
-                    className="pos-input mt-1"
-                  >
-                    {RECEIPT_FONT_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {translate(RECEIPT_FONT_LABEL_KEYS[option.id])}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <label className="block text-sm">
-                <span className="text-gray-500 dark:text-gray-400">
-                  {translate("settingsMarqueeEndAt")}
-                </span>
-                <input
-                  type="datetime-local"
-                  value={toDatetimeLocalValue(draft.marqueeEndAt)}
-                  onChange={(event) =>
-                    updateDraft("marqueeEndAt", fromDatetimeLocalValue(event.target.value))
-                  }
-                  className="pos-input mt-1"
-                />
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {translate("settingsMarqueeEndAtHint")}
-                </p>
-              </label>
-
-              {draft.marqueeEnabled && draft.marqueeText.trim() && (
-                <div className="overflow-hidden rounded-lg border border-amber-300 bg-amber-100 dark:border-amber-700 dark:bg-amber-950/40">
-                  <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">
-                    {translate("settingsMarqueePreview")}
-                  </p>
-                  <div
-                    className="overflow-hidden py-2"
-                    style={{
-                      fontFamily: RECEIPT_FONT_OPTIONS.find((f) => f.id === draft.marqueeFontFamily)
-                        ?.stack,
-                    }}
-                  >
-                    <div
-                      className="pos-marquee-track inline-block whitespace-nowrap pl-[100%]"
-                      style={{ animationDuration: `${draft.marqueeDurationSeconds}s` }}
-                    >
-                      <span className="px-6 text-sm font-semibold text-amber-950 dark:text-amber-100">
-                        {draft.marqueeText.trim()}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
+            <div className="mt-4">
+              <MarqueeSettingsEditor
+                value={draft.marqueeConfigs}
+                onChange={(next) => updateDraft("marqueeConfigs", next)}
+              />
             </div>
           </section>
 

@@ -2,6 +2,7 @@ import type { MenuCustomizationConfig, MenuItem } from "@/lib/types";
 import { DEFAULT_MENU_CATEGORY, type MenuCategory } from "@/lib/menu-categories";
 import { customizationConfigForSave } from "@/lib/menu-customization";
 import { deriveItemType, resolveStation } from "@/lib/order-routing";
+import { defaultTaxGroupForItemType } from "@/lib/tax-summary";
 import { supabase } from "@/src/lib/supabase";
 
 export type MenuItemInput = {
@@ -19,6 +20,7 @@ export type MenuItemInput = {
   sortOrder?: number;
   station?: MenuItem["station"];
   itemType?: MenuItem["itemType"];
+  taxGroup?: MenuItem["taxGroup"];
   billOnly?: boolean;
   customizationConfig?: MenuCustomizationConfig;
 };
@@ -30,6 +32,8 @@ function deriveRouting(category: string, itemType?: MenuItem["itemType"]) {
 
 function toDbRow(input: MenuItemInput) {
   const routing = deriveRouting(input.category, input.itemType);
+  const itemType = input.itemType ?? routing.itemType;
+  const taxGroup = input.taxGroup ?? defaultTaxGroupForItemType(itemType);
   const displayOrder = input.sortOrder ?? 0;
   return {
     name_en: input.nameEn.trim(),
@@ -43,7 +47,8 @@ function toDbRow(input: MenuItemInput) {
     category_id: input.categoryId ?? null,
     price: input.price,
     station: input.station ?? routing.station,
-    item_type: input.itemType ?? routing.itemType,
+    item_type: itemType,
+    tax_group: taxGroup,
     is_available: input.isAvailable,
     sold_out: !input.isAvailable,
     sort_order: displayOrder,

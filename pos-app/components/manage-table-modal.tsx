@@ -166,6 +166,7 @@ export function ManageTableModal({
       table.id,
       reason,
       actor,
+      { tableLabel: table.label, staffId: currentStaffUser?.id },
     );
     setCancelSaving(false);
     if (cancelError) {

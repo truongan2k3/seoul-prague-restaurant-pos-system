@@ -137,4 +137,6 @@ export interface CheckoutSubmitPayload {
   payment: CheckoutPaymentRecord;
   remainingLines?: CheckoutLine[];
   closeTable: boolean;
+  /** When omitted, falls back to settings.autoPrintOnPayment */
+  printReceipt?: boolean;
 }

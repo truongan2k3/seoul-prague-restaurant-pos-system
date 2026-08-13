@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Minus, Printer } from "lucide-react";
 import { LiveClock } from "@/components/live-clock";
 import { useApp } from "@/contexts/app-context";
+import { useSettings } from "@/contexts/settings-context";
 import { formatPrice } from "@/lib/i18n/translations";
+import { formatReceiptAmount } from "@/lib/receipt-calculations";
 import {
   computeRevenueChange,
   computeRevenueStats,
@@ -18,6 +20,8 @@ import {
   type TopSellerGroup,
   type TopSellerRow,
 } from "@/lib/summary-analytics";
+import { computeTaxSummaryReport } from "@/lib/tax-summary";
+import { printTaxSummaryReport } from "@/src/lib/printTaxSummary";
 import { filterButtonClass, segmentButtonClass } from "@/lib/theme-classes";
 import type { MenuItem, SaleRecord } from "@/lib/types";
 
@@ -135,9 +139,11 @@ export function SummaryView({
   onRefresh: () => void;
 }) {
   const { translate, language } = useApp();
+  const { settings } = useSettings();
   const [period, setPeriod] = useState<SummaryPeriod>("today");
   const [customDate, setCustomDate] = useState(() => toDateInputValue(new Date()));
   const [sellerGroup, setSellerGroup] = useState<TopSellerGroup>("all");
+  const [taxPrinting, setTaxPrinting] = useState(false);
 
   const todayRange = useMemo(() => getPeriodRange("today"), []);
   const yesterdayRange = useMemo(() => getPeriodRange("yesterday"), []);
@@ -168,6 +174,38 @@ export function SummaryView({
     () => computeTopSellers(filteredSales, menuItems, language, sellerGroup),
     [filteredSales, menuItems, language, sellerGroup],
   );
+
+  const taxReport = useMemo(
+    () =>
+      computeTaxSummaryReport({
+        sales: filteredSales,
+        menuItems,
+        range: activeRange,
+        business: {
+          brandName: settings.receiptHeaderTitle,
+          brandAddress: settings.receiptAddress,
+          legalName: settings.receiptLegalName,
+          companyAddress: settings.receiptCompanyAddress,
+          ico: settings.receiptIco,
+          dic: settings.receiptDic,
+          phone: settings.receiptPhone,
+        },
+      }),
+    [filteredSales, menuItems, activeRange, settings],
+  );
+
+  const handlePrintTaxSummary = async () => {
+    setTaxPrinting(true);
+    try {
+      await printTaxSummaryReport(taxReport, {
+        receiptFontSize: settings.receiptFontSize,
+        receiptFontWeight: settings.receiptFontWeight,
+        receiptFontFamily: settings.receiptFontFamily,
+      });
+    } finally {
+      setTaxPrinting(false);
+    }
+  };
 
   const periodLabel =
     period === "custom"
@@ -308,6 +346,86 @@ export function SummaryView({
               </div>
             </section>
           </div>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  {translate("taxSummaryTitle")}
+                </h2>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {translate("taxSummaryHint")}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={filteredSales.length === 0 || taxPrinting}
+                onClick={() => void handlePrintTaxSummary()}
+                className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900"
+              >
+                <Printer className="h-4 w-4" />
+                {taxPrinting ? "…" : translate("taxSummaryPrint")}
+              </button>
+            </div>
+
+            {filteredSales.length === 0 ? (
+              <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+                {translate("summaryNoSales")}
+              </p>
+            ) : (
+              <div className="mt-4 space-y-6">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {translate("taxSummaryDocuments")}: {taxReport.documentCount}
+                </p>
+                {taxReport.sections.map((section) => (
+                  <div key={section.title ?? "total"}>
+                    {section.title ? (
+                      <h3 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        {section.title === "Jidelna"
+                          ? translate("taxSummaryDineIn")
+                          : section.title === "S SEBOU"
+                            ? translate("taxSummaryTakeaway")
+                            : section.title}
+                      </h3>
+                    ) : null}
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[420px] text-left text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                            <th className="py-2 pr-3">{translate("taxSummaryRate")}</th>
+                            <th className="py-2 pr-3 text-right">{translate("taxSummaryBase")}</th>
+                            <th className="py-2 pr-3 text-right">{translate("taxSummaryVat")}</th>
+                            <th className="py-2 text-right">{translate("taxSummaryGross")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {section.rows.map((row) => (
+                            <tr
+                              key={`${section.title ?? "all"}-${row.label}`}
+                              className={`border-b border-gray-100 dark:border-gray-800/60 ${
+                                row.label === "Celkem" ? "font-semibold" : ""
+                              }`}
+                            >
+                              <td className="py-2 pr-3">{row.label}</td>
+                              <td className="py-2 pr-3 text-right tabular-nums">
+                                {formatReceiptAmount(row.base)}
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums">
+                                {formatReceiptAmount(row.vat)}
+                              </td>
+                              <td className="py-2 text-right tabular-nums">
+                                {formatReceiptAmount(row.gross)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
 
           <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">

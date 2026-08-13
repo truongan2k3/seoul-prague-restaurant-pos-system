@@ -629,7 +629,10 @@ export function NewOrderModal({
         cancelsByReason.set(entry.reason, ids);
       }
       for (const [reason, ids] of cancelsByReason) {
-        const { error } = await cancelOrderItems(ids, table.id, reason, actor);
+        const { error } = await cancelOrderItems(ids, table.id, reason, actor, {
+          tableLabel: table.label,
+          staffId: currentStaffUser?.id,
+        });
         if (error) throw error;
       }
       await persistSubmittedLines(submittedLines, options);

@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Megaphone } from "lucide-react";
+import { MarqueeSequenceTrack } from "@/components/marquee-sequence-track";
 import { useSettings } from "@/contexts/settings-context";
 import {
-  clampMarqueeDurationSeconds,
+  getMarqueeSurfaceConfig,
   isMarqueeVisibleOn,
   marqueeFontFamilyStack,
+  marqueeMessagesForSurface,
   type MarqueeSurface,
 } from "@/lib/marquee-settings";
 
@@ -15,7 +17,6 @@ export function AnnouncementMarquee({
   tone = "amber",
 }: {
   surface?: MarqueeSurface;
-  /** amber = main POS; dark = KDS/bar/client on dark backgrounds */
   tone?: "amber" | "dark";
 }) {
   const { settings } = useSettings();
@@ -26,15 +27,16 @@ export function AnnouncementMarquee({
     return () => clearInterval(interval);
   }, []);
 
+  const config = useMemo(() => getMarqueeSurfaceConfig(settings, surface), [settings, surface]);
+  const messages = useMemo(() => marqueeMessagesForSurface(config), [config]);
   const active = useMemo(
     () => isMarqueeVisibleOn(settings, surface, now),
     [settings, surface, now],
   );
-  if (!active) return null;
 
-  const text = settings.marqueeText.trim();
-  const duration = clampMarqueeDurationSeconds(settings.marqueeDurationSeconds);
-  const fontFamily = marqueeFontFamilyStack(settings.marqueeFontFamily);
+  if (!active || messages.length === 0) return null;
+
+  const fontFamily = marqueeFontFamilyStack(config.fontFamily);
 
   const shell =
     tone === "dark"
@@ -52,16 +54,11 @@ export function AnnouncementMarquee({
         <Megaphone className="h-4 w-4 shrink-0" aria-hidden />
       </div>
 
-      {/* Single copy: enter from right, exit left, then restart (not a seamless loop). */}
-      <div
-        className="pos-marquee-track inline-block whitespace-nowrap py-2 pl-[100%]"
-        style={{
-          animationDuration: `${duration}s`,
-          fontFamily,
-        }}
-      >
-        <span className="px-8 text-sm font-semibold tracking-wide sm:text-base">{text}</span>
-      </div>
+      <MarqueeSequenceTrack
+        messages={messages}
+        durationSeconds={config.durationSeconds}
+        fontFamily={fontFamily}
+      />
     </div>
   );
 }

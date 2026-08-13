@@ -154,6 +154,11 @@ export function CheckoutPanel({
   const [splitCount, setSplitCount] = useState(2);
   const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [printReceipt, setPrintReceipt] = useState(settings.autoPrintOnPayment);
+
+  useEffect(() => {
+    setPrintReceipt(settings.autoPrintOnPayment);
+  }, [settings.autoPrintOnPayment]);
 
   const menuById = useMemo(() => new Map(menuItems.map((item) => [item.id, item])), [menuItems]);
 
@@ -464,6 +469,7 @@ export function CheckoutPanel({
       payment,
       remainingLines: remaining,
       closeTable,
+      printReceipt,
     };
 
     await submitCheckout(payload);
@@ -860,6 +866,19 @@ export function CheckoutPanel({
             ) : null}
           </div>
         </div>
+
+        <label className="mb-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-900/50">
+          <span className="flex items-center gap-2 text-sm text-gray-800 dark:text-gray-200">
+            <Printer className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400" />
+            {translate("checkoutPrintReceipt")}
+          </span>
+          <input
+            type="checkbox"
+            checked={printReceipt}
+            onChange={(event) => setPrintReceipt(event.target.checked)}
+            className="h-4 w-4 rounded border-gray-300"
+          />
+        </label>
 
         <button
           type="button"

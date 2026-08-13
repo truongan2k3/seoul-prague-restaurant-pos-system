@@ -1,6 +1,7 @@
 import type { CheckoutPaymentRecord } from "@/lib/checkout-calculations";
 import { menuItemMatchesOrderName } from "@/lib/menu-display";
 import { RECEIPT_BUSINESS, VAT_RATES, type TaxGroup } from "@/lib/receipt-config";
+import { defaultTaxGroupForItemType } from "@/lib/tax-summary";
 import type { MenuItem, OrderItem, PaymentMethod } from "@/lib/types";
 
 export interface ReceiptLineItem {
@@ -86,7 +87,8 @@ export function generateOrderNumber(closedAt: Date): string {
 }
 
 function resolveTaxGroup(menuItem?: MenuItem): TaxGroup {
-  if (menuItem?.itemType === "drink") return "A";
+  if (menuItem?.taxGroup === "A" || menuItem?.taxGroup === "B") return menuItem.taxGroup;
+  if (menuItem?.itemType) return defaultTaxGroupForItemType(menuItem.itemType);
   return "B";
 }
 

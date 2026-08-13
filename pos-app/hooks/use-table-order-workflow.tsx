@@ -307,7 +307,7 @@ export function useTableOrderWorkflow({
       `Table ${selectedTable.label} · ${payload.payment.paymentMethod} · ${payload.payment.amountDueNow.toFixed(2)} Kč`,
     );
 
-    if (settings.autoPrintOnPayment) {
+    if (payload.printReceipt ?? settings.autoPrintOnPayment) {
       printReceipt({
         tableLabel: selectedTable.label,
         staffName: staff?.name,

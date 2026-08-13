@@ -14,7 +14,11 @@ import { DEFAULT_SOUND_CONFIGS, parseSoundConfigs, soundConfigsToDb } from "@/li
 import { DEFAULT_RESERVATION_OPERATING_HOURS } from "@/lib/reservation-slots";
 import {
   clampMarqueeDurationSeconds,
+  defaultMarqueeConfigs,
+  legacyMarqueeFieldsFromConfigs,
+  parseMarqueeConfigsJson,
   parseMarqueeFontFamily,
+  resolveMarqueeConfigs,
 } from "@/lib/marquee-settings";
 import {
   parseReceiptFontFamily,
@@ -115,6 +119,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   marqueeOnClient: false,
   marqueeOnKds: false,
   marqueeOnBar: false,
+  marqueeConfigs: defaultMarqueeConfigs(),
 };
 
 type SettingsRow = {
@@ -174,6 +179,7 @@ type SettingsRow = {
   marquee_on_client?: boolean | null;
   marquee_on_kds?: boolean | null;
   marquee_on_bar?: boolean | null;
+  marquee_configs?: unknown;
 };
 
 function parseNumericSetting(value: number | string | null | undefined, fallback: number): number {
@@ -358,17 +364,38 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     menuItemSortMode: parseMenuSortMode(row.menu_item_sort_mode),
     cfdReviewUrl: row.cfd_review_url ?? DEFAULT_APP_SETTINGS.cfdReviewUrl,
     cfdReviewQrImageUrl: row.cfd_review_qr_image_url ?? DEFAULT_APP_SETTINGS.cfdReviewQrImageUrl,
-    marqueeEnabled: row.marquee_enabled ?? DEFAULT_APP_SETTINGS.marqueeEnabled,
-    marqueeText: row.marquee_text ?? DEFAULT_APP_SETTINGS.marqueeText,
-    marqueeDurationSeconds: clampMarqueeDurationSeconds(
-      parseNumericSetting(row.marquee_duration_seconds, DEFAULT_APP_SETTINGS.marqueeDurationSeconds),
-    ),
-    marqueeFontFamily: parseMarqueeFontFamily(row.marquee_font_family),
-    marqueeEndAt: row.marquee_end_at ?? DEFAULT_APP_SETTINGS.marqueeEndAt,
-    marqueeOnPos: row.marquee_on_pos ?? DEFAULT_APP_SETTINGS.marqueeOnPos,
-    marqueeOnClient: row.marquee_on_client ?? DEFAULT_APP_SETTINGS.marqueeOnClient,
-    marqueeOnKds: row.marquee_on_kds ?? DEFAULT_APP_SETTINGS.marqueeOnKds,
-    marqueeOnBar: row.marquee_on_bar ?? DEFAULT_APP_SETTINGS.marqueeOnBar,
+    ...(() => {
+      const marqueeConfigs = resolveMarqueeConfigs({
+        marqueeConfigs: parseMarqueeConfigsJson(row.marquee_configs),
+        marqueeEnabled: row.marquee_enabled ?? DEFAULT_APP_SETTINGS.marqueeEnabled,
+        marqueeText: row.marquee_text ?? DEFAULT_APP_SETTINGS.marqueeText,
+        marqueeDurationSeconds: clampMarqueeDurationSeconds(
+          parseNumericSetting(
+            row.marquee_duration_seconds,
+            DEFAULT_APP_SETTINGS.marqueeDurationSeconds,
+          ),
+        ),
+        marqueeFontFamily: parseMarqueeFontFamily(row.marquee_font_family),
+        marqueeEndAt: row.marquee_end_at ?? DEFAULT_APP_SETTINGS.marqueeEndAt,
+        marqueeOnPos: row.marquee_on_pos ?? DEFAULT_APP_SETTINGS.marqueeOnPos,
+        marqueeOnClient: row.marquee_on_client ?? DEFAULT_APP_SETTINGS.marqueeOnClient,
+        marqueeOnKds: row.marquee_on_kds ?? DEFAULT_APP_SETTINGS.marqueeOnKds,
+        marqueeOnBar: row.marquee_on_bar ?? DEFAULT_APP_SETTINGS.marqueeOnBar,
+      });
+      const legacy = legacyMarqueeFieldsFromConfigs(marqueeConfigs);
+      return {
+        marqueeConfigs,
+        marqueeEnabled: legacy.marqueeEnabled,
+        marqueeText: legacy.marqueeText,
+        marqueeDurationSeconds: legacy.marqueeDurationSeconds,
+        marqueeFontFamily: legacy.marqueeFontFamily,
+        marqueeEndAt: legacy.marqueeEndAt,
+        marqueeOnPos: legacy.marqueeOnPos,
+        marqueeOnClient: legacy.marqueeOnClient,
+        marqueeOnKds: legacy.marqueeOnKds,
+        marqueeOnBar: legacy.marqueeOnBar,
+      };
+    })(),
   };
 }
 
@@ -459,17 +486,31 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   if (partial.cfdReviewQrImageUrl !== undefined) {
     payload.cfd_review_qr_image_url = partial.cfdReviewQrImageUrl;
   }
-  if (partial.marqueeEnabled !== undefined) payload.marquee_enabled = partial.marqueeEnabled;
-  if (partial.marqueeText !== undefined) payload.marquee_text = partial.marqueeText;
-  if (partial.marqueeDurationSeconds !== undefined) {
-    payload.marquee_duration_seconds = clampMarqueeDurationSeconds(partial.marqueeDurationSeconds);
+  if (partial.marqueeConfigs !== undefined) {
+    payload.marquee_configs = partial.marqueeConfigs;
+    const legacy = legacyMarqueeFieldsFromConfigs(partial.marqueeConfigs);
+    payload.marquee_enabled = legacy.marqueeEnabled;
+    payload.marquee_text = legacy.marqueeText;
+    payload.marquee_duration_seconds = legacy.marqueeDurationSeconds;
+    payload.marquee_font_family = legacy.marqueeFontFamily;
+    payload.marquee_end_at = legacy.marqueeEndAt || null;
+    payload.marquee_on_pos = legacy.marqueeOnPos;
+    payload.marquee_on_client = legacy.marqueeOnClient;
+    payload.marquee_on_kds = legacy.marqueeOnKds;
+    payload.marquee_on_bar = legacy.marqueeOnBar;
+  } else {
+    if (partial.marqueeEnabled !== undefined) payload.marquee_enabled = partial.marqueeEnabled;
+    if (partial.marqueeText !== undefined) payload.marquee_text = partial.marqueeText;
+    if (partial.marqueeDurationSeconds !== undefined) {
+      payload.marquee_duration_seconds = clampMarqueeDurationSeconds(partial.marqueeDurationSeconds);
+    }
+    if (partial.marqueeFontFamily !== undefined) payload.marquee_font_family = partial.marqueeFontFamily;
+    if (partial.marqueeEndAt !== undefined) payload.marquee_end_at = partial.marqueeEndAt || null;
+    if (partial.marqueeOnPos !== undefined) payload.marquee_on_pos = partial.marqueeOnPos;
+    if (partial.marqueeOnClient !== undefined) payload.marquee_on_client = partial.marqueeOnClient;
+    if (partial.marqueeOnKds !== undefined) payload.marquee_on_kds = partial.marqueeOnKds;
+    if (partial.marqueeOnBar !== undefined) payload.marquee_on_bar = partial.marqueeOnBar;
   }
-  if (partial.marqueeFontFamily !== undefined) payload.marquee_font_family = partial.marqueeFontFamily;
-  if (partial.marqueeEndAt !== undefined) payload.marquee_end_at = partial.marqueeEndAt || null;
-  if (partial.marqueeOnPos !== undefined) payload.marquee_on_pos = partial.marqueeOnPos;
-  if (partial.marqueeOnClient !== undefined) payload.marquee_on_client = partial.marqueeOnClient;
-  if (partial.marqueeOnKds !== undefined) payload.marquee_on_kds = partial.marqueeOnKds;
-  if (partial.marqueeOnBar !== undefined) payload.marquee_on_bar = partial.marqueeOnBar;
   return payload;
 }
 
@@ -663,15 +704,7 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "receiptFontWeight"
     | "receiptFontFamily"
     | "adminDeletionPassword"
-    | "marqueeEnabled"
-    | "marqueeText"
-    | "marqueeDurationSeconds"
-    | "marqueeFontFamily"
-    | "marqueeEndAt"
-    | "marqueeOnPos"
-    | "marqueeOnClient"
-    | "marqueeOnKds"
-    | "marqueeOnBar"
+    | "marqueeConfigs"
     | "soundConfigs"
   >;
 
@@ -721,15 +754,7 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     receiptFontWeight: settings.receiptFontWeight,
     receiptFontFamily: settings.receiptFontFamily,
     adminDeletionPassword: settings.adminDeletionPassword,
-    marqueeEnabled: settings.marqueeEnabled,
-    marqueeText: settings.marqueeText,
-    marqueeDurationSeconds: settings.marqueeDurationSeconds,
-    marqueeFontFamily: settings.marqueeFontFamily,
-    marqueeEndAt: settings.marqueeEndAt,
-    marqueeOnPos: settings.marqueeOnPos,
-    marqueeOnClient: settings.marqueeOnClient,
-    marqueeOnKds: settings.marqueeOnKds,
-    marqueeOnBar: settings.marqueeOnBar,
+    marqueeConfigs: resolveMarqueeConfigs(settings),
     soundConfigs: settings.soundConfigs,
   };
 }

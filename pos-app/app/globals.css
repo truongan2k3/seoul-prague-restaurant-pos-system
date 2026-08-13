@@ -661,8 +661,14 @@ input[type="search"] {
   will-change: transform;
 }
 
+.pos-marquee-track-once {
+  animation: pos-marquee-scroll linear 1;
+  will-change: transform;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .pos-marquee-track {
+  .pos-marquee-track,
+  .pos-marquee-track-once {
     animation: none;
     transform: none;
     padding-left: 2.5rem;

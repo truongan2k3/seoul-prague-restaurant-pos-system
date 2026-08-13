@@ -11,6 +11,8 @@ import {
   menuItemRouteFromItem,
   type MenuItemRoute,
 } from "@/lib/menu-item-dispatch";
+import { defaultTaxGroupForItemType, taxRateForGroup } from "@/lib/tax-summary";
+import type { TaxGroup } from "@/lib/receipt-config";
 import type {
   MenuCategoryRecord,
   MenuItem,
@@ -63,6 +65,7 @@ export function MenuItemFormModal({
         sortOrder: item.sortOrder,
         station: item.station,
         itemType: item.itemType,
+        taxGroup: item.taxGroup ?? defaultTaxGroupForItemType(item.itemType),
         billOnly: item.billOnly ?? false,
         customizationConfig: item.customizationConfig,
       });
@@ -75,6 +78,7 @@ export function MenuItemFormModal({
         category: categoryName,
         categoryId: defaultCategory?.id ?? null,
         itemType,
+        taxGroup: defaultTaxGroupForItemType(itemType),
         station: resolveStation(categoryName, itemType),
       });
     }
@@ -209,6 +213,7 @@ export function MenuItemFormModal({
                         categoryId: category.id,
                         category: category.name,
                         itemType,
+                        taxGroup: defaultTaxGroupForItemType(itemType),
                       };
                     }
                     const routing = menuItemInputFromRoute(
@@ -219,6 +224,7 @@ export function MenuItemFormModal({
                       categoryId: category.id,
                       category: category.name,
                       itemType,
+                      taxGroup: defaultTaxGroupForItemType(itemType),
                       ...routing,
                     };
                   });
@@ -304,6 +310,26 @@ export function MenuItemFormModal({
                 {translate(
                   selectedRoute === "none" ? "menuItemRouteNoneHint" : "menuItemRouteHint",
                 )}
+              </p>
+            </label>
+
+            <label className="block sm:col-span-2">
+              <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                {translate("menuItemTaxGroup")}
+              </span>
+              <select
+                value={form.taxGroup ?? defaultTaxGroupForItemType(form.itemType ?? "food")}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, taxGroup: e.target.value as TaxGroup }))
+                }
+                className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+              >
+                <option value="B">{translate("menuItemTaxFood")}</option>
+                <option value="A">{translate("menuItemTaxDrink")}</option>
+              </select>
+              <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                {translate("menuItemTaxHint")}{" "}
+                {taxRateForGroup(form.taxGroup ?? defaultTaxGroupForItemType(form.itemType ?? "food"))}%
               </p>
             </label>
           </div>

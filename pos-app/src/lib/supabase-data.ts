@@ -19,6 +19,7 @@ import { applyOptionGroupLibraryToItems } from "@/lib/menu-customization";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
 import { gridToPosition } from "@/lib/table-layout";
 import { deriveItemType, resolveStation } from "@/lib/order-routing";
+import { defaultTaxGroupForItemType } from "@/lib/tax-summary";
 import { normalizeStaffRole, parseAllowedNav } from "@/lib/staff-roles";
 import {
   fetchOptionGroupLibrary,
@@ -53,6 +54,7 @@ interface SupabaseMenuItemRow {
   category_id?: string | null;
   station?: "kitchen" | "bar";
   item_type?: "food" | "drink";
+  tax_group?: "A" | "B" | null;
   sold_out?: boolean;
   is_available?: boolean;
   sort_order?: number;
@@ -176,6 +178,7 @@ export function mapMenuItemRow(row: SupabaseMenuItemRow): MenuItem {
     price: Number(row.price),
     station: row.station ?? resolveStation(row.category, itemType),
     itemType,
+    taxGroup: row.tax_group ?? defaultTaxGroupForItemType(itemType),
     isAvailable,
     sortOrder: row.display_order ?? row.sort_order ?? 0,
     imageUrl: row.image_url ?? undefined,
@@ -392,6 +395,7 @@ export function mapSalesResponse(
     guest_phone?: string | null;
     party_size?: number | null;
     visit_source?: "reservation" | "walk_in" | null;
+    service_channel?: "dine_in" | "takeaway" | null;
   }[] | null,
 ): SaleRecord[] {
   return (data ?? []).map((s) => ({
@@ -435,6 +439,7 @@ export function mapSalesResponse(
     guestPhone: s.guest_phone ?? undefined,
     partySize: s.party_size != null ? Number(s.party_size) : undefined,
     visitSource: s.visit_source ?? undefined,
+    serviceChannel: s.service_channel ?? undefined,
   }));
 }
 

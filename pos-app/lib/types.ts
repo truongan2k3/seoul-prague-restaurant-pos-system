@@ -1,6 +1,8 @@
 import type { MenuCategory } from "@/lib/menu-categories";
 import type { KitchenPrintLayout } from "@/lib/kitchen-print-layout";
 import type { KitchenFulfillmentMode } from "@/lib/kitchen-fulfillment-mode";
+import type { TaxGroup } from "@/lib/receipt-config";
+import type { ServiceChannel } from "@/lib/tax-summary";
 
 export type TableStatus = "empty" | "waiting" | "ready";
 export type TableShape = "square" | "round";
@@ -53,6 +55,20 @@ export type ReceiptFontFamily =
 export type MenuItemLayout = "vertical" | "horizontal";
 
 export type MenuSortMode = "custom" | "alphabetical";
+
+export type MarqueeSurface = "pos" | "client" | "kds" | "bar";
+
+export interface MarqueeSurfaceConfig {
+  enabled: boolean;
+  /** Non-empty strings scroll one after another (not simultaneous). */
+  messages: string[];
+  durationSeconds: number;
+  fontFamily: ReceiptFontFamily;
+  /** ISO datetime — hide after this moment (empty = no expiry) */
+  endAt: string;
+}
+
+export type MarqueeConfigs = Record<MarqueeSurface, MarqueeSurfaceConfig>;
 
 export type CfdSlideshowMediaType = "image" | "video" | "gif";
 
@@ -173,7 +189,9 @@ export interface AppSettings {
   cfdReviewUrl: string;
   /** Optional uploaded QR image override */
   cfdReviewQrImageUrl: string;
-  /** Scrolling announcement banner on main POS tabs */
+  /** Scrolling announcement banner — per-screen configs */
+  marqueeConfigs: MarqueeConfigs;
+  /** @deprecated Use marqueeConfigs — kept for legacy DB migration */
   marqueeEnabled: boolean;
   marqueeText: string;
   /** Seconds for one full scroll across the screen (lower = faster) */
@@ -366,6 +384,8 @@ export interface MenuItem {
   isAvailable: boolean;
   station: Station;
   itemType: "food" | "drink";
+  /** VAT group: A = 21% (drinks), B = 12% (food). Defaults from itemType. */
+  taxGroup?: TaxGroup;
   sortOrder: number;
   /** Bill only — no kitchen, bar, or print when ordered. */
   billOnly?: boolean;
@@ -438,6 +458,8 @@ export interface SaleRecord {
   guestPhone?: string;
   partySize?: number;
   visitSource?: VisitSource;
+  /** Dine-in (Jídelna) vs takeaway (S sebou) for tax summary. */
+  serviceChannel?: ServiceChannel;
 }
 
 export interface InventoryItem {

@@ -53,10 +53,15 @@ export function orderItemDualDisplay(
   order: Pick<OrderItem, "menuItemId" | "name">,
   menuItems: MenuItem[],
   language: LanguageCode,
+  options?: { englishOnly?: boolean },
 ): { primary: string; secondary: string | null } {
   const menu = resolveMenuItemForOrder(order, menuItems);
   if (!menu) {
     return { primary: order.name, secondary: null };
+  }
+
+  if (options?.englishOnly) {
+    return { primary: menu.nameEn.trim() || order.name, secondary: null };
   }
 
   const primary = menuItemDisplayName(menu, language);

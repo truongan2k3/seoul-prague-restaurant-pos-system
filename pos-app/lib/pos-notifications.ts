@@ -70,7 +70,7 @@ export function subscribeToCallWaiter(
 
 export type KitchenPrintMessagePayload = {
   tableId?: string;
-  tableLabel: string;
+  tableLabel?: string;
   message: string;
   messageZh: string;
   at: string;
@@ -79,7 +79,7 @@ export type KitchenPrintMessagePayload = {
 /** Phone/tablet → Windows Print Station (no local print on sender). */
 export async function broadcastKitchenPrintMessage(input: {
   tableId?: string;
-  tableLabel: string;
+  tableLabel?: string;
   message: string;
   messageZh: string;
 }) {
@@ -103,7 +103,7 @@ export async function broadcastKitchenPrintMessage(input: {
 
   const payload: KitchenPrintMessagePayload = {
     tableId: input.tableId,
-    tableLabel: input.tableLabel,
+    tableLabel: input.tableLabel?.trim() || undefined,
     message: input.message,
     messageZh: input.messageZh,
     at: new Date().toISOString(),

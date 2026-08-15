@@ -111,6 +111,8 @@ interface PendingKitchenMessage {
   messageZh: string;
 }
 
+type KitchenMessageMode = "table" | "general";
+
 interface NewOrderModalProps {
   open: boolean;
   tableLabel: string;
@@ -343,7 +345,7 @@ export function NewOrderModal({
   const [submittedNoteTranslating, setSubmittedNoteTranslating] = useState(false);
   const [submittedCancelTarget, setSubmittedCancelTarget] = useState<{
     lineId: string;
-    itemId: string;
+    itemIds: string[];
   } | null>(null);
   const [submittedLineError, setSubmittedLineError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -367,6 +369,7 @@ export function NewOrderModal({
   const orderPanelRef = useRef<HTMLDivElement | null>(null);
   const wasOpenRef = useRef(false);
   const [kitchenMessageOpen, setKitchenMessageOpen] = useState(false);
+  const [kitchenMessageMode, setKitchenMessageMode] = useState<KitchenMessageMode>("table");
   const [kitchenMessageDraft, setKitchenMessageDraft] = useState("");
   const [kitchenMessageTranslated, setKitchenMessageTranslated] = useState("");
   const [kitchenMessageTranslating, setKitchenMessageTranslating] = useState(false);
@@ -697,10 +700,22 @@ export function NewOrderModal({
   const applySubmittedQuantityChange = (lineId: string, delta: number) => {
     setSubmittedPriceEditLineId(null);
     const next = submittedLines
-      .map((line) =>
-        line.lineId === lineId ? { ...line, quantity: line.quantity + delta } : line,
-      )
-      .filter((line) => line.quantity > 0);
+      .map((line) => {
+        if (line.lineId !== lineId) return line;
+        const newQty = line.quantity + delta;
+        if (newQty <= 0) return null;
+        let unitIds = line.unitIds;
+        if (delta < 0 && unitIds && unitIds.length > 0) {
+          unitIds = unitIds.slice(0, newQty);
+        }
+        return {
+          ...line,
+          quantity: newQty,
+          unitIds,
+          id: unitIds?.[0] ?? line.id,
+        };
+      })
+      .filter((line): line is EditableLine => line !== null);
     setSubmittedLines(next);
     if (next.length === 0) setSelectedSubmittedLineId(null);
   };
@@ -708,7 +723,7 @@ export function NewOrderModal({
   const adjustSubmittedQuantity = (lineId: string, delta: number) => {
     if (delta < 0) {
       const line = submittedLines.find((entry) => entry.lineId === lineId);
-      if (line?.id) {
+      if (line?.id || (line?.unitIds?.length ?? 0) > 0) {
         requestPin(() => applySubmittedQuantityChange(lineId, delta));
         return;
       }
@@ -780,11 +795,16 @@ export function NewOrderModal({
   };
 
   const requestRemoveSubmittedLine = (line: EditableLine) => {
-    if (!line.id) {
+    const itemIds = line.unitIds?.length
+      ? [...line.unitIds]
+      : line.id
+        ? [line.id]
+        : [];
+    if (itemIds.length === 0) {
       adjustSubmittedQuantity(line.lineId, -line.quantity);
       return;
     }
-    requestPin(() => setSubmittedCancelTarget({ lineId: line.lineId, itemId: line.id! }));
+    requestPin(() => setSubmittedCancelTarget({ lineId: line.lineId, itemIds }));
   };
 
   const handleSubmittedCancelConfirm = (reason: string) => {
@@ -792,7 +812,7 @@ export function NewOrderModal({
     setSubmittedLineError(null);
     setPendingCancels((prev) => [
       ...prev,
-      { itemId: submittedCancelTarget.itemId, reason },
+      ...submittedCancelTarget.itemIds.map((itemId) => ({ itemId, reason })),
     ]);
     const next = submittedLines.filter(
       (line) => line.lineId !== submittedCancelTarget.lineId,
@@ -1013,10 +1033,16 @@ export function NewOrderModal({
     closeNoteModal();
   };
 
-  const openKitchenMessageModal = () => {
+  const openKitchenMessageModal = (mode: KitchenMessageMode) => {
+    setKitchenMessageMode(mode);
     setKitchenMessageError(null);
-    setKitchenMessageDraft(pendingKitchenMessage?.message ?? "");
-    setKitchenMessageTranslated(pendingKitchenMessage?.messageZh ?? "");
+    if (mode === "table") {
+      setKitchenMessageDraft(pendingKitchenMessage?.message ?? "");
+      setKitchenMessageTranslated(pendingKitchenMessage?.messageZh ?? "");
+    } else {
+      setKitchenMessageDraft("");
+      setKitchenMessageTranslated("");
+    }
     setKitchenMessageOpen(true);
   };
 
@@ -1038,6 +1064,40 @@ export function NewOrderModal({
       setKitchenMessageError(error instanceof Error ? error.message : "Failed to save message");
     } finally {
       setKitchenMessageBusy(false);
+    }
+  };
+
+  const handleSendGeneralKitchenMessage = async () => {
+    const message = kitchenMessageDraft.trim();
+    if (!message || kitchenMessageBusy) return;
+
+    if (!shouldPrintKitchenOnSend(settings)) {
+      setKitchenMessageError(translate("kitchenPrintDisabled"));
+      return;
+    }
+
+    setKitchenMessageBusy(true);
+    setKitchenMessageError(null);
+    try {
+      const messageZh =
+        kitchenMessageTranslated.trim() ||
+        (await translateNoteToChineseAction(message));
+      await printKitchenStaffMessage({ message, messageZh });
+      setKitchenMessageOpen(false);
+      setKitchenMessageDraft("");
+      setKitchenMessageTranslated("");
+    } catch (error) {
+      setKitchenMessageError(error instanceof Error ? error.message : "Print failed");
+    } finally {
+      setKitchenMessageBusy(false);
+    }
+  };
+
+  const handleKitchenMessageSubmit = async () => {
+    if (kitchenMessageMode === "general") {
+      await handleSendGeneralKitchenMessage();
+    } else {
+      await handleQueueKitchenMessage();
     }
   };
 
@@ -1579,14 +1639,22 @@ export function NewOrderModal({
           </span>
         </div>
 
-        <div className="mb-2">
+        <div className="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <button
             type="button"
-            onClick={openKitchenMessageModal}
-            className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-200"
+            onClick={() => openKitchenMessageModal("table")}
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-200"
           >
-            <MessageSquare className="h-4 w-4" />
-            {translate("kitchenMessage")}
+            <MessageSquare className="h-4 w-4 shrink-0" />
+            {translate("kitchenMessageTable")}
+          </button>
+          <button
+            type="button"
+            onClick={() => openKitchenMessageModal("general")}
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200"
+          >
+            <MessageSquare className="h-4 w-4 shrink-0" />
+            {translate("kitchenMessageGeneral")}
           </button>
         </div>
 
@@ -1663,14 +1731,6 @@ export function NewOrderModal({
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                onClick={openKitchenMessageModal}
-                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-200"
-              >
-                <MessageSquare className="h-4 w-4" />
-                <span>{translate("kitchenMessage")}</span>
-              </button>
               <button
                 type="button"
                 onClick={requestClose}
@@ -2047,7 +2107,7 @@ export function NewOrderModal({
 
       <CancelReasonModal
         open={submittedCancelTarget !== null}
-        itemCount={1}
+        itemCount={submittedCancelTarget?.itemIds.length ?? 0}
         translate={translate}
         onClose={() => setSubmittedCancelTarget(null)}
         onConfirm={handleSubmittedCancelConfirm}
@@ -2083,10 +2143,16 @@ export function NewOrderModal({
                   id="kitchen-message-title"
                   className="text-lg font-semibold text-gray-900 dark:text-gray-100"
                 >
-                  {translate("kitchenMessageTitle")}
+                  {translate(
+                    kitchenMessageMode === "general"
+                      ? "kitchenGeneralMessageTitle"
+                      : "kitchenMessageTitle",
+                  )}
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {translate("table")} {tableLabel} · {translate("kitchenMessageQueuedHint")}
+                  {kitchenMessageMode === "general"
+                    ? translate("kitchenGeneralMessageHint")
+                    : `${translate("table")} ${tableLabel} · ${translate("kitchenMessageQueuedHint")}`}
                 </p>
               </div>
               <button
@@ -2138,12 +2204,16 @@ export function NewOrderModal({
               <button
                 type="button"
                 disabled={kitchenMessageBusy || !kitchenMessageDraft.trim()}
-                onClick={() => void handleQueueKitchenMessage()}
+                onClick={() => void handleKitchenMessageSubmit()}
                 className="min-h-[48px] flex-1 rounded-xl bg-orange-600 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
               >
                 {kitchenMessageBusy
-                  ? translate("kitchenMessageSaving")
-                  : translate("kitchenMessageSave")}
+                  ? kitchenMessageMode === "general"
+                    ? translate("kitchenMessageSending")
+                    : translate("kitchenMessageSaving")
+                  : kitchenMessageMode === "general"
+                    ? translate("kitchenMessageSendNow")
+                    : translate("kitchenMessageSave")}
               </button>
             </div>
           </div>

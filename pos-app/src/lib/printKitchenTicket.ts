@@ -300,10 +300,11 @@ export async function buildKitchenTicketHtml(input: {
     .filter(Boolean)
     .join('<div class="kitchen-meta-gap"></div>');
 
-  // Kitchen order ticket is always ZH (large) + EN (small), per kitchen template.
+  // Kitchen: ZH (large) + EN (small). Bar tickets: English only.
+  const englishOnly = input.stationLabel === "BAR";
   const itemBlocks = lines
     .map((item) => {
-      const display = resolveKitchenTicketItemDisplay(item, input.menuItems);
+      const display = resolveKitchenTicketItemDisplay(item, input.menuItems, { englishOnly });
       if (!display) return "";
 
       const primaryLine =
@@ -392,7 +393,7 @@ export async function buildKitchenTicketHtml(input: {
 }
 
 export async function buildKitchenMessageHtml(input: {
-  tableLabel: string;
+  tableLabel?: string;
   message: string;
   messageZh: string;
   fontSize?: KitchenPrintFontSize;
@@ -421,15 +422,21 @@ export async function buildKitchenMessageHtml(input: {
   const zh = input.messageZh.trim() || input.message.trim();
   const src = input.message.trim();
 
+  const tableLabel = input.tableLabel?.trim();
+
   const headerBlocks = sortLayoutBlocks([
-    {
-      order: layout.tableLabel.order,
-      html: drawLayoutLine(draw, `TABLE ${input.tableLabel}`, layout.tableLabel, {
-        width: FULL_WIDTH_PX,
-        baseSize: s.table,
-        weight: weights.primary,
-      }),
-    },
+    ...(tableLabel
+      ? [
+          {
+            order: layout.tableLabel.order,
+            html: drawLayoutLine(draw, `TABLE ${tableLabel}`, layout.tableLabel, {
+              width: FULL_WIDTH_PX,
+              baseSize: s.table,
+              weight: weights.primary,
+            }),
+          },
+        ]
+      : []),
     {
       order: layout.messageMeta.order,
       html: drawLayoutLine(draw, `MESSAGE · ${time}`, layout.messageMeta, {
@@ -593,7 +600,7 @@ export async function printKitchenTicket(input: {
 }
 
 export async function printKitchenMessage(input: {
-  tableLabel: string;
+  tableLabel?: string;
   message: string;
   messageZh: string;
   settings: KitchenPrintSettings;

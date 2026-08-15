@@ -59,6 +59,7 @@ function TicketCard({
   menuItems,
   language,
   translate,
+  checklistVariant,
   onMarkReady,
   onUndoReady,
   onCancelItem,
@@ -70,6 +71,7 @@ function TicketCard({
   menuItems: MenuItem[];
   language: ReturnType<typeof useStationScreen>["language"];
   translate: ReturnType<typeof useStationScreen>["translate"];
+  checklistVariant: "kitchen" | "bar";
   onMarkReady: (tableId: string, itemIds: string[]) => void;
   onUndoReady: (tableId: string, itemIds: string[]) => void;
   onCancelItem?: (tableId: string, itemIds: string[]) => void;
@@ -112,7 +114,7 @@ function TicketCard({
           menuItems={menuItems}
           language={language}
           translate={translate}
-          variant="kitchen"
+          variant={checklistVariant}
           interactive
           onMarkReady={(itemIds) => {
             if (!busy) onMarkReady(ticket.table.id, itemIds);
@@ -434,6 +436,7 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
               menuItems={menuItems}
               language={language}
               translate={translate}
+              checklistVariant={variant}
               onMarkReady={(tableId, itemIds) => void handleMarkItemReady(tableId, itemIds)}
               onUndoReady={(tableId, itemIds) => void handleUndoItemReady(tableId, itemIds)}
               onCancelItem={handleCancelItemRequest}

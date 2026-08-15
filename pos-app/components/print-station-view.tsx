@@ -213,13 +213,17 @@ export function PrintStationView() {
             settings: cfg,
           });
           pushLog({
-            label: `${translate("table")} ${payload.tableLabel}`,
+            label: payload.tableLabel?.trim()
+              ? `${translate("table")} ${payload.tableLabel}`
+              : translate("kitchenMessageGeneral"),
             ok: true,
             detail: translate("printStationMessageJob"),
           });
         } catch (error) {
           pushLog({
-            label: `${translate("table")} ${payload.tableLabel}`,
+            label: payload.tableLabel?.trim()
+              ? `${translate("table")} ${payload.tableLabel}`
+              : translate("kitchenMessageGeneral"),
             ok: false,
             detail: error instanceof Error ? error.message : "Print failed",
           });

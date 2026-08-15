@@ -42,7 +42,7 @@ interface ReceiptPrintContextValue {
     menuItems: MenuItem[];
   }) => Promise<void>;
   printKitchenStaffMessage: (input: {
-    tableLabel: string;
+    tableLabel?: string;
     message: string;
     messageZh?: string;
   }) => Promise<void>;
@@ -124,19 +124,20 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
   );
 
   const printKitchenStaffMessage = useCallback(
-    async (input: { tableLabel: string; message: string; messageZh?: string }) => {
+    async (input: { tableLabel?: string; message: string; messageZh?: string }) => {
       const messageZh =
         input.messageZh?.trim() || (await translateNoteToChineseAction(input.message));
+      const tableLabel = input.tableLabel?.trim();
       if (settings.kitchenPrintViaStation) {
         await broadcastKitchenPrintMessage({
-          tableLabel: input.tableLabel,
+          tableLabel,
           message: input.message,
           messageZh,
         });
         return;
       }
       await printKitchenMessage({
-        tableLabel: input.tableLabel,
+        tableLabel,
         message: input.message,
         messageZh,
         settings,

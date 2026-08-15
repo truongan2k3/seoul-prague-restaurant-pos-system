@@ -24,7 +24,7 @@ interface OrderItemChecklistProps {
   onUndoReady?: (itemIds: string[]) => void;
   onCancelItem?: (itemIds: string[]) => void;
   onAcknowledgeCancel?: (itemIds: string[]) => void;
-  variant?: "kitchen" | "floor";
+  variant?: "kitchen" | "bar" | "floor";
   dense?: boolean;
   interactive?: boolean;
 }
@@ -151,7 +151,9 @@ export function OrderItemChecklist({
         {items.map((item, index) => {
           const status = normalizeOrderItemStatus(item.status);
           const kitchenStatus = resolveKitchenStatus(item);
-          const { primary, secondary } = orderItemDualDisplay(item, menuItems, language);
+          const { primary, secondary } = orderItemDualDisplay(item, menuItems, language, {
+            englishOnly: variant === "bar",
+          });
           const isCancelled = kitchenStatus === "cancelled" || Boolean(item.isCancelled);
           const isReady = !isCancelled && (kitchenStatus === "ready" || status === "ready");
           const isServed = !isCancelled && (kitchenStatus === "served" || status === "served");

@@ -89,10 +89,25 @@ export interface KitchenTicketItemDisplay {
 export function resolveKitchenTicketItemDisplay(
   item: OrderItem,
   menuItems: MenuItem[],
+  options?: { englishOnly?: boolean },
 ): KitchenTicketItemDisplay | null {
+  const englishOnly = options?.englishOnly ?? false;
+
   if (isGrillGuestPrepOrder(item)) {
     const { primary, secondary } = saucePrepLines(item);
     if (!primary && !secondary) return null;
+    if (englishOnly) {
+      const enLine = secondary || primary;
+      if (!enLine) return null;
+      return {
+        kind: "sauce-prep",
+        quantity: 0,
+        primary: enLine,
+        secondary: "",
+        noteZh: "",
+        noteEn: "",
+      };
+    }
     return {
       kind: "sauce-prep",
       quantity: 0,
@@ -118,6 +133,18 @@ export function resolveKitchenTicketItemDisplay(
   const secondary = joinKitchenSegments(dishEn, addonEn);
 
   if (!primary && !secondary && !noteZh && !noteEn) return null;
+
+  if (englishOnly) {
+    const enLine = secondary || primary;
+    return {
+      kind: "dish",
+      quantity: item.quantity || 1,
+      primary: enLine,
+      secondary: "",
+      noteZh: "",
+      noteEn: noteEn || "",
+    };
+  }
 
   return {
     kind: "dish",

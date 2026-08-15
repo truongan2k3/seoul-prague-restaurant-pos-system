@@ -19,7 +19,7 @@ function modifiersKey(item: OrderItem): string {
   }
 }
 
-function aggregateKey(item: OrderItem): string {
+function displayAggregateKey(item: OrderItem, includeOrderWave: boolean): string {
   return [
     item.menuItemId ?? "",
     item.name,
@@ -32,8 +32,38 @@ function aggregateKey(item: OrderItem): string {
     item.isCancelled ? "1" : "0",
     item.cancelReason ?? "",
     modifiersKey(item),
-    createdAtBucket(item.createdAt),
+    includeOrderWave ? createdAtBucket(item.createdAt) : "",
   ].join("\u0001");
+}
+
+function mergeAggregateRow(
+  merged: OrderItem[],
+  indexByKey: Map<string, number>,
+  item: OrderItem,
+  key: string,
+): void {
+  const existingIndex = indexByKey.get(key);
+
+  if (existingIndex === undefined) {
+    indexByKey.set(key, merged.length);
+    const unitIds = item.id ? [item.id] : [];
+    merged.push({
+      ...item,
+      quantity: item.quantity || 1,
+      unitIds,
+    });
+    return;
+  }
+
+  const match = merged[existingIndex]!;
+  match.quantity += item.quantity || 1;
+  if (item.id) {
+    match.unitIds = [...(match.unitIds ?? []), item.id];
+  }
+  if (item.createdAt && (!match.createdAt || item.createdAt < match.createdAt)) {
+    match.createdAt = item.createdAt;
+  }
+  if (!match.id && item.id) match.id = item.id;
 }
 
 /**
@@ -45,29 +75,22 @@ export function aggregateDisplayItems(items: OrderItem[]): OrderItem[] {
   const indexByKey = new Map<string, number>();
 
   for (const item of items) {
-    const key = aggregateKey(item);
-    const existingIndex = indexByKey.get(key);
+    mergeAggregateRow(merged, indexByKey, item, displayAggregateKey(item, true));
+  }
 
-    if (existingIndex === undefined) {
-      indexByKey.set(key, merged.length);
-      const unitIds = item.id ? [item.id] : [];
-      merged.push({
-        ...item,
-        quantity: item.quantity || 1,
-        unitIds,
-      });
-      continue;
-    }
+  return merged;
+}
 
-    const match = merged[existingIndex]!;
-    match.quantity += item.quantity || 1;
-    if (item.id) {
-      match.unitIds = [...(match.unitIds ?? []), item.id];
-    }
-    if (item.createdAt && (!match.createdAt || item.createdAt < match.createdAt)) {
-      match.createdAt = item.createdAt;
-    }
-    if (!match.id && item.id) match.id = item.id;
+/**
+ * POS order panel — merge identical lines regardless of send time; split only
+ * when notes, modifiers, price, or kitchen status differ.
+ */
+export function aggregateOrderPanelItems(items: OrderItem[]): OrderItem[] {
+  const merged: OrderItem[] = [];
+  const indexByKey = new Map<string, number>();
+
+  for (const item of items) {
+    mergeAggregateRow(merged, indexByKey, item, displayAggregateKey(item, false));
   }
 
   return merged;

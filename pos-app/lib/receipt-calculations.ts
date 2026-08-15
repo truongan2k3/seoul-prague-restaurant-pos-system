@@ -86,17 +86,27 @@ export function generateOrderNumber(closedAt: Date): string {
   return `${closedAt.getFullYear()}${pad(closedAt.getMonth() + 1)}${pad(closedAt.getDate())}${pad(closedAt.getHours())}${pad(closedAt.getMinutes())}${pad(closedAt.getSeconds())}`;
 }
 
-function resolveTaxGroup(menuItem?: MenuItem): TaxGroup {
+function resolveTaxGroup(menuItem?: MenuItem, order?: OrderItem): TaxGroup {
+  if (order?.taxGroup === "A" || order?.taxGroup === "B") return order.taxGroup;
   if (menuItem?.taxGroup === "A" || menuItem?.taxGroup === "B") return menuItem.taxGroup;
-  if (menuItem?.itemType) return defaultTaxGroupForItemType(menuItem.itemType);
+  const itemType = order?.itemType ?? menuItem?.itemType;
+  if (itemType) return defaultTaxGroupForItemType(itemType);
   return "B";
 }
 
-export function resolveItemCode(menuItem: MenuItem | undefined, index: number): string {
+export function resolveItemCode(
+  menuItem: MenuItem | undefined,
+  index: number,
+  order?: Pick<OrderItem, "itemType">,
+): string {
   if (menuItem) {
     const prefix = menuItem.itemType === "drink" ? "D" : "P";
     const num = menuItem.sortOrder > 0 ? menuItem.sortOrder : index + 1;
     return `${prefix}${num}`;
+  }
+  if (order?.itemType) {
+    const prefix = order.itemType === "drink" ? "D" : "P";
+    return `${prefix}${index + 1}`;
   }
   return `X${index + 1}`;
 }
@@ -114,12 +124,12 @@ export function buildReceiptLines(
       );
 
     return {
-      code: resolveItemCode(matchedMenu, index),
+      code: resolveItemCode(matchedMenu, index, item),
       name: item.name,
       quantity: item.quantity,
       unitPrice: item.price,
       lineTotal: item.price * item.quantity,
-      taxGroup: resolveTaxGroup(matchedMenu),
+      taxGroup: resolveTaxGroup(matchedMenu, item),
     };
   });
 }

@@ -344,6 +344,10 @@ export interface OrderItem {
   tableId?: string;
   createdAt?: string;
   modifiers?: OrderLineModifiers;
+  /** Food vs drink — used for receipt VAT when not linked to menu. */
+  itemType?: MenuItem["itemType"];
+  /** Receipt VAT group when not resolved from menu catalog. */
+  taxGroup?: TaxGroup;
   /** When display-aggregated, all underlying DB row ids. */
   unitIds?: string[];
 }

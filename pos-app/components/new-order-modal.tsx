@@ -36,7 +36,9 @@ import { resolveOrderLineStation, resolveStation } from "@/lib/order-routing";
 import {
   finalizeBillOnlyOrder,
   isBillOnlyOrderLine,
+  menuItemInputFromRoute,
   orderDispatchFromMenuItem,
+  type MenuItemRoute,
 } from "@/lib/menu-item-dispatch";
 import {
   editableLinesToOrders,
@@ -72,6 +74,8 @@ import type {
   Station,
 } from "@/lib/types";
 import { filterButtonClass } from "@/lib/theme-classes";
+import type { TaxGroup } from "@/lib/receipt-config";
+import { defaultTaxGroupForItemType, taxRateForGroup } from "@/lib/tax-summary";
 import { cancelOrderItems } from "@/src/lib/table-actions";
 import {
   buildGrillGuestPrepOrder,
@@ -104,6 +108,7 @@ interface CartLine {
   isCustomItem?: boolean;
   skipPrint?: boolean;
   hideOnKds?: boolean;
+  taxGroup?: TaxGroup;
 }
 
 interface PendingKitchenMessage {
@@ -160,6 +165,10 @@ function cartLinesToOrders(lines: CartLine[]): OrderItem[] {
       status: "preparing",
       skipPrint: line.skipPrint,
       hideOnKds: line.hideOnKds,
+      ...(line.isCustomItem && {
+        itemType: line.itemType,
+        taxGroup: line.taxGroup,
+      }),
       modifiers: {
         selectedOptions: line.selectedOptions,
         specialRequestIds: line.specialRequestIds,
@@ -382,7 +391,9 @@ export function NewOrderModal({
   const [customItemName, setCustomItemName] = useState("");
   const [customItemPrice, setCustomItemPrice] = useState("");
   const [customItemQty, setCustomItemQty] = useState("1");
-  const [customItemStation, setCustomItemStation] = useState<Station>("kitchen");
+  const [customItemRoute, setCustomItemRoute] = useState<MenuItemRoute>("none");
+  const [customItemType, setCustomItemType] = useState<MenuItem["itemType"]>("food");
+  const [customItemTaxGroup, setCustomItemTaxGroup] = useState<TaxGroup>("B");
   const [customItemError, setCustomItemError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -422,7 +433,9 @@ export function NewOrderModal({
     setCustomItemName("");
     setCustomItemPrice("");
     setCustomItemQty("1");
-    setCustomItemStation("kitchen");
+    setCustomItemRoute("none");
+    setCustomItemType("food");
+    setCustomItemTaxGroup("B");
     setCustomItemError(null);
     setSelectedSubmittedLineId(null);
     setSubmittedPriceEditLineId(null);
@@ -1139,6 +1152,8 @@ export function NewOrderModal({
       return;
     }
     setCustomItemError(null);
+    const routing = menuItemInputFromRoute(customItemRoute);
+    const dispatch = orderDispatchFromMenuItem({ billOnly: routing.billOnly });
     setCart((prev) => [
       ...prev,
       {
@@ -1147,18 +1162,23 @@ export function NewOrderModal({
         price,
         quantity,
         category: "Custom",
-        itemType: customItemStation === "bar" ? "drink" : "food",
-        station: customItemStation,
+        itemType: customItemType,
+        taxGroup: customItemTaxGroup,
+        station: routing.station,
         note: "",
         isPrintedNote: false,
         isCustomItem: true,
+        skipPrint: dispatch.skipPrint,
+        hideOnKds: dispatch.hideOnKds,
       },
     ]);
     setCustomItemOpen(false);
     setCustomItemName("");
     setCustomItemPrice("");
     setCustomItemQty("1");
-    setCustomItemStation("kitchen");
+    setCustomItemRoute("none");
+    setCustomItemType("food");
+    setCustomItemTaxGroup("B");
     setCartOpen(true);
   };
 
@@ -1199,6 +1219,10 @@ export function NewOrderModal({
           station: resolveOrderLineStation(line),
           status: "preparing" as const,
           ...dispatch,
+          ...(line.isCustomItem && {
+            itemType: line.itemType,
+            taxGroup: line.taxGroup,
+          }),
           modifiers: {
             selectedOptions: line.selectedOptions,
             specialRequestIds: line.specialRequestIds,
@@ -1822,6 +1846,9 @@ export function NewOrderModal({
                     type="button"
                     onClick={() => {
                       setCustomItemError(null);
+                      setCustomItemRoute("none");
+                      setCustomItemType("food");
+                      setCustomItemTaxGroup("B");
                       setCustomItemOpen(true);
                     }}
                     className="inline-flex min-h-[48px] shrink-0 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-800 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
@@ -2290,26 +2317,82 @@ export function NewOrderModal({
                 </label>
               </div>
               <div className="block text-sm">
-                <span className="text-gray-500 dark:text-gray-400">{translate("customItemStation")}</span>
-                <div className="mt-2 flex gap-2">
+                <span className="text-gray-500 dark:text-gray-400">{translate("menuItemRoute")}</span>
+                <div className="mt-2 flex flex-wrap gap-2">
                   {(
                     [
-                      ["kitchen", "kitchen"],
-                      ["bar", "bar"],
+                      ["kitchen", "menuItemRouteKitchen"],
+                      ["bar", "menuItemRouteBar"],
+                      ["none", "menuItemRouteNone"],
                     ] as const
                   ).map(([value, labelKey]) => (
                     <button
                       key={value}
                       type="button"
-                      onClick={() => setCustomItemStation(value)}
+                      onClick={() => setCustomItemRoute(value)}
                       className={`min-h-[40px] flex-1 rounded-lg px-3 text-sm font-semibold ${filterButtonClass(
-                        customItemStation === value,
+                        customItemRoute === value,
                       )}`}
                     >
                       {translate(labelKey)}
                     </button>
                   ))}
                 </div>
+                <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                  {translate(
+                    customItemRoute === "none" ? "menuItemRouteNoneHint" : "menuItemRouteHint",
+                  )}
+                </p>
+              </div>
+              <div className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">{translate("customItemType")}</span>
+                <div className="mt-2 flex gap-2">
+                  {(
+                    [
+                      ["food", "summaryFood"],
+                      ["drink", "summaryDrinks"],
+                    ] as const
+                  ).map(([value, labelKey]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => {
+                        setCustomItemType(value);
+                        setCustomItemTaxGroup(defaultTaxGroupForItemType(value));
+                      }}
+                      className={`min-h-[40px] flex-1 rounded-lg px-3 text-sm font-semibold ${filterButtonClass(
+                        customItemType === value,
+                      )}`}
+                    >
+                      {translate(labelKey)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">{translate("menuItemTaxGroup")}</span>
+                <div className="mt-2 flex gap-2">
+                  {(
+                    [
+                      ["B", "menuItemTaxFood"],
+                      ["A", "menuItemTaxDrink"],
+                    ] as const
+                  ).map(([value, labelKey]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setCustomItemTaxGroup(value)}
+                      className={`min-h-[40px] flex-1 rounded-lg px-3 text-sm font-semibold ${filterButtonClass(
+                        customItemTaxGroup === value,
+                      )}`}
+                    >
+                      {translate(labelKey)}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                  {translate("menuItemTaxHint")} {taxRateForGroup(customItemTaxGroup)}%
+                </p>
               </div>
             </div>
           </Modal>

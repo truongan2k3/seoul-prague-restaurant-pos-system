@@ -1,6 +1,5 @@
-import { grillGuestCountFromPrepOrder, isGrillGuestPrepOrder } from "@/lib/grill-guest-count";
 import { aggregateDisplayItems } from "@/lib/order-item-aggregate";
-import { menuItemDisplayName, resolveMenuItemForOrder } from "@/lib/menu-display";
+import { resolveKitchenTicketItemDisplay } from "@/lib/kitchen-ticket-display";
 import {
   DEFAULT_KITCHEN_CLIP_TOP_MM,
   DEFAULT_KITCHEN_PRINT_LAYOUT,
@@ -91,70 +90,6 @@ const ORDER_TYPE_SCALE: Record<KitchenPrintFontSize, KitchenTypeScale> = {
 
 function scaleFor(size: KitchenPrintFontSize | undefined): KitchenTypeScale {
   return ORDER_TYPE_SCALE[size ?? "xlarge"] ?? ORDER_TYPE_SCALE.xlarge;
-}
-
-function itemNameForLang(
-  item: OrderItem,
-  menuItems: MenuItem[],
-  lang: KitchenPrintLanguage,
-): string {
-  if (isGrillGuestPrepOrder(item)) {
-    const count = grillGuestCountFromPrepOrder(item);
-    if (lang === "zh") {
-      return count ? `准备烤肉蘸料 · ${count}位` : "准备烤肉蘸料";
-    }
-    if (lang === "cs") {
-      return count ? `Omáčka ke grilu · ${count} hostů` : "Příprava omáčky ke grilu";
-    }
-    return count ? `BBQ sauce · ${count} guests` : "BBQ dipping sauce prep";
-  }
-  const menu = resolveMenuItemForOrder(item, menuItems);
-  if (menu) return menuItemDisplayName(menu, lang);
-  return item.name;
-}
-
-/** Prefer real Chinese name; never silently drop ZH when it exists on the menu. */
-function dualItemNames(
-  item: OrderItem,
-  menuItems: MenuItem[],
-  primaryLang: KitchenPrintLanguage,
-  secondaryLang: KitchenPrintLanguage | "none",
-): { primary: string; secondary: string } {
-  const primary = itemNameForLang(item, menuItems, primaryLang);
-  if (secondaryLang === "none") return { primary, secondary: "" };
-
-  let secondary = itemNameForLang(item, menuItems, secondaryLang);
-
-  if (primaryLang === "zh" || secondaryLang === "zh") {
-    const menu = resolveMenuItemForOrder(item, menuItems);
-    const zh = menu?.nameZh?.trim() || (isGrillGuestPrepOrder(item) ? "准备烤肉蘸料" : "");
-    const en = menu?.nameEn?.trim() || item.name;
-    if (primaryLang === "zh" && zh) {
-      return {
-        primary: zh,
-        secondary: secondaryLang === "en" ? en : secondary,
-      };
-    }
-    if (secondaryLang === "zh" && zh && zh !== primary) {
-      secondary = zh;
-    }
-  }
-
-  if (secondary.trim().toLowerCase() === primary.trim().toLowerCase()) {
-    return { primary, secondary: "" };
-  }
-  return { primary, secondary };
-}
-
-function dualNotes(item: OrderItem): { zh: string; en: string } {
-  const original = item.notes?.trim() ?? "";
-  const translated = item.notesTranslated?.trim() ?? "";
-  if (translated && original && translated.toLowerCase() !== original.toLowerCase()) {
-    return { zh: translated, en: original };
-  }
-  if (translated) return { zh: translated, en: "" };
-  if (original) return { zh: original, en: "" };
-  return { zh: "", en: "" };
 }
 
 function bmp(
@@ -368,28 +303,33 @@ export async function buildKitchenTicketHtml(input: {
   // Kitchen order ticket is always ZH (large) + EN (small), per kitchen template.
   const itemBlocks = lines
     .map((item) => {
-      const { primary, secondary } = dualItemNames(item, input.menuItems, "zh", "en");
-      const { zh: noteZh, en: noteEn } = dualNotes(item);
+      const display = resolveKitchenTicketItemDisplay(item, input.menuItems);
+      if (!display) return "";
+
+      const primaryLine =
+        display.kind === "sauce-prep"
+          ? display.primary
+          : `${display.quantity}× ${display.primary}`;
+      const secondary = display.secondary;
+      const noteZh = display.noteZh;
+      const noteEn = display.noteEn;
 
       const itemLines = sortLayoutBlocks([
         {
           order: orderLayout.itemNamePrimary.order,
-          html: drawLayoutLine(
-            draw,
-            `${item.quantity}× ${primary}`,
-            orderLayout.itemNamePrimary,
-            {
-              width: FULL_WIDTH_PX,
-              baseSize: s.namePrimary,
-              weight: weights.primary,
-            },
-          ),
+          html: primaryLine
+            ? drawLayoutLine(draw, primaryLine, orderLayout.itemNamePrimary, {
+                width: FULL_WIDTH_PX,
+                baseSize: s.namePrimary,
+                weight: weights.primary,
+              })
+            : "",
         },
         {
           order: orderLayout.itemNameSecondary.order,
           html: secondary
             ? drawLayoutLine(draw, secondary, orderLayout.itemNameSecondary, {
-                width: NAME_WIDTH_PX,
+                width: FULL_WIDTH_PX,
                 baseSize: s.nameSecondary,
                 weight: weights.secondary,
                 className: "kitchen-name-secondary",

@@ -241,12 +241,32 @@ export function buildLineDisplayName(
   return parts.join(" · ");
 }
 
+export function isIncludedRiceOption(option: SelectedMenuOption): boolean {
+  if (option.optionId === "rice") return true;
+  const en = option.nameEn.trim().toLowerCase();
+  if (en.includes("rice (included)") || en === "rice") return true;
+  if (option.nameZh.trim() === "米饭") return true;
+  const cz = option.nameCz.trim().toLowerCase();
+  if ((option.priceDelta ?? 0) === 0 && cz.includes("rýže")) return true;
+  return false;
+}
+
+export function kitchenPrintOptions(
+  selected: SelectedMenuOption[] | undefined,
+): SelectedMenuOption[] {
+  return (selected ?? []).filter((option) => !isIncludedRiceOption(option));
+}
+
 export function buildKitchenModifierText(selected: SelectedMenuOption[]): string {
-  return selected.map((entry) => entry.nameZh.trim() || entry.nameEn).join(" · ");
+  return kitchenPrintOptions(selected)
+    .map((entry) => entry.nameZh.trim() || entry.nameEn)
+    .join(" · ");
 }
 
 export function buildKitchenModifierTextEn(selected: SelectedMenuOption[]): string {
-  return selected.map((entry) => entry.nameEn.trim() || entry.nameCz.trim() || entry.nameZh).join(" · ");
+  return kitchenPrintOptions(selected)
+    .map((entry) => entry.nameEn.trim() || entry.nameCz.trim() || entry.nameZh)
+    .join(" · ");
 }
 
 export function mergeNoteWithKitchenModifiers(

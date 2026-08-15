@@ -22,6 +22,20 @@ export const SOUND_FILE_OPTIONS = [
   { value: "/sounds/default-bell.mp3", label: "default-bell.mp3" },
 ] as const;
 
+/** Pastel row background on POS order panel by kitchen workflow state. */
+export function orderLineKitchenPanelClass(
+  item: Pick<OrderItem, "kitchenStatus" | "status" | "isCancelled">,
+): string {
+  const kitchen = resolveKitchenStatus(item);
+  if (kitchen === "ready") {
+    return "border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40";
+  }
+  if (kitchen === "served") {
+    return "border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-900/60";
+  }
+  return "border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/35";
+}
+
 export function resolveKitchenStatus(
   item: Pick<OrderItem, "kitchenStatus" | "status" | "isCancelled">,
 ): KitchenStatus {

@@ -15,7 +15,7 @@ import { usePinGate } from "@/contexts/pin-gate-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { useSettings } from "@/contexts/settings-context";
 import { shouldPrintKitchenOnSend } from "@/lib/kitchen-fulfillment-mode";
-import { resolveKitchenStatus } from "@/lib/auto-serve";
+import { orderLineKitchenPanelClass, resolveKitchenStatus } from "@/lib/auto-serve";
 import { categoriesForOrdering } from "@/lib/category-utils";
 import { sortMenuItemsForDisplay } from "@/lib/menu-sort";
 import { formatPosPrice, priceDisplayOptionsFromSettings } from "@/lib/price-display";
@@ -57,6 +57,7 @@ import {
   isManageTableLineEditable,
   isManageTablePriceEditable,
 } from "@/lib/order-sla";
+import { normalizeOrderItemStatus, statusTranslationKey } from "@/lib/order-status";
 import { matchesFoldedSearch } from "@/lib/search-normalize";
 import { isTablePaidInProgress } from "@/lib/table-payment";
 import type {
@@ -103,6 +104,11 @@ interface CartLine {
   isCustomItem?: boolean;
   skipPrint?: boolean;
   hideOnKds?: boolean;
+}
+
+interface PendingKitchenMessage {
+  message: string;
+  messageZh: string;
 }
 
 interface NewOrderModalProps {
@@ -366,6 +372,9 @@ export function NewOrderModal({
   const [kitchenMessageTranslating, setKitchenMessageTranslating] = useState(false);
   const [kitchenMessageBusy, setKitchenMessageBusy] = useState(false);
   const [kitchenMessageError, setKitchenMessageError] = useState<string | null>(null);
+  const [pendingKitchenMessage, setPendingKitchenMessage] = useState<PendingKitchenMessage | null>(
+    null,
+  );
   const [customItemOpen, setCustomItemOpen] = useState(false);
   const [customItemName, setCustomItemName] = useState("");
   const [customItemPrice, setCustomItemPrice] = useState("");
@@ -405,6 +414,7 @@ export function NewOrderModal({
     setKitchenMessageTranslating(false);
     setKitchenMessageBusy(false);
     setKitchenMessageError(null);
+    setPendingKitchenMessage(null);
     setCustomItemOpen(false);
     setCustomItemName("");
     setCustomItemPrice("");
@@ -605,9 +615,10 @@ export function NewOrderModal({
     submittedOrdersDirty(submittedDraftOrders, submittedBaseline);
 
   const hasPendingSend =
-    mode === "append" ? cart.length > 0 || hasSubmittedChanges : cart.length > 0;
+    Boolean(pendingKitchenMessage) ||
+    (mode === "append" ? cart.length > 0 || hasSubmittedChanges : cart.length > 0);
 
-  const hasUnsavedChanges = cart.length > 0 || hasSubmittedChanges;
+  const hasUnsavedChanges = cart.length > 0 || hasSubmittedChanges || Boolean(pendingKitchenMessage);
 
   const canCheckout =
     Boolean(onCheckout) &&
@@ -1002,31 +1013,45 @@ export function NewOrderModal({
     closeNoteModal();
   };
 
-  const handleSendKitchenMessage = async () => {
+  const openKitchenMessageModal = () => {
+    setKitchenMessageError(null);
+    setKitchenMessageDraft(pendingKitchenMessage?.message ?? "");
+    setKitchenMessageTranslated(pendingKitchenMessage?.messageZh ?? "");
+    setKitchenMessageOpen(true);
+  };
+
+  const handleQueueKitchenMessage = async () => {
     const message = kitchenMessageDraft.trim();
     if (!message || kitchenMessageBusy) return;
-
-    if (!shouldPrintKitchenOnSend(settings)) {
-      setKitchenMessageError(translate("kitchenPrintDisabled"));
-      return;
-    }
 
     setKitchenMessageBusy(true);
     setKitchenMessageError(null);
     try {
-      await printKitchenStaffMessage({
-        tableLabel,
-        message,
-        messageZh: kitchenMessageTranslated.trim() || undefined,
-      });
+      const messageZh =
+        kitchenMessageTranslated.trim() ||
+        (await translateNoteToChineseAction(message));
+      setPendingKitchenMessage({ message, messageZh });
       setKitchenMessageOpen(false);
       setKitchenMessageDraft("");
       setKitchenMessageTranslated("");
     } catch (error) {
-      setKitchenMessageError(error instanceof Error ? error.message : "Print failed");
+      setKitchenMessageError(error instanceof Error ? error.message : "Failed to save message");
     } finally {
       setKitchenMessageBusy(false);
     }
+  };
+
+  const flushPendingKitchenMessage = async () => {
+    if (!pendingKitchenMessage) return;
+    if (!shouldPrintKitchenOnSend(settings)) {
+      throw new Error(translate("kitchenPrintDisabled"));
+    }
+    await printKitchenStaffMessage({
+      tableLabel,
+      message: pendingKitchenMessage.message,
+      messageZh: pendingKitchenMessage.messageZh,
+    });
+    setPendingKitchenMessage(null);
   };
 
   const updateCartQty = (lineId: string, delta: number) => {
@@ -1142,13 +1167,22 @@ export function NewOrderModal({
       if (!saved) return;
     }
 
-    if (cart.length === 0) return;
+    setSubmittedLineError(null);
+    try {
+      if (cart.length > 0) {
+        const orders = await buildCartOrdersFromLines();
+        await onSendToKitchen(orders);
+        setCart([]);
+        setCartOpen(false);
+        setGrillGuestCount(null);
+      }
 
-    const orders = await buildCartOrdersFromLines();
-    await onSendToKitchen(orders);
-    setCart([]);
-    setCartOpen(false);
-    setGrillGuestCount(null);
+      if (pendingKitchenMessage) {
+        await flushPendingKitchenMessage();
+      }
+    } catch (error) {
+      setSubmittedLineError(error instanceof Error ? error.message : "Failed to send.");
+    }
   };
 
   const handleSaveNoPrint = async () => {
@@ -1174,6 +1208,7 @@ export function NewOrderModal({
     setDiscardConfirmOpen(false);
     setUnsavedConfirmMode(null);
     setCart([]);
+    setPendingKitchenMessage(null);
     onClose();
   };
 
@@ -1194,6 +1229,7 @@ export function NewOrderModal({
     const mode = unsavedConfirmMode;
     revertSubmittedChanges();
     setCart([]);
+    setPendingKitchenMessage(null);
     setDiscardConfirmOpen(false);
     setUnsavedConfirmMode(null);
     if (mode === "close") {
@@ -1210,7 +1246,7 @@ export function NewOrderModal({
       if (!saved) return;
     }
     if (mode === "close") {
-      if (cart.length > 0) {
+      if (cart.length > 0 || pendingKitchenMessage) {
         await handleSend();
       }
       handleClose();
@@ -1318,12 +1354,12 @@ export function NewOrderModal({
           </p>
         )}
 
-        {submittedLines.length === 0 && cart.length === 0 ? (
+        {submittedLines.length === 0 && cart.length === 0 && !pendingKitchenMessage ? (
           <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
             {translate("cartEmpty")}
           </p>
         ) : (
-          <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+          <ul className="space-y-2">
             {submittedLines.map((line) => {
               const selected = line.lineId === selectedSubmittedLineId;
               const displayName = orderItemDisplayName(line, menuItems, language);
@@ -1332,9 +1368,17 @@ export function NewOrderModal({
               const showTick = !linePending && isLineSentToKitchen(line);
               const priceChanged = isLinePriceAdjusted(line, menuItems);
               const originalPrice = resolveOriginalUnitPrice(line, menuItems);
+              const status = normalizeOrderItemStatus(line.status);
+              const kitchen = resolveKitchenStatus(line);
+              const statusClass = orderLineKitchenPanelClass(line);
 
               return (
-                <li key={line.lineId}>
+                <li
+                  key={line.lineId}
+                  className={`overflow-hidden rounded-xl border ${statusClass} ${
+                    selected ? "ring-2 ring-blue-400 dark:ring-blue-500" : ""
+                  } ${linePending ? "ring-2 ring-orange-400 dark:ring-orange-500" : ""}`}
+                >
                   <button
                     type="button"
                     onClick={() => {
@@ -1343,9 +1387,9 @@ export function NewOrderModal({
                       );
                       setSubmittedPriceEditLineId(null);
                     }}
-                    className={`flex w-full items-start gap-2 px-2 py-3 text-left transition ${
-                      selected ? "bg-blue-50 dark:bg-blue-950/30" : "hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                    } ${linePending ? "text-orange-700 dark:text-orange-300" : "text-gray-900 dark:text-gray-100"}`}
+                    className={`flex w-full items-start gap-2 px-3 py-3 text-left transition hover:brightness-[0.98] dark:hover:brightness-110 ${
+                      linePending ? "text-orange-800 dark:text-orange-200" : "text-gray-900 dark:text-gray-100"
+                    }`}
                   >
                     <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center">
                       {showTick ? (
@@ -1356,8 +1400,17 @@ export function NewOrderModal({
                       <p className="text-base font-semibold leading-snug">
                         {line.quantity}× {displayName}
                       </p>
+                      <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide opacity-80">
+                        {translate(
+                          kitchen === "ready"
+                            ? "ready"
+                            : kitchen === "served"
+                              ? "served"
+                              : statusTranslationKey(status),
+                        )}
+                      </p>
                       {(line.notes || line.notesTranslated) && (
-                        <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+                        <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-300">
                           {line.notesTranslated || line.notes}
                         </p>
                       )}
@@ -1431,8 +1484,11 @@ export function NewOrderModal({
                   : noteTextParts.join(", ");
 
               return (
-                <li key={line.lineId} className="px-2 py-3">
-                  <div className="flex items-start gap-2">
+                <li
+                  key={line.lineId}
+                  className="overflow-hidden rounded-xl border border-blue-200 bg-blue-50/70 dark:border-blue-900 dark:bg-blue-950/30"
+                >
+                  <div className="flex items-start gap-2 px-3 py-3">
                     <span className="mt-1 h-5 w-5 shrink-0" aria-hidden />
                     <div className="min-w-0 flex-1">
                       <button
@@ -1476,6 +1532,39 @@ export function NewOrderModal({
                 </li>
               );
             })}
+
+            {pendingKitchenMessage && (
+              <li className="overflow-hidden rounded-xl border border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/40">
+                <div className="flex items-start gap-2 px-3 py-3">
+                  <MessageSquare className="mt-0.5 h-5 w-5 shrink-0 text-orange-700 dark:text-orange-300" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-orange-800 dark:text-orange-200">
+                      {translate("kitchenMessagePendingLabel")}
+                    </p>
+                    <p className="mt-0.5 text-sm font-medium text-orange-950 dark:text-orange-100">
+                      {pendingKitchenMessage.messageZh}
+                    </p>
+                    {pendingKitchenMessage.messageZh.toLowerCase() !==
+                      pendingKitchenMessage.message.toLowerCase() && (
+                      <p className="mt-0.5 text-xs text-orange-800/80 dark:text-orange-200/80">
+                        {pendingKitchenMessage.message}
+                      </p>
+                    )}
+                    <p className="mt-1 text-[11px] text-orange-700 dark:text-orange-300">
+                      {translate("kitchenMessageQueuedHint")}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPendingKitchenMessage(null)}
+                    className="shrink-0 rounded-lg p-1.5 text-orange-700 hover:bg-orange-100 dark:text-orange-300 dark:hover:bg-orange-900/50"
+                    aria-label={translate("cancel")}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </li>
+            )}
           </ul>
         )}
       </div>
@@ -1488,6 +1577,17 @@ export function NewOrderModal({
           <span className="text-2xl font-bold tabular-nums text-gray-900 dark:text-gray-100">
             {formatOrderPrice(billTotal)}
           </span>
+        </div>
+
+        <div className="mb-2">
+          <button
+            type="button"
+            onClick={openKitchenMessageModal}
+            className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-200"
+          >
+            <MessageSquare className="h-4 w-4" />
+            {translate("kitchenMessage")}
+          </button>
         </div>
 
         <div className="grid grid-cols-3 gap-2">
@@ -1565,10 +1665,7 @@ export function NewOrderModal({
             <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  setKitchenMessageError(null);
-                  setKitchenMessageOpen(true);
-                }}
+                onClick={openKitchenMessageModal}
                 className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-200"
               >
                 <MessageSquare className="h-4 w-4" />
@@ -1989,7 +2086,7 @@ export function NewOrderModal({
                   {translate("kitchenMessageTitle")}
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {translate("table")} {tableLabel}
+                  {translate("table")} {tableLabel} · {translate("kitchenMessageQueuedHint")}
                 </p>
               </div>
               <button
@@ -2041,12 +2138,12 @@ export function NewOrderModal({
               <button
                 type="button"
                 disabled={kitchenMessageBusy || !kitchenMessageDraft.trim()}
-                onClick={() => void handleSendKitchenMessage()}
+                onClick={() => void handleQueueKitchenMessage()}
                 className="min-h-[48px] flex-1 rounded-xl bg-orange-600 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
               >
                 {kitchenMessageBusy
-                  ? translate("kitchenMessageSending")
-                  : translate("kitchenMessageSend")}
+                  ? translate("kitchenMessageSaving")
+                  : translate("kitchenMessageSave")}
               </button>
             </div>
           </div>

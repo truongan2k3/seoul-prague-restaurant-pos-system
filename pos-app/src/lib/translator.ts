@@ -24,9 +24,18 @@ function cleanNoteText(text: string): string {
 }
 
 interface MyMemoryResponse {
+  quotaFinished?: boolean;
   responseData?: {
     translatedText?: string;
   };
+}
+
+function isUsableTranslation(source: string, translated: string): boolean {
+  const trimmed = translated.trim();
+  if (!trimmed) return false;
+  if (/MYMEMORY WARNING/i.test(trimmed)) return false;
+  if (/[\u4e00-\u9fff]/.test(trimmed)) return true;
+  return cleanNoteText(trimmed) !== cleanNoteText(source);
 }
 
 function detectSourceLang(text: string): "en" | "cs" | "vi" {
@@ -47,8 +56,10 @@ async function translateViaMyMemory(text: string, langpair: string): Promise<str
     const response = await fetch(url, { signal: controller.signal });
     if (!response.ok) return null;
     const payload = (await response.json()) as MyMemoryResponse;
+    if (payload.quotaFinished) return null;
     const translated = payload.responseData?.translatedText?.trim();
-    return translated || null;
+    if (!translated || /MYMEMORY WARNING/i.test(translated)) return null;
+    return translated;
   } catch {
     return null;
   } finally {
@@ -80,7 +91,7 @@ export async function translateNoteToChinese(text: string): Promise<string> {
 
   for (const pair of pairs) {
     const translated = await translateViaMyMemory(trimmed, pair);
-    if (translated && translated.toLowerCase() !== cleaned) {
+    if (translated && isUsableTranslation(trimmed, translated)) {
       return translated;
     }
   }

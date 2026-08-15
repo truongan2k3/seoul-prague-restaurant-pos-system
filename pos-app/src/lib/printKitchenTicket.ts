@@ -3,6 +3,7 @@ import { aggregateDisplayItems } from "@/lib/order-item-aggregate";
 import { menuItemDisplayName, resolveMenuItemForOrder } from "@/lib/menu-display";
 import {
   DEFAULT_KITCHEN_PRINT_LAYOUT,
+  layoutBlockStyle,
   layoutPx,
   sortLayoutBlocks,
   type KitchenPrintLayout,
@@ -275,8 +276,10 @@ function drawLayoutLine(
     weight: opts.weight,
     align: element.align,
   });
-  if (!opts.className) return img;
-  return `<div class="${opts.className}">${img}</div>`;
+  const style = layoutBlockStyle(element);
+  const styleAttr = style ? ` style="${style}"` : "";
+  if (!opts.className) return `<div${styleAttr}>${img}</div>`;
+  return `<div class="${opts.className}"${styleAttr}>${img}</div>`;
 }
 
 export async function buildKitchenTicketHtml(input: {

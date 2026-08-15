@@ -1,5 +1,6 @@
 /**
- * Generates supabase/seed-menu-jin-cheng.sql from embedded menu CSV rows.
+ * @deprecated Prefer scripts/generate-menu-from-xlsx.py → supabase/seed-menu-from-old-system.sql
+ * Generates supabase/seed-menu-jin-cheng.sql from embedded menu CSV rows (legacy 88-item grill menu).
  * Run: node scripts/generate-menu-seed.mjs
  */
 

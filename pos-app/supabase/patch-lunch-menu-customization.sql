@@ -40,5 +40,6 @@ SELECT * FROM (VALUES
 ) AS v(label_en, label_cz, label_zh, display_order)
 WHERE NOT EXISTS (SELECT 1 FROM public.note_presets LIMIT 1);
 
--- Lunch menu: run supabase/seed-lunch-menu.sql for 7 sub-categories (59 fixed-price items).
+-- Lunch menu: run supabase/seed-menu-from-old-system.sql (Excel menu only).
+-- seed-lunch-menu.sql is deprecated — do not run.
 -- Legacy single "Lunch Menu" category is removed by that seed.

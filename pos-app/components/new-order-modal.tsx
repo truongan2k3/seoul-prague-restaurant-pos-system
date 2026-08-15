@@ -81,7 +81,7 @@ import {
   fetchNotePresets,
   mapNotePresetsResponse,
 } from "@/src/lib/note-preset-actions";
-import { translateNoteToChinese } from "@/src/lib/translator";
+import { translateNoteToChineseAction } from "@/src/lib/translate-actions";
 
 interface CartLine {
   lineId: string;
@@ -362,6 +362,8 @@ export function NewOrderModal({
   const wasOpenRef = useRef(false);
   const [kitchenMessageOpen, setKitchenMessageOpen] = useState(false);
   const [kitchenMessageDraft, setKitchenMessageDraft] = useState("");
+  const [kitchenMessageTranslated, setKitchenMessageTranslated] = useState("");
+  const [kitchenMessageTranslating, setKitchenMessageTranslating] = useState(false);
   const [kitchenMessageBusy, setKitchenMessageBusy] = useState(false);
   const [kitchenMessageError, setKitchenMessageError] = useState<string | null>(null);
   const [customItemOpen, setCustomItemOpen] = useState(false);
@@ -399,6 +401,8 @@ export function NewOrderModal({
     setDiscardConfirmOpen(false);
     setKitchenMessageOpen(false);
     setKitchenMessageDraft("");
+    setKitchenMessageTranslated("");
+    setKitchenMessageTranslating(false);
     setKitchenMessageBusy(false);
     setKitchenMessageError(null);
     setCustomItemOpen(false);
@@ -435,7 +439,7 @@ export function NewOrderModal({
     setNoteTranslating(true);
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      void translateNoteToChinese(note).then((translated) => {
+      void translateNoteToChineseAction(note).then((translated) => {
         if (!cancelled) {
           setNoteDraftTranslated(translated);
           setNoteTranslating(false);
@@ -448,6 +452,31 @@ export function NewOrderModal({
       window.clearTimeout(timer);
     };
   }, [noteDraft]);
+
+  useEffect(() => {
+    const message = kitchenMessageDraft.trim();
+    if (!message) {
+      setKitchenMessageTranslated("");
+      setKitchenMessageTranslating(false);
+      return;
+    }
+
+    setKitchenMessageTranslating(true);
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void translateNoteToChineseAction(message).then((translated) => {
+        if (!cancelled) {
+          setKitchenMessageTranslated(translated);
+          setKitchenMessageTranslating(false);
+        }
+      });
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [kitchenMessageDraft]);
 
   const categoryOptions = useMemo(
     () => categoriesForOrdering(categories, settings.menuCategorySortMode),
@@ -848,7 +877,7 @@ export function NewOrderModal({
 
     let itemNoteTranslated = "";
     if (result.itemNote) {
-      itemNoteTranslated = await translateNoteToChinese(result.itemNote);
+      itemNoteTranslated = await translateNoteToChineseAction(result.itemNote);
     }
 
     const dispatch = orderDispatchFromMenuItem(item);
@@ -951,7 +980,7 @@ export function NewOrderModal({
     const trimmed = noteDraft.trim();
     let translated = "";
     if (trimmed) {
-      translated = await translateNoteToChinese(trimmed);
+      translated = await translateNoteToChineseAction(trimmed);
     }
 
     setCart((prev) =>
@@ -985,9 +1014,14 @@ export function NewOrderModal({
     setKitchenMessageBusy(true);
     setKitchenMessageError(null);
     try {
-      await printKitchenStaffMessage({ tableLabel, message });
+      await printKitchenStaffMessage({
+        tableLabel,
+        message,
+        messageZh: kitchenMessageTranslated.trim() || undefined,
+      });
       setKitchenMessageOpen(false);
       setKitchenMessageDraft("");
+      setKitchenMessageTranslated("");
     } catch (error) {
       setKitchenMessageError(error instanceof Error ? error.message : "Print failed");
     } finally {
@@ -1802,17 +1836,19 @@ export function NewOrderModal({
                 {(notePresetIds.length > 0 || noteDraft.trim()) && (
                   <div className="mt-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 dark:border-orange-900 dark:bg-orange-950/40">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-700 dark:text-orange-300">
-                      Kitchen (中文)
+                      {translate("kitchenMessagePreview")}
                     </p>
                     <p className="mt-1 text-sm font-bold text-orange-700 dark:text-orange-300">
-                      {[
-                        ...notePresetIds
-                          .map((id) => notePresets.find((entry) => entry.id === id)?.labelZh)
-                          .filter(Boolean),
-                        noteDraftTranslated || noteDraft.trim(),
-                      ]
-                        .filter(Boolean)
-                        .join(", ")}
+                      {noteTranslating && !noteDraftTranslated
+                        ? translate("noteTranslating")
+                        : [
+                            ...notePresetIds
+                              .map((id) => notePresets.find((entry) => entry.id === id)?.labelZh)
+                              .filter(Boolean),
+                            noteDraftTranslated || noteDraft.trim(),
+                          ]
+                            .filter(Boolean)
+                            .join(", ")}
                     </p>
                   </div>
                 )}
@@ -1975,6 +2011,19 @@ export function NewOrderModal({
               className="min-h-[120px] w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-base text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
               autoFocus
             />
+
+            {kitchenMessageDraft.trim() && (
+              <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 dark:border-orange-900 dark:bg-orange-950/40">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-700 dark:text-orange-300">
+                  {translate("kitchenMessagePreview")}
+                </p>
+                <p className="mt-1 text-sm font-bold text-orange-700 dark:text-orange-300">
+                  {kitchenMessageTranslating && !kitchenMessageTranslated
+                    ? translate("noteTranslating")
+                    : kitchenMessageTranslated || kitchenMessageDraft.trim()}
+                </p>
+              </div>
+            )}
 
             {kitchenMessageError && (
               <p className="mt-2 text-sm text-red-600 dark:text-red-400">{kitchenMessageError}</p>

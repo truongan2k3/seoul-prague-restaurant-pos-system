@@ -1,4 +1,6 @@
--- JIN CHENG menu seed (88 items)
+-- JIN CHENG menu seed (88 items) — DEPRECATED / DO NOT RUN
+-- Use ONLY: supabase/seed-menu-from-old-system.sql (177 items from menu-old-system.xlsx)
+-- Regenerate: python3 scripts/generate-menu-from-xlsx.py
 -- Run AFTER patch-menu-jin-cheng-schema.sql
 -- WARNING: Deletes all existing menu_items rows.
 

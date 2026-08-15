@@ -2,11 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRightLeft, Minus, Percent, Plus, Save, ShoppingBag, Tag, Trash2 } from "lucide-react";
-import { CancelReasonModal } from "@/components/cancel-reason-modal";
 import { LinePriceEditor } from "@/components/line-price-editor";
 import { Modal } from "@/components/modal";
 import { useApp } from "@/contexts/app-context";
-import { usePinGate } from "@/contexts/pin-gate-context";
 import { useSettings } from "@/contexts/settings-context";
 import {
   editableLinesToOrders,
@@ -34,7 +32,6 @@ import { formatPosPrice, priceDisplayOptionsFromSettings } from "@/lib/price-dis
 import { isTablePaidInProgress } from "@/lib/table-payment";
 import { filterButtonClass } from "@/lib/theme-classes";
 import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
-import { cancelOrderItems } from "@/src/lib/table-actions";
 
 interface ManageTableModalProps {
   open: boolean;
@@ -84,8 +81,7 @@ export function ManageTableModal({
   isSaving = false,
   error,
 }: ManageTableModalProps) {
-  const { translate, language, currentStaffUser } = useApp();
-  const { requestPin } = usePinGate();
+  const { translate, language } = useApp();
   const { settings } = useSettings();
   const priceOptions = priceDisplayOptionsFromSettings(settings);
   const formatOrderPrice = (amount: number) => formatPosPrice(amount, priceOptions);
@@ -96,11 +92,6 @@ export function ManageTableModal({
   const [showTransfer, setShowTransfer] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [priceEditLineId, setPriceEditLineId] = useState<string | null>(null);
-  const [cancelTarget, setCancelTarget] = useState<{
-    lineId: string;
-    itemId: string;
-  } | null>(null);
-  const [cancelSaving, setCancelSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -132,56 +123,16 @@ export function ManageTableModal({
   };
 
   const adjustQuantity = (lineId: string, delta: number) => {
-    if (delta < 0) {
-      const line = lines.find((entry) => entry.lineId === lineId);
-      if (line?.id) {
-        requestPin(() => applyQuantityChange(lineId, delta));
-        return;
-      }
-    }
     applyQuantityChange(lineId, delta);
   };
 
   const removeLine = (lineId: string) => {
     setPriceEditLineId(null);
-    const line = lines.find((entry) => entry.lineId === lineId);
-    if (!line) return;
-
-    // Local-only draft line (not yet in DB) — drop from state.
-    if (!line.id) {
-      setLines((prev) => prev.filter((entry) => entry.lineId !== lineId));
-      return;
-    }
-
-    requestPin(() => setCancelTarget({ lineId, itemId: line.id! }));
-  };
-
-  const handleCancelConfirm = async (reason: string) => {
-    if (!cancelTarget) return;
-    setCancelSaving(true);
-    setLocalError(null);
-    const actor = currentStaffUser?.name?.trim() || "Staff";
-    const { error: cancelError } = await cancelOrderItems(
-      [cancelTarget.itemId],
-      table.id,
-      reason,
-      actor,
-      { tableLabel: table.label, staffId: currentStaffUser?.id },
-    );
-    setCancelSaving(false);
-    if (cancelError) {
-      setLocalError(cancelError.message);
-      return;
-    }
-    setLines((prev) => prev.filter((entry) => entry.lineId !== cancelTarget.lineId));
-    setCancelTarget(null);
-    onRefresh();
+    setLines((prev) => prev.filter((entry) => entry.lineId !== lineId));
   };
 
   const openPriceEditor = (line: EditableLine) => {
-    requestPin(() => {
-      setPriceEditLineId((current) => (current === line.lineId ? null : line.lineId));
-    });
+    setPriceEditLineId((current) => (current === line.lineId ? null : line.lineId));
   };
 
   const applyPriceEdit = (lineId: string, mode: LinePriceAdjustMode, value: number) => {
@@ -226,7 +177,6 @@ export function ManageTableModal({
   };
 
   return (
-    <>
     <Modal
       open={open}
       onClose={onClose}
@@ -258,12 +208,26 @@ export function ManageTableModal({
                 return (
                   <li
                     key={line.lineId}
+                    role={priceEditable ? "button" : undefined}
+                    tabIndex={priceEditable ? 0 : undefined}
+                    onClick={() => {
+                      if (priceEditable) openPriceEditor(line);
+                    }}
+                    onKeyDown={(event) => {
+                      if (!priceEditable) return;
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openPriceEditor(line);
+                      }
+                    }}
                     className={`rounded-lg border px-3 py-2.5 ${
                       isServed
                         ? "border-slate-300 bg-slate-50 opacity-90 dark:border-slate-600 dark:bg-slate-900/60"
                         : isReady
                           ? "border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40"
-                          : `border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 ${rowSurfaceClass(status)}`
+                          : `border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 ${rowSurfaceClass(status)}${
+                              priceEditable ? " cursor-pointer" : ""
+                            }`
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -316,7 +280,10 @@ export function ManageTableModal({
                         <div className="flex items-center gap-1.5">
                           <button
                             type="button"
-                            onClick={() => adjustQuantity(line.lineId, -1)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              adjustQuantity(line.lineId, -1);
+                            }}
                             className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-700 dark:border-gray-600 dark:text-gray-200"
                             aria-label="Decrease quantity"
                           >
@@ -327,7 +294,10 @@ export function ManageTableModal({
                           </span>
                           <button
                             type="button"
-                            onClick={() => adjustQuantity(line.lineId, 1)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              adjustQuantity(line.lineId, 1);
+                            }}
                             className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-700 dark:border-gray-600 dark:text-gray-200"
                             aria-label="Increase quantity"
                           >
@@ -336,7 +306,10 @@ export function ManageTableModal({
                           {priceEditable && (
                             <button
                               type="button"
-                              onClick={() => openPriceEditor(line)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openPriceEditor(line);
+                              }}
                               className={`flex h-8 w-8 items-center justify-center rounded-lg border ${
                                 priceEditLineId === line.lineId
                                   ? "border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
@@ -350,7 +323,10 @@ export function ManageTableModal({
                           )}
                           <button
                             type="button"
-                            onClick={() => removeLine(line.lineId)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              removeLine(line.lineId);
+                            }}
                             className="ml-1 flex h-8 w-8 items-center justify-center rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
                             aria-label="Remove item"
                           >
@@ -365,7 +341,10 @@ export function ManageTableModal({
                           {priceEditable && (
                             <button
                               type="button"
-                              onClick={() => openPriceEditor(line)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openPriceEditor(line);
+                              }}
                               className={`flex h-8 w-8 items-center justify-center rounded-lg border ${
                                 priceEditLineId === line.lineId
                                   ? "border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
@@ -386,7 +365,8 @@ export function ManageTableModal({
                     </div>
 
                     {priceEditLineId === line.lineId && (
-                      <LinePriceEditor
+                      <div onClick={(event) => event.stopPropagation()}>
+                        <LinePriceEditor
                         line={line}
                         menuItems={menuItems}
                         translate={translate}
@@ -394,7 +374,8 @@ export function ManageTableModal({
                         onApply={(mode, value) => applyPriceEdit(line.lineId, mode, value)}
                         onReset={() => resetLinePrice(line.lineId)}
                         onCancel={() => setPriceEditLineId(null)}
-                      />
+                        />
+                      </div>
                     )}
                   </li>
                 );
@@ -505,15 +486,5 @@ export function ManageTableModal({
         </div>
       </div>
     </Modal>
-
-      <CancelReasonModal
-        open={cancelTarget !== null}
-        itemCount={1}
-        translate={translate}
-        onClose={() => setCancelTarget(null)}
-        onConfirm={handleCancelConfirm}
-        isSaving={cancelSaving}
-      />
-    </>
   );
 }

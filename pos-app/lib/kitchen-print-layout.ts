@@ -10,6 +10,12 @@ export interface KitchenPrintLayoutElement {
   sizeScale: KitchenPrintLayoutSizeScale;
   /** Lower values render higher in the vertical stack. */
   order: number;
+  /** Extra space above this block (px). */
+  marginTop: number;
+  /** Extra space below this block (px). */
+  marginBottom: number;
+  /** Optional absolute font size in px; overrides sizeScale when set. */
+  fontSizePx: number | null;
 }
 
 export interface KitchenPrintOrderTicketLayout {
@@ -43,6 +49,9 @@ const DEFAULT_ELEMENT = (
   align,
   sizeScale: 1,
   order,
+  marginTop: 0,
+  marginBottom: 0,
+  fontSizePx: null,
 });
 
 export const DEFAULT_KITCHEN_PRINT_LAYOUT: KitchenPrintLayout = {
@@ -85,6 +94,19 @@ function parseOrder(value: unknown, fallback: number): number {
   return Math.max(0, Math.min(20, Math.round(num)));
 }
 
+function parseFontSizePx(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const num = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(num) || num <= 0) return null;
+  return Math.max(8, Math.min(120, Math.round(num)));
+}
+
+function parseMargin(value: unknown, fallback: number): number {
+  const num = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.max(0, Math.min(48, Math.round(num)));
+}
+
 function parseElement(
   value: unknown,
   fallback: KitchenPrintLayoutElement,
@@ -96,6 +118,9 @@ function parseElement(
     align: parseAlign(row.align, fallback.align),
     sizeScale: parseSizeScale(row.sizeScale, fallback.sizeScale),
     order: parseOrder(row.order, fallback.order),
+    marginTop: parseMargin(row.marginTop, fallback.marginTop),
+    marginBottom: parseMargin(row.marginBottom, fallback.marginBottom),
+    fontSizePx: parseFontSizePx(row.fontSizePx),
   };
 }
 
@@ -137,7 +162,17 @@ export function parseKitchenPrintLayout(value: unknown): KitchenPrintLayout {
 }
 
 export function layoutPx(basePx: number, element: KitchenPrintLayoutElement): number {
+  if (element.fontSizePx != null && element.fontSizePx > 0) {
+    return element.fontSizePx;
+  }
   return Math.max(8, Math.round(basePx * element.sizeScale));
+}
+
+export function layoutBlockStyle(element: KitchenPrintLayoutElement): string {
+  const parts: string[] = [];
+  if (element.marginTop > 0) parts.push(`margin-top:${element.marginTop}px`);
+  if (element.marginBottom > 0) parts.push(`margin-bottom:${element.marginBottom}px`);
+  return parts.join(";");
 }
 
 export function sortLayoutBlocks<T extends { order: number }>(blocks: T[]): T[] {

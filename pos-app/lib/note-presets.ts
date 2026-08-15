@@ -1,5 +1,5 @@
 import type { LanguageCode, MenuItem, NotePreset } from "@/lib/types";
-import { translateNoteToChinese } from "@/src/lib/translator";
+import { translateNoteToChineseAction } from "@/src/lib/translate-actions";
 
 export function presetLabel(preset: NotePreset, language: LanguageCode): string {
   if (language === "cs") return preset.labelCz.trim() || preset.labelEn;
@@ -39,13 +39,13 @@ export async function finalizeNoteTranslation(
       const zh = preset.labelZh.trim();
       if (zh) return zh;
       const source = preset.labelEn.trim() || preset.labelCz.trim();
-      return source ? translateNoteToChinese(source) : "";
+      return source ? translateNoteToChineseAction(source) : "";
     }),
   );
 
   let translatedFree = "";
   if (trimmedFree) {
-    translatedFree = await translateNoteToChinese(trimmedFree);
+    translatedFree = await translateNoteToChineseAction(trimmedFree);
   }
 
   const note = [...presetLabels, trimmedFree].filter(Boolean).join(", ");

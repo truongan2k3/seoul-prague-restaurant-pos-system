@@ -3,6 +3,8 @@
 const PRINT_FONT =
   '"Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif';
 
+const KITCHEN_FONT_SIZES_PX = [16, 18, 20, 22, 24, 28, 34, 40, 42, 46, 50, 52];
+
 let cjkFontPromise: Promise<void> | null = null;
 
 /** Load Noto Sans SC once in the main window so canvas can paint Chinese. */
@@ -27,10 +29,12 @@ export function ensureCjkPrintFont(): Promise<void> {
     }
 
     try {
-      await Promise.all([
-        document.fonts.load(`700 28px ${PRINT_FONT}`),
-        document.fonts.load(`400 16px ${PRINT_FONT}`),
+      const loads = KITCHEN_FONT_SIZES_PX.flatMap((size) => [
+        document.fonts.load(`400 ${size}px ${PRINT_FONT}`),
+        document.fonts.load(`600 ${size}px ${PRINT_FONT}`),
+        document.fonts.load(`700 ${size}px ${PRINT_FONT}`),
       ]);
+      await Promise.all(loads);
     } catch {
       // system CJK fallbacks may still work on canvas
     }
@@ -44,23 +48,23 @@ export function containsCjk(text: string): boolean {
   return /[\u3400-\u9fff\uf900-\ufaff]/.test(text);
 }
 
-function wrapLines(
+function effectiveMaxWidth(maxWidthPx: number, fontSizePx: number): number {
+  const margin = Math.max(10, Math.round(fontSizePx * 0.15));
+  return Math.max(1, maxWidthPx - margin);
+}
+
+function breakLongSegment(
   ctx: CanvasRenderingContext2D,
-  text: string,
+  segment: string,
   maxWidth: number,
 ): string[] {
-  const chars = Array.from(text);
-  if (chars.length === 0) return [""];
+  const chars = Array.from(segment);
+  if (chars.length === 0) return [];
 
   const lines: string[] = [];
   let current = "";
 
   for (const ch of chars) {
-    if (ch === "\n") {
-      lines.push(current);
-      current = "";
-      continue;
-    }
     const next = current + ch;
     if (ctx.measureText(next).width > maxWidth && current) {
       lines.push(current);
@@ -69,7 +73,66 @@ function wrapLines(
       current = next;
     }
   }
+
   if (current) lines.push(current);
+  return lines;
+}
+
+/** Word-aware wrap with char fallback so long kitchen lines never clip at canvas edge. */
+function wrapLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+): string[] {
+  if (!text) return [""];
+
+  const lines: string[] = [];
+
+  for (const paragraph of text.split("\n")) {
+    if (!paragraph) {
+      lines.push("");
+      continue;
+    }
+
+    const parts = paragraph.split(/(\s+|[·•\-–—/])/);
+    let line = "";
+
+    const flushLine = () => {
+      const trimmed = line.trimEnd();
+      if (trimmed) lines.push(trimmed);
+      line = "";
+    };
+
+    for (const part of parts) {
+      if (!part) continue;
+
+      const candidate = line + part;
+      if (!line || ctx.measureText(candidate).width <= maxWidth) {
+        if (line || ctx.measureText(part).width <= maxWidth) {
+          line = candidate;
+          continue;
+        }
+      }
+
+      flushLine();
+      const trimmedPart = part.trimStart();
+      if (ctx.measureText(trimmedPart).width <= maxWidth) {
+        line = trimmedPart;
+        continue;
+      }
+
+      const broken = breakLongSegment(ctx, trimmedPart, maxWidth);
+      if (broken.length > 1) {
+        lines.push(...broken.slice(0, -1));
+        line = broken[broken.length - 1] ?? "";
+      } else if (broken.length === 1) {
+        line = broken[0] ?? "";
+      }
+    }
+
+    flushLine();
+  }
+
   return lines.length > 0 ? lines : [""];
 }
 
@@ -101,7 +164,8 @@ export function textToPngDataUrl(text: string, options: BitmapTextOptions): stri
   if (!mctx) return "";
 
   mctx.font = `${fontWeight} ${options.fontSizePx}px ${PRINT_FONT}`;
-  const lines = wrapLines(mctx, trimmed, options.maxWidthPx);
+  const wrapWidth = effectiveMaxWidth(options.maxWidthPx, options.fontSizePx);
+  const lines = wrapLines(mctx, trimmed, wrapWidth);
   const lineHeight = options.fontSizePx + lineGap;
   const contentHeight = lines.length * lineHeight + paddingY * 2;
 

@@ -20,6 +20,17 @@ export function escAlign(mode: "left" | "center" | "right"): Uint8Array {
   return new Uint8Array([0x1b, 0x61, n]);
 }
 
+export function escFeedDots(dots: number): Uint8Array {
+  const parts: Uint8Array[] = [];
+  let remaining = Math.max(0, Math.floor(dots));
+  while (remaining > 0) {
+    const chunk = Math.min(255, remaining);
+    parts.push(new Uint8Array([0x1b, 0x4a, chunk]));
+    remaining -= chunk;
+  }
+  return parts.length > 0 ? concatBytes(parts) : new Uint8Array();
+}
+
 export function escFeed(lines = 1): Uint8Array {
   return new Uint8Array([0x1b, 0x64, Math.max(0, Math.min(255, lines))]);
 }
@@ -94,8 +105,35 @@ export async function escRasterFromPngDataUrl(dataUrl: string, maxWidth = 576): 
   return concatBytes([header, raster]);
 }
 
-export async function buildEscPosFromPngs(dataUrls: string[]): Promise<Uint8Array> {
+export function escBlankRaster(heightDots: number, widthDots = 576): Uint8Array {
+  const targetWidth = Math.min(widthDots, Math.ceil(widthDots / 8) * 8);
+  const targetHeight = Math.max(1, Math.floor(heightDots));
+  const widthBytes = targetWidth / 8;
+  const header = new Uint8Array([
+    0x1d,
+    0x76,
+    0x30,
+    0x00,
+    widthBytes & 0xff,
+    (widthBytes >> 8) & 0xff,
+    targetHeight & 0xff,
+    (targetHeight >> 8) & 0xff,
+  ]);
+  return concatBytes([header, new Uint8Array(widthBytes * targetHeight)]);
+}
+
+export async function buildEscPosFromPngs(
+  dataUrls: string[],
+  options?: { topFeedLines?: number; topFeedDots?: number; topBlankRasterDots?: number },
+): Promise<Uint8Array> {
   const parts: Uint8Array[] = [escInit(), escAlign("left")];
+  if (options?.topBlankRasterDots && options.topBlankRasterDots > 0) {
+    parts.push(escBlankRaster(options.topBlankRasterDots));
+  } else if (options?.topFeedDots && options.topFeedDots > 0) {
+    parts.push(escFeedDots(options.topFeedDots));
+  } else if (options?.topFeedLines && options.topFeedLines > 0) {
+    parts.push(escFeed(options.topFeedLines));
+  }
   for (const url of dataUrls) {
     if (!url) continue;
     parts.push(await escRasterFromPngDataUrl(url));

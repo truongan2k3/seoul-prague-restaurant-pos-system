@@ -3,6 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LanguageSelector } from "@/components/language-selector";
+import {
+  clampKitchenClipTopMm,
+  KITCHEN_CLIP_TOP_MM_MAX,
+  KITCHEN_CLIP_TOP_MM_MIN,
+} from "@/lib/kitchen-print-layout";
 import { KitchenPrintLayoutEditor } from "@/components/kitchen-print-layout-editor";
 import { LiveClock } from "@/components/live-clock";
 import { MenuCustomizationManager } from "@/components/menu-customization-manager";
@@ -743,6 +748,33 @@ export function SettingsView({
                     <option value="xlarge">{translate("settingsKitchenPrintFontXLarge")}</option>
                     <option value="xxlarge">{translate("settingsKitchenPrintFontXXLarge")}</option>
                   </select>
+                </label>
+                <label className="block text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {translate("settingsKitchenPrintClipTop")}
+                  </span>
+                  <div className="mt-2 flex items-center gap-3">
+                    <input
+                      type="range"
+                      min={KITCHEN_CLIP_TOP_MM_MIN}
+                      max={KITCHEN_CLIP_TOP_MM_MAX}
+                      step={1}
+                      value={draft.kitchenPrintClipTopMm}
+                      onChange={(event) =>
+                        updateDraft(
+                          "kitchenPrintClipTopMm",
+                          clampKitchenClipTopMm(Number(event.target.value)),
+                        )
+                      }
+                      className="min-h-[44px] flex-1"
+                    />
+                    <span className="w-14 text-right text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                      {draft.kitchenPrintClipTopMm} mm
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {translate("settingsKitchenPrintClipTopHint")}
+                  </p>
                 </label>
                 <label className="block text-sm">
                   <span className="text-gray-500 dark:text-gray-400">

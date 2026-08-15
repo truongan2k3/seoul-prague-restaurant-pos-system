@@ -178,3 +178,34 @@ export function layoutBlockStyle(element: KitchenPrintLayoutElement): string {
 export function sortLayoutBlocks<T extends { order: number }>(blocks: T[]): T[] {
   return [...blocks].sort((a, b) => a.order - b.order);
 }
+
+/** Top blank margin on kitchen tickets so clip rails do not hide the table label. */
+export const KITCHEN_CLIP_TOP_MM_MIN = 0;
+export const KITCHEN_CLIP_TOP_MM_MAX = 40;
+export const DEFAULT_KITCHEN_CLIP_TOP_MM = 20;
+
+export function clampKitchenClipTopMm(mm: number): number {
+  if (!Number.isFinite(mm)) return DEFAULT_KITCHEN_CLIP_TOP_MM;
+  return Math.max(
+    KITCHEN_CLIP_TOP_MM_MIN,
+    Math.min(KITCHEN_CLIP_TOP_MM_MAX, Math.round(mm)),
+  );
+}
+
+export function parseKitchenClipTopMm(value: unknown): number {
+  if (typeof value === "number") return clampKitchenClipTopMm(value);
+  if (typeof value === "string" && value.trim()) {
+    return clampKitchenClipTopMm(Number(value));
+  }
+  return DEFAULT_KITCHEN_CLIP_TOP_MM;
+}
+
+/** Browser print preview bitmap height (px). */
+export function kitchenClipTopPx(mm: number): number {
+  return Math.round(clampKitchenClipTopMm(mm) * 8);
+}
+
+/** ESC/POS raster height (~203 dpi on 80mm). */
+export function kitchenClipTopDots(mm: number): number {
+  return Math.round((clampKitchenClipTopMm(mm) * 203) / 25.4);
+}

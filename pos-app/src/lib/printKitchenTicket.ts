@@ -1,8 +1,11 @@
-import { isGrillGuestPrepOrder } from "@/lib/grill-guest-count";
+import { grillGuestCountFromPrepOrder, isGrillGuestPrepOrder } from "@/lib/grill-guest-count";
 import { aggregateDisplayItems } from "@/lib/order-item-aggregate";
 import { menuItemDisplayName, resolveMenuItemForOrder } from "@/lib/menu-display";
 import {
+  DEFAULT_KITCHEN_CLIP_TOP_MM,
   DEFAULT_KITCHEN_PRINT_LAYOUT,
+  kitchenClipTopDots,
+  kitchenClipTopPx,
   layoutBlockStyle,
   layoutPx,
   sortLayoutBlocks,
@@ -22,6 +25,7 @@ import type {
 import { printReceiptHTML } from "@/src/lib/printReceipt";
 import {
   bitmapImgHtml,
+  blankPngDataUrl,
   ensureCjkPrintFont,
   textToPngDataUrl,
 } from "@/src/lib/printTextBitmap";
@@ -95,9 +99,14 @@ function itemNameForLang(
   lang: KitchenPrintLanguage,
 ): string {
   if (isGrillGuestPrepOrder(item)) {
-    if (lang === "zh") return "准备烤肉蘸料";
-    if (lang === "cs") return "Příprava omáčky ke grilu";
-    return "BBQ dipping sauce prep";
+    const count = grillGuestCountFromPrepOrder(item);
+    if (lang === "zh") {
+      return count ? `准备烤肉蘸料 · ${count}位` : "准备烤肉蘸料";
+    }
+    if (lang === "cs") {
+      return count ? `Omáčka ke grilu · ${count} hostů` : "Příprava omáčky ke grilu";
+    }
+    return count ? `BBQ sauce · ${count} guests` : "BBQ dipping sauce prep";
   }
   const menu = resolveMenuItemForOrder(item, menuItems);
   if (menu) return menuItemDisplayName(menu, lang);
@@ -180,6 +189,7 @@ export type KitchenPrintSettings = Pick<
   | "kitchenPrintOrderFontWeight"
   | "kitchenPrintMessageFontWeight"
   | "kitchenPrintLayout"
+  | "kitchenPrintClipTopMm"
   | "receiptFontSize"
   | "receiptFontWeight"
   | "receiptFontFamily"
@@ -188,6 +198,13 @@ export type KitchenPrintSettings = Pick<
   | "browserPrintFallback"
   | "printers"
 >;
+
+function kitchenClipSpacerHtml(widthPx: number, clipTopMm: number): string {
+  const heightPx = kitchenClipTopPx(clipTopMm);
+  if (heightPx <= 0) return "";
+  const png = blankPngDataUrl(widthPx, heightPx, 2);
+  return bitmapImgHtml(png, "", widthPx);
+}
 
 function kitchenTicketCss(qtyPx: number): string {
   return `
@@ -199,6 +216,11 @@ function kitchenTicketCss(qtyPx: number): string {
         background: #fff !important;
         color: #000 !important;
         font-family: Arial, Helvetica, sans-serif;
+      }
+      .kitchen-clip-spacer {
+        display: block;
+        overflow: hidden;
+        line-height: 0;
       }
       .kitchen-ticket img.kt-bitmap {
         display: block;
@@ -292,11 +314,13 @@ export async function buildKitchenTicketHtml(input: {
   fontWeight?: ReceiptFontWeight;
   layout?: KitchenPrintLayout;
   stationLabel?: string;
+  clipTopMm?: number;
 }): Promise<{ html: string; pngs: string[] }> {
   await ensureCjkPrintFont();
   const s = scaleFor(input.fontSize);
   const weights = kitchenBitmapWeights(input.fontWeight ?? "bold");
   const layout = input.layout ?? DEFAULT_KITCHEN_PRINT_LAYOUT;
+  const clipTopMm = input.clipTopMm ?? DEFAULT_KITCHEN_CLIP_TOP_MM;
   const orderLayout = layout.orderTicket;
   const pngs: string[] = [];
   const draw = (
@@ -411,9 +435,12 @@ export async function buildKitchenTicketHtml(input: {
     .filter(Boolean)
     .join("");
 
+  const clipHtml = kitchenClipSpacerHtml(FULL_WIDTH_PX, clipTopMm);
+
   const html = `
     ${kitchenTicketCss(s.qty)}
     <div class="kitchen-ticket">
+      ${clipHtml ? `<div class="kitchen-clip-spacer">${clipHtml}</div>` : ""}
       ${headerBlocks ? `<div class="kitchen-header">${headerBlocks}</div>` : ""}
       ${
         itemBlocks ||
@@ -431,11 +458,13 @@ export async function buildKitchenMessageHtml(input: {
   fontSize?: KitchenPrintFontSize;
   fontWeight?: ReceiptFontWeight;
   layout?: KitchenPrintLayout;
+  clipTopMm?: number;
 }): Promise<{ html: string; pngs: string[] }> {
   await ensureCjkPrintFont();
   const s = scaleFor(input.fontSize);
   const weights = kitchenBitmapWeights(input.fontWeight ?? "bold");
   const layout = (input.layout ?? DEFAULT_KITCHEN_PRINT_LAYOUT).messageTicket;
+  const clipTopMm = input.clipTopMm ?? DEFAULT_KITCHEN_CLIP_TOP_MM;
   const pngs: string[] = [];
   const draw = (
     text: string,
@@ -503,9 +532,12 @@ export async function buildKitchenMessageHtml(input: {
     ? `<div class="kitchen-footer">*** STAFF MESSAGE ***</div>`
     : "";
 
+  const clipHtml = kitchenClipSpacerHtml(FULL_WIDTH_PX, clipTopMm);
+
   const html = `
     ${kitchenTicketCss(s.qty)}
     <div class="kitchen-ticket">
+      ${clipHtml ? `<div class="kitchen-clip-spacer">${clipHtml}</div>` : ""}
       ${headerBlocks ? `<div class="kitchen-header">${headerBlocks}</div>` : ""}
       ${bodyBlocks ? `<div class="kitchen-message-box">${bodyBlocks}</div>` : ""}
       ${footerHtml}
@@ -531,7 +563,10 @@ async function dispatchKitchenPrint(
     try {
       const { buildEscPosFromPngs } = await import("@/src/lib/escpos");
       const { silentPrintEscPos } = await import("@/src/lib/print-bridge-client");
-      const bytes = await buildEscPosFromPngs(pngs);
+      const clipDots = kitchenClipTopDots(settings.kitchenPrintClipTopMm);
+      const bytes = await buildEscPosFromPngs(pngs, {
+        topBlankRasterDots: clipDots > 0 ? clipDots : undefined,
+      });
       let result = await silentPrintEscPos(settings, role, bytes);
       // Messages: if no printer has kitchen-message role, fall back to kitchen printers.
       if (
@@ -580,6 +615,7 @@ async function printStationTicket(input: {
     fontWeight: input.settings.kitchenPrintOrderFontWeight,
     layout: input.settings.kitchenPrintLayout,
     stationLabel: input.stationLabel,
+    clipTopMm: input.settings.kitchenPrintClipTopMm,
   });
 
   await dispatchKitchenPrint(input.settings, html, pngs, input.role);
@@ -630,6 +666,7 @@ export async function printKitchenMessage(input: {
     fontSize: input.settings.kitchenPrintMessageFontSize,
     fontWeight: input.settings.kitchenPrintMessageFontWeight,
     layout: input.settings.kitchenPrintLayout,
+    clipTopMm: input.settings.kitchenPrintClipTopMm,
   });
   await dispatchKitchenPrint(input.settings, html, pngs, "kitchen-message");
 }

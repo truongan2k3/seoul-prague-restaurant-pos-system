@@ -479,6 +479,9 @@ const en = {
   settingsKitchenPrintLangNone: "None",
   settingsKitchenPrintOrderFontSize: "Kitchen order ticket text size",
   settingsKitchenPrintMessageFontSize: "Kitchen message text size",
+  settingsKitchenPrintClipTop: "Top blank margin (clip rail)",
+  settingsKitchenPrintClipTopHint:
+    "Extra blank space at the top of kitchen tickets so a clip rail does not cover the table number. 0 = none, ~20 mm default.",
   settingsKitchenPrintOrderFontWeight: "Kitchen order ticket boldness",
   settingsKitchenPrintMessageFontWeight: "Kitchen message ticket boldness",
   settingsKitchenPrintFontLarge: "Large (min)",
@@ -1183,6 +1186,9 @@ const cs: Record<TranslationKey, string> = {
   settingsKitchenPrintLangNone: "Žádný",
   settingsKitchenPrintOrderFontSize: "Velikost textu lístku objednávky",
   settingsKitchenPrintMessageFontSize: "Velikost textu zprávy pro kuchyni",
+  settingsKitchenPrintClipTop: "Horní okraj (spona / držák)",
+  settingsKitchenPrintClipTopHint:
+    "Prázdné místo nahoře na kuchyňských lístcích, aby spona nezakryla číslo stolu. 0 = žádné, výchozí cca 20 mm.",
   settingsKitchenPrintOrderFontWeight: "Tučnost lístku objednávky",
   settingsKitchenPrintMessageFontWeight: "Tučnost lístku zprávy",
   settingsKitchenPrintFontLarge: "Velká (min)",
@@ -1880,6 +1886,9 @@ const zh: Record<TranslationKey, string> = {
   settingsKitchenPrintLangNone: "无",
   settingsKitchenPrintOrderFontSize: "厨房订单小票字号",
   settingsKitchenPrintMessageFontSize: "厨房消息字号",
+  settingsKitchenPrintClipTop: "顶部留白（夹子）",
+  settingsKitchenPrintClipTopHint:
+    "厨房小票顶部的空白，避免夹子挡住桌号。0 = 无，默认约 20 毫米。",
   settingsKitchenPrintOrderFontWeight: "厨房订单小票粗细",
   settingsKitchenPrintMessageFontWeight: "厨房消息小票粗细",
   settingsKitchenPrintFontLarge: "大（最小）",

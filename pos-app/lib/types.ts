@@ -153,6 +153,8 @@ export interface AppSettings {
   kitchenPrintMessageFontWeight: ReceiptFontWeight;
   /** Per-element layout for kitchen order and message tickets (JSON). */
   kitchenPrintLayout: KitchenPrintLayout;
+  /** Blank margin at top of kitchen tickets (mm) — avoids clip rail covering table. */
+  kitchenPrintClipTopMm: number;
   receiptHeaderTitle: string;
   receiptLegalName: string;
   receiptAddress: string;

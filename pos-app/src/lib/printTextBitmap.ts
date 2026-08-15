@@ -126,6 +126,19 @@ export function textToPngDataUrl(text: string, options: BitmapTextOptions): stri
   return canvas.toDataURL("image/png");
 }
 
+export function blankPngDataUrl(widthPx: number, heightPx: number, dpr = 2): string {
+  if (widthPx <= 0 || heightPx <= 0) return "";
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(widthPx * dpr);
+  canvas.height = Math.ceil(heightPx * dpr);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+  ctx.scale(dpr, dpr);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, widthPx, heightPx);
+  return canvas.toDataURL("image/png");
+}
+
 export function bitmapImgHtml(
   dataUrl: string,
   alt: string,

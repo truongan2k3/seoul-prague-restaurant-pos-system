@@ -14,6 +14,7 @@ import { CallWaiterListener } from "@/components/call-waiter-listener";
 import { Sidebar } from "@/components/sidebar";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { useTableOrderWorkflow } from "@/hooks/use-table-order-workflow";
+import { useSessionHealth } from "@/hooks/use-session-health";
 import { useApp } from "@/contexts/app-context";
 import { AUTO_SERVE_POLL_MS } from "@/lib/auto-serve";
 import { canAccessNavTabForMember, firstAccessibleNavTab } from "@/lib/staff-roles";
@@ -185,6 +186,16 @@ export function DashboardShell() {
     onRefresh: refreshPosData,
   });
 
+  useSessionHealth({
+    onRefresh: () => {
+      refreshPosData();
+      void reloadSales();
+      void reloadInventory();
+    },
+    isBusy: () => tableOrder.modal != null,
+    enabled: !loading && !error,
+  });
+
   if (loading) return <LoadingShell />;
   if (error) {
     return (
@@ -225,7 +236,14 @@ export function DashboardShell() {
       case "reservations":
         return <ReservationsView tables={tables} onRefreshTables={reloadTables} />;
       case "history":
-        return <HistoryView menuItems={menuItems} />;
+        return (
+          <HistoryView
+            menuItems={menuItems}
+            onSaleUpdated={(updated) => {
+              setSales((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
+            }}
+          />
+        );
       case "summary":
         return <SummaryView sales={sales} menuItems={menuItems} onRefresh={reloadSales} />;
       case "storage":

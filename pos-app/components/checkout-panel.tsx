@@ -36,6 +36,8 @@ interface CheckoutPanelProps {
   onCfdUpdate?: (payload: CfdCheckoutPayload) => void;
   confirmLabel?: string;
   className?: string;
+  /** Bumps when checkout opens fresh — resets split session. */
+  sessionResetKey?: number;
 }
 
 function AccordionTabBar({
@@ -123,6 +125,7 @@ export function CheckoutPanel({
   onCfdUpdate,
   confirmLabel,
   className = "",
+  sessionResetKey = 0,
 }: CheckoutPanelProps) {
   const { translate } = useApp();
   const { settings } = useSettings();
@@ -155,24 +158,18 @@ export function CheckoutPanel({
   const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
   const [printReceipt, setPrintReceipt] = useState(settings.autoPrintOnPayment);
+  const splitSessionRef = useRef<{ active: boolean; mode: SplitMode; count: number }>({
+    active: false,
+    mode: "total",
+    count: 2,
+  });
+  const [equalPaymentsMade, setEqualPaymentsMade] = useState(0);
 
   useEffect(() => {
     setPrintReceipt(settings.autoPrintOnPayment);
   }, [settings.autoPrintOnPayment]);
 
-  const menuById = useMemo(() => new Map(menuItems.map((item) => [item.id, item])), [menuItems]);
-
-  const summaryRows = useMemo(
-    () => buildReceiptLines(orderSummary, menuById),
-    [orderSummary, menuById],
-  );
-
-  const orderSubtotal = useMemo(
-    () => orderSummary.reduce((sum, item) => sum + item.price * item.quantity, 0),
-    [orderSummary],
-  );
-
-  useEffect(() => {
+  const resetCheckoutForm = useCallback(() => {
     setSelectedLineIds(lines.map((line) => line.lineId));
     setDiscountValue(0);
     setDiscountPreset(null);
@@ -186,7 +183,51 @@ export function CheckoutPanel({
     setSplitMode("total");
     setAccordion(null);
     setLocalError(null);
+    setEqualPaymentsMade(0);
+    splitSessionRef.current = { active: false, mode: "total", count: 2 };
   }, [lines]);
+
+  useEffect(() => {
+    resetCheckoutForm();
+  }, [sessionResetKey, resetCheckoutForm]);
+
+  useEffect(() => {
+    if (splitMode !== "total") {
+      splitSessionRef.current = { active: true, mode: splitMode, count: splitCount };
+    }
+  }, [splitMode, splitCount]);
+
+  useEffect(() => {
+    const session = splitSessionRef.current;
+    if (!session.active || session.mode === "total") {
+      setSelectedLineIds(lines.map((line) => line.lineId));
+      return;
+    }
+
+    setSplitMode(session.mode);
+    setSplitCount(session.count);
+    setAccordion("split");
+    if (session.mode === "items") {
+      setSelectedLineIds([]);
+    } else {
+      setSelectedLineIds(lines.map((line) => line.lineId));
+    }
+    setCashGiven("");
+    setRoundUpTotal("");
+    setLocalError(null);
+  }, [lines]);
+
+  const menuById = useMemo(() => new Map(menuItems.map((item) => [item.id, item])), [menuItems]);
+
+  const summaryRows = useMemo(
+    () => buildReceiptLines(orderSummary, menuById),
+    [orderSummary, menuById],
+  );
+
+  const orderSubtotal = useMemo(
+    () => orderSummary.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    [orderSummary],
+  );
 
   useEffect(() => {
     if (splitMode === "items") {
@@ -462,7 +503,8 @@ export function CheckoutPanel({
 
     const closeTable =
       splitMode === "total" ||
-      (splitMode === "items" && (remaining?.length ?? 0) === 0);
+      (splitMode === "items" && (remaining?.length ?? 0) === 0) ||
+      (splitMode === "equal" && equalPaymentsMade + 1 >= splitCount);
 
     const payload: CheckoutSubmitPayload = {
       paidOrders,
@@ -478,6 +520,18 @@ export function CheckoutPanel({
   const submitCheckout = async (payload: CheckoutSubmitPayload) => {
     await onCheckout(payload);
     playPaymentSuccessSound(settings.soundConfigs.paymentSuccess);
+
+    if (!payload.closeTable && payload.payment.splitMode !== "total") {
+      setAccordion("split");
+      setCashGiven("");
+      setRoundUpTotal("");
+      if (payload.payment.splitMode === "equal") {
+        setEqualPaymentsMade((count) => count + 1);
+      }
+      if (payload.payment.splitMode === "items") {
+        setSelectedLineIds([]);
+      }
+    }
   };
 
   const submitLabel = confirmLabel
@@ -611,6 +665,13 @@ export function CheckoutPanel({
                   <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
                     {translate("perPerson")}: {displayPrice(baseTotals.amountDueNow)}
                   </span>
+                  {splitCount > 1 && (
+                    <span className="text-xs text-blue-700 dark:text-blue-300">
+                      {translate("splitPaymentProgress")
+                        .replace("{current}", String(equalPaymentsMade + 1))
+                        .replace("{total}", String(splitCount))}
+                    </span>
+                  )}
                 </div>
               )}
 

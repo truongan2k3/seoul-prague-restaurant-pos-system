@@ -21,10 +21,12 @@ export function MarqueeSequenceTrack({
     [messages],
   );
   const [index, setIndex] = useState(0);
+  const [cycle, setCycle] = useState(0);
   const duration = clampMarqueeDurationSeconds(durationSeconds);
 
   useEffect(() => {
     setIndex(0);
+    setCycle(0);
   }, [activeMessages.join("\u0001"), duration]);
 
   if (activeMessages.length === 0) return null;
@@ -33,15 +35,18 @@ export function MarqueeSequenceTrack({
 
   return (
     <div
-      key={`${index}-${text}`}
+      key={`${cycle}-${index}-${text}`}
       className={className}
       style={{
         animationDuration: `${duration}s`,
         fontFamily,
       }}
       onAnimationEnd={() => {
-        if (activeMessages.length <= 1) return;
-        setIndex((current) => (current + 1) % activeMessages.length);
+        if (activeMessages.length > 1) {
+          setIndex((current) => (current + 1) % activeMessages.length);
+        } else {
+          setCycle((current) => current + 1);
+        }
       }}
     >
       <span className={textClassName}>{text}</span>

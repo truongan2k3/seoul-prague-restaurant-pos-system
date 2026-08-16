@@ -37,3 +37,26 @@ export async function fetchOrderLogsForItems(orderItemIds: string[]) {
     error: null,
   };
 }
+
+/** All order_logs for every line on this table (including cancelled rows). */
+export async function fetchOrderLogsForTable(tableId: string, since?: Date) {
+  let itemsQuery = supabase
+    .from("order_items")
+    .select("id, name, created_at")
+    .eq("table_id", tableId)
+    .order("created_at", { ascending: true });
+
+  if (since) {
+    itemsQuery = itemsQuery.gte("created_at", since.toISOString());
+  }
+
+  const { data: items, error: itemsError } = await itemsQuery;
+  if (itemsError) return { data: [] as OrderLogEntry[], error: itemsError, itemNames: new Map<string, string>() };
+
+  const itemNames = new Map<string, string>(
+    (items ?? []).map((row) => [row.id, String(row.name)]),
+  );
+  const ids = [...itemNames.keys()];
+  const logsRes = await fetchOrderLogsForItems(ids);
+  return { ...logsRes, itemNames };
+}

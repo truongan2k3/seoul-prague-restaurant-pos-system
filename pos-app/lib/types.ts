@@ -91,6 +91,8 @@ export interface NetworkPrinter {
   port: string;
   enabled: boolean;
   roles: PrinterRole[];
+  /** Per IP (bridge): rasterize text → ESC/POS bitmap. Fixes garbled fonts on old thermals. */
+  legacyBitmap?: boolean;
 }
 
 /** Configurable alert sounds (paths under /public/sounds). */
@@ -178,6 +180,8 @@ export interface AppSettings {
   receiptFontSize: ReceiptFontSize;
   receiptFontWeight: ReceiptFontWeight;
   receiptFontFamily: ReceiptFontFamily;
+  /** Rasterize receipt text to PNG before print (fixes old thermal / ESC/POS font issues). */
+  receiptPrintBitmap: boolean;
   adminDeletionPassword: string;
   /** Looping ad video on /client after thank-you (public URL) — legacy single file */
   cfdAdVideoUrl: string;

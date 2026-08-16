@@ -246,47 +246,56 @@ function ThankYouView({
 
 function CfdSlideshowPlayer({ items }: { items: CfdSlideshowItem[] }) {
   const [index, setIndex] = useState(0);
+  const [replay, setReplay] = useState(0);
   const item = items[index % items.length];
   const mediaClass = "max-h-full max-w-full object-contain";
+  const singleItem = items.length <= 1;
 
   useEffect(() => {
     setIndex(0);
+    setReplay(0);
   }, [items]);
 
+  const goNext = useCallback(() => {
+    if (singleItem) {
+      setReplay((current) => current + 1);
+      return;
+    }
+    setIndex((current) => (current + 1) % items.length);
+  }, [items.length, singleItem]);
+
   useEffect(() => {
-    if (items.length <= 1) return;
     if (item.type === "video") return;
 
     const ms = cfdSlideshowItemDuration(item) * 1000;
     const timer = window.setTimeout(() => {
-      setIndex((current) => (current + 1) % items.length);
+      goNext();
     }, ms);
     return () => window.clearTimeout(timer);
-  }, [index, item, items.length]);
+  }, [index, item, goNext, replay]);
 
-  const goNext = useCallback(() => {
-    setIndex((current) => (current + 1) % items.length);
-  }, [items.length]);
+  const mediaKey = `${item.url}-${replay}`;
 
   return (
     <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-zinc-950 px-4 py-4 sm:px-6 sm:py-6">
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-zinc-800 bg-black">
         {item.type === "video" ? (
           <video
-            key={item.url}
+            key={mediaKey}
             src={item.url}
             autoPlay
             muted
             playsInline
-            onEnded={goNext}
+            loop={singleItem}
+            onEnded={singleItem ? undefined : goNext}
             className={mediaClass}
           />
         ) : item.type === "gif" || isCfdGifMedia(item.url) ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img key={item.url} src={item.url} alt="Promotional display" className={mediaClass} />
+          <img key={mediaKey} src={item.url} alt="Promotional display" className={mediaClass} />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <img key={item.url} src={item.url} alt="Promotional display" className={mediaClass} />
+          <img key={mediaKey} src={item.url} alt="Promotional display" className={mediaClass} />
         )}
       </div>
     </main>

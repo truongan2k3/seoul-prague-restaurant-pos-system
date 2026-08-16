@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSessionHealth } from "@/hooks/use-session-health";
 import { Bell, User } from "lucide-react";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { CancelReasonModal } from "@/components/cancel-reason-modal";
@@ -209,6 +210,11 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
       unsubTables();
     };
   }, [reload]);
+
+  useSessionHealth({
+    onRefresh: () => void reload(),
+    isBusy: () => busy || cancelTarget != null,
+  });
 
   useEffect(() => {
     let cancelled = false;

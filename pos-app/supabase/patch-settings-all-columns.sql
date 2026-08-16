@@ -50,6 +50,7 @@ ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS reservation_operating_hours
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS receipt_font_size text DEFAULT 'medium';
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS receipt_font_weight text DEFAULT 'bold';
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS receipt_font_family text DEFAULT 'consolas';
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS receipt_print_bitmap boolean DEFAULT false;
 
 -- Admin + card terminal
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS admin_deletion_password text DEFAULT '1234';

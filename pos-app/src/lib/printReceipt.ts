@@ -13,6 +13,7 @@ import {
 } from "@/lib/receipt-print-styles";
 import type { AppSettings } from "@/lib/types";
 import type { ReceiptTemplate } from "@/src/components/ReceiptPrint";
+import { receiptShouldUseBitmap } from "@/lib/print-dispatch";
 
 const PRINT_IFRAME_ID = "receipt-print-iframe";
 
@@ -20,6 +21,7 @@ export type ReceiptPrintFontSettings = Pick<
   AppSettings,
   "receiptFontSize" | "receiptFontWeight" | "receiptFontFamily"
 > &
+  Partial<Pick<AppSettings, "receiptPrintBitmap">> &
   Partial<
     Pick<
       AppSettings,
@@ -249,7 +251,7 @@ function resolvePrintTypography(fontSettings?: ReceiptPrintFontSettings): Receip
     return receiptTypographyFromSettings({
       receiptFontSize: "medium",
       receiptFontWeight: "bold",
-      receiptFontFamily: "consolas",
+      receiptFontFamily: "courier",
     });
   }
   return receiptTypographyFromSettings(fontSettings);
@@ -371,22 +373,71 @@ export async function printReceiptData(
   template?: ReceiptTemplate,
   fontSettings?: ReceiptPrintFontSettings,
 ): Promise<void> {
-  const html = buildReceiptHtmlContent(data, template);
+  const typography = resolvePrintTypography(fontSettings);
+  const useBitmap = receiptShouldUseBitmap({
+    receiptPrintBitmap: fontSettings?.receiptPrintBitmap ?? false,
+    printers: fontSettings?.printers ?? [],
+  });
+
+  let receiptHtmlContent: string;
+  let bitmapPngs: string[] = [];
+
+  if (useBitmap) {
+    const { buildBitmapReceiptHtml } = await import("@/src/lib/printReceiptBitmap");
+    const bitmap = await buildBitmapReceiptHtml(
+      data,
+      template,
+      typography,
+      fontSettings?.receiptFontFamily ?? "courier",
+      fontSettings?.receiptFontWeight ?? "bold",
+    );
+    receiptHtmlContent = bitmap.html;
+    bitmapPngs = bitmap.pngs;
+  } else {
+    receiptHtmlContent = buildReceiptHtmlContent(data, template);
+  }
 
   if (fontSettings?.silentPrintEnabled) {
     try {
-      const { buildEscPosFromTextLines } = await import("@/src/lib/escpos");
-      const { silentPrintEscPos } = await import("@/src/lib/print-bridge-client");
-      const bytes = buildEscPosFromTextLines(buildReceiptEscPosLines(data, template));
-      const result = await silentPrintEscPos(
-        {
-          silentPrintEnabled: true,
-          printBridgeUrl: fontSettings.printBridgeUrl ?? "http://127.0.0.1:39100",
-          browserPrintFallback: fontSettings.browserPrintFallback ?? true,
-          printers: fontSettings.printers ?? [],
-        },
+      const { buildEscPosFromPngs, buildEscPosFromTextLines } = await import("@/src/lib/escpos");
+      const {
+        printerUsesLegacyBitmap,
+        silentPrintEscPosPerPrinter,
+      } = await import("@/src/lib/print-bridge-client");
+      const bridgeSettings = {
+        silentPrintEnabled: true,
+        printBridgeUrl: fontSettings.printBridgeUrl ?? "http://127.0.0.1:39100",
+        browserPrintFallback: fontSettings.browserPrintFallback ?? true,
+        printers: fontSettings.printers ?? [],
+      };
+      const textBytes = buildEscPosFromTextLines(buildReceiptEscPosLines(data, template));
+      let bitmapBytes: Uint8Array | null = null;
+
+      const result = await silentPrintEscPosPerPrinter(
+        bridgeSettings,
         "receipt",
-        bytes,
+        async (printer) => {
+          if (!printerUsesLegacyBitmap(printer)) {
+            return textBytes;
+          }
+          if (!bitmapBytes) {
+            if (bitmapPngs.length === 0) {
+              const { buildBitmapReceiptHtml } = await import("@/src/lib/printReceiptBitmap");
+              const bitmap = await buildBitmapReceiptHtml(
+                data,
+                template,
+                typography,
+                fontSettings?.receiptFontFamily ?? "courier",
+                fontSettings?.receiptFontWeight ?? "bold",
+              );
+              bitmapPngs = bitmap.pngs;
+              receiptHtmlContent = bitmap.html;
+            }
+            bitmapBytes =
+              bitmapPngs.length > 0 ? await buildEscPosFromPngs(bitmapPngs) : textBytes;
+          }
+          return bitmapBytes;
+        },
       );
       if (result.sent) return;
       console.warn("[ReceiptPrint] Silent print incomplete:", result.error);
@@ -399,5 +450,5 @@ export async function printReceiptData(
     }
   }
 
-  return printReceiptHTML(html, fontSettings);
+  return printReceiptHTML(receiptHtmlContent, fontSettings);
 }

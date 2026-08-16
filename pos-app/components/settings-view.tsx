@@ -28,6 +28,7 @@ import { MarqueeSettingsEditor } from "@/components/marquee-settings-editor";
 import type { TranslationKey } from "@/lib/i18n/translations";
 import { pingPrintBridge } from "@/src/lib/print-bridge-client";
 import type { NetworkPrinter, PrinterRole, ReceiptFontFamily, WeekdayKey } from "@/lib/types";
+import { formatPrinterEndpoint } from "@/lib/print-dispatch";
 import { CfdSlideshowManager } from "@/components/cfd-slideshow-manager";
 import {
   clearBusinessLogoAction,
@@ -238,6 +239,7 @@ export function SettingsView({
       port: draft.printerPort || "9100",
       enabled: true,
       roles: ["kitchen"],
+      legacyBitmap: false,
     };
     updateDraft("printers", [...draft.printers, next]);
   };
@@ -524,7 +526,7 @@ export function SettingsView({
                         placeholder="9100"
                       />
                     </label>
-                    <div className="block text-sm">
+                    <div className="block text-sm sm:col-span-2">
                       <span className="text-gray-500 dark:text-gray-400">
                         {translate("settingsPrinterRoles")}
                       </span>
@@ -550,6 +552,24 @@ export function SettingsView({
                         ))}
                       </div>
                     </div>
+                    <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3 sm:col-span-2 dark:border-amber-900/50 dark:bg-amber-950/20">
+                      <input
+                        type="checkbox"
+                        checked={printer.legacyBitmap === true}
+                        onChange={(event) =>
+                          updatePrinter(printer.id, { legacyBitmap: event.target.checked })
+                        }
+                        className="mt-0.5 h-4 w-4 rounded border-gray-300"
+                      />
+                      <span className="text-sm">
+                        <span className="font-medium text-gray-900 dark:text-gray-100">
+                          {translate("settingsPrinterLegacyBitmap")} — {formatPrinterEndpoint(printer)}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+                          {translate("settingsPrinterLegacyBitmapHint")}
+                        </span>
+                      </span>
+                    </label>
                   </div>
                 </div>
               ))}

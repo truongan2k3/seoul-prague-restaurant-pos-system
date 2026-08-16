@@ -159,7 +159,7 @@ export function parseReceiptFontFamily(value: string | null | undefined): Receip
   ) {
     return value;
   }
-  return "consolas";
+  return "courier";
 }
 
 export function receiptFontStack(family: ReceiptFontFamily): string {
@@ -228,8 +228,9 @@ export function buildThermalPrintCss(
     font-size: ${typography.bodyPx}px;
     font-weight: ${typography.bodyWeight};
     line-height: ${typography.lineHeight};
-    -webkit-font-smoothing: antialiased;
-    text-rendering: geometricPrecision;
+    -webkit-font-smoothing: none;
+    -moz-osx-font-smoothing: unset;
+    text-rendering: optimizeSpeed;
     background: #fff !important;
     color: #000 !important;
   }
@@ -327,5 +328,19 @@ export function buildThermalPrintCss(
   }
   .receipt-footer p { margin: 2px 0; }
   p { margin: 2px 0; color: #000; }
+  .receipt-bitmap img.kt-bitmap {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+  }
+  .receipt-bitmap-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .receipt-bitmap-col { flex: 1; min-width: 0; }
+  .receipt-bitmap-gap { height: 6px; }
 `;
 }

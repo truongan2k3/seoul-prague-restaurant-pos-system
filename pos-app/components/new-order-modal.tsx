@@ -377,6 +377,10 @@ export function NewOrderModal({
   const [unsavedConfirmMode, setUnsavedConfirmMode] = useState<"close" | "outside" | null>(null);
   const orderPanelRef = useRef<HTMLDivElement | null>(null);
   const wasOpenRef = useRef(false);
+  /** Blocks duplicate Send taps before parent `isSaving` flips. */
+  const actionLockRef = useRef(false);
+  const [isSending, setIsSending] = useState(false);
+  const isBusy = isSaving || isSending;
   const [kitchenMessageOpen, setKitchenMessageOpen] = useState(false);
   const [kitchenMessageMode, setKitchenMessageMode] = useState<KitchenMessageMode>("table");
   const [kitchenMessageDraft, setKitchenMessageDraft] = useState("");
@@ -395,6 +399,7 @@ export function NewOrderModal({
   const [customItemType, setCustomItemType] = useState<MenuItem["itemType"]>("food");
   const [customItemTaxGroup, setCustomItemTaxGroup] = useState<TaxGroup>("B");
   const [customItemError, setCustomItemError] = useState<string | null>(null);
+  const [activityLogRevision, setActivityLogRevision] = useState(0);
 
   useEffect(() => {
     if (!open) return;
@@ -664,6 +669,7 @@ export function NewOrderModal({
       });
       setSubmittedBaseline(orders);
       setPendingCancels([]);
+      setActivityLogRevision((value) => value + 1);
       onRefreshExistingOrders?.();
     } catch (error) {
       setSubmittedLineError(error instanceof Error ? error.message : "Failed to save order.");
@@ -1244,15 +1250,17 @@ export function NewOrderModal({
   };
 
   const handleSend = async () => {
-    if (!hasPendingSend || isSaving) return;
+    if (!hasPendingSend || isBusy || actionLockRef.current) return;
 
-    if (hasSubmittedChanges) {
-      const saved = await handleSaveSubmittedChanges({ silent: false });
-      if (!saved) return;
-    }
-
-    setSubmittedLineError(null);
+    actionLockRef.current = true;
+    setIsSending(true);
     try {
+      if (hasSubmittedChanges) {
+        const saved = await handleSaveSubmittedChanges({ silent: false });
+        if (!saved) return;
+      }
+
+      setSubmittedLineError(null);
       if (cart.length > 0) {
         const orders = await buildCartOrdersFromLines();
         await onSendToKitchen(orders);
@@ -1266,25 +1274,35 @@ export function NewOrderModal({
       }
     } catch (error) {
       setSubmittedLineError(error instanceof Error ? error.message : "Failed to send.");
+    } finally {
+      actionLockRef.current = false;
+      setIsSending(false);
     }
   };
 
   const handleSaveNoPrint = async () => {
-    if (isSaving) return;
+    if (isBusy || actionLockRef.current) return;
     if (!hasSubmittedChanges && cart.length === 0) return;
 
-    if (hasSubmittedChanges && mode === "append") {
-      const saved = await handleSaveSubmittedChanges({ silent: true });
-      if (!saved) return;
-    }
+    actionLockRef.current = true;
+    setIsSending(true);
+    try {
+      if (hasSubmittedChanges && mode === "append") {
+        const saved = await handleSaveSubmittedChanges({ silent: true });
+        if (!saved) return;
+      }
 
-    if (cart.length > 0) {
-      if (!onAppendCartNoPrint) return;
-      const orders = await buildCartOrdersFromLines();
-      await onAppendCartNoPrint(orders);
-      setCart([]);
-      setGrillGuestCount(null);
-      onRefreshExistingOrders?.();
+      if (cart.length > 0) {
+        if (!onAppendCartNoPrint) return;
+        const orders = await buildCartOrdersFromLines();
+        await onAppendCartNoPrint(orders);
+        setCart([]);
+        setGrillGuestCount(null);
+        onRefreshExistingOrders?.();
+      }
+    } finally {
+      actionLockRef.current = false;
+      setIsSending(false);
     }
   };
 
@@ -1370,20 +1388,31 @@ export function NewOrderModal({
     selectedSubmittedLineId,
   ]);
 
-  const orderItemIdsForLog = useMemo(
-    () => submittedLines.map((line) => line.id).filter((id): id is string => Boolean(id)),
-    [submittedLines],
-  );
+  const orderItemIdsForLog = useMemo(() => {
+    const ids = new Set<string>();
+    for (const line of submittedLines) {
+      if (line.id) ids.add(line.id);
+      line.unitIds?.forEach((id) => ids.add(id));
+    }
+    for (const item of submittedBaseline) {
+      if (item.id) ids.add(item.id);
+      item.unitIds?.forEach((id) => ids.add(id));
+    }
+    for (const entry of pendingCancels) ids.add(entry.itemId);
+    return [...ids];
+  }, [submittedLines, submittedBaseline, pendingCancels]);
 
   const itemNameByOrderId = useMemo(() => {
     const map = new Map<string, string>();
-    for (const line of submittedLines) {
-      if (line.id) {
-        map.set(line.id, orderItemDisplayName(line, menuItems, language));
-      }
-    }
+    const addLine = (line: OrderItem) => {
+      const label = orderItemDisplayName(line, menuItems, language);
+      if (line.id) map.set(line.id, label);
+      line.unitIds?.forEach((id) => map.set(id, label));
+    };
+    for (const line of submittedBaseline) addLine(line);
+    for (const line of submittedLines) addLine(line);
     return map;
-  }, [submittedLines, menuItems, language]);
+  }, [submittedLines, submittedBaseline, menuItems, language]);
 
   const isLineSentToKitchen = (line: OrderItem) => {
     if (line.isCancelled || line.hideOnKds || line.skipPrint) return false;
@@ -1392,7 +1421,7 @@ export function NewOrderModal({
   };
 
   const canSaveNoPrint =
-    !isSaving &&
+    !isBusy &&
     ((mode === "append" && hasSubmittedChanges && Boolean(onSaveExistingOrders)) ||
       (cart.length > 0 && Boolean(onAppendCartNoPrint)));
 
@@ -1518,7 +1547,7 @@ export function NewOrderModal({
                       qtyEditable={isManageTableLineEditable(line.status)}
                       priceEditable={isManageTablePriceEditable(line.status)}
                       priceActive={submittedPriceEditLineId === line.lineId}
-                      disabled={isSaving}
+                      disabled={isBusy}
                       onDismiss={dismissSubmittedLineSelection}
                       onSpecialRequest={() => openSubmittedNoteModal(line)}
                       onEditPrice={() =>
@@ -1689,20 +1718,20 @@ export function NewOrderModal({
             onClick={() => void handleSaveNoPrint()}
             className="min-h-[52px] rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm font-semibold text-gray-800 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
           >
-            {isSaving ? "…" : translate("saveNoPrint")}
+            {isBusy ? "…" : translate("saveNoPrint")}
           </button>
           <button
             type="button"
-            disabled={!hasPendingSend || isSaving}
+            disabled={!hasPendingSend || isBusy}
             onClick={() => void handleSend()}
             className="min-h-[52px] rounded-lg bg-blue-600 px-2 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {isSaving ? "…" : translate("sendToKitchen")}
+            {isBusy ? "…" : translate("sendToKitchen")}
           </button>
           {onCheckout ? (
             <button
               type="button"
-              disabled={!canCheckout || isSaving}
+              disabled={!canCheckout || isBusy}
               onClick={() => void onCheckout(submittedOrdersRaw)}
               className="min-h-[52px] rounded-lg bg-emerald-600 px-2 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -1721,6 +1750,7 @@ export function NewOrderModal({
           since={table.occupiedAt}
           orderItemIds={orderItemIdsForLog}
           itemNameByOrderId={itemNameByOrderId}
+          refreshKey={activityLogRevision}
         />
       ) : null}
     </>
@@ -2430,7 +2460,7 @@ export function NewOrderModal({
               {hasSubmittedChanges && (
                 <button
                   type="button"
-                  disabled={isSaving}
+                  disabled={isBusy}
                   onClick={() => void handleUnsavedSave()}
                   className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
                 >

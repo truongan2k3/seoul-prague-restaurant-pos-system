@@ -13,8 +13,11 @@ import { sumLines } from "@/lib/checkout-calculations";
 import type { CheckoutPaymentRecord } from "@/lib/checkout-calculations";
 import { formatCzk } from "@/lib/currency";
 import { generateOrderNumber } from "@/lib/receipt-calculations";
-import type { MenuItem, OrderItem, SaleRecord } from "@/lib/types";
+import { paymentFilterClass } from "@/lib/theme-classes";
+import type { MenuItem, OrderItem, PaymentMethod, SaleRecord } from "@/lib/types";
 import { deleteSaleRecords, updateSaleRecord } from "@/src/lib/sales-actions";
+
+type EditScope = "payment" | "full";
 
 function saleToPaymentRecord(sale: SaleRecord): CheckoutPaymentRecord {
   return {
@@ -33,13 +36,21 @@ function saleToPaymentRecord(sale: SaleRecord): CheckoutPaymentRecord {
   };
 }
 
+function resolveCashAmounts(grandTotal: number, amountGivenRaw: number) {
+  const amountGiven = amountGivenRaw > 0 ? amountGivenRaw : grandTotal;
+  const changeDue = Math.max(0, amountGiven - grandTotal);
+  return { amountGiven, changeDue };
+}
+
 interface OrderHistoryModalProps {
   sale: SaleRecord;
   menuItems: MenuItem[];
   onClose: () => void;
   onUpdated: (sale: SaleRecord) => void;
   onDeleted?: (saleId: string) => void;
+  /** @deprecated use initialEditScope */
   initialEditMode?: boolean;
+  initialEditScope?: EditScope | false;
 }
 
 export function OrderHistoryModal({
@@ -49,19 +60,30 @@ export function OrderHistoryModal({
   onUpdated,
   onDeleted,
   initialEditMode = false,
+  initialEditScope,
 }: OrderHistoryModalProps) {
+  const resolvedInitialScope: EditScope | false =
+    initialEditScope ?? (initialEditMode ? "payment" : false);
+
   const { translate, currentStaffUser, logAction } = useApp();
   const { printReceipt } = useReceiptPrint();
   const { pushNotification } = useNotifications();
   const { requestDeletion } = useAdminDeletionGate();
-  const [editMode, setEditMode] = useState(initialEditMode);
+  const [editScope, setEditScope] = useState<EditScope | false>(resolvedInitialScope);
   const [editItems, setEditItems] = useState<OrderItem[]>(sale.items);
   const [editDiscount, setEditDiscount] = useState(sale.discountAmount);
   const [editTip, setEditTip] = useState(sale.tip);
+  const [editPaymentMethod, setEditPaymentMethod] = useState<PaymentMethod>(sale.paymentMethod);
+  const [editAmountGiven, setEditAmountGiven] = useState(
+    sale.amountGiven != null ? String(sale.amountGiven) : "",
+  );
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const canEdit = canManageStaff(currentStaffUser?.role);
+  const editMode = editScope !== false;
+  const paymentOnlyEdit = editScope === "payment";
+
   const orderItemIds = useMemo(
     () => sale.items.map((item) => item.id).filter((id): id is string => Boolean(id)),
     [sale.items],
@@ -71,19 +93,43 @@ export function OrderHistoryModal({
     [sale.items],
   );
 
-  useEffect(() => {
-    setEditMode(initialEditMode);
+  const resetEditState = () => {
     setEditItems(sale.items);
     setEditDiscount(sale.discountAmount);
     setEditTip(sale.tip);
+    setEditPaymentMethod(sale.paymentMethod);
+    setEditAmountGiven(sale.amountGiven != null ? String(sale.amountGiven) : "");
     setSaveError(null);
-  }, [sale, initialEditMode]);
+  };
+
+  useEffect(() => {
+    setEditScope(resolvedInitialScope);
+    resetEditState();
+  }, [sale, resolvedInitialScope]);
 
   const editSubtotal = useMemo(() => sumLines(editItems), [editItems]);
   const editGrandTotal = useMemo(
     () => Math.max(0, editSubtotal - editDiscount) + editTip,
     [editSubtotal, editDiscount, editTip],
   );
+  const editChangeDue = useMemo(() => {
+    if (editPaymentMethod !== "cash") return 0;
+    const given = Number(editAmountGiven) || 0;
+    if (given <= 0) return 0;
+    return Math.max(0, given - editGrandTotal);
+  }, [editPaymentMethod, editAmountGiven, editGrandTotal]);
+
+  const displayPaymentMethod = editMode ? editPaymentMethod : sale.paymentMethod;
+  const displayAmountGiven = editMode
+    ? editPaymentMethod === "cash"
+      ? Number(editAmountGiven) || editGrandTotal
+      : undefined
+    : sale.amountGiven;
+  const displayChangeDue = editMode
+    ? editPaymentMethod === "cash"
+      ? editChangeDue
+      : undefined
+    : sale.changeDue;
 
   const handleReprint = () => {
     printReceipt({
@@ -99,12 +145,21 @@ export function OrderHistoryModal({
   const handleSaveEdit = async () => {
     setSaving(true);
     setSaveError(null);
+
+    const cashFields =
+      editPaymentMethod === "cash"
+        ? resolveCashAmounts(editGrandTotal, Number(editAmountGiven) || 0)
+        : { amountGiven: null as number | null, changeDue: null as number | null };
+
     const { error } = await updateSaleRecord(sale.id, {
       items: editItems,
       subtotal: editSubtotal,
       discountAmount: editDiscount,
       tip: editTip,
       grandTotal: editGrandTotal,
+      paymentMethod: editPaymentMethod,
+      amountGiven: cashFields.amountGiven,
+      changeDue: cashFields.changeDue,
     });
     setSaving(false);
     if (error) {
@@ -119,10 +174,23 @@ export function OrderHistoryModal({
       discountAmount: editDiscount,
       tip: editTip,
       grandTotal: editGrandTotal,
+      paymentMethod: editPaymentMethod,
+      amountGiven: cashFields.amountGiven ?? undefined,
+      changeDue: cashFields.changeDue ?? undefined,
     };
     onUpdated(updated);
-    setEditMode(false);
-    logAction("edit_sale", `Order ${generateOrderNumber(sale.closedAt)} · ${sale.tableLabel}`);
+    setEditScope(false);
+
+    const changes: string[] = [];
+    if (sale.tip !== editTip) changes.push(`tip ${sale.tip}→${editTip}`);
+    if (sale.paymentMethod !== editPaymentMethod) {
+      changes.push(`${sale.paymentMethod}→${editPaymentMethod}`);
+    }
+    if (sale.grandTotal !== editGrandTotal) changes.push(`total ${sale.grandTotal}→${editGrandTotal}`);
+    logAction(
+      "edit_sale",
+      `Order ${generateOrderNumber(sale.closedAt)} · ${sale.tableLabel}${changes.length ? ` · ${changes.join(", ")}` : ""}`,
+    );
   };
 
   const handleDelete = () => {
@@ -185,7 +253,7 @@ export function OrderHistoryModal({
             <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
               {translate("currentOrder")}
             </h3>
-            {editMode ? (
+            {editMode && !paymentOnlyEdit ? (
               <ul className="mt-3 space-y-2">
                 {editItems.map((item, index) => (
                   <li
@@ -237,11 +305,48 @@ export function OrderHistoryModal({
 
           <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
             {editMode ? (
-              <div className="space-y-3 text-sm">
+              <div className="mb-4 space-y-3 text-sm">
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">{translate("paymentMethod")}</span>
+                  <div className="mt-2 flex gap-2">
+                    {(["cash", "card"] as const).map((method) => (
+                      <button
+                        key={method}
+                        type="button"
+                        onClick={() => {
+                          setEditPaymentMethod(method);
+                          if (method === "cash" && !editAmountGiven) {
+                            setEditAmountGiven(String(editGrandTotal));
+                          }
+                        }}
+                        className={`min-h-[40px] flex-1 rounded-lg px-3 text-sm font-semibold capitalize ${paymentFilterClass(
+                          editPaymentMethod === method,
+                          method,
+                        )}`}
+                      >
+                        {translate(method)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {editPaymentMethod === "cash" && (
+                  <label className="block space-y-1">
+                    <span>{translate("amountGiven")}</span>
+                    <NumericInputField
+                      value={editAmountGiven}
+                      onChange={setEditAmountGiven}
+                      allowDecimal
+                      inputClassName="w-full rounded border border-gray-200 px-2 py-1 text-right text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                    />
+                    {editChangeDue > 0 && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {translate("changeDue")}: {formatCzk(editChangeDue)}
+                      </p>
+                    )}
+                  </label>
+                )}
                 <label className="block space-y-1">
-                  <span className="flex items-center justify-between gap-3">
-                    {translate("discount")}
-                  </span>
+                  <span>{translate("discount")}</span>
                   <NumericInputField
                     value={editDiscount > 0 ? String(editDiscount) : ""}
                     onChange={(raw) => setEditDiscount(Math.max(0, Number(raw) || 0))}
@@ -250,9 +355,7 @@ export function OrderHistoryModal({
                   />
                 </label>
                 <label className="block space-y-1">
-                  <span className="flex items-center justify-between gap-3">
-                    {translate("tip")}
-                  </span>
+                  <span>{translate("tip")}</span>
                   <NumericInputField
                     value={editTip > 0 ? String(editTip) : ""}
                     onChange={(raw) => setEditTip(Math.max(0, Number(raw) || 0))}
@@ -261,12 +364,33 @@ export function OrderHistoryModal({
                   />
                 </label>
               </div>
-            ) : null}
+            ) : (
+              <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-gray-500 dark:text-gray-400">{translate("paymentMethod")}:</span>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${
+                    displayPaymentMethod === "cash"
+                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+                      : "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200"
+                  }`}
+                >
+                  {translate(displayPaymentMethod)}
+                </span>
+                {displayPaymentMethod === "cash" && displayAmountGiven != null && (
+                  <span className="text-gray-600 dark:text-gray-300">
+                    · {translate("amountGiven")} {formatCzk(displayAmountGiven)}
+                    {(displayChangeDue ?? 0) > 0
+                      ? ` · ${translate("changeDue")} ${formatCzk(displayChangeDue ?? 0)}`
+                      : ""}
+                  </span>
+                )}
+              </div>
+            )}
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <dt className="text-gray-500 dark:text-gray-400">{translate("subtotal")}</dt>
                 <dd className="tabular-nums">
-                  {formatCzk(editMode ? editSubtotal : sale.subtotal)}
+                  {formatCzk(editMode && !paymentOnlyEdit ? editSubtotal : sale.subtotal)}
                 </dd>
               </div>
               <div className="flex justify-between">
@@ -315,11 +439,8 @@ export function OrderHistoryModal({
                 <button
                   type="button"
                   onClick={() => {
-                    setEditMode(false);
-                    setEditItems(sale.items);
-                    setEditDiscount(sale.discountAmount);
-                    setEditTip(sale.tip);
-                    setSaveError(null);
+                    setEditScope(false);
+                    resetEditState();
                   }}
                   className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium dark:border-gray-700"
                 >
@@ -338,7 +459,14 @@ export function OrderHistoryModal({
               <>
                 <button
                   type="button"
-                  onClick={() => setEditMode(true)}
+                  onClick={() => setEditScope("payment")}
+                  className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200"
+                >
+                  {translate("editTipAndPayment")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditScope("full")}
                   className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium dark:border-gray-700"
                 >
                   {translate("editOrder")}

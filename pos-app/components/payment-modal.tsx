@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, X } from "lucide-react";
 import { CheckoutPanel, type CheckoutSubmitPayload } from "@/components/checkout-panel";
 import { useApp } from "@/contexts/app-context";
@@ -38,6 +38,11 @@ export function PaymentModal({
   const { translate } = useApp();
 
   const lines = useMemo(() => expandCheckoutLines(orders), [orders]);
+  const [checkoutSessionKey, setCheckoutSessionKey] = useState(0);
+
+  useEffect(() => {
+    if (open) setCheckoutSessionKey((key) => key + 1);
+  }, [open, table.id]);
 
   const handleCancelCfd = useCallback(() => {
     void sendCfdEvent("CANCEL_CHECKOUT", {});
@@ -150,6 +155,7 @@ export function PaymentModal({
           onCheckout={onConfirm}
           onCfdUpdate={broadcastCheckoutUpdate}
           confirmLabel={translate("confirmPrintReceipt")}
+          sessionResetKey={checkoutSessionKey}
         />
       </div>
     </div>

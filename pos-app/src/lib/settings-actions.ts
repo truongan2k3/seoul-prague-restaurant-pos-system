@@ -42,20 +42,13 @@ import { supabase } from "@/src/lib/supabase";
 export function createDefaultPrinters(host = "192.168.1.200", port = "9100"): NetworkPrinter[] {
   return [
     {
-      id: "printer-receipt",
-      name: "Receipt",
-      host,
-      port,
-      enabled: true,
-      roles: ["receipt"],
-    },
-    {
       id: "printer-kitchen",
       name: "Kitchen",
       host,
       port,
       enabled: true,
       roles: ["kitchen", "kitchen-message"],
+      legacyBitmap: false,
     },
     {
       id: "printer-bar",
@@ -63,7 +56,8 @@ export function createDefaultPrinters(host = "192.168.1.200", port = "9100"): Ne
       host,
       port,
       enabled: true,
-      roles: ["bar"],
+      roles: ["receipt", "bar"],
+      legacyBitmap: true,
     },
   ];
 }
@@ -108,7 +102,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   reservationOperatingHours: DEFAULT_RESERVATION_OPERATING_HOURS,
   receiptFontSize: "medium",
   receiptFontWeight: "bold",
-  receiptFontFamily: "consolas",
+  receiptFontFamily: "courier",
+  receiptPrintBitmap: false,
   adminDeletionPassword: "1234",
   cfdAdVideoUrl: "",
   cfdAdSlideshow: [],
@@ -171,6 +166,7 @@ type SettingsRow = {
   receipt_font_size?: string | null;
   receipt_font_weight?: string | null;
   receipt_font_family?: string | null;
+  receipt_print_bitmap?: boolean | null;
   admin_deletion_password?: string | null;
   cfd_ad_video_url?: string | null;
   cfd_ad_slideshow?: unknown;
@@ -240,13 +236,22 @@ function parseNetworkPrinter(value: unknown): NetworkPrinter | null {
   const roles = Array.isArray(row.roles)
     ? row.roles.map(parsePrinterRole).filter((role): role is PrinterRole => Boolean(role))
     : [];
+  const resolvedRoles: PrinterRole[] =
+    roles.length > 0 ? roles : (["receipt"] as PrinterRole[]);
+  const legacyBitmap =
+    typeof row.legacy_bitmap === "boolean"
+      ? row.legacy_bitmap
+      : typeof row.legacyBitmap === "boolean"
+        ? row.legacyBitmap
+        : false;
   return {
     id,
     name,
     host,
     port: typeof row.port === "string" && row.port.trim() ? row.port.trim() : "9100",
     enabled: row.enabled !== false,
-    roles: roles.length > 0 ? roles : ["receipt"],
+    roles: resolvedRoles,
+    legacyBitmap,
   };
 }
 
@@ -366,6 +371,7 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     receiptFontSize: parseReceiptFontSize(row.receipt_font_size),
     receiptFontWeight: parseReceiptFontWeight(row.receipt_font_weight),
     receiptFontFamily: parseReceiptFontFamily(row.receipt_font_family),
+    receiptPrintBitmap: row.receipt_print_bitmap ?? DEFAULT_APP_SETTINGS.receiptPrintBitmap,
     adminDeletionPassword: row.admin_deletion_password ?? DEFAULT_APP_SETTINGS.adminDeletionPassword,
     cfdAdVideoUrl: row.cfd_ad_video_url ?? DEFAULT_APP_SETTINGS.cfdAdVideoUrl,
     cfdAdSlideshow: parseCfdSlideshow(row.cfd_ad_slideshow),
@@ -485,6 +491,7 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   if (partial.receiptFontSize !== undefined) payload.receipt_font_size = partial.receiptFontSize;
   if (partial.receiptFontWeight !== undefined) payload.receipt_font_weight = partial.receiptFontWeight;
   if (partial.receiptFontFamily !== undefined) payload.receipt_font_family = partial.receiptFontFamily;
+  if (partial.receiptPrintBitmap !== undefined) payload.receipt_print_bitmap = partial.receiptPrintBitmap;
   if (partial.adminDeletionPassword !== undefined) {
     payload.admin_deletion_password = partial.adminDeletionPassword;
   }
@@ -716,6 +723,7 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "receiptFontSize"
     | "receiptFontWeight"
     | "receiptFontFamily"
+    | "receiptPrintBitmap"
     | "adminDeletionPassword"
     | "marqueeConfigs"
     | "soundConfigs"
@@ -767,6 +775,7 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     receiptFontSize: settings.receiptFontSize,
     receiptFontWeight: settings.receiptFontWeight,
     receiptFontFamily: settings.receiptFontFamily,
+    receiptPrintBitmap: settings.receiptPrintBitmap,
     adminDeletionPassword: settings.adminDeletionPassword,
     marqueeConfigs: resolveMarqueeConfigs(settings),
     soundConfigs: settings.soundConfigs,

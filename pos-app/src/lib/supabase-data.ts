@@ -25,6 +25,7 @@ import {
   fetchOptionGroupLibrary,
   mapOptionGroupLibraryResponse,
 } from "@/src/lib/option-group-library-actions";
+import { subscribeToPostgresChanges, subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
 import { supabase } from "@/src/lib/supabase";
 
 interface SupabaseTableRow {
@@ -464,23 +465,19 @@ export function mapInventoryResponse(
 }
 
 export function subscribeToTableChanges(onChange: () => void) {
-  const channel = supabase
-    .channel("tables-realtime")
-    .on("postgres_changes", { event: "*", schema: "public", table: "tables" }, onChange)
-    .subscribe();
-  return () => {
-    void supabase.removeChannel(channel);
-  };
+  return subscribeToPostgresChanges(
+    "tables-realtime",
+    { event: "*", schema: "public", table: "tables" },
+    onChange,
+  );
 }
 
 export function subscribeToOrderItemChanges(onChange: () => void) {
-  const channel = supabase
-    .channel("order-items-realtime")
-    .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, onChange)
-    .subscribe();
-  return () => {
-    void supabase.removeChannel(channel);
-  };
+  return subscribeToPostgresChanges(
+    "order-items-realtime",
+    { event: "*", schema: "public", table: "order_items" },
+    onChange,
+  );
 }
 
 export async function fetchStaffNameForOrderAction(orderId: string, action: string) {
@@ -499,61 +496,45 @@ export async function fetchStaffNameForOrderAction(orderId: string, action: stri
 export function subscribeToOrderItemUpdates(
   onUpdate: (payload: { new: SupabaseOrderItemRow; old: SupabaseOrderItemRow | null }) => void,
 ) {
-  const channel = supabase
-    .channel("order-items-ready-updates")
-    .on(
-      "postgres_changes",
-      { event: "UPDATE", schema: "public", table: "order_items" },
-      (payload) => {
-        onUpdate({
-          new: payload.new as SupabaseOrderItemRow,
-          old: (payload.old as SupabaseOrderItemRow | null) ?? null,
-        });
-      },
-    )
-    .subscribe();
-  return () => {
-    void supabase.removeChannel(channel);
-  };
+  return subscribeToPostgresRowChanges(
+    "order-items-ready-updates",
+    { event: "UPDATE", schema: "public", table: "order_items" },
+    (payload) => {
+      onUpdate({
+        new: payload.new as SupabaseOrderItemRow,
+        old: (payload.old as SupabaseOrderItemRow | null) ?? null,
+      });
+    },
+  );
 }
 
 export function subscribeToOrderItemInserts(
   onInsert: (row: SupabaseOrderItemRow) => void,
   channelName = "order-items-inserts",
 ) {
-  const channel = supabase
-    .channel(channelName)
-    .on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "order_items" },
-      (payload) => {
-        onInsert(payload.new as SupabaseOrderItemRow);
-      },
-    )
-    .subscribe();
-  return () => {
-    void supabase.removeChannel(channel);
-  };
+  return subscribeToPostgresRowChanges(
+    channelName,
+    { event: "INSERT", schema: "public", table: "order_items" },
+    (payload) => {
+      onInsert(payload.new as SupabaseOrderItemRow);
+    },
+  );
 }
 
 export function subscribeToMenuChanges(onChange: () => void) {
-  const channel = supabase
-    .channel("menu-realtime")
-    .on("postgres_changes", { event: "*", schema: "public", table: "menu_items" }, onChange)
-    .subscribe();
-  return () => {
-    void supabase.removeChannel(channel);
-  };
+  return subscribeToPostgresChanges(
+    "menu-realtime",
+    { event: "*", schema: "public", table: "menu_items" },
+    onChange,
+  );
 }
 
 export function subscribeToCategoryChanges(onChange: () => void) {
-  const channel = supabase
-    .channel(`categories-realtime-${Date.now()}`)
-    .on("postgres_changes", { event: "*", schema: "public", table: "categories" }, onChange)
-    .subscribe();
-  return () => {
-    void supabase.removeChannel(channel);
-  };
+  return subscribeToPostgresChanges(
+    "categories-realtime",
+    { event: "*", schema: "public", table: "categories" },
+    onChange,
+  );
 }
 
 export async function updateTableLayout(
@@ -596,13 +577,11 @@ export async function updateTableMetadata(
 }
 
 export function subscribeToInventoryChanges(onChange: () => void) {
-  const channel = supabase
-    .channel("inventory-realtime")
-    .on("postgres_changes", { event: "*", schema: "public", table: "inventory_items" }, onChange)
-    .subscribe();
-  return () => {
-    void supabase.removeChannel(channel);
-  };
+  return subscribeToPostgresChanges(
+    "inventory-realtime",
+    { event: "*", schema: "public", table: "inventory_items" },
+    onChange,
+  );
 }
 
 export async function logActionToDb(staffId: string, staffName: string, action: string, details?: string) {

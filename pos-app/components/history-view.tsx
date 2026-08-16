@@ -30,6 +30,7 @@ import { fetchSales, mapSalesResponse } from "@/src/lib/supabase-data";
 
 interface HistoryViewProps {
   menuItems: MenuItem[];
+  onSaleUpdated?: (sale: SaleRecord) => void;
 }
 
 const PERIOD_OPTIONS: SummaryPeriod[] = ["today", "yesterday", "week", "month", "custom"];
@@ -66,7 +67,7 @@ function toMonthInputValue(date = new Date()): string {
   return `${year}-${month}`;
 }
 
-export function HistoryView({ menuItems }: HistoryViewProps) {
+export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   const { translate, language, currentStaffUser, logAction } = useApp();
   const { pushNotification } = useNotifications();
   const { requestDeletion } = useAdminDeletionGate();
@@ -77,7 +78,7 @@ export function HistoryView({ menuItems }: HistoryViewProps) {
   const [customDate, setCustomDate] = useState(() => toDateInputValue(new Date()));
   const [paymentFilter, setPaymentFilter] = useState<HistoryPaymentFilter>("all");
   const [selectedSale, setSelectedSale] = useState<SaleRecord | null>(null);
-  const [openInEditMode, setOpenInEditMode] = useState(false);
+  const [openEditScope, setOpenEditScope] = useState<"payment" | "full" | false>(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteDate, setDeleteDate] = useState(() => toDateInputValue(new Date()));
   const [deleteMonth, setDeleteMonth] = useState(() => toMonthInputValue());
@@ -169,7 +170,7 @@ export function HistoryView({ menuItems }: HistoryViewProps) {
     });
     if (selectedSale && idSet.has(selectedSale.id)) {
       setSelectedSale(null);
-      setOpenInEditMode(false);
+      setOpenEditScope(false);
     }
     logAction("delete_sale", detail);
     pushNotification({ message: translate("historyDeleteSuccess") });
@@ -216,14 +217,14 @@ export function HistoryView({ menuItems }: HistoryViewProps) {
     );
   };
 
-  const openSale = (sale: SaleRecord, edit = false) => {
+  const openSale = (sale: SaleRecord, editScope: "payment" | "full" | false = false) => {
     setSelectedSale(sale);
-    setOpenInEditMode(edit);
+    setOpenEditScope(editScope);
   };
 
   const closeModal = () => {
     setSelectedSale(null);
-    setOpenInEditMode(false);
+    setOpenEditScope(false);
   };
 
   return (
@@ -486,11 +487,11 @@ export function HistoryView({ menuItems }: HistoryViewProps) {
                               <>
                                 <button
                                   type="button"
-                                  onClick={() => openSale(sale, true)}
+                                  onClick={() => openSale(sale, "payment")}
                                   className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-800 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200"
                                 >
                                   <Pencil className="h-3.5 w-3.5" />
-                                  {translate("editOrder")}
+                                  {translate("editTipAndPayment")}
                                 </button>
                                 <button
                                   type="button"
@@ -519,11 +520,12 @@ export function HistoryView({ menuItems }: HistoryViewProps) {
         <OrderHistoryModal
           sale={selectedSale}
           menuItems={menuItems}
-          initialEditMode={openInEditMode}
+          initialEditScope={openEditScope}
           onClose={closeModal}
           onUpdated={(updated) => {
             setSales((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
             setSelectedSale(updated);
+            onSaleUpdated?.(updated);
           }}
           onDeleted={(deletedId) => {
             setSales((prev) => prev.filter((row) => row.id !== deletedId));

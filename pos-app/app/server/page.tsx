@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSessionHealth } from "@/hooks/use-session-health";
 import { useApp } from "@/contexts/app-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { useSettings } from "@/contexts/settings-context";
@@ -34,6 +35,7 @@ function ServerApp() {
   const [categories, setCategories] = useState<MenuCategoryRecord[]>([]);
   const [orderModal, setOrderModal] = useState<OrderModalState>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const actionLockRef = useRef(false);
 
   const reload = useCallback(async () => {
     const [t, m, c] = await Promise.all([
@@ -54,6 +56,11 @@ function ServerApp() {
     return () => { u1(); u2(); u3(); };
   }, [reload]);
 
+  useSessionHealth({
+    onRefresh: () => void reload(),
+    isBusy: () => orderModal != null || isSaving,
+  });
+
   const handleTableClick = (table: RestaurantTable) => {
     setOrderModal({
       table,
@@ -63,46 +70,53 @@ function ServerApp() {
 
   const handleSend = async (orders: OrderItem[]) => {
     if (!orderModal) return;
+    if (actionLockRef.current) return;
+
+    actionLockRef.current = true;
     setIsSaving(true);
 
-    const preparedOrders = applyFulfillmentModeToNewOrders(
-      orders,
-      settings.kitchenFulfillmentMode,
-    );
-    const isAppend = orderModal.mode === "append";
-    const { error } = isAppend
-      ? await appendOrdersToTable(
-          orderModal.table.id,
-          preparedOrders,
-          staff?.id,
-          staff?.name,
-          orderModal.table.label,
-        )
-      : await occupyTable(
-          orderModal.table.id,
-          preparedOrders,
-          staff?.id,
-          staff?.name,
-          orderModal.table.label,
-        );
+    try {
+      const preparedOrders = applyFulfillmentModeToNewOrders(
+        orders,
+        settings.kitchenFulfillmentMode,
+      );
+      const isAppend = orderModal.mode === "append";
+      const { error } = isAppend
+        ? await appendOrdersToTable(
+            orderModal.table.id,
+            preparedOrders,
+            staff?.id,
+            staff?.name,
+            orderModal.table.label,
+          )
+        : await occupyTable(
+            orderModal.table.id,
+            preparedOrders,
+            staff?.id,
+            staff?.name,
+            orderModal.table.label,
+          );
 
-    setIsSaving(false);
-    if (error) return;
+      if (error) return;
 
-    logAction(isAppend ? "server add items" : "server order", `Table ${orderModal.table.label}`);
+      logAction(isAppend ? "server add items" : "server order", `Table ${orderModal.table.label}`);
 
-    if (shouldPrintKitchenOnSend(settings) && !settings.kitchenPrintViaStation) {
-      void printKitchenOrder({
-        tableLabel: orderModal.table.label,
-        orders: preparedOrders,
-        menuItems,
-      }).catch((printError) => {
-        console.warn("[KitchenPrint] Failed:", printError);
-      });
+      if (shouldPrintKitchenOnSend(settings) && !settings.kitchenPrintViaStation) {
+        void printKitchenOrder({
+          tableLabel: orderModal.table.label,
+          orders: preparedOrders,
+          menuItems,
+        }).catch((printError) => {
+          console.warn("[KitchenPrint] Failed:", printError);
+        });
+      }
+
+      setOrderModal(null);
+      void reload();
+    } finally {
+      actionLockRef.current = false;
+      setIsSaving(false);
     }
-
-    setOrderModal(null);
-    void reload();
   };
 
   return (

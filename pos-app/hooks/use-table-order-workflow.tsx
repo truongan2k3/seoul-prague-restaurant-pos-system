@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ManageTableModal } from "@/components/manage-table-modal";
 import { NewOrderModal } from "@/components/new-order-modal";
 import { PaymentModal } from "@/components/payment-modal";
@@ -15,7 +15,7 @@ import {
 import { ordersFromLines } from "@/lib/checkout-calculations";
 import { finalizeBillOnlyOrder } from "@/lib/menu-item-dispatch";
 import { filterItemsForBoard } from "@/lib/order-board";
-import { sendCfdEvent } from "@/lib/cfd-display";
+import { sendCfdEvent, buildCfdCheckoutPayload } from "@/lib/cfd-display";
 import type { MenuCategoryRecord, MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
 import {
   appendOrdersToTable,
@@ -56,6 +56,7 @@ export function useTableOrderWorkflow({
   const [modal, setModal] = useState<TableOrderModalState>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const actionLockRef = useRef(false);
 
   const selectedTable = modal ? tables.find((t) => t.id === modal.tableId) : undefined;
 
@@ -80,101 +81,114 @@ export function useTableOrderWorkflow({
 
   const handleSendToKitchen = async (orders: OrderItem[]) => {
     if (!modal || modal.type !== "new-order") return;
+    if (actionLockRef.current) return;
 
+    actionLockRef.current = true;
     setIsSaving(true);
     setActionError(null);
 
-    const preparedOrders = applyFulfillmentModeToNewOrders(
-      orders,
-      settings.kitchenFulfillmentMode,
-    );
-    const isAppend = modal.mode === "append";
-    const { data, error } = isAppend
-      ? await appendOrdersToTable(
-          modal.tableId,
-          preparedOrders,
-          staff?.id,
-          staff?.name,
-          selectedTable?.label,
-        )
-      : await occupyTable(
-          modal.tableId,
-          preparedOrders,
-          staff?.id,
-          staff?.name,
-          selectedTable?.label,
-        );
+    try {
+      const preparedOrders = applyFulfillmentModeToNewOrders(
+        orders,
+        settings.kitchenFulfillmentMode,
+      );
+      const isAppend = modal.mode === "append";
+      const { data, error } = isAppend
+        ? await appendOrdersToTable(
+            modal.tableId,
+            preparedOrders,
+            staff?.id,
+            staff?.name,
+            selectedTable?.label,
+          )
+        : await occupyTable(
+            modal.tableId,
+            preparedOrders,
+            staff?.id,
+            staff?.name,
+            selectedTable?.label,
+          );
 
-    setIsSaving(false);
+      if (error || !data) {
+        setActionError(error?.message ?? "Failed to send order.");
+        return;
+      }
 
-    if (error || !data) {
-      setActionError(error?.message ?? "Failed to send order.");
-      return;
+      logAction(isAppend ? "add items" : "new order", `Table ${selectedTable?.label}`);
+
+      if (shouldPrintKitchenOnSend(settings) && !settings.kitchenPrintViaStation && selectedTable) {
+        void printKitchenOrder({
+          tableLabel: selectedTable.label,
+          orders: preparedOrders,
+          menuItems,
+        }).catch((printError) => {
+          console.warn("[KitchenPrint] Failed:", printError);
+        });
+      }
+
+      const updatedTable = mapTableRow(data);
+      setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
+      // Stay on the table screen after send so staff can checkout or add more.
+      setModal({ type: "new-order", tableId: modal.tableId, mode: "append" });
+      onRefresh();
+    } finally {
+      actionLockRef.current = false;
+      setIsSaving(false);
     }
-
-    logAction(isAppend ? "add items" : "new order", `Table ${selectedTable?.label}`);
-
-    if (shouldPrintKitchenOnSend(settings) && !settings.kitchenPrintViaStation && selectedTable) {
-      void printKitchenOrder({
-        tableLabel: selectedTable.label,
-        orders: preparedOrders,
-        menuItems,
-      }).catch((printError) => {
-        console.warn("[KitchenPrint] Failed:", printError);
-      });
-    }
-
-    const updatedTable = mapTableRow(data);
-    setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
-    // Stay on the table screen after send so staff can checkout or add more.
-    setModal({ type: "new-order", tableId: modal.tableId, mode: "append" });
-    onRefresh();
   };
 
   const handleAppendCartNoPrint = async (orders: OrderItem[]) => {
     if (!modal || modal.type !== "new-order") return;
+    if (actionLockRef.current) return;
 
+    actionLockRef.current = true;
     setIsSaving(true);
     setActionError(null);
 
-    const silentOrders = orders.map((item) =>
-      finalizeBillOnlyOrder({
-        ...item,
-        skipPrint: true,
-        hideOnKds: true,
-      }),
-    );
+    try {
+      const silentOrders = orders.map((item) =>
+        finalizeBillOnlyOrder({
+          ...item,
+          skipPrint: true,
+          hideOnKds: true,
+        }),
+      );
 
-    const isAppend = modal.mode === "append";
-    const { data, error } = isAppend
-      ? await appendOrdersToTable(
-          modal.tableId,
-          silentOrders,
-          staff?.id,
-          staff?.name,
-          selectedTable?.label,
-        )
-      : await occupyTable(
-          modal.tableId,
-          silentOrders,
-          staff?.id,
-          staff?.name,
-          selectedTable?.label,
-        );
+      const isAppend = modal.mode === "append";
+      const { data, error } = isAppend
+        ? await appendOrdersToTable(
+            modal.tableId,
+            silentOrders,
+            staff?.id,
+            staff?.name,
+            selectedTable?.label,
+          )
+        : await occupyTable(
+            modal.tableId,
+            silentOrders,
+            staff?.id,
+            staff?.name,
+            selectedTable?.label,
+          );
 
-    setIsSaving(false);
+      if (error || !data) {
+        setActionError(error?.message ?? "Failed to save order.");
+        return;
+      }
 
-    if (error || !data) {
-      setActionError(error?.message ?? "Failed to save order.");
-      return;
+      logAction(
+        isAppend ? "save no print" : "save no print (new table)",
+        `Table ${selectedTable?.label}`,
+      );
+
+      const updatedTable = mapTableRow(data);
+      setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
+      setModal({ type: "new-order", tableId: modal.tableId, mode: "append" });
+      onRefresh();
+    } finally {
+      actionLockRef.current = false;
+      setIsSaving(false);
     }
-
-    logAction(isAppend ? "save no print" : "save no print (new table)", `Table ${selectedTable?.label}`);
-
-    const updatedTable = mapTableRow(data);
-    setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
-    setModal({ type: "new-order", tableId: modal.tableId, mode: "append" });
-    onRefresh();
   };
 
   const handleSaveOrders = async (
@@ -318,6 +332,47 @@ export function useTableOrderWorkflow({
     }
 
     void sendCfdEvent("PAYMENT_SUCCESS", { tableNumber: selectedTable.label });
+
+    const continuingSplit =
+      !payload.closeTable &&
+      (payload.payment.splitMode === "equal" ||
+        (payload.payment.splitMode === "items" &&
+          remainingOrders !== undefined &&
+          remainingOrders.length > 0));
+
+    if (continuingSplit) {
+      const nextOrders =
+        payload.payment.splitMode === "items" && remainingOrders
+          ? remainingOrders
+          : modal.orders;
+
+      if (data) {
+        const updatedTable = mapTableRow(data);
+        setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
+      } else if (remainingOrders !== undefined) {
+        setTables((prev) =>
+          prev.map((t) =>
+            t.id === modal.tableId ? { ...t, orders: remainingOrders } : t,
+          ),
+        );
+      }
+
+      setModal({ type: "checkout", tableId: modal.tableId, orders: nextOrders });
+
+      const subtotal = nextOrders.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      void sendCfdEvent(
+        "START_CHECKOUT",
+        buildCfdCheckoutPayload(selectedTable.label, nextOrders, menuItems, {
+          subtotal,
+          discount: 0,
+          tip: 0,
+          grandTotal: subtotal,
+          amountDueNow: subtotal,
+        }),
+      );
+      onRefresh();
+      return;
+    }
 
     if (data) {
       const updatedTable = mapTableRow(data);

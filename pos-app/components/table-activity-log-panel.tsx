@@ -10,7 +10,7 @@ import {
   type ActivityTimelineEntry,
 } from "@/lib/format-table-activity";
 import type { OrderLogEntry, TableActivityLogEntry } from "@/lib/types";
-import { fetchOrderLogsForItems } from "@/src/lib/order-log-actions";
+import { fetchOrderLogsForTable } from "@/src/lib/order-log-actions";
 import { fetchTableActivityLogs } from "@/src/lib/table-activity-log-actions";
 
 function mergeTimeline(
@@ -43,6 +43,8 @@ interface TableActivityLogPanelProps {
   snapshot?: OrderLogEntry[];
   compact?: boolean;
   defaultOpen?: boolean;
+  /** Bump after save/send so the panel refetches. */
+  refreshKey?: number;
 }
 
 export function TableActivityLogPanel({
@@ -53,6 +55,7 @@ export function TableActivityLogPanel({
   snapshot,
   compact = false,
   defaultOpen = false,
+  refreshKey = 0,
 }: TableActivityLogPanelProps) {
   const { translate } = useApp();
   const [open, setOpen] = useState(defaultOpen || Boolean(snapshot?.length));
@@ -78,22 +81,30 @@ export function TableActivityLogPanel({
     setLoading(true);
     const [tableRes, orderRes] = await Promise.all([
       fetchTableActivityLogs(tableId, since),
-      orderItemIds.length > 0
-        ? fetchOrderLogsForItems(orderItemIds)
-        : Promise.resolve({ data: [] as OrderLogEntry[], error: null }),
+      fetchOrderLogsForTable(tableId, since),
     ]);
-    setEntries(mergeTimeline(tableRes.data, orderRes.data, itemNameByOrderId));
+
+    const names = new Map(itemNameByOrderId);
+    for (const [id, name] of orderRes.itemNames) {
+      if (!names.has(id)) names.set(id, name);
+    }
+    for (const id of orderItemIds) {
+      const label = itemNameByOrderId.get(id);
+      if (label) names.set(id, label);
+    }
+
+    setEntries(mergeTimeline(tableRes.data, orderRes.data, names));
     setLoading(false);
   }, [snapshot, tableId, since, orderItemIds, itemNameByOrderId]);
 
   useEffect(() => {
     if (!open) return;
     void load();
-  }, [open, load]);
+  }, [open, load, refreshKey]);
 
   const panelBody = (
     <div className={compact ? "max-h-48 overflow-y-auto" : "max-h-64 overflow-y-auto"}>
-      {loading ? (
+      {loading && entries.length === 0 ? (
         <p className="py-3 text-xs text-gray-500 dark:text-gray-400">{translate("loading")}</p>
       ) : entries.length === 0 ? (
         <p className="py-3 text-xs text-gray-500 dark:text-gray-400">{translate("noActivityLog")}</p>
@@ -109,6 +120,9 @@ export function TableActivityLogPanel({
           ))}
         </ol>
       )}
+      {loading && entries.length > 0 ? (
+        <p className="pb-2 text-[10px] text-gray-400">{translate("loading")}…</p>
+      ) : null}
     </div>
   );
 
@@ -118,25 +132,23 @@ export function TableActivityLogPanel({
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
-          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800/50"
+          className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800/60"
         >
-          <History className="h-3.5 w-3.5" />
+          <History className="h-4 w-4 shrink-0" />
           {translate("viewActivityLog")}
-          <span className="ml-auto text-[10px] font-normal normal-case text-gray-400">
-            {entries.length > 0 ? entries.length : ""}
-          </span>
         </button>
-        {open ? <div className="px-3 pb-3">{panelBody}</div> : null}
+        {open ? <div className="px-4 pb-3">{panelBody}</div> : null}
       </div>
     );
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/40">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+    <section>
+      <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+        <History className="h-4 w-4" />
         {translate("activityLog")}
       </h3>
-      <div className="mt-3">{panelBody}</div>
+      <div className="mt-2">{panelBody}</div>
     </section>
   );
 }

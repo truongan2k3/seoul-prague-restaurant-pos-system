@@ -1,4 +1,4 @@
-import type { OrderItem } from "@/lib/types";
+import type { OrderItem, PaymentMethod } from "@/lib/types";
 import { supabase } from "@/src/lib/supabase";
 
 function localDayRange(dateStr: string): { start: string; end: string } {
@@ -39,16 +39,35 @@ export async function updateSaleRecord(
     discountAmount: number;
     tip: number;
     grandTotal: number;
+    paymentMethod: PaymentMethod;
+    amountGiven?: number | null;
+    changeDue?: number | null;
   },
 ) {
-  return supabase
-    .from("sales")
-    .update({
-      items: updates.items,
-      subtotal: Number(updates.subtotal.toFixed(2)),
-      discount_amount: Number(updates.discountAmount.toFixed(2)),
-      tip: Number(updates.tip.toFixed(2)),
-      grand_total: Number(updates.grandTotal.toFixed(2)),
-    })
-    .eq("id", saleId);
+  const payload: Record<string, unknown> = {
+    items: updates.items,
+    subtotal: Number(updates.subtotal.toFixed(2)),
+    discount_amount: Number(updates.discountAmount.toFixed(2)),
+    tip: Number(updates.tip.toFixed(2)),
+    grand_total: Number(updates.grandTotal.toFixed(2)),
+    payment_method: updates.paymentMethod,
+  };
+
+  if (updates.paymentMethod === "cash") {
+    payload.amount_given =
+      updates.amountGiven != null ? Number(updates.amountGiven.toFixed(2)) : null;
+    payload.change_due =
+      updates.changeDue != null ? Number(updates.changeDue.toFixed(2)) : null;
+    payload.card_auth_code = null;
+    payload.card_last4 = null;
+    payload.card_brand = null;
+  } else {
+    payload.amount_given = null;
+    payload.change_due = null;
+    payload.card_auth_code = null;
+    payload.card_last4 = null;
+    payload.card_brand = null;
+  }
+
+  return supabase.from("sales").update(payload).eq("id", saleId);
 }

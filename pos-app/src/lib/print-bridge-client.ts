@@ -1,4 +1,5 @@
 import type { AppSettings, NetworkPrinter, PrinterRole } from "@/lib/types";
+import { printersForRole, printerUsesLegacyBitmap } from "@/lib/print-dispatch";
 import { bytesToBase64 } from "@/src/lib/escpos";
 
 export type PrintDispatchSettings = Pick<
@@ -8,10 +9,11 @@ export type PrintDispatchSettings = Pick<
 
 const RAW_PRINTER_PORTS = new Set([9100, 9101, 9102, 9103]);
 
-function printersForRole(settings: PrintDispatchSettings, role: PrinterRole): NetworkPrinter[] {
-  return (settings.printers ?? []).filter(
-    (printer) => printer.enabled && printer.roles.includes(role),
-  );
+function printersForRoleFromSettings(
+  settings: PrintDispatchSettings,
+  role: PrinterRole,
+): NetworkPrinter[] {
+  return printersForRole(settings.printers, role);
 }
 
 /** Reject URLs that point at a raw thermal port (common misconfig). */
@@ -118,6 +120,21 @@ export async function silentPrintEscPos(
   role: PrinterRole,
   data: Uint8Array,
 ): Promise<{ sent: boolean; error?: string }> {
+  return silentPrintEscPosPerPrinter(settings, role, () => data);
+}
+
+type EscPosPayloadResolver = (
+  printer: NetworkPrinter,
+) => Uint8Array | null | undefined | Promise<Uint8Array | null | undefined>;
+
+/**
+ * Send per-printer ESC/POS via bridge — e.g. bitmap for legacy IP, text for modern IP.
+ */
+export async function silentPrintEscPosPerPrinter(
+  settings: PrintDispatchSettings,
+  role: PrinterRole,
+  resolvePayload: EscPosPayloadResolver,
+): Promise<{ sent: boolean; error?: string }> {
   if (!settings.silentPrintEnabled) {
     return { sent: false };
   }
@@ -127,7 +144,7 @@ export async function silentPrintEscPos(
     return { sent: false, error: check.message };
   }
 
-  const targets = printersForRole(settings, role);
+  const targets = printersForRoleFromSettings(settings, role);
   if (targets.length === 0) {
     return { sent: false, error: "No enabled printers for this role" };
   }
@@ -137,14 +154,21 @@ export async function silentPrintEscPos(
 
   for (const printer of targets) {
     try {
-      await sendRawToPrinter(settings.printBridgeUrl, printer, data);
+      const payload = await resolvePayload(printer);
+      if (!payload || payload.length === 0) {
+        errors.push(`${printer.name} (${printer.host}): no print payload`);
+        continue;
+      }
+      await sendRawToPrinter(settings.printBridgeUrl, printer, payload);
       sent = true;
     } catch (error) {
       errors.push(
-        `${printer.name}: ${error instanceof Error ? error.message : "print failed"}`,
+        `${printer.name} (${printer.host}): ${error instanceof Error ? error.message : "print failed"}`,
       );
     }
   }
 
   return { sent, error: errors.length > 0 ? errors.join("; ") : undefined };
 }
+
+export { printerUsesLegacyBitmap };

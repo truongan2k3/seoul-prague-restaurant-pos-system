@@ -146,6 +146,8 @@ export interface BitmapTextOptions {
   lineGap?: number;
   /** Device pixel ratio for sharp thermal / PDF output. */
   dpr?: number;
+  /** Override canvas font stack (defaults to kitchen CJK stack). */
+  fontFamily?: string;
 }
 
 /** Paint black text on transparent canvas → PNG data URL. */
@@ -163,7 +165,8 @@ export function textToPngDataUrl(text: string, options: BitmapTextOptions): stri
   const mctx = measure.getContext("2d");
   if (!mctx) return "";
 
-  mctx.font = `${fontWeight} ${options.fontSizePx}px ${PRINT_FONT}`;
+  const fontStack = options.fontFamily ?? PRINT_FONT;
+  mctx.font = `${fontWeight} ${options.fontSizePx}px ${fontStack}`;
   const wrapWidth = effectiveMaxWidth(options.maxWidthPx, options.fontSizePx);
   const lines = wrapLines(mctx, trimmed, wrapWidth);
   const lineHeight = options.fontSizePx + lineGap;
@@ -178,7 +181,7 @@ export function textToPngDataUrl(text: string, options: BitmapTextOptions): stri
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, options.maxWidthPx, contentHeight);
   ctx.fillStyle = "#000000";
-  ctx.font = `${fontWeight} ${options.fontSizePx}px ${PRINT_FONT}`;
+  ctx.font = `${fontWeight} ${options.fontSizePx}px ${fontStack}`;
   ctx.textBaseline = "top";
   ctx.textAlign = align === "center" ? "center" : "left";
 

@@ -14,6 +14,7 @@ import {
 } from "@/lib/receipt-print-styles";
 import type { AppSettings, ReceiptFontFamily, ReceiptFontWeight } from "@/lib/types";
 import type { ReceiptTemplate } from "@/src/components/ReceiptPrint";
+import { DEFAULT_RECEIPT_PAPER_WIDTH_MM, receiptRasterWidthDots } from "@/lib/receipt-raster";
 import { DEFAULT_RECEIPT_BRANDING_VISIBILITY } from "@/lib/receipt-branding";
 import {
   bitmapImgHtml,
@@ -21,7 +22,6 @@ import {
   ensureCjkPrintFont,
   RECEIPT_BITMAP_DPR,
   RECEIPT_BITMAP_H_PAD,
-  RECEIPT_RASTER_WIDTH_PX,
   textToPngDataUrl,
   textToPngItemRowDataUrl,
   textToPngSplitRowDataUrl,
@@ -30,9 +30,8 @@ import {
   type BitmapTextOptions,
 } from "@/src/lib/printTextBitmap";
 
-/** Match ESC/POS raster width 1:1 — avoids shrinking high-DPR PNGs on the printer. */
-const FULL_WIDTH_PX = RECEIPT_RASTER_WIDTH_PX;
-const FOOTER_SPACER_PX = 36;
+/** Raster width set per print job from paper width (1 dot ≈ 1 canvas px). */
+const FOOTER_SPACER_PX = 40;
 const DIVIDER = "--------------------------------";
 
 function resolveTemplate(data: ReceiptData, template?: ReceiptTemplate): ReceiptTemplate {
@@ -94,8 +93,11 @@ export async function buildBitmapReceiptHtml(
   fontFamily: ReceiptFontFamily,
   fontWeight: ReceiptFontWeight,
   fontSize?: AppSettings["receiptFontSize"],
+  paperWidthMm = DEFAULT_RECEIPT_PAPER_WIDTH_MM,
 ): Promise<{ html: string; pngs: string[] }> {
   await ensureCjkPrintFont();
+
+  const fullWidthPx = receiptRasterWidthDots(paperWidthMm);
 
   const typography =
     fontSize != null
@@ -116,20 +118,20 @@ export async function buildBitmapReceiptHtml(
   const blocks: string[] = [];
 
   const baseOpts = (size: number, weight: KitchenBitmapWeight): BitmapTextOptions => ({
-    maxWidthPx: FULL_WIDTH_PX,
+    maxWidthPx: fullWidthPx,
     fontSizePx: size,
     fontWeight: weight,
     fontFamily: fontStack,
     dpr: RECEIPT_BITMAP_DPR,
     horizontalPad: RECEIPT_BITMAP_H_PAD,
-    paddingY: 3,
-    lineGap: 3,
+    paddingY: 4,
+    lineGap: 4,
   });
 
   const emit = (url: string, alt: string) => {
     if (!url) return;
     pngs.push(url);
-    blocks.push(bitmapImgHtml(url, alt, FULL_WIDTH_PX));
+    blocks.push(bitmapImgHtml(url, alt, fullWidthPx));
   };
 
   const pushLine = (text: string, opts: BitmapLineOpts) => {
@@ -243,7 +245,7 @@ export async function buildBitmapReceiptHtml(
 
   for (const item of data.items) {
     const amount = `${formatReceiptAmount(item.lineTotal)} ${item.taxGroup}`;
-    pushItem(`${item.code} ${item.name}`.trim(), amount, typography.metaPx, weights.secondary);
+    pushItem(`${item.code} ${item.name}`.trim(), amount, typography.itemPx, weights.primary);
   }
 
   pushLine(DIVIDER, {
@@ -361,7 +363,7 @@ export async function buildBitmapReceiptHtml(
   }
 
   emit(
-    blankPngDataUrl(FULL_WIDTH_PX, FOOTER_SPACER_PX, RECEIPT_BITMAP_DPR),
+    blankPngDataUrl(fullWidthPx, FOOTER_SPACER_PX, RECEIPT_BITMAP_DPR),
     "footer-spacer",
   );
 

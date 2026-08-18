@@ -146,8 +146,11 @@ export async function buildEscPosFromPngs(
     feedBetweenDots?: number;
     bottomBlankRasterDots?: number;
     bottomFeedLines?: number;
+    /** ESC/POS raster width in dots (default 576 for 80 mm). */
+    rasterWidthDots?: number;
   },
 ): Promise<Uint8Array> {
+  const rasterWidth = options?.rasterWidthDots ?? 576;
   const parts: Uint8Array[] = [escInit(), escAlign("left")];
   if (options?.topBlankRasterDots && options.topBlankRasterDots > 0) {
     parts.push(escBlankRaster(options.topBlankRasterDots));
@@ -159,7 +162,7 @@ export async function buildEscPosFromPngs(
   const tightRasterGap = options?.feedBetweenDots === 0;
   for (const url of dataUrls) {
     if (!url) continue;
-    parts.push(await escRasterFromPngDataUrl(url));
+    parts.push(await escRasterFromPngDataUrl(url, rasterWidth));
     if (tightRasterGap) {
       continue;
     }
@@ -180,17 +183,28 @@ export function escFontB(): Uint8Array {
   return new Uint8Array([0x1b, 0x4d, 0x01]);
 }
 
+export function escFontA(): Uint8Array {
+  return new Uint8Array([0x1b, 0x4d, 0x00]);
+}
+
 export function escCharSizeNormal(): Uint8Array {
   return new Uint8Array([0x1d, 0x21, 0x00]);
+}
+
+/** Double height — readable receipt text without breaking column width. */
+export function escCharSizeDoubleHeight(): Uint8Array {
+  return new Uint8Array([0x1d, 0x21, 0x10]);
 }
 
 export function buildEscPosFromTextLines(
   lines: string[],
   useCp1250 = true,
-  options?: { compactFont?: boolean },
+  options?: { compactFont?: boolean; readableReceipt?: boolean },
 ): Uint8Array {
   const parts: Uint8Array[] = [escInit(), escAlign("left")];
-  if (options?.compactFont !== false) {
+  if (options?.readableReceipt) {
+    parts.push(escFontA(), escCharSizeDoubleHeight());
+  } else if (options?.compactFont !== false) {
     parts.push(escFontB(), escCharSizeNormal());
   }
   if (useCp1250) {

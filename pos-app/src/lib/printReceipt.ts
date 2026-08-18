@@ -21,6 +21,7 @@ import {
 import type { AppSettings } from "@/lib/types";
 import { ReceiptBodyContent, type ReceiptTemplate } from "@/src/components/ReceiptPrint";
 import { padReceiptLine, receiptItemEscPosLines, receiptMetaEscPosLines, RECEIPT_LINE_WIDTH } from "@/lib/receipt-line-format";
+import { DEFAULT_RECEIPT_PAPER_WIDTH_MM, receiptRasterWidthDots } from "@/lib/receipt-raster";
 import { receiptShouldUseBitmap } from "@/lib/print-dispatch";
 
 const PRINT_IFRAME_ID = "receipt-print-iframe";
@@ -182,7 +183,7 @@ export function printReceiptHTML(
     };
 
     const typography = resolvePrintTypography(fontSettings);
-    const paperWidthMm = fontSettings?.paperWidthMm ?? 72;
+    const paperWidthMm = fontSettings?.paperWidthMm ?? DEFAULT_RECEIPT_PAPER_WIDTH_MM;
 
     doc.open();
     doc.write(buildPrintDocument(receiptHtmlContent, typography, paperWidthMm));
@@ -315,6 +316,8 @@ export async function printReceiptData(
   const bitmapTypography = fontSettings
     ? receiptBitmapTypographyFromSettings(fontSettings)
     : typography;
+  const paperWidthMm = fontSettings?.paperWidthMm ?? DEFAULT_RECEIPT_PAPER_WIDTH_MM;
+  const rasterWidthDots = receiptRasterWidthDots(paperWidthMm);
   const useBitmap = receiptShouldUseBitmap({
     receiptPrintBitmap: fontSettings?.receiptPrintBitmap ?? false,
     printers: fontSettings?.printers ?? [],
@@ -332,6 +335,7 @@ export async function printReceiptData(
       fontSettings?.receiptFontFamily ?? "courier",
       fontSettings?.receiptFontWeight ?? "normal",
       fontSettings?.receiptFontSize,
+      paperWidthMm,
     );
     receiptHtmlContent = bitmap.html;
     bitmapPngs = bitmap.pngs;
@@ -352,7 +356,9 @@ export async function printReceiptData(
         browserPrintFallback: fontSettings.browserPrintFallback ?? true,
         printers: fontSettings.printers ?? [],
       };
-      const textBytes = buildEscPosFromTextLines(buildReceiptEscPosLines(data, template));
+      const textBytes = buildEscPosFromTextLines(buildReceiptEscPosLines(data, template), true, {
+        readableReceipt: true,
+      });
       let bitmapBytes: Uint8Array | null = null;
 
       const result = await silentPrintEscPosPerPrinter(
@@ -372,6 +378,7 @@ export async function printReceiptData(
                 fontSettings?.receiptFontFamily ?? "courier",
                 fontSettings?.receiptFontWeight ?? "normal",
                 fontSettings?.receiptFontSize,
+                paperWidthMm,
               );
               bitmapPngs = bitmap.pngs;
               receiptHtmlContent = bitmap.html;
@@ -382,6 +389,7 @@ export async function printReceiptData(
                     feedBetweenDots: 4,
                     bottomBlankRasterDots: 72,
                     bottomFeedLines: 8,
+                    rasterWidthDots,
                   })
                 : textBytes;
           }

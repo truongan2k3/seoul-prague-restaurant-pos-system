@@ -65,34 +65,34 @@ const SIZE_SCALE: Record<
   Pick<ReceiptTypography, "bodyPx" | "itemPx" | "metaPx" | "tablePx" | "titlePx" | "indexPx" | "celkemPx" | "lineHeight">
 > = {
   normal: {
-    bodyPx: 10,
-    itemPx: 10,
-    metaPx: 9,
-    tablePx: 9,
-    titlePx: 13,
-    indexPx: 14,
-    celkemPx: 12,
+    bodyPx: 20,
+    itemPx: 20,
+    metaPx: 18,
+    tablePx: 18,
+    titlePx: 26,
+    indexPx: 28,
+    celkemPx: 24,
     lineHeight: 1.2,
   },
   medium: {
-    bodyPx: 11,
-    itemPx: 11,
-    metaPx: 10,
-    tablePx: 10,
-    titlePx: 14,
-    indexPx: 16,
-    celkemPx: 13,
-    lineHeight: 1.25,
+    bodyPx: 22,
+    itemPx: 22,
+    metaPx: 20,
+    tablePx: 20,
+    titlePx: 28,
+    indexPx: 30,
+    celkemPx: 26,
+    lineHeight: 1.22,
   },
   large: {
-    bodyPx: 12,
-    itemPx: 12,
-    metaPx: 11,
-    tablePx: 11,
-    titlePx: 15,
-    indexPx: 18,
-    celkemPx: 14,
-    lineHeight: 1.25,
+    bodyPx: 24,
+    itemPx: 24,
+    metaPx: 22,
+    tablePx: 22,
+    titlePx: 30,
+    indexPx: 32,
+    celkemPx: 28,
+    lineHeight: 1.22,
   },
 };
 
@@ -178,40 +178,40 @@ export function receiptTypographyFromSettings(
   };
 }
 
-/** Larger canvas px sizes for legacy bitmap receipts (~72mm / 576 dots, 1:1 raster). */
+/** Bitmap receipt fonts — tuned for ~576-dot thermal (similar density to kitchen tickets). */
 const BITMAP_SIZE_SCALE: Record<
   ReceiptFontSize,
   Pick<ReceiptTypography, "bodyPx" | "itemPx" | "metaPx" | "tablePx" | "titlePx" | "indexPx" | "celkemPx" | "lineHeight">
 > = {
   normal: {
-    bodyPx: 16,
-    itemPx: 17,
-    metaPx: 15,
-    tablePx: 15,
-    titlePx: 22,
-    indexPx: 24,
-    celkemPx: 20,
-    lineHeight: 1.18,
+    bodyPx: 26,
+    itemPx: 30,
+    metaPx: 24,
+    tablePx: 24,
+    titlePx: 36,
+    indexPx: 38,
+    celkemPx: 32,
+    lineHeight: 1.15,
   },
   medium: {
-    bodyPx: 18,
-    itemPx: 19,
-    metaPx: 17,
-    tablePx: 17,
-    titlePx: 24,
-    indexPx: 26,
-    celkemPx: 22,
-    lineHeight: 1.18,
+    bodyPx: 28,
+    itemPx: 32,
+    metaPx: 26,
+    tablePx: 26,
+    titlePx: 40,
+    indexPx: 42,
+    celkemPx: 34,
+    lineHeight: 1.15,
   },
   large: {
-    bodyPx: 20,
-    itemPx: 21,
-    metaPx: 19,
-    tablePx: 19,
-    titlePx: 26,
-    indexPx: 28,
-    celkemPx: 24,
-    lineHeight: 1.18,
+    bodyPx: 30,
+    itemPx: 36,
+    metaPx: 28,
+    tablePx: 28,
+    titlePx: 44,
+    indexPx: 46,
+    celkemPx: 38,
+    lineHeight: 1.15,
   },
 };
 
@@ -243,9 +243,9 @@ export function receiptTypographyCssVars(
 
 export function buildThermalPrintCss(
   typography: ReceiptTypography,
-  paperWidthMm: number = 72,
+  paperWidthMm: number = 80,
 ): string {
-  const width = Number.isFinite(paperWidthMm) && paperWidthMm > 0 ? paperWidthMm : 72;
+  const width = Number.isFinite(paperWidthMm) && paperWidthMm > 0 ? paperWidthMm : 80;
   return `
   @page {
     size: ${width}mm auto;
@@ -388,8 +388,8 @@ export function buildThermalPrintCss(
   .receipt-bitmap-col { flex: 1; min-width: 0; }
   .receipt-bitmap-gap { height: 2px; }
   .receipt-inner.receipt-czech {
-    width: 72mm;
-    max-width: 72mm;
+    width: ${width}mm;
+    max-width: ${width}mm;
     margin: 0 auto;
     padding: 4px;
     font-size: var(--receipt-body-size, ${typography.bodyPx}px);

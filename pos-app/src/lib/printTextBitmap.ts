@@ -165,6 +165,7 @@ export interface BitmapTextOptions {
 }
 
 /** Native 72mm thermal width (~576 dots) — match ESC/POS raster 1:1. */
+export { DEFAULT_RECEIPT_PAPER_WIDTH_MM, receiptRasterWidthDots } from "@/lib/receipt-raster";
 export const RECEIPT_RASTER_WIDTH_PX = 576;
 export const RECEIPT_BITMAP_DPR = 1;
 export const RECEIPT_BITMAP_H_PAD = 6;

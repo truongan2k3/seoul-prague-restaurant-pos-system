@@ -9,6 +9,7 @@ import {
 } from "react";
 import { ReceiptPreviewModal } from "@/components/receipt-preview-modal";
 import { settingsToReceiptBusiness, settingsToReceiptTemplate } from "@/src/components/ReceiptPrint";
+import { DEFAULT_RECEIPT_PAPER_WIDTH_MM } from "@/lib/receipt-raster";
 import { printReceiptData } from "@/src/lib/printReceipt";
 import { printKitchenMessage, printKitchenTicket } from "@/src/lib/printKitchenTicket";
 import { useApp } from "@/contexts/app-context";
@@ -89,6 +90,7 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
         printBridgeUrl: settings.printBridgeUrl,
         browserPrintFallback: settings.browserPrintFallback,
         printers: settings.printers,
+        paperWidthMm: DEFAULT_RECEIPT_PAPER_WIDTH_MM,
       });
     },
     [
@@ -160,6 +162,7 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
         printBridgeUrl: settings.printBridgeUrl,
         browserPrintFallback: settings.browserPrintFallback,
         printers: settings.printers,
+        paperWidthMm: DEFAULT_RECEIPT_PAPER_WIDTH_MM,
       });
     }
   }, [

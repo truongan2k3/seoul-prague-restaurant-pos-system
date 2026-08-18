@@ -79,7 +79,7 @@ function breakLongSegment(
 }
 
 /** Word-aware wrap with char fallback so long kitchen lines never clip at canvas edge. */
-function wrapLines(
+export function wrapTextLines(
   ctx: CanvasRenderingContext2D,
   text: string,
   maxWidth: number,
@@ -141,9 +141,11 @@ export interface BitmapTextOptions {
   maxWidthPx: number;
   fontSizePx: number;
   fontWeight?: 400 | 600 | 700;
-  align?: "left" | "center";
+  align?: "left" | "center" | "right";
   paddingY?: number;
   lineGap?: number;
+  /** When false, render as a single line (no auto-wrap). */
+  wrap?: boolean;
   /** Device pixel ratio for sharp thermal / PDF output. */
   dpr?: number;
   /** Override canvas font stack (defaults to kitchen CJK stack). */
@@ -168,7 +170,8 @@ export function textToPngDataUrl(text: string, options: BitmapTextOptions): stri
   const fontStack = options.fontFamily ?? PRINT_FONT;
   mctx.font = `${fontWeight} ${options.fontSizePx}px ${fontStack}`;
   const wrapWidth = effectiveMaxWidth(options.maxWidthPx, options.fontSizePx);
-  const lines = wrapLines(mctx, trimmed, wrapWidth);
+  const lines =
+    options.wrap === false ? [trimmed] : wrapTextLines(mctx, trimmed, wrapWidth);
   const lineHeight = options.fontSizePx + lineGap;
   const contentHeight = lines.length * lineHeight + paddingY * 2;
 
@@ -183,12 +186,183 @@ export function textToPngDataUrl(text: string, options: BitmapTextOptions): stri
   ctx.fillStyle = "#000000";
   ctx.font = `${fontWeight} ${options.fontSizePx}px ${fontStack}`;
   ctx.textBaseline = "top";
-  ctx.textAlign = align === "center" ? "center" : "left";
+  ctx.textAlign = align === "center" ? "center" : align === "right" ? "right" : "left";
 
-  const x = align === "center" ? options.maxWidthPx / 2 : 0;
+  const x =
+    align === "center"
+      ? options.maxWidthPx / 2
+      : align === "right"
+        ? options.maxWidthPx
+        : 0;
   lines.forEach((line, index) => {
     ctx.fillText(line, x, paddingY + index * lineHeight);
   });
+
+  return canvas.toDataURL("image/png");
+}
+
+type BitmapDrawOptions = Pick<
+  BitmapTextOptions,
+  "maxWidthPx" | "fontSizePx" | "fontWeight" | "paddingY" | "lineGap" | "dpr" | "fontFamily"
+>;
+
+function bitmapFont(ctx: CanvasRenderingContext2D, options: BitmapDrawOptions): string {
+  const fontWeight = options.fontWeight ?? 700;
+  const fontStack = options.fontFamily ?? PRINT_FONT;
+  ctx.font = `${fontWeight} ${options.fontSizePx}px ${fontStack}`;
+  return fontStack;
+}
+
+function lineMetrics(options: BitmapDrawOptions) {
+  const paddingY = options.paddingY ?? 2;
+  const lineGap = options.lineGap ?? 4;
+  const lineHeight = options.fontSizePx + lineGap;
+  return { paddingY, lineGap, lineHeight };
+}
+
+/** Left + right text on one row; left side wraps, amount stays on the first line. */
+export function textToPngItemRowDataUrl(
+  leftText: string,
+  rightText: string,
+  options: BitmapDrawOptions,
+): string {
+  const trimmedLeft = leftText.trim();
+  const trimmedRight = rightText.trim();
+  if (!trimmedLeft && !trimmedRight) return "";
+
+  const dpr = options.dpr ?? 2;
+  const measure = document.createElement("canvas");
+  const mctx = measure.getContext("2d");
+  if (!mctx) return "";
+
+  bitmapFont(mctx, options);
+  const { paddingY, lineHeight } = lineMetrics(options);
+  const fullWidth = effectiveMaxWidth(options.maxWidthPx, options.fontSizePx);
+  const gap = 8;
+  const rightWidth = trimmedRight ? mctx.measureText(trimmedRight).width : 0;
+  const leftWrapWidth = Math.max(40, fullWidth - rightWidth - (trimmedRight ? gap : 0));
+  const leftLines = trimmedLeft ? wrapTextLines(mctx, trimmedLeft, leftWrapWidth) : [""];
+  const rowCount = Math.max(leftLines.length, 1);
+  const contentHeight = rowCount * lineHeight + paddingY * 2;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(options.maxWidthPx * dpr);
+  canvas.height = Math.ceil(contentHeight * dpr);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, options.maxWidthPx, contentHeight);
+  ctx.fillStyle = "#000000";
+  bitmapFont(ctx, options);
+  ctx.textBaseline = "top";
+
+  leftLines.forEach((line, index) => {
+    ctx.textAlign = "left";
+    ctx.fillText(line, 0, paddingY + index * lineHeight);
+    if (index === 0 && trimmedRight) {
+      ctx.textAlign = "right";
+      ctx.fillText(trimmedRight, options.maxWidthPx, paddingY);
+    }
+  });
+
+  return canvas.toDataURL("image/png");
+}
+
+/** Two columns of stacked lines (Tel/Stůl left, Datum/Čas right) in one PNG strip. */
+export function textToPngTwoColumnDataUrl(
+  leftLines: string[],
+  rightLines: string[],
+  options: BitmapDrawOptions,
+): string {
+  const left = leftLines.map((line) => line.trim()).filter(Boolean);
+  const right = rightLines.map((line) => line.trim()).filter(Boolean);
+  if (left.length === 0 && right.length === 0) return "";
+
+  const dpr = options.dpr ?? 2;
+  const measure = document.createElement("canvas");
+  const mctx = measure.getContext("2d");
+  if (!mctx) return "";
+
+  bitmapFont(mctx, options);
+  const { paddingY, lineHeight } = lineMetrics(options);
+  const rowCount = Math.max(left.length, right.length, 1);
+  const contentHeight = rowCount * lineHeight + paddingY * 2;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(options.maxWidthPx * dpr);
+  canvas.height = Math.ceil(contentHeight * dpr);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, options.maxWidthPx, contentHeight);
+  ctx.fillStyle = "#000000";
+  bitmapFont(ctx, options);
+  ctx.textBaseline = "top";
+
+  for (let i = 0; i < rowCount; i += 1) {
+    const y = paddingY + i * lineHeight;
+    const leftText = left[i] ?? "";
+    const rightText = right[i] ?? "";
+    if (leftText) {
+      ctx.textAlign = "left";
+      ctx.fillText(leftText, 0, y);
+    }
+    if (rightText) {
+      ctx.textAlign = "right";
+      ctx.fillText(rightText, options.maxWidthPx, y);
+    }
+  }
+
+  return canvas.toDataURL("image/png");
+}
+
+/** Single row with left and right text (totals, column headers). */
+export function textToPngSplitRowDataUrl(
+  leftText: string,
+  rightText: string,
+  options: BitmapDrawOptions,
+): string {
+  return textToPngItemRowDataUrl(leftText, rightText, options);
+}
+
+/** Three columns for VAT grid rows. */
+export function textToPngThreeColumnDataUrl(
+  leftText: string,
+  midText: string,
+  rightText: string,
+  options: BitmapDrawOptions,
+): string {
+  const dpr = options.dpr ?? 2;
+  const measure = document.createElement("canvas");
+  const mctx = measure.getContext("2d");
+  if (!mctx) return "";
+
+  bitmapFont(mctx, options);
+  const { paddingY, lineHeight } = lineMetrics(options);
+  const contentHeight = lineHeight + paddingY * 2;
+  const width = options.maxWidthPx;
+  const midX = width * 0.62;
+  const rightX = width;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(width * dpr);
+  canvas.height = Math.ceil(contentHeight * dpr);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, contentHeight);
+  ctx.fillStyle = "#000000";
+  bitmapFont(ctx, options);
+  ctx.textBaseline = "top";
+
+  ctx.textAlign = "left";
+  ctx.fillText(leftText.trim(), 0, paddingY);
+  ctx.textAlign = "right";
+  ctx.fillText(midText.trim(), midX, paddingY);
+  ctx.fillText(rightText.trim(), rightX, paddingY);
 
   return canvas.toDataURL("image/png");
 }

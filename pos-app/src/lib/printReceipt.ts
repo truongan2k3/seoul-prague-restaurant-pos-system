@@ -20,7 +20,7 @@ import {
 } from "@/lib/receipt-print-styles";
 import type { AppSettings } from "@/lib/types";
 import { ReceiptBodyContent, type ReceiptTemplate } from "@/src/components/ReceiptPrint";
-import { padReceiptLine, receiptItemEscPosLines, RECEIPT_LINE_WIDTH } from "@/lib/receipt-line-format";
+import { padReceiptLine, receiptItemEscPosLines, receiptMetaEscPosLines, RECEIPT_LINE_WIDTH } from "@/lib/receipt-line-format";
 import { receiptShouldUseBitmap } from "@/lib/print-dispatch";
 
 const PRINT_IFRAME_ID = "receipt-print-iframe";
@@ -232,10 +232,15 @@ export function buildReceiptEscPosLines(
     lines.push(`IČO: ${biz.ico}   DIČ: ${biz.dic}`);
   }
 
-  const telPart = vis.showPhone && biz.phone.trim() ? `Tel: ${biz.phone}` : "";
-  lines.push(padLine(telPart, `Stůl č. ${data.tableLabel}`.trim()));
+  const metaLeft: string[] = [];
+  if (vis.showPhone && biz.phone.trim()) metaLeft.push(`Tel: ${biz.phone}`);
+  metaLeft.push(`Stůl č. ${data.tableLabel}`);
   lines.push(
-    padLine(`Datum: ${formatReceiptDate(data.closedAt)}`, `Čas: ${formatReceiptTime(data.closedAt)}`),
+    ...receiptMetaEscPosLines(
+      metaLeft,
+      [`Datum: ${formatReceiptDate(data.closedAt)}`, `Čas: ${formatReceiptTime(data.closedAt)}`],
+      RECEIPT_LINE_WIDTH,
+    ),
   );
 
   lines.push("--------------------------------");

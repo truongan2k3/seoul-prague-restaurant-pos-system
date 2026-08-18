@@ -57,7 +57,7 @@ export function createDefaultPrinters(host = "192.168.1.200", port = "9100"): Ne
       port,
       enabled: true,
       roles: ["receipt", "bar"],
-      legacyBitmap: true,
+      legacyBitmap: false,
     },
   ];
 }

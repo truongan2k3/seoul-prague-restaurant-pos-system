@@ -144,6 +144,8 @@ export async function buildEscPosFromPngs(
     topBlankRasterDots?: number;
     /** When 0, raster strips print back-to-back (receipt tight layout). Default: one line feed between strips. */
     feedBetweenDots?: number;
+    bottomBlankRasterDots?: number;
+    bottomFeedLines?: number;
   },
 ): Promise<Uint8Array> {
   const parts: Uint8Array[] = [escInit(), escAlign("left")];
@@ -167,7 +169,10 @@ export async function buildEscPosFromPngs(
       parts.push(escFeed(1));
     }
   }
-  parts.push(escFeed(4), escCut());
+  if (options?.bottomBlankRasterDots && options.bottomBlankRasterDots > 0) {
+    parts.push(escBlankRaster(options.bottomBlankRasterDots));
+  }
+  parts.push(escFeed(options?.bottomFeedLines ?? 6), escCut());
   return concatBytes(parts);
 }
 

@@ -141,6 +141,17 @@ function kitchenClipSpacerHtml(widthPx: number, clipTopMm: number): string {
   return bitmapImgHtml(png, "", widthPx);
 }
 
+/** Vertical gap between kitchen ticket bitmap strips (ESC/POS ignores HTML padding). */
+function pushKitchenBitmapSpacer(pngs: string[], heightPx: number) {
+  if (heightPx <= 0) return;
+  const png = blankPngDataUrl(FULL_WIDTH_PX, heightPx, 2);
+  if (png) pngs.push(png);
+}
+
+const KITCHEN_HEADER_ITEM_GAP_PX = 24;
+/** ~1 text line between items on 80mm thermal (matches reference tickets). */
+const KITCHEN_ITEM_GAP_PX = 44;
+
 function kitchenTicketCss(qtyPx: number): string {
   return `
     <style>
@@ -173,8 +184,7 @@ function kitchenTicketCss(qtyPx: number): string {
       .kitchen-header .kt-bitmap { margin: 0 auto; }
       .kitchen-meta-gap { height: 4px; }
       .kitchen-item {
-        border-bottom: 1px dashed #000;
-        padding: 8px 0;
+        padding: 4px 0 20px;
       }
       .kitchen-item-row {
         display: flex;
@@ -303,7 +313,11 @@ export async function buildKitchenTicketHtml(input: {
   // Kitchen: ZH (large) + EN (small). Bar tickets: English only.
   const englishOnly = input.stationLabel === "BAR";
   const itemBlocks = lines
-    .map((item) => {
+    .map((item, itemIndex) => {
+      if (itemIndex === 0 && headerBlocks) {
+        pushKitchenBitmapSpacer(pngs, KITCHEN_HEADER_ITEM_GAP_PX);
+      }
+
       const display = resolveKitchenTicketItemDisplay(item, input.menuItems, { englishOnly });
       if (!display) return "";
 
@@ -365,6 +379,10 @@ export async function buildKitchenTicketHtml(input: {
         .join("");
 
       if (!itemLines) return "";
+
+      if (itemIndex < lines.length - 1) {
+        pushKitchenBitmapSpacer(pngs, KITCHEN_ITEM_GAP_PX);
+      }
 
       return `
         <div class="kitchen-item">
@@ -513,6 +531,8 @@ async function dispatchKitchenPrint(
       const clipDots = kitchenClipTopDots(settings.kitchenPrintClipTopMm);
       const bytes = await buildEscPosFromPngs(pngs, {
         topBlankRasterDots: clipDots > 0 ? clipDots : undefined,
+        bottomBlankRasterDots: 32,
+        bottomFeedLines: 6,
       });
       let result = await silentPrintEscPos(settings, role, bytes);
       // Messages: if no printer has kitchen-message role, fall back to kitchen printers.

@@ -442,7 +442,10 @@ export async function printReceiptData(
             }
             bitmapBytes =
               bitmapPngs.length > 0
-                ? await buildEscPosFromPngs(bitmapPngs, { feedBetweenDots: 0 })
+                ? await buildEscPosFromPngs(bitmapPngs, {
+                    feedBetweenDots: 0,
+                    bottomFeedLines: 3,
+                  })
                 : textBytes;
           }
           return bitmapBytes;

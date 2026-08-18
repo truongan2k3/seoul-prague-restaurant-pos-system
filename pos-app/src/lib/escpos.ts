@@ -142,7 +142,7 @@ export async function buildEscPosFromPngs(
     topFeedLines?: number;
     topFeedDots?: number;
     topBlankRasterDots?: number;
-    /** Dots to feed between raster strips (0 = tight layout). */
+    /** When 0, raster strips print back-to-back (receipt tight layout). Default: one line feed between strips. */
     feedBetweenDots?: number;
   },
 ): Promise<Uint8Array> {
@@ -154,15 +154,20 @@ export async function buildEscPosFromPngs(
   } else if (options?.topFeedLines && options.topFeedLines > 0) {
     parts.push(escFeed(options.topFeedLines));
   }
-  const betweenDots = options?.feedBetweenDots ?? 0;
+  const tightRasterGap = options?.feedBetweenDots === 0;
   for (const url of dataUrls) {
     if (!url) continue;
     parts.push(await escRasterFromPngDataUrl(url));
-    if (betweenDots > 0) {
-      parts.push(escFeedDots(betweenDots));
+    if (tightRasterGap) {
+      continue;
+    }
+    if (options?.feedBetweenDots != null && options.feedBetweenDots > 0) {
+      parts.push(escFeedDots(options.feedBetweenDots));
+    } else {
+      parts.push(escFeed(1));
     }
   }
-  parts.push(escFeed(3), escCut());
+  parts.push(escFeed(4), escCut());
   return concatBytes(parts);
 }
 

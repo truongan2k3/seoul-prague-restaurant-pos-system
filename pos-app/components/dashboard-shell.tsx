@@ -13,6 +13,7 @@ import { ReadyNotificationListener } from "@/components/ready-notification-liste
 import { CallWaiterListener } from "@/components/call-waiter-listener";
 import { Sidebar } from "@/components/sidebar";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
+import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
 import { useTableOrderWorkflow } from "@/hooks/use-table-order-workflow";
 import { useSessionHealth } from "@/hooks/use-session-health";
 import { useApp } from "@/contexts/app-context";
@@ -195,6 +196,15 @@ export function DashboardShell() {
     isBusy: () => tableOrder.modal != null,
     enabled: !loading && !error,
   });
+
+  useEffect(() => {
+    if (loading || error) return;
+    return subscribePosSoftRefresh(() => {
+      refreshPosData();
+      void reloadSales();
+      void reloadInventory();
+    });
+  }, [loading, error, refreshPosData, reloadSales, reloadInventory]);
 
   if (loading) return <LoadingShell />;
   if (error) {

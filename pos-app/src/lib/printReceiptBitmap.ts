@@ -2,7 +2,6 @@ import { formatEurFromCzk } from "@/lib/currency";
 import {
   formatReceiptAmount,
   formatReceiptDate,
-  formatReceiptDisplayIndex,
   formatReceiptTime,
   type ReceiptData,
 } from "@/lib/receipt-calculations";
@@ -15,6 +14,7 @@ import {
 } from "@/lib/receipt-print-styles";
 import type { AppSettings, ReceiptFontFamily, ReceiptFontWeight } from "@/lib/types";
 import type { ReceiptTemplate } from "@/src/components/ReceiptPrint";
+import { padReceiptLine, receiptItemEscPosLines, RECEIPT_LINE_WIDTH } from "@/lib/receipt-line-format";
 import { DEFAULT_RECEIPT_BRANDING_VISIBILITY } from "@/lib/receipt-branding";
 import {
   bitmapImgHtml,
@@ -29,7 +29,12 @@ const HALF_WIDTH_PX = 250;
 const DIVIDER = "--------------------------------";
 
 function resolveTemplate(data: ReceiptData, template?: ReceiptTemplate): ReceiptTemplate {
-  if (template) return template;
+  if (template) {
+    return {
+      ...template,
+      visibility: template.visibility ?? { ...DEFAULT_RECEIPT_BRANDING_VISIBILITY },
+    };
+  }
   if (data.business) {
     return {
       brandName: data.business.brandName,
@@ -98,7 +103,7 @@ function gap(size: "sm" | "md" = "sm"): string {
   return `<div class="receipt-bitmap-gap" style="height:${height}px"></div>`;
 }
 
-function rowPair(
+function rowLine(
   left: string,
   right: string,
   size: number,
@@ -106,14 +111,8 @@ function rowPair(
   fontStack: string,
   pngs: string[],
 ): string {
-  const leftHtml = bmp(left, { width: HALF_WIDTH_PX, size, weight }, fontStack, pngs);
-  const rightHtml = bmp(
-    right,
-    { width: HALF_WIDTH_PX, size, weight, align: "left" },
-    fontStack,
-    pngs,
-  );
-  return `<div class="receipt-bitmap-row">${leftHtml}${rightHtml}</div>`;
+  const text = padReceiptLine(left, right, RECEIPT_LINE_WIDTH);
+  return bmp(text, { width: FULL_WIDTH_PX, size, weight }, fontStack, pngs);
 }
 
 /** Rasterize receipt lines so legacy thermal printers receive images, not font glyphs. */
@@ -154,7 +153,7 @@ export async function buildBitmapReceiptHtml(
     blocks.push(bmp(text, { width, size, weight, align }, fontStack, pngs));
   };
 
-  push(`Č.: ${data.orderNumber}`, typography.metaPx, weights.secondary, "center");
+  push(padReceiptLine("", `Č.: ${data.orderNumber}`, RECEIPT_LINE_WIDTH), typography.metaPx, weights.secondary, "left");
   if (vis.showHeaderTitle) push(biz.brandName, typography.titlePx, weights.primary, "center");
   if (vis.showBrandAddress) push(biz.brandAddress, typography.metaPx, weights.secondary, "center");
   if (vis.showLegalName) push(biz.legalName, typography.metaPx, weights.secondary, "center");
@@ -163,40 +162,37 @@ export async function buildBitmapReceiptHtml(
     push(`IČO: ${biz.ico}   DIČ: ${biz.dic}`, typography.metaPx, weights.secondary, "center");
   }
 
-  const metaLeft = [
-    vis.showPhone && biz.phone.trim()
-      ? bmp(`Tel: ${biz.phone}`, { width: HALF_WIDTH_PX, size: typography.metaPx, weight: weights.secondary }, fontStack, pngs)
-      : "",
-    bmp(`Stůl č. ${data.tableLabel}`, { width: HALF_WIDTH_PX, size: typography.metaPx, weight: weights.secondary }, fontStack, pngs),
-  ].join("");
-  const metaRight = [
-    bmp(`Datum: ${formatReceiptDate(data.closedAt)}`, { width: HALF_WIDTH_PX, size: typography.metaPx, weight: weights.secondary }, fontStack, pngs),
-    bmp(`Čas: ${formatReceiptTime(data.closedAt)}`, { width: HALF_WIDTH_PX, size: typography.metaPx, weight: weights.secondary }, fontStack, pngs),
-  ].join("");
+  const telPart = vis.showPhone && biz.phone.trim() ? `Tel: ${biz.phone}` : "";
   blocks.push(
-    `<div class="receipt-bitmap-row"><div class="receipt-bitmap-col">${metaLeft}</div><div class="receipt-bitmap-col">${metaRight}</div></div>`,
+    rowLine(telPart, `Stůl č. ${data.tableLabel}`, typography.metaPx, weights.secondary, fontStack, pngs),
+  );
+  blocks.push(
+    rowLine(
+      `Datum: ${formatReceiptDate(data.closedAt)}`,
+      `Čas: ${formatReceiptTime(data.closedAt)}`,
+      typography.metaPx,
+      weights.secondary,
+      fontStack,
+      pngs,
+    ),
   );
 
-  blocks.push(gap(), bmp(DIVIDER, { width: FULL_WIDTH_PX, size: typography.metaPx, weight: weights.secondary, align: "center" }, fontStack, pngs), gap());
+  blocks.push(bmp(DIVIDER, { width: FULL_WIDTH_PX, size: typography.metaPx, weight: weights.secondary, align: "center" }, fontStack, pngs));
 
   blocks.push(
-    rowPair("Kód Položka", "Částka", typography.itemPx, weights.primary, fontStack, pngs),
+    rowLine("Kód Položka", "Částka", typography.metaPx, weights.primary, fontStack, pngs),
   );
 
+  const itemSize = typography.metaPx;
+  const itemWeight = weights.secondary;
   for (const item of data.items) {
-    blocks.push(
-      rowPair(
-        `${item.code} ${item.name}`,
-        `${formatReceiptAmount(item.lineTotal)} ${item.taxGroup}`,
-        typography.itemPx,
-        weights.primary,
-        fontStack,
-        pngs,
-      ),
-    );
+    const amount = `${formatReceiptAmount(item.lineTotal)} ${item.taxGroup}`;
+    for (const line of receiptItemEscPosLines(item.code, item.name, amount, RECEIPT_LINE_WIDTH)) {
+      blocks.push(bmp(line, { width: FULL_WIDTH_PX, size: itemSize, weight: itemWeight }, fontStack, pngs));
+    }
   }
 
-  blocks.push(gap(), bmp(DIVIDER, { width: FULL_WIDTH_PX, size: typography.metaPx, weight: weights.secondary, align: "center" }, fontStack, pngs), gap());
+  blocks.push(bmp(DIVIDER, { width: FULL_WIDTH_PX, size: typography.metaPx, weight: weights.secondary, align: "center" }, fontStack, pngs));
 
   const showSubtotal =
     data.discountAmount > 0 ||
@@ -205,23 +201,16 @@ export async function buildBitmapReceiptHtml(
 
   if (showSubtotal) {
     blocks.push(
-      rowPair(
-        "Mezisoučet:",
-        formatReceiptAmount(data.subtotal),
-        typography.bodyPx,
-        weights.secondary,
-        fontStack,
-        pngs,
-      ),
+      rowLine("Mezisoučet:", formatReceiptAmount(data.subtotal), typography.metaPx, weights.secondary, fontStack, pngs),
     );
   }
 
   if (data.discountAmount > 0) {
     blocks.push(
-      rowPair(
+      rowLine(
         data.discountLabel ?? "Sleva:",
-        `${formatReceiptAmount(data.discountAmount)} CZK`,
-        typography.bodyPx,
+        formatReceiptAmount(data.discountAmount),
+        typography.metaPx,
         weights.secondary,
         fontStack,
         pngs,
@@ -230,14 +219,7 @@ export async function buildBitmapReceiptHtml(
   }
 
   blocks.push(
-    rowPair(
-      "CELKEM",
-      formatReceiptAmount(data.grandTotal),
-      typography.celkemPx,
-      weights.primary,
-      fontStack,
-      pngs,
-    ),
+    rowLine("CELKEM", formatReceiptAmount(data.grandTotal), typography.celkemPx, weights.primary, fontStack, pngs),
   );
 
   if (data.showEur && data.eurRate) {
@@ -245,7 +227,7 @@ export async function buildBitmapReceiptHtml(
   }
 
   blocks.push(
-    rowPair(
+    rowLine(
       paymentMethodLabel(data.paymentMethod),
       formatReceiptAmount(data.grandTotal),
       typography.metaPx,
@@ -257,17 +239,10 @@ export async function buildBitmapReceiptHtml(
 
   if (data.paymentMethod === "cash" && data.amountGiven != null) {
     blocks.push(
-      rowPair(
-        "Přijato:",
-        `${formatReceiptAmount(data.amountGiven)} CZK`,
-        typography.metaPx,
-        weights.secondary,
-        fontStack,
-        pngs,
-      ),
-      rowPair(
+      rowLine("Přijato:", formatReceiptAmount(data.amountGiven), typography.metaPx, weights.secondary, fontStack, pngs),
+      rowLine(
         "Vráceno:",
-        `${formatReceiptAmount(data.changeDue ?? 0)} CZK`,
+        formatReceiptAmount(data.changeDue ?? 0),
         typography.metaPx,
         weights.primary,
         fontStack,
@@ -277,7 +252,7 @@ export async function buildBitmapReceiptHtml(
   }
 
   if (data.paymentMethod === "card" && data.cardLast4) {
-    blocks.push(gap(), bmp(DIVIDER, { width: FULL_WIDTH_PX, size: typography.metaPx, weight: weights.secondary, align: "center" }, fontStack, pngs), gap());
+    blocks.push(bmp(DIVIDER, { width: FULL_WIDTH_PX, size: typography.metaPx, weight: weights.secondary, align: "center" }, fontStack, pngs));
     push("PLATBA KARTOU / CARD PAYMENT", typography.itemPx, weights.primary, "center");
     push(
       `Karta: ${data.cardBrand ?? "Card"} (${formatCardMask(data.cardLast4)})`,
@@ -291,19 +266,24 @@ export async function buildBitmapReceiptHtml(
     push("Trans. Status: SCHVÁLENO / APPROVED", typography.metaPx, weights.secondary, "center");
   }
 
-  blocks.push(gap(), bmp(DIVIDER, { width: FULL_WIDTH_PX, size: typography.metaPx, weight: weights.secondary, align: "center" }, fontStack, pngs), gap());
+  blocks.push(bmp(DIVIDER, { width: FULL_WIDTH_PX, size: typography.metaPx, weight: weights.secondary, align: "center" }, fontStack, pngs));
 
-  push("Rate (%)    DPH    Základ", typography.tablePx, weights.primary, "center");
+  blocks.push(
+    rowLine("DPH", "Základ", typography.tablePx, weights.primary, fontStack, pngs),
+  );
   for (const row of data.taxGroups) {
-    push(
-      `${row.rate}%    ${formatReceiptAmount(row.vat)}    ${formatReceiptAmount(row.base)}`,
-      typography.tablePx,
-      weights.secondary,
-      "center",
+    blocks.push(
+      rowLine(
+        String(row.rate),
+        `${formatReceiptAmount(row.vat)}  ${formatReceiptAmount(row.base)}`,
+        typography.tablePx,
+        weights.secondary,
+        fontStack,
+        pngs,
+      ),
     );
   }
 
-  blocks.push(gap("md"));
   if (vis.showFooter) {
     for (const line of biz.footerLines) {
       push(line, typography.metaPx, weights.secondary, "center");

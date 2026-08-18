@@ -200,7 +200,7 @@ export function buildEscPosFromTextLines(
   for (const line of lines) {
     parts.push(writeLine(line));
   }
-  parts.push(escFeed(2), escCut());
+  parts.push(escFeed(1), escCut());
   return concatBytes(parts);
 }
 

@@ -20,6 +20,7 @@ import {
 } from "@/lib/receipt-print-styles";
 import type { AppSettings } from "@/lib/types";
 import { ReceiptBodyContent, type ReceiptTemplate } from "@/src/components/ReceiptPrint";
+import { padReceiptLine, receiptItemEscPosLines, RECEIPT_LINE_WIDTH } from "@/lib/receipt-line-format";
 import { receiptShouldUseBitmap } from "@/lib/print-dispatch";
 
 const PRINT_IFRAME_ID = "receipt-print-iframe";
@@ -78,9 +79,8 @@ function paymentMethodLabel(method: ReceiptData["paymentMethod"]): string {
   return method === "cash" ? "hotovost" : "debetní karta";
 }
 
-function padLine(left: string, right: string, width = 42): string {
-  const gap = Math.max(1, width - left.length - right.length);
-  return `${left}${" ".repeat(gap)}${right}`;
+function padLine(left: string, right: string, width = RECEIPT_LINE_WIDTH): string {
+  return padReceiptLine(left, right, width);
 }
 
 export function buildReceiptHtmlContent(data: ReceiptData, template?: ReceiptTemplate): string {
@@ -242,8 +242,10 @@ export function buildReceiptEscPosLines(
   lines.push(padLine("Kód Položka", "Částka"));
 
   for (const item of data.items) {
-    lines.push(`${item.code} ${item.name}`);
-    lines.push(padLine("", `${formatReceiptAmount(item.lineTotal)} ${item.taxGroup}`));
+    const amount = `${formatReceiptAmount(item.lineTotal)} ${item.taxGroup}`;
+    lines.push(
+      ...receiptItemEscPosLines(item.code, item.name, amount, RECEIPT_LINE_WIDTH),
+    );
   }
 
   lines.push("--------------------------------");
@@ -373,7 +375,7 @@ export async function printReceiptData(
               bitmapPngs.length > 0
                 ? await buildEscPosFromPngs(bitmapPngs, {
                     feedBetweenDots: 0,
-                    bottomFeedLines: 3,
+                    bottomFeedLines: 2,
                   })
                 : textBytes;
           }

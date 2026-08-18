@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LanguageSelector } from "@/components/language-selector";
 import {
@@ -24,6 +24,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { useSettings } from "@/contexts/settings-context";
+import { useRegisterUnsavedWork } from "@/contexts/unsaved-work-context";
 import { playTestAlertSound } from "@/lib/notification-sound";
 import { SOUND_FILE_OPTIONS } from "@/lib/auto-serve";
 import {
@@ -100,6 +101,8 @@ export function SettingsView({
 
   const [draft, setDraft] = useState<SettingsPageDraft>(() => pickSettingsPageDraft(settings));
   const [dirty, setDirty] = useState(false);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const [bridgeTestMessage, setBridgeTestMessage] = useState<string | null>(null);
   const [bridgeTesting, setBridgeTesting] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
@@ -167,7 +170,25 @@ export function SettingsView({
         playSound: false,
       });
     }
+    return ok;
   };
+
+  useRegisterUnsavedWork({
+    id: "settings-page",
+    isDirty: () => dirty,
+    onSave: useCallback(async () => {
+      const ok = await saveSettingsPageDraft(draftRef.current);
+      if (ok) {
+        setDirty(false);
+        pushNotification({
+          id: "settings-saved",
+          message: translate("settingsSavedSuccess"),
+          playSound: false,
+        });
+      }
+      return ok;
+    }, [saveSettingsPageDraft, pushNotification, translate]),
+  });
 
   const handleSoundUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -1547,6 +1568,15 @@ export function SettingsView({
             >
               {theme === "light" ? translate("darkMode") : translate("lightMode")}
             </button>
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-6 md:col-span-2 dark:border-gray-700 dark:bg-gray-800">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">
+              {translate("settingsAutoSyncTitle")}
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+              {translate("settingsAutoSyncHint")}
+            </p>
           </section>
         </div>
         )}

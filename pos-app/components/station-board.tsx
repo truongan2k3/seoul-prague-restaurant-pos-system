@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
 import { useSessionHealth } from "@/hooks/use-session-health";
 import { Bell, User } from "lucide-react";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
@@ -215,6 +216,10 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
     onRefresh: () => void reload(),
     isBusy: () => busy || cancelTarget != null,
   });
+
+  useEffect(() => {
+    return subscribePosSoftRefresh(() => void reload());
+  }, [reload]);
 
   useEffect(() => {
     let cancelled = false;

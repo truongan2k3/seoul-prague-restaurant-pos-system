@@ -44,6 +44,14 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
+/* Block native pull-to-refresh on phones; app uses a guarded custom pull instead. */
+@media (max-width: 767px), (pointer: coarse) {
+  html,
+  body {
+    overscroll-behavior-y: none;
+  }
+}
+
 /* ── Responsive utilities ─────────────────────────────────────────────────── */
 
 .no-scrollbar {

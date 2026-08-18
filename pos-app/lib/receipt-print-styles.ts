@@ -184,34 +184,34 @@ const BITMAP_SIZE_SCALE: Record<
   Pick<ReceiptTypography, "bodyPx" | "itemPx" | "metaPx" | "tablePx" | "titlePx" | "indexPx" | "celkemPx" | "lineHeight">
 > = {
   normal: {
+    bodyPx: 10,
+    itemPx: 10,
+    metaPx: 9,
+    tablePx: 9,
+    titlePx: 12,
+    indexPx: 14,
+    celkemPx: 11,
+    lineHeight: 1.12,
+  },
+  medium: {
     bodyPx: 11,
     itemPx: 11,
     metaPx: 10,
     tablePx: 10,
-    titlePx: 14,
+    titlePx: 13,
     indexPx: 16,
-    celkemPx: 13,
-    lineHeight: 1.15,
+    celkemPx: 12,
+    lineHeight: 1.12,
   },
-  medium: {
+  large: {
     bodyPx: 12,
     itemPx: 12,
     metaPx: 11,
     tablePx: 11,
-    titlePx: 15,
+    titlePx: 14,
     indexPx: 18,
-    celkemPx: 14,
-    lineHeight: 1.15,
-  },
-  large: {
-    bodyPx: 13,
-    itemPx: 13,
-    metaPx: 12,
-    tablePx: 12,
-    titlePx: 16,
-    indexPx: 20,
-    celkemPx: 15,
-    lineHeight: 1.15,
+    celkemPx: 13,
+    lineHeight: 1.12,
   },
 };
 

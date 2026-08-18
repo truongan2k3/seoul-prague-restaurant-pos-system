@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronRight, MessageSquare, Minus, Plus, Search, X } from "lucide-react";
 import { CancelReasonModal } from "@/components/cancel-reason-modal";
 import { ItemCustomizeModal, type CustomizeResult } from "@/components/item-customize-modal";
@@ -14,6 +14,7 @@ import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { useSettings } from "@/contexts/settings-context";
+import { useRegisterUnsavedWork } from "@/contexts/unsaved-work-context";
 import { shouldPrintKitchenOnSend } from "@/lib/kitchen-fulfillment-mode";
 import { orderLineKitchenPanelClass, resolveKitchenStatus } from "@/lib/auto-serve";
 import { categoriesForOrdering } from "@/lib/category-utils";
@@ -1354,6 +1355,29 @@ export function NewOrderModal({
       handleClose();
     }
   };
+
+  const saveAllOrderChanges = useCallback(async (): Promise<boolean> => {
+    if (hasSubmittedChanges) {
+      const saved = await handleSaveSubmittedChanges({ silent: true });
+      if (!saved) return false;
+    }
+    if (cart.length > 0 || pendingKitchenMessage) {
+      await handleSend();
+    }
+    return true;
+  }, [
+    hasSubmittedChanges,
+    cart.length,
+    pendingKitchenMessage,
+    handleSaveSubmittedChanges,
+    handleSend,
+  ]);
+
+  useRegisterUnsavedWork({
+    id: "order-modal",
+    isDirty: () => open && hasUnsavedChanges,
+    onSave: saveAllOrderChanges,
+  });
 
   useEffect(() => {
     if (!open) return;

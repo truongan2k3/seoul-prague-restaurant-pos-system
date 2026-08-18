@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
 import { useSessionHealth } from "@/hooks/use-session-health";
 import { useApp } from "@/contexts/app-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
@@ -60,6 +61,10 @@ function ServerApp() {
     onRefresh: () => void reload(),
     isBusy: () => orderModal != null || isSaving,
   });
+
+  useEffect(() => {
+    return subscribePosSoftRefresh(() => void reload());
+  }, [reload]);
 
   const handleTableClick = (table: RestaurantTable) => {
     setOrderModal({

@@ -11,6 +11,8 @@ import { SettingsProvider, useSettings } from "@/contexts/settings-context";
 import { AdminDeletionPasswordModal } from "@/components/admin-deletion-password-modal";
 import { FullscreenToggle } from "@/components/fullscreen-toggle";
 import { ManagerPinModal } from "@/components/manager-pin-modal";
+import { MobileRefreshGuard } from "@/components/mobile-refresh-guard";
+import { UnsavedWorkProvider } from "@/contexts/unsaved-work-context";
 
 function PinGateWrapper({ children }: { children: React.ReactNode }) {
   const { verifyManagerPin, currentStaffUser } = useApp();
@@ -45,10 +47,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <NotificationProvider>
             <ReceiptPrintProvider>
             <AdminDeletionGateWrapper>
-              <PinGateWrapper>
-                {children}
-                <FullscreenToggle variant="fab" />
-              </PinGateWrapper>
+              <UnsavedWorkProvider>
+                <PinGateWrapper>
+                  {children}
+                  <MobileRefreshGuard />
+                  <FullscreenToggle variant="fab" />
+                </PinGateWrapper>
+              </UnsavedWorkProvider>
             </AdminDeletionGateWrapper>
             </ReceiptPrintProvider>
           </NotificationProvider>

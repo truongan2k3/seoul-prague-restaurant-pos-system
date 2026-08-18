@@ -48,9 +48,19 @@ export function containsCjk(text: string): boolean {
   return /[\u3400-\u9fff\uf900-\ufaff]/.test(text);
 }
 
-function effectiveMaxWidth(maxWidthPx: number, fontSizePx: number): number {
-  const margin = Math.max(10, Math.round(fontSizePx * 0.15));
-  return Math.max(1, maxWidthPx - margin);
+function effectiveMaxWidth(maxWidthPx: number, fontSizePx: number, horizontalPad = 0): number {
+  const margin = Math.max(4, Math.round(fontSizePx * 0.08));
+  return Math.max(1, maxWidthPx - horizontalPad * 2 - margin);
+}
+
+function bitmapX(
+  align: "left" | "center" | "right",
+  maxWidthPx: number,
+  horizontalPad: number,
+): number {
+  if (align === "center") return maxWidthPx / 2;
+  if (align === "right") return maxWidthPx - horizontalPad;
+  return horizontalPad;
 }
 
 function breakLongSegment(
@@ -150,7 +160,14 @@ export interface BitmapTextOptions {
   dpr?: number;
   /** Override canvas font stack (defaults to kitchen CJK stack). */
   fontFamily?: string;
+  /** Horizontal inset so right-aligned text is not clipped at paper edge. */
+  horizontalPad?: number;
 }
+
+/** Native 72mm thermal width (~576 dots) — match ESC/POS raster 1:1. */
+export const RECEIPT_RASTER_WIDTH_PX = 576;
+export const RECEIPT_BITMAP_DPR = 1;
+export const RECEIPT_BITMAP_H_PAD = 6;
 
 /** Paint black text on transparent canvas → PNG data URL. */
 export function textToPngDataUrl(text: string, options: BitmapTextOptions): string {
@@ -162,6 +179,7 @@ export function textToPngDataUrl(text: string, options: BitmapTextOptions): stri
   const paddingY = options.paddingY ?? 2;
   const lineGap = options.lineGap ?? 4;
   const align = options.align ?? "left";
+  const horizontalPad = options.horizontalPad ?? 0;
 
   const measure = document.createElement("canvas");
   const mctx = measure.getContext("2d");
@@ -169,7 +187,7 @@ export function textToPngDataUrl(text: string, options: BitmapTextOptions): stri
 
   const fontStack = options.fontFamily ?? PRINT_FONT;
   mctx.font = `${fontWeight} ${options.fontSizePx}px ${fontStack}`;
-  const wrapWidth = effectiveMaxWidth(options.maxWidthPx, options.fontSizePx);
+  const wrapWidth = effectiveMaxWidth(options.maxWidthPx, options.fontSizePx, horizontalPad);
   const lines =
     options.wrap === false ? [trimmed] : wrapTextLines(mctx, trimmed, wrapWidth);
   const lineHeight = options.fontSizePx + lineGap;
@@ -188,12 +206,7 @@ export function textToPngDataUrl(text: string, options: BitmapTextOptions): stri
   ctx.textBaseline = "top";
   ctx.textAlign = align === "center" ? "center" : align === "right" ? "right" : "left";
 
-  const x =
-    align === "center"
-      ? options.maxWidthPx / 2
-      : align === "right"
-        ? options.maxWidthPx
-        : 0;
+  const x = bitmapX(align, options.maxWidthPx, horizontalPad);
   lines.forEach((line, index) => {
     ctx.fillText(line, x, paddingY + index * lineHeight);
   });
@@ -203,7 +216,7 @@ export function textToPngDataUrl(text: string, options: BitmapTextOptions): stri
 
 type BitmapDrawOptions = Pick<
   BitmapTextOptions,
-  "maxWidthPx" | "fontSizePx" | "fontWeight" | "paddingY" | "lineGap" | "dpr" | "fontFamily"
+  "maxWidthPx" | "fontSizePx" | "fontWeight" | "paddingY" | "lineGap" | "dpr" | "fontFamily" | "horizontalPad"
 >;
 
 function bitmapFont(ctx: CanvasRenderingContext2D, options: BitmapDrawOptions): string {
@@ -237,8 +250,9 @@ export function textToPngItemRowDataUrl(
 
   bitmapFont(mctx, options);
   const { paddingY, lineHeight } = lineMetrics(options);
-  const fullWidth = effectiveMaxWidth(options.maxWidthPx, options.fontSizePx);
-  const gap = 8;
+  const horizontalPad = options.horizontalPad ?? 0;
+  const fullWidth = effectiveMaxWidth(options.maxWidthPx, options.fontSizePx, horizontalPad);
+  const gap = 10;
   const rightWidth = trimmedRight ? mctx.measureText(trimmedRight).width : 0;
   const leftWrapWidth = Math.max(40, fullWidth - rightWidth - (trimmedRight ? gap : 0));
   const leftLines = trimmedLeft ? wrapTextLines(mctx, trimmedLeft, leftWrapWidth) : [""];
@@ -259,10 +273,10 @@ export function textToPngItemRowDataUrl(
 
   leftLines.forEach((line, index) => {
     ctx.textAlign = "left";
-    ctx.fillText(line, 0, paddingY + index * lineHeight);
+    ctx.fillText(line, horizontalPad, paddingY + index * lineHeight);
     if (index === 0 && trimmedRight) {
       ctx.textAlign = "right";
-      ctx.fillText(trimmedRight, options.maxWidthPx, paddingY);
+      ctx.fillText(trimmedRight, options.maxWidthPx - horizontalPad, paddingY);
     }
   });
 
@@ -286,6 +300,7 @@ export function textToPngTwoColumnDataUrl(
 
   bitmapFont(mctx, options);
   const { paddingY, lineHeight } = lineMetrics(options);
+  const horizontalPad = options.horizontalPad ?? 0;
   const rowCount = Math.max(left.length, right.length, 1);
   const contentHeight = rowCount * lineHeight + paddingY * 2;
 
@@ -307,11 +322,11 @@ export function textToPngTwoColumnDataUrl(
     const rightText = right[i] ?? "";
     if (leftText) {
       ctx.textAlign = "left";
-      ctx.fillText(leftText, 0, y);
+      ctx.fillText(leftText, horizontalPad, y);
     }
     if (rightText) {
       ctx.textAlign = "right";
-      ctx.fillText(rightText, options.maxWidthPx, y);
+      ctx.fillText(rightText, options.maxWidthPx - horizontalPad, y);
     }
   }
 
@@ -341,10 +356,11 @@ export function textToPngThreeColumnDataUrl(
 
   bitmapFont(mctx, options);
   const { paddingY, lineHeight } = lineMetrics(options);
+  const horizontalPad = options.horizontalPad ?? 0;
   const contentHeight = lineHeight + paddingY * 2;
   const width = options.maxWidthPx;
-  const midX = width * 0.62;
-  const rightX = width;
+  const midX = width * 0.68 - horizontalPad;
+  const rightX = width - horizontalPad;
 
   const canvas = document.createElement("canvas");
   canvas.width = Math.ceil(width * dpr);
@@ -359,7 +375,7 @@ export function textToPngThreeColumnDataUrl(
   ctx.textBaseline = "top";
 
   ctx.textAlign = "left";
-  ctx.fillText(leftText.trim(), 0, paddingY);
+  ctx.fillText(leftText.trim(), horizontalPad, paddingY);
   ctx.textAlign = "right";
   ctx.fillText(midText.trim(), midX, paddingY);
   ctx.fillText(rightText.trim(), rightX, paddingY);

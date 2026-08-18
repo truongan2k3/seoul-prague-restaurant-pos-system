@@ -178,40 +178,40 @@ export function receiptTypographyFromSettings(
   };
 }
 
-/** Larger canvas px sizes for legacy bitmap receipts (~72mm thermal raster). */
+/** Larger canvas px sizes for legacy bitmap receipts (~72mm / 576 dots, 1:1 raster). */
 const BITMAP_SIZE_SCALE: Record<
   ReceiptFontSize,
   Pick<ReceiptTypography, "bodyPx" | "itemPx" | "metaPx" | "tablePx" | "titlePx" | "indexPx" | "celkemPx" | "lineHeight">
 > = {
   normal: {
-    bodyPx: 10,
-    itemPx: 10,
-    metaPx: 9,
-    tablePx: 9,
-    titlePx: 12,
-    indexPx: 14,
-    celkemPx: 11,
-    lineHeight: 1.12,
+    bodyPx: 16,
+    itemPx: 17,
+    metaPx: 15,
+    tablePx: 15,
+    titlePx: 22,
+    indexPx: 24,
+    celkemPx: 20,
+    lineHeight: 1.18,
   },
   medium: {
-    bodyPx: 11,
-    itemPx: 11,
-    metaPx: 10,
-    tablePx: 10,
-    titlePx: 13,
-    indexPx: 16,
-    celkemPx: 12,
-    lineHeight: 1.12,
+    bodyPx: 18,
+    itemPx: 19,
+    metaPx: 17,
+    tablePx: 17,
+    titlePx: 24,
+    indexPx: 26,
+    celkemPx: 22,
+    lineHeight: 1.18,
   },
   large: {
-    bodyPx: 12,
-    itemPx: 12,
-    metaPx: 11,
-    tablePx: 11,
-    titlePx: 14,
-    indexPx: 18,
-    celkemPx: 13,
-    lineHeight: 1.12,
+    bodyPx: 20,
+    itemPx: 21,
+    metaPx: 19,
+    tablePx: 19,
+    titlePx: 26,
+    indexPx: 28,
+    celkemPx: 24,
+    lineHeight: 1.18,
   },
 };
 

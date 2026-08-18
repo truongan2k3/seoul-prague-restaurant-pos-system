@@ -17,7 +17,11 @@ import type { ReceiptTemplate } from "@/src/components/ReceiptPrint";
 import { DEFAULT_RECEIPT_BRANDING_VISIBILITY } from "@/lib/receipt-branding";
 import {
   bitmapImgHtml,
+  blankPngDataUrl,
   ensureCjkPrintFont,
+  RECEIPT_BITMAP_DPR,
+  RECEIPT_BITMAP_H_PAD,
+  RECEIPT_RASTER_WIDTH_PX,
   textToPngDataUrl,
   textToPngItemRowDataUrl,
   textToPngSplitRowDataUrl,
@@ -26,8 +30,9 @@ import {
   type BitmapTextOptions,
 } from "@/src/lib/printTextBitmap";
 
-/** Content width for 72mm receipt paper (~2mm margins). */
-const FULL_WIDTH_PX = 520;
+/** Match ESC/POS raster width 1:1 — avoids shrinking high-DPR PNGs on the printer. */
+const FULL_WIDTH_PX = RECEIPT_RASTER_WIDTH_PX;
+const FOOTER_SPACER_PX = 36;
 const DIVIDER = "--------------------------------";
 
 function resolveTemplate(data: ReceiptData, template?: ReceiptTemplate): ReceiptTemplate {
@@ -103,7 +108,9 @@ export async function buildBitmapReceiptHtml(
 
   const biz = resolveTemplate(data, template);
   const vis = biz.visibility;
-  const fontStack = receiptFontStack(fontFamily === "courier" ? "arial" : fontFamily);
+  const fontStack = receiptFontStack(
+    fontFamily === "courier" || fontFamily === "consolas" ? "consolas" : fontFamily,
+  );
   const weights = kitchenBitmapWeights(fontWeight);
   const pngs: string[] = [];
   const blocks: string[] = [];
@@ -113,9 +120,10 @@ export async function buildBitmapReceiptHtml(
     fontSizePx: size,
     fontWeight: weight,
     fontFamily: fontStack,
-    dpr: 2,
-    paddingY: 1,
-    lineGap: 2,
+    dpr: RECEIPT_BITMAP_DPR,
+    horizontalPad: RECEIPT_BITMAP_H_PAD,
+    paddingY: 3,
+    lineGap: 3,
   });
 
   const emit = (url: string, alt: string) => {
@@ -351,6 +359,11 @@ export async function buildBitmapReceiptHtml(
       });
     }
   }
+
+  emit(
+    blankPngDataUrl(FULL_WIDTH_PX, FOOTER_SPACER_PX, RECEIPT_BITMAP_DPR),
+    "footer-spacer",
+  );
 
   const html = `<div class="receipt-bitmap">${blocks.join("")}</div>`;
   return { html, pngs };

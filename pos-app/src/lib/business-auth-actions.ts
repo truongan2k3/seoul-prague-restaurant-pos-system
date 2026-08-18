@@ -100,6 +100,7 @@ async function ensureSettingsForBusiness(businessId: string) {
       kitchen_print_message_font_weight: DEFAULT_APP_SETTINGS.kitchenPrintMessageFontWeight,
       kitchen_print_layout: DEFAULT_APP_SETTINGS.kitchenPrintLayout,
       kitchen_print_clip_top_mm: DEFAULT_APP_SETTINGS.kitchenPrintClipTopMm,
+      kitchen_print_clip_bottom_mm: DEFAULT_APP_SETTINGS.kitchenPrintClipBottomMm,
       kitchen_print_item_gap_px: DEFAULT_APP_SETTINGS.kitchenPrintItemGapPx,
       receipt_header_title: DEFAULT_BUSINESS_NAME,
       receipt_legal_name: DEFAULT_APP_SETTINGS.receiptLegalName,

@@ -5,14 +5,18 @@ import Link from "next/link";
 import { LanguageSelector } from "@/components/language-selector";
 import {
   clampKitchenClipTopMm,
+  clampKitchenClipBottomMm,
   clampKitchenItemGapPx,
   KITCHEN_CLIP_TOP_MM_MAX,
   KITCHEN_CLIP_TOP_MM_MIN,
+  KITCHEN_CLIP_BOTTOM_MM_MAX,
+  KITCHEN_CLIP_BOTTOM_MM_MIN,
   KITCHEN_ITEM_GAP_PX_MAX,
   KITCHEN_ITEM_GAP_PX_MIN,
 } from "@/lib/kitchen-print-layout";
 import { KitchenPrintLayoutEditor } from "@/components/kitchen-print-layout-editor";
 import { KitchenTicketSpacingPreview } from "@/components/kitchen-ticket-spacing-preview";
+import { ReceiptBrandingEditor } from "@/components/receipt-branding-editor";
 import { LiveClock } from "@/components/live-clock";
 import { MenuCustomizationManager } from "@/components/menu-customization-manager";
 import { useApp } from "@/contexts/app-context";
@@ -800,6 +804,33 @@ export function SettingsView({
                     {translate("settingsKitchenPrintClipTopHint")}
                   </p>
                 </label>
+                <label className="block text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {translate("settingsKitchenPrintClipBottom")}
+                  </span>
+                  <div className="mt-2 flex items-center gap-3">
+                    <input
+                      type="range"
+                      min={KITCHEN_CLIP_BOTTOM_MM_MIN}
+                      max={KITCHEN_CLIP_BOTTOM_MM_MAX}
+                      step={1}
+                      value={draft.kitchenPrintClipBottomMm}
+                      onChange={(event) =>
+                        updateDraft(
+                          "kitchenPrintClipBottomMm",
+                          clampKitchenClipBottomMm(Number(event.target.value)),
+                        )
+                      }
+                      className="min-h-[44px] flex-1"
+                    />
+                    <span className="w-14 text-right text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                      {draft.kitchenPrintClipBottomMm} mm
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {translate("settingsKitchenPrintClipBottomHint")}
+                  </p>
+                </label>
                 <label className="block text-sm sm:col-span-2">
                   <span className="text-gray-500 dark:text-gray-400">
                     {translate("settingsKitchenPrintItemGap")}
@@ -829,6 +860,7 @@ export function SettingsView({
                   <KitchenTicketSpacingPreview
                     itemGapPx={draft.kitchenPrintItemGapPx}
                     clipTopMm={draft.kitchenPrintClipTopMm}
+                    clipBottomMm={draft.kitchenPrintClipBottomMm}
                     fontSize={draft.kitchenPrintOrderFontSize}
                     fontWeight={draft.kitchenPrintOrderFontWeight}
                     layout={draft.kitchenPrintLayout}
@@ -944,77 +976,66 @@ export function SettingsView({
             </div>
 
             <h3 className="mt-6 text-sm font-semibold text-gray-900 dark:text-gray-100">
-              {translate("settingsBillTemplate")}
+              {translate("settingsBranding")}
             </h3>
-            <div className="mt-3 space-y-3">
-              <label className="block text-sm">
-                <span className="text-gray-500 dark:text-gray-400">{translate("settingsReceiptHeader")}</span>
-                <input
-                  value={draft.receiptHeaderTitle}
-                  onChange={(event) => updateDraft("receiptHeaderTitle", event.target.value)}
-                  className="pos-input mt-1"
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="text-gray-500 dark:text-gray-400">{translate("settingsReceiptLegalName")}</span>
-                <input
-                  value={draft.receiptLegalName}
-                  onChange={(event) => updateDraft("receiptLegalName", event.target.value)}
-                  className="pos-input mt-1"
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="text-gray-500 dark:text-gray-400">{translate("settingsReceiptAddress")}</span>
-                <input
-                  value={draft.receiptAddress}
-                  onChange={(event) => updateDraft("receiptAddress", event.target.value)}
-                  className="pos-input mt-1"
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="text-gray-500 dark:text-gray-400">{translate("settingsReceiptCompanyAddress")}</span>
-                <input
-                  value={draft.receiptCompanyAddress}
-                  onChange={(event) => updateDraft("receiptCompanyAddress", event.target.value)}
-                  className="pos-input mt-1"
-                />
-              </label>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">{translate("settingsReceiptIco")}</span>
-                  <input
-                    value={draft.receiptIco}
-                    onChange={(event) => updateDraft("receiptIco", event.target.value)}
-                    className="pos-input mt-1"
-                  />
-                </label>
-                <label className="block text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">{translate("settingsReceiptDic")}</span>
-                  <input
-                    value={draft.receiptDic}
-                    onChange={(event) => updateDraft("receiptDic", event.target.value)}
-                    className="pos-input mt-1"
-                  />
-                </label>
-              </div>
-              <label className="block text-sm">
-                <span className="text-gray-500 dark:text-gray-400">{translate("settingsReceiptPhone")}</span>
-                <input
-                  value={draft.receiptPhone}
-                  onChange={(event) => updateDraft("receiptPhone", event.target.value)}
-                  className="pos-input mt-1"
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="text-gray-500 dark:text-gray-400">{translate("settingsReceiptFooter")}</span>
-                <textarea
-                  value={draft.receiptFooterNote}
-                  onChange={(event) => updateDraft("receiptFooterNote", event.target.value)}
-                  className="pos-input mt-1 min-h-[72px]"
-                  placeholder={"Děkujeme za Vaši návštěvu!\nOtevírací doba: Po-Ne 10:00-22:00"}
-                />
-              </label>
-            </div>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {translate("settingsBrandingHint")}
+            </p>
+            <ReceiptBrandingEditor
+              draft={{
+                ...draft.receiptBrandingVisibility,
+                receiptHeaderTitle: draft.receiptHeaderTitle,
+                receiptLegalName: draft.receiptLegalName,
+                receiptAddress: draft.receiptAddress,
+                receiptCompanyAddress: draft.receiptCompanyAddress,
+                receiptIco: draft.receiptIco,
+                receiptDic: draft.receiptDic,
+                receiptPhone: draft.receiptPhone,
+                receiptFooterNote: draft.receiptFooterNote,
+              }}
+              translate={translate}
+              onChange={(patch) => {
+                const visibilityKeys = [
+                  "showHeaderTitle",
+                  "showBrandAddress",
+                  "showLegalName",
+                  "showCompanyAddress",
+                  "showIcoDic",
+                  "showPhone",
+                  "showFooter",
+                ] as const;
+                const visPatch: Partial<typeof draft.receiptBrandingVisibility> = {};
+                for (const key of visibilityKeys) {
+                  if (key in patch) {
+                    visPatch[key] = patch[key] as boolean;
+                  }
+                }
+                if (Object.keys(visPatch).length > 0) {
+                  updateDraft("receiptBrandingVisibility", {
+                    ...draft.receiptBrandingVisibility,
+                    ...visPatch,
+                  });
+                }
+                if (patch.receiptHeaderTitle !== undefined) {
+                  updateDraft("receiptHeaderTitle", patch.receiptHeaderTitle);
+                }
+                if (patch.receiptLegalName !== undefined) {
+                  updateDraft("receiptLegalName", patch.receiptLegalName);
+                }
+                if (patch.receiptAddress !== undefined) {
+                  updateDraft("receiptAddress", patch.receiptAddress);
+                }
+                if (patch.receiptCompanyAddress !== undefined) {
+                  updateDraft("receiptCompanyAddress", patch.receiptCompanyAddress);
+                }
+                if (patch.receiptIco !== undefined) updateDraft("receiptIco", patch.receiptIco);
+                if (patch.receiptDic !== undefined) updateDraft("receiptDic", patch.receiptDic);
+                if (patch.receiptPhone !== undefined) updateDraft("receiptPhone", patch.receiptPhone);
+                if (patch.receiptFooterNote !== undefined) {
+                  updateDraft("receiptFooterNote", patch.receiptFooterNote);
+                }
+              }}
+            />
           </section>
 
         </div>

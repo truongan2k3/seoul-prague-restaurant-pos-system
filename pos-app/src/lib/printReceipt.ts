@@ -1,19 +1,25 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
   formatReceiptAmount,
   formatReceiptDate,
-  formatReceiptDisplayIndex,
   formatReceiptTime,
   type ReceiptData,
 } from "@/lib/receipt-calculations";
 import { formatEurFromCzk } from "@/lib/currency";
 import {
+  DEFAULT_RECEIPT_BRANDING_VISIBILITY,
+  type ReceiptBrandingVisibility,
+} from "@/lib/receipt-branding";
+import {
   buildThermalPrintCss,
   receiptBitmapTypographyFromSettings,
+  receiptTypographyCssVars,
   receiptTypographyFromSettings,
   type ReceiptTypography,
 } from "@/lib/receipt-print-styles";
 import type { AppSettings } from "@/lib/types";
-import type { ReceiptTemplate } from "@/src/components/ReceiptPrint";
+import { ReceiptBodyContent, type ReceiptTemplate } from "@/src/components/ReceiptPrint";
 import { receiptShouldUseBitmap } from "@/lib/print-dispatch";
 
 const PRINT_IFRAME_ID = "receipt-print-iframe";
@@ -29,20 +35,16 @@ export type ReceiptPrintFontSettings = Pick<
       "silentPrintEnabled" | "printBridgeUrl" | "browserPrintFallback" | "printers"
     >
   > & {
-    /** Thermal paper width in mm (kitchen tickets use 80). */
     paperWidthMm?: number;
   };
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 function resolveTemplate(data: ReceiptData, template?: ReceiptTemplate): ReceiptTemplate {
-  if (template) return template;
+  if (template) {
+    return {
+      ...template,
+      visibility: template.visibility ?? { ...DEFAULT_RECEIPT_BRANDING_VISIBILITY },
+    };
+  }
   if (data.business) {
     return {
       brandName: data.business.brandName,
@@ -53,6 +55,7 @@ function resolveTemplate(data: ReceiptData, template?: ReceiptTemplate): Receipt
       dic: data.business.dic,
       phone: data.business.phone,
       footerLines: data.business.footerLines,
+      visibility: { ...DEFAULT_RECEIPT_BRANDING_VISIBILITY },
     };
   }
   return {
@@ -67,151 +70,32 @@ function resolveTemplate(data: ReceiptData, template?: ReceiptTemplate): Receipt
       "Děkujeme za Vaši návštěvu!",
       "Otevírací doba: Po-Ne 10:00-22:00",
     ],
+    visibility: { ...DEFAULT_RECEIPT_BRANDING_VISIBILITY },
   };
-}
-
-function formatCardMask(last4: string): string {
-  return `**** **** **** ${last4}`;
 }
 
 function paymentMethodLabel(method: ReceiptData["paymentMethod"]): string {
   return method === "cash" ? "hotovost" : "debetní karta";
 }
 
-function buildCardPaymentSection(data: ReceiptData): string {
-  if (data.paymentMethod !== "card" || !data.cardLast4) return "";
-
-  const brand = escapeHtml(data.cardBrand ?? "Card");
-  const mask = escapeHtml(formatCardMask(data.cardLast4));
-  const authLine = data.cardAuthCode
-    ? `<p class="text-center">Auth Code: ${escapeHtml(data.cardAuthCode)}</p>`
-    : "";
-
-  return `
-    <div class="divider"></div>
-    <section class="receipt-card-payment">
-      <p class="text-center bold">PLATBA KARTOU / CARD PAYMENT</p>
-      <p class="text-center">Karta: ${brand} (${mask})</p>
-      ${authLine}
-      <p class="text-center">Trans. Status: SCHVÁLENO / APPROVED</p>
-    </section>`;
+function padLine(left: string, right: string, width = 42): string {
+  const gap = Math.max(1, width - left.length - right.length);
+  return `${left}${" ".repeat(gap)}${right}`;
 }
 
 export function buildReceiptHtmlContent(data: ReceiptData, template?: ReceiptTemplate): string {
-  const biz = resolveTemplate(data, template);
-  const displayIndex = formatReceiptDisplayIndex(data.orderNumber);
+  return renderToStaticMarkup(createElement(ReceiptBodyContent, { data, template }));
+}
 
-  const itemRows = data.items
-    .map(
-      (item) => `
-    <div class="receipt-item">
-      <span class="receipt-item-left">${escapeHtml(item.code)} ${escapeHtml(item.name)}</span>
-      <span class="receipt-item-right">${item.quantity} ${escapeHtml(formatReceiptAmount(item.lineTotal))} ${escapeHtml(item.taxGroup)}</span>
-    </div>`,
-    )
-    .join("");
-
-  const discountRow =
-    data.discountAmount > 0
-      ? `<div class="flex-between"><span>${escapeHtml(data.discountLabel ?? "Sleva:")}</span><span>${escapeHtml(formatReceiptAmount(data.discountAmount))} CZK</span></div>`
-      : "";
-
-  const cashRows =
-    data.paymentMethod === "cash" && data.amountGiven != null
-      ? `
-    <div class="flex-between"><span>Přijato:</span><span>${escapeHtml(formatReceiptAmount(data.amountGiven))} CZK</span></div>
-    <div class="flex-between bold"><span>Vráceno:</span><span>${escapeHtml(formatReceiptAmount(data.changeDue ?? 0))} CZK</span></div>`
-      : "";
-
-  const eurRow =
-    data.showEur && data.eurRate
-      ? `<p class="text-center">≈ ${escapeHtml(formatEurFromCzk(data.grandTotal, data.eurRate))}</p>`
-      : "";
-
-  const vatRows = data.taxGroups
-    .map(
-      (row) => `
-      <tr>
-        <td>${escapeHtml(String(row.rate))}</td>
-        <td class="text-right">${escapeHtml(formatReceiptAmount(row.vat))}</td>
-        <td class="text-right">${escapeHtml(formatReceiptAmount(row.base))}</td>
-      </tr>`,
-    )
-    .join("");
-
-  const footerLines = biz.footerLines
-    .map((line) => `<p>${escapeHtml(line)}</p>`)
-    .join("");
-
-  return `
-    <header class="text-center">
-      <p class="receipt-index">${escapeHtml(displayIndex)}</p>
-      <p>Č.: ${escapeHtml(data.orderNumber)}</p>
-      <p class="receipt-title">${escapeHtml(biz.brandName)}</p>
-      <p class="text-center">${escapeHtml(biz.brandAddress)}</p>
-      <p class="text-center">${escapeHtml(biz.legalName)}</p>
-      <p class="text-center">${escapeHtml(biz.companyAddress)}</p>
-      <p class="text-center">IČO: ${escapeHtml(biz.ico)}&nbsp;&nbsp;&nbsp;DIČ: ${escapeHtml(biz.dic)}</p>
-      <div class="receipt-meta-row">
-        <div class="receipt-meta-col">
-          <span>Tel: ${escapeHtml(biz.phone)}</span>
-          <span>Stůl č. ${escapeHtml(data.tableLabel)}</span>
-        </div>
-        <div class="receipt-meta-col receipt-meta-right">
-          <span>Datum: ${escapeHtml(formatReceiptDate(data.closedAt))}</span>
-          <span>Čas: ${escapeHtml(formatReceiptTime(data.closedAt))}</span>
-        </div>
-      </div>
-    </header>
-
-    <div class="divider"></div>
-
-    <section>
-      <div class="receipt-items-head">
-        <span>Kód Položka</span>
-        <span>Částka</span>
-      </div>
-      ${itemRows}
-    </section>
-
-    <div class="divider"></div>
-
-    <section>
-      <div class="flex-between"><span>Mezisoučet:</span><span>${escapeHtml(formatReceiptAmount(data.subtotal))} CZK</span></div>
-      ${discountRow}
-      <div class="receipt-celkem">
-        <span>CELKEM</span>
-        <span>${escapeHtml(formatReceiptAmount(data.grandTotal))} CZK</span>
-      </div>
-      ${eurRow}
-      <p class="receipt-payment">${escapeHtml(paymentMethodLabel(data.paymentMethod))}</p>
-      ${cashRows}
-    </section>
-
-    ${buildCardPaymentSection(data)}
-
-    <div class="divider"></div>
-
-    <table>
-      <thead>
-        <tr>
-          <th>Rate (%)</th>
-          <th class="text-right">DPH</th>
-          <th class="text-right">Základ</th>
-        </tr>
-      </thead>
-      <tbody>${vatRows}</tbody>
-    </table>
-
-    <footer class="receipt-footer">${footerLines}</footer>
-  `.trim();
+function cssVarsInline(typography: ReceiptTypography): string {
+  return Object.entries(receiptTypographyCssVars(typography))
+    .map(([key, value]) => `${key}:${value}`)
+    .join(";");
 }
 
 function getOrCreatePrintIframe(): HTMLIFrameElement {
   const existing = document.getElementById(PRINT_IFRAME_ID) as HTMLIFrameElement | null;
-  if (existing) {
-    existing.remove();
-  }
+  if (existing) existing.remove();
 
   const iframe = document.createElement("iframe");
   iframe.id = PRINT_IFRAME_ID;
@@ -236,22 +120,26 @@ function buildPrintDocument(
   paperWidthMm: number,
 ): string {
   return `<!DOCTYPE html>
-<html lang="zh-CN" style="color-scheme: only light;">
+<html lang="cs" style="color-scheme: only light;">
   <head>
     <meta charset="utf-8" />
     <meta name="color-scheme" content="only light" />
     <title>Receipt</title>
     <style>${buildThermalPrintCss(typography, paperWidthMm)}</style>
   </head>
-  <body>${bodyHtml}</body>
+  <body>
+    <div class="receipt-inner receipt-czech receipt-sheet receipt-thermal" style="${cssVarsInline(typography)}">
+      ${bodyHtml}
+    </div>
+  </body>
 </html>`;
 }
 
 function resolvePrintTypography(fontSettings?: ReceiptPrintFontSettings): ReceiptTypography {
   if (!fontSettings) {
     return receiptTypographyFromSettings({
-      receiptFontSize: "medium",
-      receiptFontWeight: "bold",
+      receiptFontSize: "normal",
+      receiptFontWeight: "normal",
       receiptFontFamily: "courier",
     });
   }
@@ -278,9 +166,7 @@ export function printReceiptHTML(
     }
 
     const cleanup = () => {
-      window.setTimeout(() => {
-        iframe.remove();
-      }, 500);
+      window.setTimeout(() => iframe.remove(), 500);
     };
 
     const runPrint = () => {
@@ -317,7 +203,6 @@ export function printReceiptHTML(
             }),
         ),
       );
-      // Give the print engine a beat to composite bitmaps.
       window.setTimeout(runPrint, 200);
     };
 
@@ -334,39 +219,83 @@ export function buildReceiptEscPosLines(
   template?: ReceiptTemplate,
 ): string[] {
   const biz = resolveTemplate(data, template);
-  const lines: string[] = [
-    biz.brandName,
-    biz.brandAddress,
-    biz.legalName,
-    biz.companyAddress,
-    `IČO: ${biz.ico}   DIČ: ${biz.dic}`,
-    biz.phone,
-    "--------------------------------",
-    `Stůl č. ${data.tableLabel}`,
-    `Doklad: ${formatReceiptDisplayIndex(data.orderNumber)}`,
-    `${formatReceiptDate(data.closedAt)} ${formatReceiptTime(data.closedAt)}`,
-    "--------------------------------",
-    "Kód Položka                    Částka",
-  ];
+  const vis: ReceiptBrandingVisibility = biz.visibility;
+  const lines: string[] = [];
+
+  lines.push(padLine("", `Č.: ${data.orderNumber}`));
+
+  if (vis.showHeaderTitle && biz.brandName.trim()) lines.push(biz.brandName);
+  if (vis.showBrandAddress && biz.brandAddress.trim()) lines.push(biz.brandAddress);
+  if (vis.showLegalName && biz.legalName.trim()) lines.push(biz.legalName);
+  if (vis.showCompanyAddress && biz.companyAddress.trim()) lines.push(biz.companyAddress);
+  if (vis.showIcoDic && (biz.ico.trim() || biz.dic.trim())) {
+    lines.push(`IČO: ${biz.ico}   DIČ: ${biz.dic}`);
+  }
+
+  const telPart = vis.showPhone && biz.phone.trim() ? `Tel: ${biz.phone}` : "";
+  lines.push(padLine(telPart, `Stůl č. ${data.tableLabel}`.trim()));
+  lines.push(
+    padLine(`Datum: ${formatReceiptDate(data.closedAt)}`, `Čas: ${formatReceiptTime(data.closedAt)}`),
+  );
+
+  lines.push("--------------------------------");
+  lines.push(padLine("Kód Položka", "Částka"));
 
   for (const item of data.items) {
     lines.push(`${item.code} ${item.name}`);
-    lines.push(`  ${item.quantity} ${formatReceiptAmount(item.lineTotal)} ${item.taxGroup}`);
+    lines.push(padLine("", `${formatReceiptAmount(item.lineTotal)} ${item.taxGroup}`));
   }
 
   lines.push("--------------------------------");
-  lines.push(`Mezisoučet: ${formatReceiptAmount(data.subtotal)} CZK`);
+
+  const showSubtotal =
+    data.discountAmount > 0 ||
+    data.tip > 0 ||
+    Math.abs(data.subtotal - data.grandTotal) > 0.009;
+
+  if (showSubtotal) {
+    lines.push(padLine("Mezisoučet:", formatReceiptAmount(data.subtotal)));
+  }
   if (data.discountAmount > 0) {
-    lines.push(`${data.discountLabel ?? "Sleva:"} -${formatReceiptAmount(data.discountAmount)} CZK`);
+    lines.push(
+      padLine(data.discountLabel ?? "Sleva:", formatReceiptAmount(data.discountAmount)),
+    );
   }
   if (data.tip > 0) {
-    lines.push(`Spropitné: ${formatReceiptAmount(data.tip)} CZK`);
+    lines.push(padLine("Spropitné:", formatReceiptAmount(data.tip)));
   }
-  lines.push(`CELKEM: ${formatReceiptAmount(data.grandTotal)} CZK`);
-  lines.push(`Platba: ${paymentMethodLabel(data.paymentMethod)}`);
-  for (const footer of biz.footerLines) {
-    lines.push(footer);
+
+  lines.push(padLine("CELKEM", formatReceiptAmount(data.grandTotal)));
+  if (data.showEur && data.eurRate) {
+    lines.push(`≈ ${formatEurFromCzk(data.grandTotal, data.eurRate)}`);
   }
+  lines.push(
+    padLine(paymentMethodLabel(data.paymentMethod), formatReceiptAmount(data.grandTotal)),
+  );
+
+  if (data.paymentMethod === "cash" && data.amountGiven != null) {
+    lines.push(padLine("Přijato:", formatReceiptAmount(data.amountGiven)));
+    lines.push(padLine("Vráceno:", formatReceiptAmount(data.changeDue ?? 0)));
+  }
+
+  lines.push("--------------------------------");
+  lines.push(padLine("DPH", "Základ"));
+  for (const row of data.taxGroups) {
+    lines.push(
+      padLine(
+        String(row.rate),
+        `${formatReceiptAmount(row.vat)}  ${formatReceiptAmount(row.base)}`,
+      ),
+    );
+  }
+
+  if (vis.showFooter) {
+    lines.push("--------------------------------");
+    for (const footer of biz.footerLines) {
+      if (footer.trim()) lines.push(footer);
+    }
+  }
+
   return lines;
 }
 
@@ -394,7 +323,7 @@ export async function printReceiptData(
       template,
       bitmapTypography,
       fontSettings?.receiptFontFamily ?? "courier",
-      fontSettings?.receiptFontWeight ?? "bold",
+      fontSettings?.receiptFontWeight ?? "normal",
       fontSettings?.receiptFontSize,
     );
     receiptHtmlContent = bitmap.html;
@@ -434,7 +363,7 @@ export async function printReceiptData(
                 template,
                 bitmapTypography,
                 fontSettings?.receiptFontFamily ?? "courier",
-                fontSettings?.receiptFontWeight ?? "bold",
+                fontSettings?.receiptFontWeight ?? "normal",
                 fontSettings?.receiptFontSize,
               );
               bitmapPngs = bitmap.pngs;
@@ -458,9 +387,9 @@ export async function printReceiptData(
       }
     } catch (error) {
       console.warn("[ReceiptPrint] Silent print failed:", error);
-      if (fontSettings.browserPrintFallback === false) throw error;
+      if (!fontSettings.browserPrintFallback) throw error;
     }
   }
 
-  return printReceiptHTML(receiptHtmlContent, fontSettings);
+  await printReceiptHTML(receiptHtmlContent, fontSettings);
 }

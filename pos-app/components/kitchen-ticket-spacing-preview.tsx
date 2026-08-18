@@ -118,6 +118,7 @@ const PREVIEW_ORDERS: OrderItem[] = [
 export function KitchenTicketSpacingPreview({
   itemGapPx,
   clipTopMm,
+  clipBottomMm,
   fontSize,
   fontWeight,
   layout,
@@ -127,6 +128,7 @@ export function KitchenTicketSpacingPreview({
 }: {
   itemGapPx: number;
   clipTopMm: number;
+  clipBottomMm: number;
   fontSize: KitchenPrintFontSize;
   fontWeight: ReceiptFontWeight;
   layout: KitchenPrintLayout;
@@ -152,6 +154,7 @@ export function KitchenTicketSpacingPreview({
           fontWeight,
           layout,
           clipTopMm,
+          clipBottomMm,
           itemGapPx,
         });
         if (!cancelled) setHtml(ticket.html);
@@ -167,6 +170,7 @@ export function KitchenTicketSpacingPreview({
   }, [
     itemGapPx,
     clipTopMm,
+    clipBottomMm,
     fontSize,
     fontWeight,
     layout,

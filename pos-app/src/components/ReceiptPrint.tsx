@@ -6,10 +6,11 @@ import { formatEurFromCzk } from "@/lib/currency";
 import {
   formatReceiptAmount,
   formatReceiptDate,
-  formatReceiptDisplayIndex,
   formatReceiptTime,
   type ReceiptData,
 } from "@/lib/receipt-calculations";
+import type { ReceiptBrandingVisibility } from "@/lib/receipt-branding";
+import { DEFAULT_RECEIPT_BRANDING_VISIBILITY } from "@/lib/receipt-branding";
 import type { AppSettings } from "@/lib/types";
 
 export interface ReceiptTemplate {
@@ -21,6 +22,7 @@ export interface ReceiptTemplate {
   dic: string;
   phone: string;
   footerLines: string[];
+  visibility: ReceiptBrandingVisibility;
 }
 
 interface ReceiptPrintProps {
@@ -31,7 +33,12 @@ interface ReceiptPrintProps {
 const DASH_LINE = "------------------------------------------";
 
 function resolveTemplate(data: ReceiptData, template?: ReceiptTemplate): ReceiptTemplate {
-  if (template) return template;
+  if (template) {
+    return {
+      ...template,
+      visibility: template.visibility ?? { ...DEFAULT_RECEIPT_BRANDING_VISIBILITY },
+    };
+  }
   if (data.business) {
     return {
       brandName: data.business.brandName,
@@ -42,6 +49,7 @@ function resolveTemplate(data: ReceiptData, template?: ReceiptTemplate): Receipt
       dic: data.business.dic,
       phone: data.business.phone,
       footerLines: data.business.footerLines,
+      visibility: { ...DEFAULT_RECEIPT_BRANDING_VISIBILITY },
     };
   }
   return {
@@ -56,6 +64,7 @@ function resolveTemplate(data: ReceiptData, template?: ReceiptTemplate): Receipt
       "Děkujeme za Vaši návštěvu!",
       "Otevírací doba: Po-Ne 10:00-22:00",
     ],
+    visibility: { ...DEFAULT_RECEIPT_BRANDING_VISIBILITY },
   };
 }
 
@@ -72,6 +81,7 @@ export function settingsToReceiptTemplate(settings: AppSettings): ReceiptTemplat
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean),
+    visibility: settings.receiptBrandingVisibility,
   };
 }
 
@@ -125,24 +135,38 @@ export function ReceiptBodyContent({
   template?: ReceiptTemplate;
 }) {
   const biz = resolveTemplate(data, template);
-  const displayIndex = formatReceiptDisplayIndex(data.orderNumber);
+  const vis = biz.visibility;
+
+  const showSubtotal =
+    data.discountAmount > 0 ||
+    data.tip > 0 ||
+    Math.abs(data.subtotal - data.grandTotal) > 0.009;
 
   return (
     <>
       <header className="receipt-header receipt-header-czech">
-        <p className="receipt-index">{displayIndex}</p>
         <p className="receipt-bill-id">Č.: {data.orderNumber}</p>
-        <h1 className="receipt-title">{biz.brandName}</h1>
-        <p className="receipt-center">{biz.brandAddress}</p>
-        <p className="receipt-center">{biz.legalName}</p>
-        <p className="receipt-center">{biz.companyAddress}</p>
-        <p className="receipt-center">
-          IČO: {biz.ico}&nbsp;&nbsp;&nbsp;DIČ: {biz.dic}
-        </p>
+        {vis.showHeaderTitle && biz.brandName.trim() ? (
+          <h1 className="receipt-title">{biz.brandName}</h1>
+        ) : null}
+        {vis.showBrandAddress && biz.brandAddress.trim() ? (
+          <p className="receipt-center">{biz.brandAddress}</p>
+        ) : null}
+        {vis.showLegalName && biz.legalName.trim() ? (
+          <p className="receipt-center">{biz.legalName}</p>
+        ) : null}
+        {vis.showCompanyAddress && biz.companyAddress.trim() ? (
+          <p className="receipt-center">{biz.companyAddress}</p>
+        ) : null}
+        {vis.showIcoDic && (biz.ico.trim() || biz.dic.trim()) ? (
+          <p className="receipt-center">
+            IČO: {biz.ico}&nbsp;&nbsp;&nbsp;DIČ: {biz.dic}
+          </p>
+        ) : null}
 
         <div className="receipt-meta-row">
           <div className="receipt-meta-left">
-            <span>Tel: {biz.phone}</span>
+            {vis.showPhone && biz.phone.trim() ? <span>Tel: {biz.phone}</span> : null}
             <span>Stůl č. {data.tableLabel}</span>
           </div>
           <div className="receipt-meta-right">
@@ -165,7 +189,7 @@ export function ReceiptBodyContent({
               {item.code} {item.name}
             </span>
             <span className="receipt-item-right">
-              {item.quantity} {formatReceiptAmount(item.lineTotal)} {item.taxGroup}
+              {formatReceiptAmount(item.lineTotal)} {item.taxGroup}
             </span>
           </div>
         ))}
@@ -174,35 +198,46 @@ export function ReceiptBodyContent({
       <p className="receipt-dash">{DASH_LINE}</p>
 
       <section className="receipt-totals-czech">
-        <div className="receipt-total-row">
-          <span>Mezisoučet:</span>
-          <span className="receipt-total-value">{formatReceiptAmount(data.subtotal)} CZK</span>
-        </div>
+        {showSubtotal && (
+          <div className="receipt-total-row">
+            <span>Mezisoučet:</span>
+            <span className="receipt-total-value">{formatReceiptAmount(data.subtotal)}</span>
+          </div>
+        )}
         {data.discountAmount > 0 && (
           <div className="receipt-total-row">
             <span>{data.discountLabel ?? "Sleva:"}</span>
-            <span className="receipt-total-value">{formatReceiptAmount(data.discountAmount)} CZK</span>
+            <span className="receipt-total-value">{formatReceiptAmount(data.discountAmount)}</span>
+          </div>
+        )}
+        {data.tip > 0 && (
+          <div className="receipt-total-row">
+            <span>Spropitné:</span>
+            <span className="receipt-total-value">{formatReceiptAmount(data.tip)}</span>
           </div>
         )}
         <div className="receipt-celkem-row">
           <span>CELKEM</span>
-          <span className="receipt-total-value">{formatReceiptAmount(data.grandTotal)} CZK</span>
+          <span className="receipt-total-value">{formatReceiptAmount(data.grandTotal)}</span>
         </div>
         {data.showEur && (
           <p className="receipt-center">
             ≈ {formatEurFromCzk(data.grandTotal, data.eurRate)}
           </p>
         )}
-        <p className="receipt-payment-line">{paymentMethodLabel(data.paymentMethod)}</p>
+        <div className="receipt-total-row receipt-payment-row">
+          <span className="receipt-payment-line">{paymentMethodLabel(data.paymentMethod)}</span>
+          <span className="receipt-total-value">{formatReceiptAmount(data.grandTotal)}</span>
+        </div>
         {data.paymentMethod === "cash" && data.amountGiven != null && (
           <>
             <div className="receipt-total-row">
               <span>Přijato:</span>
-              <span className="receipt-total-value">{formatReceiptAmount(data.amountGiven)} CZK</span>
+              <span className="receipt-total-value">{formatReceiptAmount(data.amountGiven)}</span>
             </div>
             <div className="receipt-total-row receipt-total-row--bold">
               <span>Vráceno:</span>
-              <span className="receipt-total-value">{formatReceiptAmount(data.changeDue ?? 0)} CZK</span>
+              <span className="receipt-total-value">{formatReceiptAmount(data.changeDue ?? 0)}</span>
             </div>
           </>
         )}
@@ -215,7 +250,7 @@ export function ReceiptBodyContent({
       <table className="receipt-vat-grid">
         <thead>
           <tr>
-            <th className="receipt-vat-th-left">Rate (%)</th>
+            <th className="receipt-vat-th-left" />
             <th className="receipt-vat-th-right">DPH</th>
             <th className="receipt-vat-th-right">Základ</th>
           </tr>
@@ -232,9 +267,9 @@ export function ReceiptBodyContent({
       </table>
 
       <footer className="receipt-footer-czech">
-        {biz.footerLines.map((line) => (
-          <p key={line}>{line}</p>
-        ))}
+        {vis.showFooter
+          ? biz.footerLines.map((line) => <p key={line}>{line}</p>)
+          : null}
       </footer>
     </>
   );

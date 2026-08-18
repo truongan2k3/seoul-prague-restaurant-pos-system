@@ -2,9 +2,12 @@ import { aggregateDisplayItems } from "@/lib/order-item-aggregate";
 import { resolveKitchenTicketItemDisplay } from "@/lib/kitchen-ticket-display";
 import {
   DEFAULT_KITCHEN_CLIP_TOP_MM,
+  DEFAULT_KITCHEN_CLIP_BOTTOM_MM,
   DEFAULT_KITCHEN_PRINT_LAYOUT,
   kitchenClipTopDots,
   kitchenClipTopPx,
+  kitchenClipBottomDots,
+  kitchenClipBottomPx,
   kitchenHeaderItemGapPx,
   clampKitchenItemGapPx,
   DEFAULT_KITCHEN_ITEM_GAP_PX,
@@ -128,6 +131,7 @@ export type KitchenPrintSettings = Pick<
   | "kitchenPrintMessageFontWeight"
   | "kitchenPrintLayout"
   | "kitchenPrintClipTopMm"
+  | "kitchenPrintClipBottomMm"
   | "kitchenPrintItemGapPx"
   | "receiptFontSize"
   | "receiptFontWeight"
@@ -138,11 +142,18 @@ export type KitchenPrintSettings = Pick<
   | "printers"
 >;
 
-function kitchenClipSpacerHtml(widthPx: number, clipTopMm: number): string {
-  const heightPx = kitchenClipTopPx(clipTopMm);
+function kitchenMarginSpacerHtml(widthPx: number, heightPx: number): string {
   if (heightPx <= 0) return "";
   const png = blankPngDataUrl(widthPx, heightPx, 2);
   return bitmapImgHtml(png, "", widthPx);
+}
+
+function kitchenClipSpacerHtml(widthPx: number, clipTopMm: number): string {
+  return kitchenMarginSpacerHtml(widthPx, kitchenClipTopPx(clipTopMm));
+}
+
+function kitchenClipBottomSpacerHtml(widthPx: number, clipBottomMm: number): string {
+  return kitchenMarginSpacerHtml(widthPx, kitchenClipBottomPx(clipBottomMm));
 }
 
 /** Vertical gap between kitchen ticket bitmap strips (ESC/POS ignores HTML padding). */
@@ -264,6 +275,7 @@ export async function buildKitchenTicketHtml(input: {
   layout?: KitchenPrintLayout;
   stationLabel?: string;
   clipTopMm?: number;
+  clipBottomMm?: number;
   itemGapPx?: number;
 }): Promise<{ html: string; pngs: string[] }> {
   await ensureCjkPrintFont();
@@ -271,6 +283,7 @@ export async function buildKitchenTicketHtml(input: {
   const weights = kitchenBitmapWeights(input.fontWeight ?? "bold");
   const layout = input.layout ?? DEFAULT_KITCHEN_PRINT_LAYOUT;
   const clipTopMm = input.clipTopMm ?? DEFAULT_KITCHEN_CLIP_TOP_MM;
+  const clipBottomMm = input.clipBottomMm ?? DEFAULT_KITCHEN_CLIP_BOTTOM_MM;
   const itemGapPx = clampKitchenItemGapPx(input.itemGapPx ?? DEFAULT_KITCHEN_ITEM_GAP_PX);
   const headerItemGapPx = kitchenHeaderItemGapPx(itemGapPx);
   const orderLayout = layout.orderTicket;
@@ -402,6 +415,7 @@ export async function buildKitchenTicketHtml(input: {
     .join("");
 
   const clipHtml = kitchenClipSpacerHtml(FULL_WIDTH_PX, clipTopMm);
+  const clipBottomHtml = kitchenClipBottomSpacerHtml(FULL_WIDTH_PX, clipBottomMm);
 
   const html = `
     ${kitchenTicketCss(s.qty, itemGapPx)}
@@ -412,6 +426,7 @@ export async function buildKitchenTicketHtml(input: {
         itemBlocks ||
         `<div class="kitchen-item">${draw("—", { width: FULL_WIDTH_PX, size: s.empty, weight: weights.primary })}</div>`
       }
+      ${clipBottomHtml ? `<div class="kitchen-clip-spacer">${clipBottomHtml}</div>` : ""}
     </div>`;
 
   return { html, pngs };
@@ -536,10 +551,11 @@ async function dispatchKitchenPrint(
       const { buildEscPosFromPngs } = await import("@/src/lib/escpos");
       const { silentPrintEscPos } = await import("@/src/lib/print-bridge-client");
       const clipDots = kitchenClipTopDots(settings.kitchenPrintClipTopMm);
+      const bottomDots = kitchenClipBottomDots(settings.kitchenPrintClipBottomMm);
       const bytes = await buildEscPosFromPngs(pngs, {
         topBlankRasterDots: clipDots > 0 ? clipDots : undefined,
-        bottomBlankRasterDots: 32,
-        bottomFeedLines: 6,
+        bottomBlankRasterDots: bottomDots > 0 ? bottomDots : undefined,
+        bottomFeedLines: 1,
       });
       let result = await silentPrintEscPos(settings, role, bytes);
       // Messages: if no printer has kitchen-message role, fall back to kitchen printers.
@@ -590,6 +606,7 @@ async function printStationTicket(input: {
     layout: input.settings.kitchenPrintLayout,
     stationLabel: input.stationLabel,
     clipTopMm: input.settings.kitchenPrintClipTopMm,
+    clipBottomMm: input.settings.kitchenPrintClipBottomMm,
     itemGapPx: input.settings.kitchenPrintItemGapPx,
   });
 

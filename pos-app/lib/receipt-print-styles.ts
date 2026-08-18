@@ -65,34 +65,34 @@ const SIZE_SCALE: Record<
   Pick<ReceiptTypography, "bodyPx" | "itemPx" | "metaPx" | "tablePx" | "titlePx" | "indexPx" | "celkemPx" | "lineHeight">
 > = {
   normal: {
+    bodyPx: 10,
+    itemPx: 10,
+    metaPx: 9,
+    tablePx: 9,
+    titlePx: 13,
+    indexPx: 14,
+    celkemPx: 12,
+    lineHeight: 1.2,
+  },
+  medium: {
     bodyPx: 11,
     itemPx: 11,
     metaPx: 10,
     tablePx: 10,
-    titlePx: 13,
+    titlePx: 14,
     indexPx: 16,
-    celkemPx: 12,
+    celkemPx: 13,
     lineHeight: 1.25,
   },
-  medium: {
-    bodyPx: 13,
-    itemPx: 13,
+  large: {
+    bodyPx: 12,
+    itemPx: 12,
     metaPx: 11,
     tablePx: 11,
-    titlePx: 14,
+    titlePx: 15,
     indexPx: 18,
-    celkemPx: 13,
-    lineHeight: 1.35,
-  },
-  large: {
-    bodyPx: 15,
-    itemPx: 15,
-    metaPx: 12,
-    tablePx: 12,
-    titlePx: 16,
-    indexPx: 20,
-    celkemPx: 15,
-    lineHeight: 1.35,
+    celkemPx: 14,
+    lineHeight: 1.25,
   },
 };
 
@@ -184,33 +184,33 @@ const BITMAP_SIZE_SCALE: Record<
   Pick<ReceiptTypography, "bodyPx" | "itemPx" | "metaPx" | "tablePx" | "titlePx" | "indexPx" | "celkemPx" | "lineHeight">
 > = {
   normal: {
-    bodyPx: 16,
-    itemPx: 16,
-    metaPx: 14,
-    tablePx: 14,
-    titlePx: 18,
-    indexPx: 24,
-    celkemPx: 18,
+    bodyPx: 11,
+    itemPx: 11,
+    metaPx: 10,
+    tablePx: 10,
+    titlePx: 14,
+    indexPx: 16,
+    celkemPx: 13,
     lineHeight: 1.15,
   },
   medium: {
-    bodyPx: 18,
-    itemPx: 18,
-    metaPx: 16,
-    tablePx: 16,
-    titlePx: 20,
-    indexPx: 26,
-    celkemPx: 20,
+    bodyPx: 12,
+    itemPx: 12,
+    metaPx: 11,
+    tablePx: 11,
+    titlePx: 15,
+    indexPx: 18,
+    celkemPx: 14,
     lineHeight: 1.15,
   },
   large: {
-    bodyPx: 20,
-    itemPx: 20,
-    metaPx: 18,
-    tablePx: 18,
-    titlePx: 22,
-    indexPx: 28,
-    celkemPx: 22,
+    bodyPx: 13,
+    itemPx: 13,
+    metaPx: 12,
+    tablePx: 12,
+    titlePx: 16,
+    indexPx: 20,
+    celkemPx: 15,
     lineHeight: 1.15,
   },
 };
@@ -387,5 +387,90 @@ export function buildThermalPrintCss(
   }
   .receipt-bitmap-col { flex: 1; min-width: 0; }
   .receipt-bitmap-gap { height: 2px; }
+  .receipt-inner.receipt-czech {
+    width: 72mm;
+    max-width: 72mm;
+    margin: 0 auto;
+    padding: 4px;
+    font-size: var(--receipt-body-size, ${typography.bodyPx}px);
+    line-height: var(--receipt-line-height, ${typography.lineHeight});
+  }
+  .receipt-czech .receipt-bill-id {
+    text-align: right;
+    font-size: var(--receipt-meta-size, ${typography.metaPx}px);
+    margin: 0 0 4px;
+  }
+  .receipt-czech .receipt-title {
+    text-align: center;
+    font-size: var(--receipt-title-size, ${typography.titlePx}px);
+    font-weight: ${typography.itemWeight};
+    margin: 4px 0;
+  }
+  .receipt-czech .receipt-center { text-align: center; margin: 1px 0; font-size: var(--receipt-meta-size, ${typography.metaPx}px); }
+  .receipt-czech .receipt-meta-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 3mm;
+    margin-top: 4px;
+    font-size: var(--receipt-meta-size, ${typography.metaPx}px);
+  }
+  .receipt-czech .receipt-meta-left,
+  .receipt-czech .receipt-meta-right {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .receipt-czech .receipt-meta-right { text-align: right; align-items: flex-end; }
+  .receipt-czech .receipt-dash {
+    border: 0;
+    border-bottom: 1px dashed #000;
+    margin: 6px 0;
+    height: 0;
+  }
+  .receipt-czech .receipt-items-head {
+    display: flex;
+    justify-content: space-between;
+    font-weight: ${typography.itemWeight};
+    font-size: var(--receipt-item-size, ${typography.itemPx}px);
+    border-bottom: 1px dashed #000;
+    padding-bottom: 3px;
+    margin-bottom: 4px;
+  }
+  .receipt-czech .receipt-item-czech {
+    display: flex;
+    justify-content: space-between;
+    gap: 3mm;
+    margin-bottom: 2px;
+    font-size: var(--receipt-item-size, ${typography.itemPx}px);
+  }
+  .receipt-czech .receipt-item-left { flex: 1; word-break: break-word; }
+  .receipt-czech .receipt-item-right { white-space: nowrap; text-align: right; }
+  .receipt-czech .receipt-total-row,
+  .receipt-czech .receipt-celkem-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 3mm;
+    margin-bottom: 2px;
+    font-size: var(--receipt-body-size, ${typography.bodyPx}px);
+  }
+  .receipt-czech .receipt-celkem-row {
+    font-size: var(--receipt-celkem-size, ${typography.celkemPx}px);
+    font-weight: ${typography.itemWeight};
+    margin: 4px 0;
+  }
+  .receipt-czech .receipt-payment-line { text-transform: lowercase; }
+  .receipt-czech .receipt-vat-grid {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--receipt-table-size, ${typography.tablePx}px);
+    margin: 4px 0;
+  }
+  .receipt-czech .receipt-vat-th-right,
+  .receipt-czech .receipt-vat-td-right { text-align: right; }
+  .receipt-czech .receipt-footer-czech {
+    text-align: center;
+    margin-top: 6px;
+    font-size: var(--receipt-meta-size, ${typography.metaPx}px);
+  }
 `;
 }

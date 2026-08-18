@@ -15,6 +15,7 @@ import {
 } from "@/lib/receipt-print-styles";
 import type { AppSettings, ReceiptFontFamily, ReceiptFontWeight } from "@/lib/types";
 import type { ReceiptTemplate } from "@/src/components/ReceiptPrint";
+import { DEFAULT_RECEIPT_BRANDING_VISIBILITY } from "@/lib/receipt-branding";
 import {
   bitmapImgHtml,
   ensureCjkPrintFont,
@@ -39,6 +40,7 @@ function resolveTemplate(data: ReceiptData, template?: ReceiptTemplate): Receipt
       dic: data.business.dic,
       phone: data.business.phone,
       footerLines: data.business.footerLines,
+      visibility: { ...DEFAULT_RECEIPT_BRANDING_VISIBILITY },
     };
   }
   return {
@@ -53,6 +55,7 @@ function resolveTemplate(data: ReceiptData, template?: ReceiptTemplate): Receipt
       "Děkujeme za Vaši návštěvu!",
       "Otevírací doba: Po-Ne 10:00-22:00",
     ],
+    visibility: { ...DEFAULT_RECEIPT_BRANDING_VISIBILITY },
   };
 }
 
@@ -134,7 +137,7 @@ export async function buildBitmapReceiptHtml(
       : typographyInput;
 
   const biz = resolveTemplate(data, template);
-  const displayIndex = formatReceiptDisplayIndex(data.orderNumber);
+  const vis = biz.visibility;
   const fontStack = receiptFontStack(fontFamily === "courier" ? "arial" : fontFamily);
   const weights = kitchenBitmapWeights(fontWeight);
   const pngs: string[] = [];
@@ -151,19 +154,19 @@ export async function buildBitmapReceiptHtml(
     blocks.push(bmp(text, { width, size, weight, align }, fontStack, pngs));
   };
 
-  push(displayIndex, typography.indexPx, weights.primary, "center");
   push(`Č.: ${data.orderNumber}`, typography.metaPx, weights.secondary, "center");
-  push(biz.brandName, typography.titlePx, weights.primary, "center");
-  push(
-    [biz.brandAddress, biz.legalName, biz.companyAddress].filter(Boolean).join("\n"),
-    typography.metaPx,
-    weights.secondary,
-    "center",
-  );
-  push(`IČO: ${biz.ico}   DIČ: ${biz.dic}`, typography.metaPx, weights.secondary, "center");
+  if (vis.showHeaderTitle) push(biz.brandName, typography.titlePx, weights.primary, "center");
+  if (vis.showBrandAddress) push(biz.brandAddress, typography.metaPx, weights.secondary, "center");
+  if (vis.showLegalName) push(biz.legalName, typography.metaPx, weights.secondary, "center");
+  if (vis.showCompanyAddress) push(biz.companyAddress, typography.metaPx, weights.secondary, "center");
+  if (vis.showIcoDic) {
+    push(`IČO: ${biz.ico}   DIČ: ${biz.dic}`, typography.metaPx, weights.secondary, "center");
+  }
 
   const metaLeft = [
-    bmp(`Tel: ${biz.phone}`, { width: HALF_WIDTH_PX, size: typography.metaPx, weight: weights.secondary }, fontStack, pngs),
+    vis.showPhone && biz.phone.trim()
+      ? bmp(`Tel: ${biz.phone}`, { width: HALF_WIDTH_PX, size: typography.metaPx, weight: weights.secondary }, fontStack, pngs)
+      : "",
     bmp(`Stůl č. ${data.tableLabel}`, { width: HALF_WIDTH_PX, size: typography.metaPx, weight: weights.secondary }, fontStack, pngs),
   ].join("");
   const metaRight = [
@@ -184,7 +187,7 @@ export async function buildBitmapReceiptHtml(
     blocks.push(
       rowPair(
         `${item.code} ${item.name}`,
-        `${item.quantity} ${formatReceiptAmount(item.lineTotal)} ${item.taxGroup}`,
+        `${formatReceiptAmount(item.lineTotal)} ${item.taxGroup}`,
         typography.itemPx,
         weights.primary,
         fontStack,
@@ -195,16 +198,23 @@ export async function buildBitmapReceiptHtml(
 
   blocks.push(gap(), bmp(DIVIDER, { width: FULL_WIDTH_PX, size: typography.metaPx, weight: weights.secondary, align: "center" }, fontStack, pngs), gap());
 
-  blocks.push(
-    rowPair(
-      "Mezisoučet:",
-      `${formatReceiptAmount(data.subtotal)} CZK`,
-      typography.bodyPx,
-      weights.secondary,
-      fontStack,
-      pngs,
-    ),
-  );
+  const showSubtotal =
+    data.discountAmount > 0 ||
+    data.tip > 0 ||
+    Math.abs(data.subtotal - data.grandTotal) > 0.009;
+
+  if (showSubtotal) {
+    blocks.push(
+      rowPair(
+        "Mezisoučet:",
+        formatReceiptAmount(data.subtotal),
+        typography.bodyPx,
+        weights.secondary,
+        fontStack,
+        pngs,
+      ),
+    );
+  }
 
   if (data.discountAmount > 0) {
     blocks.push(
@@ -222,7 +232,7 @@ export async function buildBitmapReceiptHtml(
   blocks.push(
     rowPair(
       "CELKEM",
-      `${formatReceiptAmount(data.grandTotal)} CZK`,
+      formatReceiptAmount(data.grandTotal),
       typography.celkemPx,
       weights.primary,
       fontStack,
@@ -234,7 +244,16 @@ export async function buildBitmapReceiptHtml(
     push(`≈ ${formatEurFromCzk(data.grandTotal, data.eurRate)}`, typography.metaPx, weights.secondary, "center");
   }
 
-  push(paymentMethodLabel(data.paymentMethod), typography.metaPx, weights.secondary, "center");
+  blocks.push(
+    rowPair(
+      paymentMethodLabel(data.paymentMethod),
+      formatReceiptAmount(data.grandTotal),
+      typography.metaPx,
+      weights.secondary,
+      fontStack,
+      pngs,
+    ),
+  );
 
   if (data.paymentMethod === "cash" && data.amountGiven != null) {
     blocks.push(
@@ -285,8 +304,10 @@ export async function buildBitmapReceiptHtml(
   }
 
   blocks.push(gap("md"));
-  for (const line of biz.footerLines) {
-    push(line, typography.metaPx, weights.secondary, "center");
+  if (vis.showFooter) {
+    for (const line of biz.footerLines) {
+      push(line, typography.metaPx, weights.secondary, "center");
+    }
   }
 
   const html = `<div class="receipt-bitmap">${blocks.join("")}</div>`;

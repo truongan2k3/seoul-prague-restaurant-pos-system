@@ -176,8 +176,23 @@ export async function buildEscPosFromPngs(
   return concatBytes(parts);
 }
 
-export function buildEscPosFromTextLines(lines: string[], useCp1250 = true): Uint8Array {
+export function escFontB(): Uint8Array {
+  return new Uint8Array([0x1b, 0x4d, 0x01]);
+}
+
+export function escCharSizeNormal(): Uint8Array {
+  return new Uint8Array([0x1d, 0x21, 0x00]);
+}
+
+export function buildEscPosFromTextLines(
+  lines: string[],
+  useCp1250 = true,
+  options?: { compactFont?: boolean },
+): Uint8Array {
   const parts: Uint8Array[] = [escInit(), escAlign("left")];
+  if (options?.compactFont !== false) {
+    parts.push(escFontB(), escCharSizeNormal());
+  }
   if (useCp1250) {
     parts.push(escSelectCodePage1250());
   }
@@ -185,7 +200,7 @@ export function buildEscPosFromTextLines(lines: string[], useCp1250 = true): Uin
   for (const line of lines) {
     parts.push(writeLine(line));
   }
-  parts.push(escFeed(3), escCut());
+  parts.push(escFeed(2), escCut());
   return concatBytes(parts);
 }
 

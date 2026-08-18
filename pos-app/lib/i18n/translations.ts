@@ -490,6 +490,9 @@ const en = {
   settingsKitchenPrintClipTop: "Top blank margin (clip rail)",
   settingsKitchenPrintClipTopHint:
     "Extra blank space at the top of kitchen tickets so a clip rail does not cover the table number. 0 = none, ~20 mm default.",
+  settingsKitchenPrintClipBottom: "Bottom blank margin (before cut)",
+  settingsKitchenPrintClipBottomHint:
+    "Blank space after the last item before the printer cuts the paper. Lower if the ticket looks too long at the bottom. 0 = minimal, default 8 mm.",
   settingsKitchenPrintItemGap: "Space between items",
   settingsKitchenPrintItemGapHint:
     "Vertical gap between menu items on kitchen tickets. Lower if items look too spread out; higher for clearer separation.",
@@ -551,6 +554,9 @@ const en = {
   noteTranslating: "Translating…",
   kitchenPrintDisabled: "Kitchen printing is turned off in Settings.",
   settingsBillTemplate: "Bill template",
+  settingsBranding: "Branding",
+  settingsBrandingHint: "Toggle each line on or off on printed receipts. Layout matches the Czech fiscal ticket style.",
+  settingsReceiptIcoDicToggle: "IČO / DIČ",
   settingsReceiptPrintQuality: "Receipt print quality",
   settingsReceiptPrintQualityHint: "Receipt font for the bar printer. Kitchen tickets use their own bitmap settings above. Courier + Medium + Bold is recommended for legacy bar printers.",
   settingsReceiptFontFamily: "Receipt font",
@@ -1220,6 +1226,9 @@ const cs: Record<TranslationKey, string> = {
   settingsKitchenPrintClipTop: "Horní okraj (spona / držák)",
   settingsKitchenPrintClipTopHint:
     "Prázdné místo nahoře na kuchyňských lístcích, aby spona nezakryla číslo stolu. 0 = žádné, výchozí cca 20 mm.",
+  settingsKitchenPrintClipBottom: "Spodní okraj (před řezem)",
+  settingsKitchenPrintClipBottomHint:
+    "Prázdné místo pod poslední položkou před automatickým řezem. Snižte, pokud je lístek dole moc dlouhý. 0 = minimum, výchozí 8 mm.",
   settingsKitchenPrintItemGap: "Mezera mezi položkami",
   settingsKitchenPrintItemGapHint:
     "Svislá mezera mezi položkami na kuchyňských lístcích. Snižte, pokud je to moc řídké; zvyšte pro lepší oddělení.",
@@ -1281,6 +1290,9 @@ const cs: Record<TranslationKey, string> = {
   noteTranslating: "Překládám…",
   kitchenPrintDisabled: "Tisk pro kuchyni je vypnutý v Nastavení.",
   settingsBillTemplate: "Šablona účtenky",
+  settingsBranding: "Branding",
+  settingsBrandingHint: "Zapněte nebo vypněte jednotlivé řádky na tištěné účtence.",
+  settingsReceiptIcoDicToggle: "IČO / DIČ",
   settingsReceiptPrintQuality: "Kvalita tisku účtenky",
   settingsReceiptPrintQualityHint: "Písmo účtenky pro bar. Kuchyňské lístky mají vlastní nastavení výše. Pro starší bar: Courier + Střední + Tučné.",
   settingsReceiptFontFamily: "Písmo účtenky",
@@ -1943,6 +1955,9 @@ const zh: Record<TranslationKey, string> = {
   settingsKitchenPrintClipTop: "顶部留白（夹子）",
   settingsKitchenPrintClipTopHint:
     "厨房小票顶部的空白，避免夹子挡住桌号。0 = 无，默认约 20 毫米。",
+  settingsKitchenPrintClipBottom: "底部留白（切纸前）",
+  settingsKitchenPrintClipBottomHint:
+    "最后一道菜与切纸之间的空白。底部太长可调低。0 = 最少，默认 8 毫米。",
   settingsKitchenPrintItemGap: "菜品间距",
   settingsKitchenPrintItemGapHint:
     "厨房小票上各菜品之间的垂直间距。太疏可调低，太挤可调高。",
@@ -2004,6 +2019,9 @@ const zh: Record<TranslationKey, string> = {
   noteTranslating: "翻译中…",
   kitchenPrintDisabled: "设置中已关闭厨房打印。",
   settingsBillTemplate: "账单模板",
+  settingsBranding: "品牌信息",
+  settingsBrandingHint: "勾选要在收据上显示的各行。版式与捷克小票一致。",
+  settingsReceiptIcoDicToggle: "IČO / DIČ",
   settingsReceiptPrintQuality: "收据打印质量",
   settingsReceiptPrintQualityHint: "吧台收据字体。厨房小票使用上方独立设置。旧吧台机推荐 Courier + 中号 + 粗体。",
   settingsReceiptFontFamily: "收据字体",

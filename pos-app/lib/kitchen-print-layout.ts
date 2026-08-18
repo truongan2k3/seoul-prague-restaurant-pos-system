@@ -210,6 +210,35 @@ export function kitchenClipTopDots(mm: number): number {
   return Math.round((clampKitchenClipTopMm(mm) * 203) / 25.4);
 }
 
+/** Blank margin at bottom of kitchen tickets before paper cut. */
+export const KITCHEN_CLIP_BOTTOM_MM_MIN = 0;
+export const KITCHEN_CLIP_BOTTOM_MM_MAX = 40;
+export const DEFAULT_KITCHEN_CLIP_BOTTOM_MM = 8;
+
+export function clampKitchenClipBottomMm(mm: number): number {
+  if (!Number.isFinite(mm)) return DEFAULT_KITCHEN_CLIP_BOTTOM_MM;
+  return Math.max(
+    KITCHEN_CLIP_BOTTOM_MM_MIN,
+    Math.min(KITCHEN_CLIP_BOTTOM_MM_MAX, Math.round(mm)),
+  );
+}
+
+export function parseKitchenClipBottomMm(value: unknown): number {
+  if (typeof value === "number") return clampKitchenClipBottomMm(value);
+  if (typeof value === "string" && value.trim()) {
+    return clampKitchenClipBottomMm(Number(value));
+  }
+  return DEFAULT_KITCHEN_CLIP_BOTTOM_MM;
+}
+
+export function kitchenClipBottomPx(mm: number): number {
+  return Math.round(clampKitchenClipBottomMm(mm) * 8);
+}
+
+export function kitchenClipBottomDots(mm: number): number {
+  return Math.round((clampKitchenClipBottomMm(mm) * 203) / 25.4);
+}
+
 /** Vertical gap between kitchen ticket items (browser px + bitmap spacer height). */
 export const KITCHEN_ITEM_GAP_PX_MIN = 0;
 export const KITCHEN_ITEM_GAP_PX_MAX = 56;

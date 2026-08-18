@@ -1,3 +1,4 @@
+import type { ReceiptBrandingVisibility } from "@/lib/receipt-branding";
 import type { MenuCategory } from "@/lib/menu-categories";
 import type { KitchenPrintLayout } from "@/lib/kitchen-print-layout";
 import type { KitchenFulfillmentMode } from "@/lib/kitchen-fulfillment-mode";
@@ -157,8 +158,11 @@ export interface AppSettings {
   kitchenPrintLayout: KitchenPrintLayout;
   /** Blank margin at top of kitchen tickets (mm) — avoids clip rail covering table. */
   kitchenPrintClipTopMm: number;
+  /** Blank margin at bottom of kitchen tickets (mm) before paper cut. */
+  kitchenPrintClipBottomMm: number;
   /** Vertical space between items on kitchen tickets (px). */
   kitchenPrintItemGapPx: number;
+  receiptBrandingVisibility: ReceiptBrandingVisibility;
   receiptHeaderTitle: string;
   receiptLegalName: string;
   receiptAddress: string;

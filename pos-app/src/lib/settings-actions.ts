@@ -27,14 +27,21 @@ import {
 } from "@/lib/receipt-print-styles";
 import {
   clampKitchenClipTopMm,
+  clampKitchenClipBottomMm,
   clampKitchenItemGapPx,
   DEFAULT_KITCHEN_CLIP_TOP_MM,
+  DEFAULT_KITCHEN_CLIP_BOTTOM_MM,
   DEFAULT_KITCHEN_ITEM_GAP_PX,
   DEFAULT_KITCHEN_PRINT_LAYOUT,
   parseKitchenClipTopMm,
+  parseKitchenClipBottomMm,
   parseKitchenItemGapPx,
   parseKitchenPrintLayout,
 } from "@/lib/kitchen-print-layout";
+import {
+  DEFAULT_RECEIPT_BRANDING_VISIBILITY,
+  parseReceiptBrandingVisibility,
+} from "@/lib/receipt-branding";
 import { inferCfdMediaType } from "@/lib/cfd-slideshow";
 import {
   parseKitchenFulfillmentMode,
@@ -84,7 +91,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   kitchenPrintMessageFontWeight: "bold",
   kitchenPrintLayout: DEFAULT_KITCHEN_PRINT_LAYOUT,
   kitchenPrintClipTopMm: DEFAULT_KITCHEN_CLIP_TOP_MM,
+  kitchenPrintClipBottomMm: DEFAULT_KITCHEN_CLIP_BOTTOM_MM,
   kitchenPrintItemGapPx: DEFAULT_KITCHEN_ITEM_GAP_PX,
+  receiptBrandingVisibility: { ...DEFAULT_RECEIPT_BRANDING_VISIBILITY },
   receiptHeaderTitle: "JIN CHENG",
   receiptLegalName: "JING DE INTER.TRADE, s.r.o.",
   receiptAddress: "Václavské nám. 819, 110 00 Praha",
@@ -104,8 +113,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   reservationMaxGuestsPerSlot: 20,
   reservationTableHoldingTime: 90,
   reservationOperatingHours: DEFAULT_RESERVATION_OPERATING_HOURS,
-  receiptFontSize: "medium",
-  receiptFontWeight: "bold",
+  receiptFontSize: "normal",
+  receiptFontWeight: "normal",
   receiptFontFamily: "courier",
   receiptPrintBitmap: false,
   adminDeletionPassword: "1234",
@@ -147,7 +156,9 @@ type SettingsRow = {
   kitchen_print_message_font_weight?: string | null;
   kitchen_print_layout?: unknown;
   kitchen_print_clip_top_mm?: number | string | null;
+  kitchen_print_clip_bottom_mm?: number | string | null;
   kitchen_print_item_gap_px?: number | string | null;
+  receipt_branding_visibility?: unknown;
   receipt_header_title: string;
   receipt_legal_name?: string | null;
   receipt_address: string;
@@ -352,7 +363,9 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     ),
     kitchenPrintLayout: parseKitchenPrintLayout(row.kitchen_print_layout),
     kitchenPrintClipTopMm: parseKitchenClipTopMm(row.kitchen_print_clip_top_mm),
+    kitchenPrintClipBottomMm: parseKitchenClipBottomMm(row.kitchen_print_clip_bottom_mm),
     kitchenPrintItemGapPx: parseKitchenItemGapPx(row.kitchen_print_item_gap_px),
+    receiptBrandingVisibility: parseReceiptBrandingVisibility(row.receipt_branding_visibility),
     receiptHeaderTitle: row.receipt_header_title,
     receiptLegalName: row.receipt_legal_name ?? DEFAULT_APP_SETTINGS.receiptLegalName,
     receiptAddress: row.receipt_address,
@@ -464,8 +477,14 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   if (partial.kitchenPrintClipTopMm !== undefined) {
     payload.kitchen_print_clip_top_mm = clampKitchenClipTopMm(partial.kitchenPrintClipTopMm);
   }
+  if (partial.kitchenPrintClipBottomMm !== undefined) {
+    payload.kitchen_print_clip_bottom_mm = clampKitchenClipBottomMm(partial.kitchenPrintClipBottomMm);
+  }
   if (partial.kitchenPrintItemGapPx !== undefined) {
     payload.kitchen_print_item_gap_px = clampKitchenItemGapPx(partial.kitchenPrintItemGapPx);
+  }
+  if (partial.receiptBrandingVisibility !== undefined) {
+    payload.receipt_branding_visibility = partial.receiptBrandingVisibility;
   }
   if (partial.receiptHeaderTitle !== undefined) payload.receipt_header_title = partial.receiptHeaderTitle;
   if (partial.receiptLegalName !== undefined) payload.receipt_legal_name = partial.receiptLegalName;
@@ -707,7 +726,9 @@ export type PrinterBillSettingsDraft = Pick<
   | "kitchenPrintMessageFontWeight"
   | "kitchenPrintLayout"
   | "kitchenPrintClipTopMm"
+  | "kitchenPrintClipBottomMm"
   | "kitchenPrintItemGapPx"
+  | "receiptBrandingVisibility"
   | "receiptHeaderTitle"
   | "receiptLegalName"
   | "receiptAddress"
@@ -759,7 +780,9 @@ export function pickPrinterBillDraft(settings: AppSettings): PrinterBillSettings
     kitchenPrintMessageFontWeight: settings.kitchenPrintMessageFontWeight,
     kitchenPrintLayout: settings.kitchenPrintLayout,
     kitchenPrintClipTopMm: settings.kitchenPrintClipTopMm,
+    kitchenPrintClipBottomMm: settings.kitchenPrintClipBottomMm,
     kitchenPrintItemGapPx: settings.kitchenPrintItemGapPx,
+    receiptBrandingVisibility: settings.receiptBrandingVisibility,
     receiptHeaderTitle: settings.receiptHeaderTitle,
     receiptLegalName: settings.receiptLegalName,
     receiptAddress: settings.receiptAddress,

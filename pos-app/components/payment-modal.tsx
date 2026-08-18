@@ -99,65 +99,56 @@ export function PaymentModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4"
+      className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-gray-900"
       role="dialog"
       aria-modal="true"
       aria-labelledby="payment-modal-title"
     >
-      <button
-        type="button"
-        aria-label="Close"
-        onClick={handleClose}
-        className="absolute inset-0 bg-black/60"
+      <header className="flex shrink-0 items-center gap-3 border-b border-gray-200 bg-inherit px-4 py-4 sm:px-6 dark:border-gray-700">
+        <button
+          type="button"
+          onClick={handleBack}
+          disabled={isSaving}
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-gray-600 hover:bg-gray-100 disabled:opacity-40 dark:text-gray-300 dark:hover:bg-gray-800"
+          aria-label={translate("backToOrder")}
+        >
+          <ArrowLeft className="h-6 w-6" />
+        </button>
+        <h2
+          id="payment-modal-title"
+          className="min-w-0 flex-1 truncate text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100"
+        >
+          {title}
+        </h2>
+        <button
+          type="button"
+          onClick={handleClose}
+          disabled={isSaving}
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+          aria-label="Close"
+        >
+          <X className="h-6 w-6" />
+        </button>
+      </header>
+
+      {error && (
+        <p className="shrink-0 border-b border-red-200 bg-red-50 px-6 py-3 text-base text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+          {error}
+        </p>
+      )}
+
+      <CheckoutPanel
+        className="min-h-0 flex-1"
+        lines={lines}
+        orderSummary={orders}
+        menuItems={menuItems}
+        tableLabel={table.label}
+        isSaving={isSaving}
+        onCheckout={onConfirm}
+        onCfdUpdate={broadcastCheckoutUpdate}
+        confirmLabel={translate("confirmPrintReceipt")}
+        sessionResetKey={checkoutSessionKey}
       />
-
-      <div className="relative z-10 my-auto flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800">
-        <header className="flex shrink-0 items-center gap-2 border-b border-gray-200 bg-inherit px-3 py-3 sm:gap-3 sm:px-4 dark:border-gray-700">
-          <button
-            type="button"
-            onClick={handleBack}
-            disabled={isSaving}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-40 dark:text-gray-300 dark:hover:bg-gray-700"
-            aria-label={translate("backToOrder")}
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <h2
-            id="payment-modal-title"
-            className="min-w-0 flex-1 truncate text-base font-semibold text-gray-900 sm:text-lg dark:text-gray-100"
-          >
-            {title}
-          </h2>
-          <button
-            type="button"
-            onClick={handleClose}
-            disabled={isSaving}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200"
-            aria-label="Close"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </header>
-
-        {error && (
-          <p className="shrink-0 border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-            {error}
-          </p>
-        )}
-
-        <CheckoutPanel
-          className="min-h-0 flex-1"
-          lines={lines}
-          orderSummary={orders}
-          menuItems={menuItems}
-          tableLabel={table.label}
-          isSaving={isSaving}
-          onCheckout={onConfirm}
-          onCfdUpdate={broadcastCheckoutUpdate}
-          confirmLabel={translate("confirmPrintReceipt")}
-          sessionResetKey={checkoutSessionKey}
-        />
-      </div>
     </div>
   );
 }

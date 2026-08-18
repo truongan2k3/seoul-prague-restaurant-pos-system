@@ -1,5 +1,7 @@
 /** Minimal ESC/POS helpers for 80mm thermal printers (Star / Epson compatible). */
 
+import { encodeWindows1250 } from "@/lib/cp1250";
+
 function concatBytes(chunks: Uint8Array[]): Uint8Array {
   const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
   const out = new Uint8Array(total);
@@ -39,10 +41,22 @@ export function escCut(): Uint8Array {
   return new Uint8Array([0x1d, 0x56, 0x00]);
 }
 
+/** Select Windows-1250 code page (Central Europe) — ESC t 17 on Epson/Star compatibles. */
+export function escSelectCodePage1250(): Uint8Array {
+  return new Uint8Array([0x1b, 0x74, 17]);
+}
+
 /** Encode Latin/UTF-8 text line (many modern thermals accept UTF-8). */
 export function escText(text: string, bold = false): Uint8Array {
   const encoder = new TextEncoder();
   const body = encoder.encode(`${text}\n`);
+  if (!bold) return body;
+  return concatBytes([new Uint8Array([0x1b, 0x45, 0x01]), body, new Uint8Array([0x1b, 0x45, 0x00])]);
+}
+
+/** Text line encoded as Windows-1250 for Czech legacy thermals. */
+export function escTextCp1250(text: string, bold = false): Uint8Array {
+  const body = encodeWindows1250(`${text}\n`);
   if (!bold) return body;
   return concatBytes([new Uint8Array([0x1b, 0x45, 0x01]), body, new Uint8Array([0x1b, 0x45, 0x00])]);
 }
@@ -124,7 +138,13 @@ export function escBlankRaster(heightDots: number, widthDots = 576): Uint8Array 
 
 export async function buildEscPosFromPngs(
   dataUrls: string[],
-  options?: { topFeedLines?: number; topFeedDots?: number; topBlankRasterDots?: number },
+  options?: {
+    topFeedLines?: number;
+    topFeedDots?: number;
+    topBlankRasterDots?: number;
+    /** Dots to feed between raster strips (0 = tight layout). */
+    feedBetweenDots?: number;
+  },
 ): Promise<Uint8Array> {
   const parts: Uint8Array[] = [escInit(), escAlign("left")];
   if (options?.topBlankRasterDots && options.topBlankRasterDots > 0) {
@@ -134,19 +154,26 @@ export async function buildEscPosFromPngs(
   } else if (options?.topFeedLines && options.topFeedLines > 0) {
     parts.push(escFeed(options.topFeedLines));
   }
+  const betweenDots = options?.feedBetweenDots ?? 0;
   for (const url of dataUrls) {
     if (!url) continue;
     parts.push(await escRasterFromPngDataUrl(url));
-    parts.push(escFeed(1));
+    if (betweenDots > 0) {
+      parts.push(escFeedDots(betweenDots));
+    }
   }
   parts.push(escFeed(3), escCut());
   return concatBytes(parts);
 }
 
-export function buildEscPosFromTextLines(lines: string[]): Uint8Array {
+export function buildEscPosFromTextLines(lines: string[], useCp1250 = true): Uint8Array {
   const parts: Uint8Array[] = [escInit(), escAlign("left")];
+  if (useCp1250) {
+    parts.push(escSelectCodePage1250());
+  }
+  const writeLine = useCp1250 ? escTextCp1250 : escText;
   for (const line of lines) {
-    parts.push(escText(line));
+    parts.push(writeLine(line));
   }
   parts.push(escFeed(3), escCut());
   return concatBytes(parts);

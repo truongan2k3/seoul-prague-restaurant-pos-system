@@ -8,6 +8,7 @@ import {
 import { formatEurFromCzk } from "@/lib/currency";
 import {
   buildThermalPrintCss,
+  receiptBitmapTypographyFromSettings,
   receiptTypographyFromSettings,
   type ReceiptTypography,
 } from "@/lib/receipt-print-styles";
@@ -338,27 +339,28 @@ export function buildReceiptEscPosLines(
     biz.brandAddress,
     biz.legalName,
     biz.companyAddress,
-    `ICO: ${biz.ico}  DIC: ${biz.dic}`,
+    `IČO: ${biz.ico}   DIČ: ${biz.dic}`,
     biz.phone,
     "--------------------------------",
-    `Stul: ${data.tableLabel}`,
+    `Stůl č. ${data.tableLabel}`,
     `Doklad: ${formatReceiptDisplayIndex(data.orderNumber)}`,
     `${formatReceiptDate(data.closedAt)} ${formatReceiptTime(data.closedAt)}`,
     "--------------------------------",
+    "Kód Položka                    Částka",
   ];
 
   for (const item of data.items) {
     lines.push(`${item.code} ${item.name}`);
-    lines.push(`  ${item.quantity} x ${formatReceiptAmount(item.unitPrice)} = ${formatReceiptAmount(item.lineTotal)}`);
+    lines.push(`  ${item.quantity} ${formatReceiptAmount(item.lineTotal)} ${item.taxGroup}`);
   }
 
   lines.push("--------------------------------");
-  lines.push(`Mezisoucet: ${formatReceiptAmount(data.subtotal)} CZK`);
+  lines.push(`Mezisoučet: ${formatReceiptAmount(data.subtotal)} CZK`);
   if (data.discountAmount > 0) {
-    lines.push(`${data.discountLabel ?? "Sleva"}: -${formatReceiptAmount(data.discountAmount)} CZK`);
+    lines.push(`${data.discountLabel ?? "Sleva:"} -${formatReceiptAmount(data.discountAmount)} CZK`);
   }
   if (data.tip > 0) {
-    lines.push(`Spropitne: ${formatReceiptAmount(data.tip)} CZK`);
+    lines.push(`Spropitné: ${formatReceiptAmount(data.tip)} CZK`);
   }
   lines.push(`CELKEM: ${formatReceiptAmount(data.grandTotal)} CZK`);
   lines.push(`Platba: ${paymentMethodLabel(data.paymentMethod)}`);
@@ -374,6 +376,9 @@ export async function printReceiptData(
   fontSettings?: ReceiptPrintFontSettings,
 ): Promise<void> {
   const typography = resolvePrintTypography(fontSettings);
+  const bitmapTypography = fontSettings
+    ? receiptBitmapTypographyFromSettings(fontSettings)
+    : typography;
   const useBitmap = receiptShouldUseBitmap({
     receiptPrintBitmap: fontSettings?.receiptPrintBitmap ?? false,
     printers: fontSettings?.printers ?? [],
@@ -387,9 +392,10 @@ export async function printReceiptData(
     const bitmap = await buildBitmapReceiptHtml(
       data,
       template,
-      typography,
+      bitmapTypography,
       fontSettings?.receiptFontFamily ?? "courier",
       fontSettings?.receiptFontWeight ?? "bold",
+      fontSettings?.receiptFontSize,
     );
     receiptHtmlContent = bitmap.html;
     bitmapPngs = bitmap.pngs;
@@ -426,15 +432,18 @@ export async function printReceiptData(
               const bitmap = await buildBitmapReceiptHtml(
                 data,
                 template,
-                typography,
+                bitmapTypography,
                 fontSettings?.receiptFontFamily ?? "courier",
                 fontSettings?.receiptFontWeight ?? "bold",
+                fontSettings?.receiptFontSize,
               );
               bitmapPngs = bitmap.pngs;
               receiptHtmlContent = bitmap.html;
             }
             bitmapBytes =
-              bitmapPngs.length > 0 ? await buildEscPosFromPngs(bitmapPngs) : textBytes;
+              bitmapPngs.length > 0
+                ? await buildEscPosFromPngs(bitmapPngs, { feedBetweenDots: 0 })
+                : textBytes;
           }
           return bitmapBytes;
         },

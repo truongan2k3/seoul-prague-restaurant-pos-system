@@ -178,6 +178,51 @@ export function receiptTypographyFromSettings(
   };
 }
 
+/** Larger canvas px sizes for legacy bitmap receipts (~72mm thermal raster). */
+const BITMAP_SIZE_SCALE: Record<
+  ReceiptFontSize,
+  Pick<ReceiptTypography, "bodyPx" | "itemPx" | "metaPx" | "tablePx" | "titlePx" | "indexPx" | "celkemPx" | "lineHeight">
+> = {
+  normal: {
+    bodyPx: 16,
+    itemPx: 16,
+    metaPx: 14,
+    tablePx: 14,
+    titlePx: 18,
+    indexPx: 24,
+    celkemPx: 18,
+    lineHeight: 1.15,
+  },
+  medium: {
+    bodyPx: 18,
+    itemPx: 18,
+    metaPx: 16,
+    tablePx: 16,
+    titlePx: 20,
+    indexPx: 26,
+    celkemPx: 20,
+    lineHeight: 1.15,
+  },
+  large: {
+    bodyPx: 20,
+    itemPx: 20,
+    metaPx: 18,
+    tablePx: 18,
+    titlePx: 22,
+    indexPx: 28,
+    celkemPx: 22,
+    lineHeight: 1.15,
+  },
+};
+
+export function receiptBitmapTypographyFromSettings(
+  settings: Pick<AppSettings, "receiptFontSize" | "receiptFontWeight" | "receiptFontFamily">,
+): ReceiptTypography {
+  const base = receiptTypographyFromSettings(settings);
+  const size = BITMAP_SIZE_SCALE[settings.receiptFontSize] ?? BITMAP_SIZE_SCALE.medium;
+  return { ...base, ...size };
+}
+
 export function receiptTypographyCssVars(
   typography: ReceiptTypography,
 ): Record<string, string | number> {
@@ -341,6 +386,6 @@ export function buildThermalPrintCss(
     gap: 6px;
   }
   .receipt-bitmap-col { flex: 1; min-width: 0; }
-  .receipt-bitmap-gap { height: 6px; }
+  .receipt-bitmap-gap { height: 2px; }
 `;
 }

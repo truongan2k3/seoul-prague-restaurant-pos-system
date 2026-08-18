@@ -1,12 +1,14 @@
 /** Standard thermal resolution used across ESC/POS raster helpers. */
 export const THERMAL_DPI = 203;
 
-/** Default physical roll width for customer receipts (matches kitchen tickets). */
+/** Default receipt roll — 80 mm thermal, legacy bitmap (Old printer mode). */
 export const DEFAULT_RECEIPT_PAPER_WIDTH_MM = 80;
 
+/** ESC/POS raster width for 80 mm receipt (576 dots printable). */
+export const RECEIPT_80MM_RASTER_DOTS = 576;
+
 /**
- * ESC/POS raster line width in dots (multiple of 8).
- * 58 mm → 384, 72 mm → 576, 80 mm → 576 printable (~72 mm image area on 80 mm roll).
+ * ESC/POS raster line width in dots (multiple of 8). Receipt printing only.
  */
 export function receiptRasterWidthDots(paperWidthMm = DEFAULT_RECEIPT_PAPER_WIDTH_MM): number {
   const mm =
@@ -16,5 +18,5 @@ export function receiptRasterWidthDots(paperWidthMm = DEFAULT_RECEIPT_PAPER_WIDT
 
   if (mm <= 62) return 384;
   if (mm <= 74) return 512;
-  return 576;
+  return RECEIPT_80MM_RASTER_DOTS;
 }

@@ -113,7 +113,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   reservationMaxGuestsPerSlot: 20,
   reservationTableHoldingTime: 90,
   reservationOperatingHours: DEFAULT_RESERVATION_OPERATING_HOURS,
-  receiptFontSize: "medium",
+  receiptFontSize: "normal",
   receiptFontWeight: "normal",
   receiptFontFamily: "courier",
   receiptPrintBitmap: false,

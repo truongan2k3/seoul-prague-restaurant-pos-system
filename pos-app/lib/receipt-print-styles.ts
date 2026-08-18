@@ -65,34 +65,34 @@ const SIZE_SCALE: Record<
   Pick<ReceiptTypography, "bodyPx" | "itemPx" | "metaPx" | "tablePx" | "titlePx" | "indexPx" | "celkemPx" | "lineHeight">
 > = {
   normal: {
-    bodyPx: 20,
-    itemPx: 20,
-    metaPx: 18,
-    tablePx: 18,
-    titlePx: 26,
-    indexPx: 28,
-    celkemPx: 24,
+    bodyPx: 10,
+    itemPx: 10,
+    metaPx: 9,
+    tablePx: 9,
+    titlePx: 13,
+    indexPx: 14,
+    celkemPx: 12,
     lineHeight: 1.2,
   },
   medium: {
-    bodyPx: 22,
-    itemPx: 22,
-    metaPx: 20,
-    tablePx: 20,
-    titlePx: 28,
-    indexPx: 30,
-    celkemPx: 26,
-    lineHeight: 1.22,
+    bodyPx: 11,
+    itemPx: 11,
+    metaPx: 10,
+    tablePx: 10,
+    titlePx: 14,
+    indexPx: 16,
+    celkemPx: 13,
+    lineHeight: 1.25,
   },
   large: {
-    bodyPx: 24,
-    itemPx: 24,
-    metaPx: 22,
-    tablePx: 22,
-    titlePx: 30,
-    indexPx: 32,
-    celkemPx: 28,
-    lineHeight: 1.22,
+    bodyPx: 12,
+    itemPx: 12,
+    metaPx: 11,
+    tablePx: 11,
+    titlePx: 15,
+    indexPx: 18,
+    celkemPx: 14,
+    lineHeight: 1.25,
   },
 };
 
@@ -176,51 +176,6 @@ export function receiptTypographyFromSettings(
     ...size,
     ...weight,
   };
-}
-
-/** Bitmap receipt fonts — tuned for ~576-dot thermal (similar density to kitchen tickets). */
-const BITMAP_SIZE_SCALE: Record<
-  ReceiptFontSize,
-  Pick<ReceiptTypography, "bodyPx" | "itemPx" | "metaPx" | "tablePx" | "titlePx" | "indexPx" | "celkemPx" | "lineHeight">
-> = {
-  normal: {
-    bodyPx: 26,
-    itemPx: 30,
-    metaPx: 24,
-    tablePx: 24,
-    titlePx: 36,
-    indexPx: 38,
-    celkemPx: 32,
-    lineHeight: 1.15,
-  },
-  medium: {
-    bodyPx: 28,
-    itemPx: 32,
-    metaPx: 26,
-    tablePx: 26,
-    titlePx: 40,
-    indexPx: 42,
-    celkemPx: 34,
-    lineHeight: 1.15,
-  },
-  large: {
-    bodyPx: 30,
-    itemPx: 36,
-    metaPx: 28,
-    tablePx: 28,
-    titlePx: 44,
-    indexPx: 46,
-    celkemPx: 38,
-    lineHeight: 1.15,
-  },
-};
-
-export function receiptBitmapTypographyFromSettings(
-  settings: Pick<AppSettings, "receiptFontSize" | "receiptFontWeight" | "receiptFontFamily">,
-): ReceiptTypography {
-  const base = receiptTypographyFromSettings(settings);
-  const size = BITMAP_SIZE_SCALE[settings.receiptFontSize] ?? BITMAP_SIZE_SCALE.medium;
-  return { ...base, ...size };
 }
 
 export function receiptTypographyCssVars(

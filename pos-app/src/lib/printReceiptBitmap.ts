@@ -7,11 +7,11 @@ import {
 } from "@/lib/receipt-calculations";
 import {
   kitchenBitmapWeights,
-  receiptBitmapTypographyFromSettings,
   receiptFontStack,
   type KitchenBitmapWeight,
   type ReceiptTypography,
 } from "@/lib/receipt-print-styles";
+import { receiptBitmapTypographyFromSettings } from "@/lib/receipt-bitmap-typography";
 import type { AppSettings, ReceiptFontFamily, ReceiptFontWeight } from "@/lib/types";
 import type { ReceiptTemplate } from "@/src/components/ReceiptPrint";
 import { DEFAULT_RECEIPT_PAPER_WIDTH_MM, receiptRasterWidthDots } from "@/lib/receipt-raster";

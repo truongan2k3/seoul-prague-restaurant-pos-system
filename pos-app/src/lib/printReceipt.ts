@@ -13,11 +13,11 @@ import {
 } from "@/lib/receipt-branding";
 import {
   buildThermalPrintCss,
-  receiptBitmapTypographyFromSettings,
   receiptTypographyCssVars,
   receiptTypographyFromSettings,
   type ReceiptTypography,
 } from "@/lib/receipt-print-styles";
+import { receiptBitmapTypographyFromSettings } from "@/lib/receipt-bitmap-typography";
 import type { AppSettings } from "@/lib/types";
 import { ReceiptBodyContent, type ReceiptTemplate } from "@/src/components/ReceiptPrint";
 import { padReceiptLine, receiptItemEscPosLines, receiptMetaEscPosLines, RECEIPT_LINE_WIDTH } from "@/lib/receipt-line-format";

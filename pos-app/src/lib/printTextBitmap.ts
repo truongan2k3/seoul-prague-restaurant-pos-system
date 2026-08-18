@@ -49,7 +49,10 @@ export function containsCjk(text: string): boolean {
 }
 
 function effectiveMaxWidth(maxWidthPx: number, fontSizePx: number, horizontalPad = 0): number {
-  const margin = Math.max(4, Math.round(fontSizePx * 0.08));
+  const margin =
+    horizontalPad > 0
+      ? Math.max(4, Math.round(fontSizePx * 0.08))
+      : Math.max(10, Math.round(fontSizePx * 0.15));
   return Math.max(1, maxWidthPx - horizontalPad * 2 - margin);
 }
 

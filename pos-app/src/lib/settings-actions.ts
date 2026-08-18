@@ -27,9 +27,12 @@ import {
 } from "@/lib/receipt-print-styles";
 import {
   clampKitchenClipTopMm,
+  clampKitchenItemGapPx,
   DEFAULT_KITCHEN_CLIP_TOP_MM,
+  DEFAULT_KITCHEN_ITEM_GAP_PX,
   DEFAULT_KITCHEN_PRINT_LAYOUT,
   parseKitchenClipTopMm,
+  parseKitchenItemGapPx,
   parseKitchenPrintLayout,
 } from "@/lib/kitchen-print-layout";
 import { inferCfdMediaType } from "@/lib/cfd-slideshow";
@@ -81,6 +84,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   kitchenPrintMessageFontWeight: "bold",
   kitchenPrintLayout: DEFAULT_KITCHEN_PRINT_LAYOUT,
   kitchenPrintClipTopMm: DEFAULT_KITCHEN_CLIP_TOP_MM,
+  kitchenPrintItemGapPx: DEFAULT_KITCHEN_ITEM_GAP_PX,
   receiptHeaderTitle: "JIN CHENG",
   receiptLegalName: "JING DE INTER.TRADE, s.r.o.",
   receiptAddress: "Václavské nám. 819, 110 00 Praha",
@@ -143,6 +147,7 @@ type SettingsRow = {
   kitchen_print_message_font_weight?: string | null;
   kitchen_print_layout?: unknown;
   kitchen_print_clip_top_mm?: number | string | null;
+  kitchen_print_item_gap_px?: number | string | null;
   receipt_header_title: string;
   receipt_legal_name?: string | null;
   receipt_address: string;
@@ -347,6 +352,7 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     ),
     kitchenPrintLayout: parseKitchenPrintLayout(row.kitchen_print_layout),
     kitchenPrintClipTopMm: parseKitchenClipTopMm(row.kitchen_print_clip_top_mm),
+    kitchenPrintItemGapPx: parseKitchenItemGapPx(row.kitchen_print_item_gap_px),
     receiptHeaderTitle: row.receipt_header_title,
     receiptLegalName: row.receipt_legal_name ?? DEFAULT_APP_SETTINGS.receiptLegalName,
     receiptAddress: row.receipt_address,
@@ -457,6 +463,9 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   }
   if (partial.kitchenPrintClipTopMm !== undefined) {
     payload.kitchen_print_clip_top_mm = clampKitchenClipTopMm(partial.kitchenPrintClipTopMm);
+  }
+  if (partial.kitchenPrintItemGapPx !== undefined) {
+    payload.kitchen_print_item_gap_px = clampKitchenItemGapPx(partial.kitchenPrintItemGapPx);
   }
   if (partial.receiptHeaderTitle !== undefined) payload.receipt_header_title = partial.receiptHeaderTitle;
   if (partial.receiptLegalName !== undefined) payload.receipt_legal_name = partial.receiptLegalName;
@@ -698,6 +707,7 @@ export type PrinterBillSettingsDraft = Pick<
   | "kitchenPrintMessageFontWeight"
   | "kitchenPrintLayout"
   | "kitchenPrintClipTopMm"
+  | "kitchenPrintItemGapPx"
   | "receiptHeaderTitle"
   | "receiptLegalName"
   | "receiptAddress"
@@ -749,6 +759,7 @@ export function pickPrinterBillDraft(settings: AppSettings): PrinterBillSettings
     kitchenPrintMessageFontWeight: settings.kitchenPrintMessageFontWeight,
     kitchenPrintLayout: settings.kitchenPrintLayout,
     kitchenPrintClipTopMm: settings.kitchenPrintClipTopMm,
+    kitchenPrintItemGapPx: settings.kitchenPrintItemGapPx,
     receiptHeaderTitle: settings.receiptHeaderTitle,
     receiptLegalName: settings.receiptLegalName,
     receiptAddress: settings.receiptAddress,

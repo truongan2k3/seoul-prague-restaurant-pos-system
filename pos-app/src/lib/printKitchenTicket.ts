@@ -5,6 +5,9 @@ import {
   DEFAULT_KITCHEN_PRINT_LAYOUT,
   kitchenClipTopDots,
   kitchenClipTopPx,
+  kitchenHeaderItemGapPx,
+  clampKitchenItemGapPx,
+  DEFAULT_KITCHEN_ITEM_GAP_PX,
   layoutBlockStyle,
   layoutPx,
   sortLayoutBlocks,
@@ -125,6 +128,7 @@ export type KitchenPrintSettings = Pick<
   | "kitchenPrintMessageFontWeight"
   | "kitchenPrintLayout"
   | "kitchenPrintClipTopMm"
+  | "kitchenPrintItemGapPx"
   | "receiptFontSize"
   | "receiptFontWeight"
   | "receiptFontFamily"
@@ -148,11 +152,8 @@ function pushKitchenBitmapSpacer(pngs: string[], heightPx: number) {
   if (png) pngs.push(png);
 }
 
-const KITCHEN_HEADER_ITEM_GAP_PX = 24;
-/** ~1 text line between items on 80mm thermal (matches reference tickets). */
-const KITCHEN_ITEM_GAP_PX = 44;
-
-function kitchenTicketCss(qtyPx: number): string {
+function kitchenTicketCss(qtyPx: number, itemGapPx: number): string {
+  const gap = clampKitchenItemGapPx(itemGapPx);
   return `
     <style>
       .kitchen-ticket {
@@ -184,7 +185,10 @@ function kitchenTicketCss(qtyPx: number): string {
       .kitchen-header .kt-bitmap { margin: 0 auto; }
       .kitchen-meta-gap { height: 4px; }
       .kitchen-item {
-        padding: 4px 0 20px;
+        padding: 4px 0 ${gap}px;
+      }
+      .kitchen-item:last-child {
+        padding-bottom: 4px;
       }
       .kitchen-item-row {
         display: flex;
@@ -260,12 +264,15 @@ export async function buildKitchenTicketHtml(input: {
   layout?: KitchenPrintLayout;
   stationLabel?: string;
   clipTopMm?: number;
+  itemGapPx?: number;
 }): Promise<{ html: string; pngs: string[] }> {
   await ensureCjkPrintFont();
   const s = scaleFor(input.fontSize);
   const weights = kitchenBitmapWeights(input.fontWeight ?? "bold");
   const layout = input.layout ?? DEFAULT_KITCHEN_PRINT_LAYOUT;
   const clipTopMm = input.clipTopMm ?? DEFAULT_KITCHEN_CLIP_TOP_MM;
+  const itemGapPx = clampKitchenItemGapPx(input.itemGapPx ?? DEFAULT_KITCHEN_ITEM_GAP_PX);
+  const headerItemGapPx = kitchenHeaderItemGapPx(itemGapPx);
   const orderLayout = layout.orderTicket;
   const pngs: string[] = [];
   const draw = (
@@ -315,7 +322,7 @@ export async function buildKitchenTicketHtml(input: {
   const itemBlocks = lines
     .map((item, itemIndex) => {
       if (itemIndex === 0 && headerBlocks) {
-        pushKitchenBitmapSpacer(pngs, KITCHEN_HEADER_ITEM_GAP_PX);
+        pushKitchenBitmapSpacer(pngs, headerItemGapPx);
       }
 
       const display = resolveKitchenTicketItemDisplay(item, input.menuItems, { englishOnly });
@@ -381,7 +388,7 @@ export async function buildKitchenTicketHtml(input: {
       if (!itemLines) return "";
 
       if (itemIndex < lines.length - 1) {
-        pushKitchenBitmapSpacer(pngs, KITCHEN_ITEM_GAP_PX);
+        pushKitchenBitmapSpacer(pngs, itemGapPx);
       }
 
       return `
@@ -397,7 +404,7 @@ export async function buildKitchenTicketHtml(input: {
   const clipHtml = kitchenClipSpacerHtml(FULL_WIDTH_PX, clipTopMm);
 
   const html = `
-    ${kitchenTicketCss(s.qty)}
+    ${kitchenTicketCss(s.qty, itemGapPx)}
     <div class="kitchen-ticket">
       ${clipHtml ? `<div class="kitchen-clip-spacer">${clipHtml}</div>` : ""}
       ${headerBlocks ? `<div class="kitchen-header">${headerBlocks}</div>` : ""}
@@ -500,7 +507,7 @@ export async function buildKitchenMessageHtml(input: {
   const clipHtml = kitchenClipSpacerHtml(FULL_WIDTH_PX, clipTopMm);
 
   const html = `
-    ${kitchenTicketCss(s.qty)}
+    ${kitchenTicketCss(s.qty, 0)}
     <div class="kitchen-ticket">
       ${clipHtml ? `<div class="kitchen-clip-spacer">${clipHtml}</div>` : ""}
       ${headerBlocks ? `<div class="kitchen-header">${headerBlocks}</div>` : ""}
@@ -583,6 +590,7 @@ async function printStationTicket(input: {
     layout: input.settings.kitchenPrintLayout,
     stationLabel: input.stationLabel,
     clipTopMm: input.settings.kitchenPrintClipTopMm,
+    itemGapPx: input.settings.kitchenPrintItemGapPx,
   });
 
   await dispatchKitchenPrint(input.settings, html, pngs, input.role);

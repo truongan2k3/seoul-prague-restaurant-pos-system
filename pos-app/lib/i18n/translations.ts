@@ -490,6 +490,12 @@ const en = {
   settingsKitchenPrintClipTop: "Top blank margin (clip rail)",
   settingsKitchenPrintClipTopHint:
     "Extra blank space at the top of kitchen tickets so a clip rail does not cover the table number. 0 = none, ~20 mm default.",
+  settingsKitchenPrintItemGap: "Space between items",
+  settingsKitchenPrintItemGapHint:
+    "Vertical gap between menu items on kitchen tickets. Lower if items look too spread out; higher for clearer separation.",
+  settingsKitchenPrintItemGapPreview: "Kitchen ticket preview",
+  settingsKitchenPrintItemGapPreviewHint:
+    "Sample ticket with several items — spacing matches silent print output.",
   settingsKitchenPrintOrderFontWeight: "Kitchen order ticket boldness",
   settingsKitchenPrintMessageFontWeight: "Kitchen message ticket boldness",
   settingsKitchenPrintFontLarge: "Large (min)",
@@ -1214,6 +1220,12 @@ const cs: Record<TranslationKey, string> = {
   settingsKitchenPrintClipTop: "Horní okraj (spona / držák)",
   settingsKitchenPrintClipTopHint:
     "Prázdné místo nahoře na kuchyňských lístcích, aby spona nezakryla číslo stolu. 0 = žádné, výchozí cca 20 mm.",
+  settingsKitchenPrintItemGap: "Mezera mezi položkami",
+  settingsKitchenPrintItemGapHint:
+    "Svislá mezera mezi položkami na kuchyňských lístcích. Snižte, pokud je to moc řídké; zvyšte pro lepší oddělení.",
+  settingsKitchenPrintItemGapPreview: "Náhled kuchyňského lístku",
+  settingsKitchenPrintItemGapPreviewHint:
+    "Ukázka s více položkami — mezery odpovídají tisku přes bridge.",
   settingsKitchenPrintOrderFontWeight: "Tučnost lístku objednávky",
   settingsKitchenPrintMessageFontWeight: "Tučnost lístku zprávy",
   settingsKitchenPrintFontLarge: "Velká (min)",
@@ -1931,6 +1943,12 @@ const zh: Record<TranslationKey, string> = {
   settingsKitchenPrintClipTop: "顶部留白（夹子）",
   settingsKitchenPrintClipTopHint:
     "厨房小票顶部的空白，避免夹子挡住桌号。0 = 无，默认约 20 毫米。",
+  settingsKitchenPrintItemGap: "菜品间距",
+  settingsKitchenPrintItemGapHint:
+    "厨房小票上各菜品之间的垂直间距。太疏可调低，太挤可调高。",
+  settingsKitchenPrintItemGapPreview: "厨房小票预览",
+  settingsKitchenPrintItemGapPreviewHint:
+    "多道菜示例 — 间距与 bridge 打印一致。",
   settingsKitchenPrintOrderFontWeight: "厨房订单小票粗细",
   settingsKitchenPrintMessageFontWeight: "厨房消息小票粗细",
   settingsKitchenPrintFontLarge: "大（最小）",

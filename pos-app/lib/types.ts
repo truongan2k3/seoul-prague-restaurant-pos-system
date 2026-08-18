@@ -157,6 +157,8 @@ export interface AppSettings {
   kitchenPrintLayout: KitchenPrintLayout;
   /** Blank margin at top of kitchen tickets (mm) — avoids clip rail covering table. */
   kitchenPrintClipTopMm: number;
+  /** Vertical space between items on kitchen tickets (px). */
+  kitchenPrintItemGapPx: number;
   receiptHeaderTitle: string;
   receiptLegalName: string;
   receiptAddress: string;

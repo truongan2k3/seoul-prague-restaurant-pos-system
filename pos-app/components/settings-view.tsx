@@ -5,10 +5,14 @@ import Link from "next/link";
 import { LanguageSelector } from "@/components/language-selector";
 import {
   clampKitchenClipTopMm,
+  clampKitchenItemGapPx,
   KITCHEN_CLIP_TOP_MM_MAX,
   KITCHEN_CLIP_TOP_MM_MIN,
+  KITCHEN_ITEM_GAP_PX_MAX,
+  KITCHEN_ITEM_GAP_PX_MIN,
 } from "@/lib/kitchen-print-layout";
 import { KitchenPrintLayoutEditor } from "@/components/kitchen-print-layout-editor";
+import { KitchenTicketSpacingPreview } from "@/components/kitchen-ticket-spacing-preview";
 import { LiveClock } from "@/components/live-clock";
 import { MenuCustomizationManager } from "@/components/menu-customization-manager";
 import { useApp } from "@/contexts/app-context";
@@ -795,6 +799,43 @@ export function SettingsView({
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                     {translate("settingsKitchenPrintClipTopHint")}
                   </p>
+                </label>
+                <label className="block text-sm sm:col-span-2">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {translate("settingsKitchenPrintItemGap")}
+                  </span>
+                  <div className="mt-2 flex items-center gap-3">
+                    <input
+                      type="range"
+                      min={KITCHEN_ITEM_GAP_PX_MIN}
+                      max={KITCHEN_ITEM_GAP_PX_MAX}
+                      step={2}
+                      value={draft.kitchenPrintItemGapPx}
+                      onChange={(event) =>
+                        updateDraft(
+                          "kitchenPrintItemGapPx",
+                          clampKitchenItemGapPx(Number(event.target.value)),
+                        )
+                      }
+                      className="min-h-[44px] flex-1"
+                    />
+                    <span className="w-14 text-right text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                      {draft.kitchenPrintItemGapPx} px
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {translate("settingsKitchenPrintItemGapHint")}
+                  </p>
+                  <KitchenTicketSpacingPreview
+                    itemGapPx={draft.kitchenPrintItemGapPx}
+                    clipTopMm={draft.kitchenPrintClipTopMm}
+                    fontSize={draft.kitchenPrintOrderFontSize}
+                    fontWeight={draft.kitchenPrintOrderFontWeight}
+                    layout={draft.kitchenPrintLayout}
+                    primaryLang={draft.kitchenPrintPrimaryLang}
+                    secondaryLang={draft.kitchenPrintSecondaryLang}
+                    translate={translate}
+                  />
                 </label>
                 <label className="block text-sm">
                   <span className="text-gray-500 dark:text-gray-400">

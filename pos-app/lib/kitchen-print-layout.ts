@@ -209,3 +209,31 @@ export function kitchenClipTopPx(mm: number): number {
 export function kitchenClipTopDots(mm: number): number {
   return Math.round((clampKitchenClipTopMm(mm) * 203) / 25.4);
 }
+
+/** Vertical gap between kitchen ticket items (browser px + bitmap spacer height). */
+export const KITCHEN_ITEM_GAP_PX_MIN = 0;
+export const KITCHEN_ITEM_GAP_PX_MAX = 56;
+export const DEFAULT_KITCHEN_ITEM_GAP_PX = 24;
+
+export function clampKitchenItemGapPx(px: number): number {
+  if (!Number.isFinite(px)) return DEFAULT_KITCHEN_ITEM_GAP_PX;
+  return Math.max(
+    KITCHEN_ITEM_GAP_PX_MIN,
+    Math.min(KITCHEN_ITEM_GAP_PX_MAX, Math.round(px)),
+  );
+}
+
+export function parseKitchenItemGapPx(value: unknown): number {
+  if (typeof value === "number") return clampKitchenItemGapPx(value);
+  if (typeof value === "string" && value.trim()) {
+    return clampKitchenItemGapPx(Number(value));
+  }
+  return DEFAULT_KITCHEN_ITEM_GAP_PX;
+}
+
+/** Gap after header before first item — scales with item gap. */
+export function kitchenHeaderItemGapPx(itemGapPx: number): number {
+  const gap = clampKitchenItemGapPx(itemGapPx);
+  if (gap <= 0) return 0;
+  return Math.max(8, Math.round(gap * 0.55));
+}

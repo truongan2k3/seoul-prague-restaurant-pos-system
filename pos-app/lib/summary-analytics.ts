@@ -11,11 +11,34 @@ export interface DateRange {
 }
 
 export interface RevenueStats {
+  /** Sales total excluding tips (after discounts). */
+  revenue: number;
+  /** Total collected from guests (revenue + tips). */
   grandTotal: number;
   cash: number;
   card: number;
   tips: number;
   orderCount: number;
+}
+
+/** Bill amount before tip (subtotal − discount, equals grandTotal − tip). */
+export function saleNetTotal(sale: SaleRecord): number {
+  return Math.max(0, sale.grandTotal - sale.tip);
+}
+
+export function computeRevenueStats(sales: SaleRecord[]): RevenueStats {
+  return {
+    revenue: sales.reduce((sum, sale) => sum + saleNetTotal(sale), 0),
+    grandTotal: sales.reduce((sum, sale) => sum + sale.grandTotal, 0),
+    cash: sales
+      .filter((sale) => sale.paymentMethod === "cash")
+      .reduce((sum, sale) => sum + saleNetTotal(sale), 0),
+    card: sales
+      .filter((sale) => sale.paymentMethod === "card")
+      .reduce((sum, sale) => sum + saleNetTotal(sale), 0),
+    tips: sales.reduce((sum, sale) => sum + sale.tip, 0),
+    orderCount: sales.length,
+  };
 }
 
 export interface TopSellerRow {
@@ -80,20 +103,6 @@ export function filterSalesInRange(sales: SaleRecord[], range: DateRange): SaleR
   return sales.filter(
     (sale) => sale.closedAt.getTime() >= range.start.getTime() && sale.closedAt.getTime() <= range.end.getTime(),
   );
-}
-
-export function computeRevenueStats(sales: SaleRecord[]): RevenueStats {
-  return {
-    grandTotal: sales.reduce((sum, sale) => sum + sale.grandTotal, 0),
-    cash: sales
-      .filter((sale) => sale.paymentMethod === "cash")
-      .reduce((sum, sale) => sum + sale.grandTotal, 0),
-    card: sales
-      .filter((sale) => sale.paymentMethod === "card")
-      .reduce((sum, sale) => sum + sale.grandTotal, 0),
-    tips: sales.reduce((sum, sale) => sum + sale.tip, 0),
-    orderCount: sales.length,
-  };
 }
 
 export function computeRevenueChange(current: number, previous: number): number | null {

@@ -15,6 +15,7 @@ import {
   filterHistorySales,
   formatSummaryDate,
   getPeriodRange,
+  saleNetTotal,
   toDateInputValue,
   type HistoryPaymentFilter,
   type SummaryPeriod,
@@ -307,7 +308,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 {translate("revenue")}
               </p>
-              <p className="mt-2 text-3xl font-bold tabular-nums text-gray-900 dark:text-gray-100">{formatCzk(stats.grandTotal)}</p>
+              <p className="mt-2 text-3xl font-bold tabular-nums text-gray-900 dark:text-gray-100">{formatCzk(stats.revenue)}</p>
               <div className="mt-3 flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-300">
                 <span>
                   {translate("cash")}: {formatCzk(stats.cash)}
@@ -317,6 +318,9 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                 </span>
                 <span>
                   {translate("tips")}: {formatCzk(stats.tips)}
+                </span>
+                <span className="text-gray-500 dark:text-gray-400">
+                  {translate("totalCollected")}: {formatCzk(stats.grandTotal)}
                 </span>
               </div>
             </div>
@@ -387,7 +391,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
             </p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
-              <table className="w-full min-w-[960px] text-left text-sm">
+              <table className="w-full min-w-[1120px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
                     {canEdit && (
@@ -406,6 +410,8 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                     <th className="px-4 py-3 font-semibold">{translate("historyItems")}</th>
                     <th className="px-4 py-3 font-semibold">{translate("staff")}</th>
                     <th className="px-4 py-3 font-semibold">{translate("payment")}</th>
+                    <th className="px-4 py-3 font-semibold text-right">{translate("totalExclTip")}</th>
+                    <th className="px-4 py-3 font-semibold text-right">{translate("tips")}</th>
                     <th className="px-4 py-3 font-semibold text-right">{translate("grandTotal")}</th>
                     <th className="px-4 py-3 font-semibold">{translate("date")}</th>
                     <th className="px-4 py-3 font-semibold text-right">Actions</th>
@@ -463,6 +469,12 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                           >
                             {translate(sale.paymentMethod)}
                           </span>
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-gray-700 dark:text-gray-300">
+                          {formatCzk(saleNetTotal(sale))}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-gray-600 dark:text-gray-400">
+                          {sale.tip > 0 ? formatCzk(sale.tip) : "—"}
                         </td>
                         <td className="px-4 py-3 text-right font-semibold tabular-nums">
                           {formatCzk(sale.grandTotal)}

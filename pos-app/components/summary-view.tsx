@@ -14,6 +14,7 @@ import {
   filterSalesInRange,
   formatSummaryDate,
   getPeriodRange,
+  saleNetTotal,
   toDateInputValue,
   type CategoryTopSellers,
   type SummaryPeriod,
@@ -166,8 +167,8 @@ export function SummaryView({
   const todayStats = useMemo(() => computeRevenueStats(todaySales), [todaySales]);
   const yesterdayStats = useMemo(() => computeRevenueStats(yesterdaySales), [yesterdaySales]);
   const changeVsYesterday = useMemo(
-    () => computeRevenueChange(todayStats.grandTotal, yesterdayStats.grandTotal),
-    [todayStats.grandTotal, yesterdayStats.grandTotal],
+    () => computeRevenueChange(todayStats.revenue, yesterdayStats.revenue),
+    [todayStats.revenue, yesterdayStats.revenue],
   );
 
   const topSellers = useMemo(
@@ -270,7 +271,10 @@ export function SummaryView({
                     {period === "today" ? translate("summaryToday") : translate("summaryPeriodRevenue")}
                   </h2>
                   <p className="mt-2 text-4xl font-bold tabular-nums text-gray-900 dark:text-gray-100">
-                    {formatPrice(period === "today" ? todayStats.grandTotal : stats.grandTotal)}
+                    {formatPrice(period === "today" ? todayStats.revenue : stats.revenue)}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {translate("revenueExclTipHint")}
                   </p>
                 </div>
                 {period === "today" && <ChangeBadge change={changeVsYesterday} />}
@@ -282,7 +286,7 @@ export function SummaryView({
                     {translate("summaryYesterday")}
                   </p>
                   <p className="mt-1 text-lg font-semibold tabular-nums text-gray-800 dark:text-gray-200">
-                    {formatPrice(yesterdayStats.grandTotal)}
+                    {formatPrice(yesterdayStats.revenue)}
                   </p>
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                     {translate("summaryComparedToYesterday")}
@@ -290,7 +294,7 @@ export function SummaryView({
                 </div>
               )}
 
-              <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+              <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
                 <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-900/50">
                   <p className="text-gray-500 dark:text-gray-400">{translate("summaryOrders")}</p>
                   <p className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
@@ -313,6 +317,12 @@ export function SummaryView({
                   <p className="text-gray-500 dark:text-gray-400">{translate("tips")}</p>
                   <p className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                     {formatPrice(stats.tips)}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-900/50">
+                  <p className="text-gray-500 dark:text-gray-400">{translate("totalCollected")}</p>
+                  <p className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                    {formatPrice(stats.grandTotal)}
                   </p>
                 </div>
               </div>
@@ -442,7 +452,9 @@ export function SummaryView({
                       <th className="py-2 pr-4">{translate("table")}</th>
                       <th className="py-2 pr-4">{translate("staff")}</th>
                       <th className="py-2 pr-4">{translate("payment")}</th>
-                      <th className="py-2 text-right">{translate("total")}</th>
+                      <th className="py-2 text-right">{translate("totalExclTip")}</th>
+                      <th className="py-2 text-right">{translate("tips")}</th>
+                      <th className="py-2 text-right">{translate("grandTotal")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -454,6 +466,12 @@ export function SummaryView({
                         <td className="py-2 pr-4">{sale.tableLabel}</td>
                         <td className="py-2 pr-4">{sale.staffName}</td>
                         <td className="py-2 pr-4 capitalize">{sale.paymentMethod}</td>
+                        <td className="py-2 text-right tabular-nums">
+                          {formatPrice(saleNetTotal(sale))}
+                        </td>
+                        <td className="py-2 text-right tabular-nums text-gray-600 dark:text-gray-400">
+                          {sale.tip > 0 ? formatPrice(sale.tip) : "—"}
+                        </td>
                         <td className="py-2 text-right font-medium tabular-nums">
                           {formatPrice(sale.grandTotal)}
                         </td>

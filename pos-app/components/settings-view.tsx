@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { LanguageSelector } from "@/components/language-selector";
 import {
@@ -26,8 +26,9 @@ import { useNotifications } from "@/contexts/notification-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { useSettings } from "@/contexts/settings-context";
 import { useRegisterUnsavedWork } from "@/contexts/unsaved-work-context";
-import { playCustomAlertSound, playTestAlertSound } from "@/lib/notification-sound";
-import { SOUND_FILE_OPTIONS } from "@/lib/auto-serve";
+import { playCustomAlertSound } from "@/lib/notification-sound";
+import { buildSoundSelectOptions } from "@/lib/auto-serve";
+import type { SoundConfigs } from "@/lib/types";
 import {
   pickSettingsPageDraft,
   type SettingsPageDraft,
@@ -96,15 +97,15 @@ export function SettingsView({
     setNotifyMainNewOrderEnabled,
     setSoundMainNewOrderEnabled,
   } = useApp();
-  const { settings, saving, error: settingsError, saveSettingsPageDraft, uploadAlertSound, uploadCfdReviewQrImage, saveSettings } =
+  const { settings, saving, error: settingsError, saveSettingsPageDraft, uploadEventAlertSound, uploadCfdReviewQrImage, saveSettings } =
     useSettings();
   const { business, updateBranding } = useAuth();
   const { pushNotification } = useNotifications();
   const { printTestReceipt, openReceiptPreview } = useReceiptPrint();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const cfdQrInputRef = useRef<HTMLInputElement>(null);
-  const audioPreviewRef = useRef<HTMLAudioElement>(null);
+  const eventSoundInputRef = useRef<HTMLInputElement>(null);
+  const [uploadSoundKey, setUploadSoundKey] = useState<keyof SoundConfigs | null>(null);
 
   const [draft, setDraft] = useState<SettingsPageDraft>(() => pickSettingsPageDraft(settings));
   const [dirty, setDirty] = useState(false);
@@ -197,12 +198,42 @@ export function SettingsView({
     }, [saveSettingsPageDraft, pushNotification, translate]),
   });
 
-  const handleSoundUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleEventSoundUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
-    await uploadAlertSound(file);
+    const key = uploadSoundKey;
     event.target.value = "";
+    setUploadSoundKey(null);
+    if (!file || !key) return;
+
+    const url = await uploadEventAlertSound(file);
+    if (!url) return;
+
+    const nextDraft: SettingsPageDraft = {
+      ...draftRef.current,
+      soundConfigs: { ...draftRef.current.soundConfigs, [key]: url },
+    };
+    setDraft(nextDraft);
+    const ok = await saveSettingsPageDraft(nextDraft);
+    if (ok) {
+      setDirty(false);
+      pushNotification({
+        message: translate("settingsSavedSuccess"),
+        playSound: false,
+      });
+    }
   };
+
+  const soundExtraUrls = useMemo(() => {
+    const urls = new Set<string>();
+    if (settings.customAlertSoundUrl.trim()) urls.add(settings.customAlertSoundUrl.trim());
+    for (const url of Object.values(draft.soundConfigs)) {
+      if (url.trim()) urls.add(url.trim());
+    }
+    for (const url of Object.values(settings.soundConfigs)) {
+      if (url.trim()) urls.add(url.trim());
+    }
+    return [...urls];
+  }, [settings.customAlertSoundUrl, settings.soundConfigs, draft.soundConfigs]);
 
   const handleCfdQrUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -1368,49 +1399,19 @@ export function SettingsView({
         {activeSettingsTab === "sounds" && (
         <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2">
           <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800 md:col-span-2">
-            <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("settingsCustomSound")}</h2>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{translate("settingsSoundPreview")}</p>
-
-            <audio
-              ref={audioPreviewRef}
-              src={settings.customAlertSoundUrl}
-              controls
-              className="mt-3 w-full"
-              preload="metadata"
-            />
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => playTestAlertSound(settings.customAlertSoundUrl)}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold dark:border-gray-600"
-              >
-                {translate("settingsPlayTestSound")}
-              </button>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
-              >
-                {translate("settingsUploadSound")}
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".mp3,.wav,audio/mpeg,audio/wav"
-                className="hidden"
-                onChange={(event) => void handleSoundUpload(event)}
-              />
-            </div>
-          </section>
-
-          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">
               {translate("soundSettingsTitle")}
             </h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {translate("soundSettingsHint")}
             </p>
+            <input
+              ref={eventSoundInputRef}
+              type="file"
+              accept=".mp3,.wav,audio/mpeg,audio/wav"
+              className="hidden"
+              onChange={(event) => void handleEventSoundUpload(event)}
+            />
             <div className="mt-4 space-y-3">
               {(
                 [
@@ -1440,38 +1441,54 @@ export function SettingsView({
                     testVariant: "ready" as const,
                   },
                 ] as const
-              ).map((row) => (
-                <label key={row.key} className="block text-sm">
-                  <span className="text-gray-700 dark:text-gray-300">{row.label}</span>
-                  <div className="mt-1 flex gap-2">
-                    <select
-                      value={draft.soundConfigs[row.key]}
-                      onChange={(event) =>
-                        updateDraft("soundConfigs", {
-                          ...draft.soundConfigs,
-                          [row.key]: event.target.value,
-                        })
-                      }
-                      className="pos-input flex-1"
-                    >
-                      {SOUND_FILE_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        playCustomAlertSound(draft.soundConfigs[row.key], row.testVariant)
-                      }
-                      className="shrink-0 rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold dark:border-gray-600"
-                    >
-                      Test
-                    </button>
-                  </div>
-                </label>
-              ))}
+              ).map((row) => {
+                const currentValue =
+                  draft.soundConfigs[row.key] ?? settings.soundConfigs[row.key] ?? "";
+                const options = buildSoundSelectOptions(currentValue, soundExtraUrls);
+
+                return (
+                  <label key={row.key} className="block text-sm">
+                    <span className="text-gray-700 dark:text-gray-300">{row.label}</span>
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      <select
+                        value={currentValue}
+                        onChange={(event) =>
+                          updateDraft("soundConfigs", {
+                            ...draft.soundConfigs,
+                            [row.key]: event.target.value,
+                          })
+                        }
+                        className="pos-input min-w-0 flex-1"
+                      >
+                        {options.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          playCustomAlertSound(currentValue, row.testVariant)
+                        }
+                        className="shrink-0 rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold dark:border-gray-600"
+                      >
+                        {translate("settingsPlayTestSound")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUploadSoundKey(row.key);
+                          eventSoundInputRef.current?.click();
+                        }}
+                        className="shrink-0 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+                      >
+                        {translate("settingsUploadSound")}
+                      </button>
+                    </div>
+                  </label>
+                );
+              })}
             </div>
           </section>
 

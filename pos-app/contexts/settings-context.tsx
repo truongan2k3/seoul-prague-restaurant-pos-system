@@ -17,6 +17,7 @@ import {
   subscribeToSettingsChanges,
   updateAppSettings,
   uploadCustomAlertSound,
+  uploadAlertSoundFile,
   uploadCfdAdVideo,
   uploadCfdReviewQrImage,
   type PrinterBillSettingsDraft,
@@ -32,6 +33,7 @@ interface SettingsContextValue {
   savePrinterBillSettings: (draft: PrinterBillSettingsDraft) => Promise<boolean>;
   saveSettingsPageDraft: (draft: SettingsPageDraft) => Promise<boolean>;
   uploadAlertSound: (file: File) => Promise<void>;
+  uploadEventAlertSound: (file: File) => Promise<string | null>;
   uploadCfdAdVideo: (file: File) => Promise<void>;
   uploadCfdReviewQrImage: (file: File) => Promise<void>;
   refreshSettings: () => Promise<void>;
@@ -120,6 +122,23 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [businessId],
   );
 
+  const uploadEventAlertSound = useCallback(
+    async (file: File) => {
+      if (!businessId) return null;
+      setSaving(true);
+      const { data, error: uploadError } = await uploadAlertSoundFile(file);
+      setSaving(false);
+
+      if (uploadError) {
+        setError(uploadError.message);
+        return null;
+      }
+      setError(null);
+      return data;
+    },
+    [businessId],
+  );
+
   const uploadCfdAdVideoHandler = useCallback(
     async (file: File) => {
       if (!businessId) return;
@@ -166,6 +185,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       savePrinterBillSettings,
       saveSettingsPageDraft,
       uploadAlertSound,
+      uploadEventAlertSound,
       uploadCfdAdVideo: uploadCfdAdVideoHandler,
       uploadCfdReviewQrImage: uploadCfdReviewQrImageHandler,
       refreshSettings,
@@ -179,6 +199,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       savePrinterBillSettings,
       saveSettingsPageDraft,
       uploadAlertSound,
+      uploadEventAlertSound,
       uploadCfdAdVideoHandler,
       uploadCfdReviewQrImageHandler,
       refreshSettings,

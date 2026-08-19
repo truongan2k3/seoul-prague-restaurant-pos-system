@@ -24,6 +24,42 @@ export const SOUND_FILE_OPTIONS = [
   { value: "/sounds/default-bell.mp3", label: "default-bell.mp3" },
 ] as const;
 
+/** Human-readable label for a sound URL (preset path or uploaded file). */
+export function soundFileLabel(url: string): string {
+  if (!url) return "";
+  try {
+    const pathname = new URL(url, "http://local").pathname;
+    return decodeURIComponent(pathname.split("/").pop() ?? url);
+  } catch {
+    return url.split("/").pop() ?? url;
+  }
+}
+
+/** Preset + custom URLs for a sound picker (always includes current value). */
+export function buildSoundSelectOptions(
+  currentValue: string,
+  extraUrls: string[] = [],
+): Array<{ value: string; label: string }> {
+  const options: Array<{ value: string; label: string }> = [];
+  const seen = new Set<string>();
+
+  const add = (value: string, label?: string) => {
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    options.push({ value, label: label ?? soundFileLabel(value) });
+  };
+
+  for (const preset of SOUND_FILE_OPTIONS) {
+    add(preset.value, preset.label);
+  }
+  for (const url of extraUrls) {
+    add(url);
+  }
+  add(currentValue);
+
+  return options;
+}
+
 /** Pastel row background on POS order panel by kitchen workflow state. */
 export function orderLineKitchenPanelClass(
   item: Pick<OrderItem, "kitchenStatus" | "status" | "isCancelled">,

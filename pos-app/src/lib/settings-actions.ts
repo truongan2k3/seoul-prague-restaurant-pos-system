@@ -635,10 +635,10 @@ export async function updateAppSettings(partial: Partial<AppSettings>, businessI
   return { data: mapSettingsRow(data as SettingsRow), error: null };
 }
 
-export async function uploadCustomAlertSound(file: File, businessId?: string | null) {
+export async function uploadAlertSoundFile(file: File) {
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "mp3";
   if (!["mp3", "wav"].includes(extension)) {
-    return { data: null, error: new Error("Only .mp3 and .wav files are supported") };
+    return { data: null as string | null, error: new Error("Only .mp3 and .wav files are supported") };
   }
 
   const path = `alert-${Date.now()}.${extension}`;
@@ -651,7 +651,13 @@ export async function uploadCustomAlertSound(file: File, businessId?: string | n
   if (uploadError) return { data: null, error: uploadError };
 
   const { data: publicData } = supabase.storage.from("audio_alerts").getPublicUrl(path);
-  return updateAppSettings({ customAlertSoundUrl: publicData.publicUrl }, businessId);
+  return { data: publicData.publicUrl, error: null as Error | null };
+}
+
+export async function uploadCustomAlertSound(file: File, businessId?: string | null) {
+  const { data: url, error } = await uploadAlertSoundFile(file);
+  if (error || !url) return { data: null, error: error ?? new Error("Upload failed") };
+  return updateAppSettings({ customAlertSoundUrl: url }, businessId);
 }
 
 async function uploadCfdMediaFile(file: File, prefix: string, allowedExtensions: string[]) {
@@ -836,7 +842,7 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     receiptPrintBitmap: settings.receiptPrintBitmap,
     adminDeletionPassword: settings.adminDeletionPassword,
     marqueeConfigs: resolveMarqueeConfigs(settings),
-    soundConfigs: settings.soundConfigs,
+    soundConfigs: { ...DEFAULT_SOUND_CONFIGS, ...settings.soundConfigs },
     changelogPopupEnabled: settings.changelogPopupEnabled,
     changelogPopupTitle: settings.changelogPopupTitle,
     changelogPopupBody: settings.changelogPopupBody,

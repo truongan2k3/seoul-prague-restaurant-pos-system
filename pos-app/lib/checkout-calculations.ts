@@ -179,19 +179,20 @@ export function buildEqualSplitShareAmounts(input: {
   discountAmount: number;
   tip: number;
   amountDueNow: number;
+  grandTotal: number;
   splitCount: number;
 }) {
   const ratio = 1 / input.splitCount;
   const subtotal = Number((input.subtotal * ratio).toFixed(2));
   const discountAmount = Number((input.discountAmount * ratio).toFixed(2));
-  const tip = Number(
-    (input.amountDueNow - subtotal + discountAmount).toFixed(2),
-  );
+  const grandTotal = Number(input.grandTotal.toFixed(2));
+  const tip = Number((grandTotal - subtotal + discountAmount).toFixed(2));
   return {
     subtotal,
     discountAmount,
     tip,
     amountDueNow: input.amountDueNow,
+    grandTotal,
   };
 }
 

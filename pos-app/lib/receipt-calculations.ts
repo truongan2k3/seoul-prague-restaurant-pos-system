@@ -190,7 +190,7 @@ export function buildReceiptData(input: {
   const subtotal = input.payment.subtotal * ratio;
   const discountAmount = input.payment.discountAmount * ratio;
   const tip = input.payment.tip * ratio;
-  const grandTotal = input.payment.amountDueNow;
+  const grandTotal = input.payment.grandTotal;
 
   const discountLabel =
     input.payment.discountAmount > 0

@@ -666,6 +666,7 @@ export async function checkoutTable(
           discountAmount: payment.discountAmount,
           tip: payment.tip,
           amountDueNow: payment.amountDueNow,
+          grandTotal: payment.grandTotal,
           splitCount: payment.splitCount,
         })
       : {
@@ -673,6 +674,7 @@ export async function checkoutTable(
           discountAmount: Number((payment.discountAmount * ratio).toFixed(2)),
           tip: Number((payment.tip * ratio).toFixed(2)),
           amountDueNow: Number(payment.amountDueNow.toFixed(2)),
+          grandTotal: Number(payment.grandTotal.toFixed(2)),
         };
 
   const paidItemIds = orders.map((item) => item.id).filter((id): id is string => Boolean(id));
@@ -745,7 +747,7 @@ export async function checkoutTable(
     discount_type: payment.discountValue > 0 ? payment.discountType : null,
     discount_value: payment.discountValue,
     tip: shareAmounts.tip,
-    grand_total: shareAmounts.amountDueNow,
+    grand_total: shareAmounts.grandTotal,
     payment_method: payment.paymentMethod,
     amount_given: payment.amountGiven ?? null,
     change_due: payment.changeDue ?? null,

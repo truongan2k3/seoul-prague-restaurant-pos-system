@@ -9,6 +9,7 @@ export const ALL_NAV_TABS: NavId[] = [
   "history",
   "summary",
   "storage",
+  "dynamicQr",
   "staff",
   "settings",
 ];
@@ -106,4 +107,33 @@ export function staffRequiresPinGate(member: StaffMember | null | undefined): bo
 
 export function staffBypassesPinGate(member: StaffMember | null | undefined): boolean {
   return !staffRequiresPinGate(member);
+}
+
+export function staffRequiresSwitchPassword(member: StaffMember | null | undefined): boolean {
+  return member?.requireSwitchPassword === true;
+}
+
+export function countActiveAdmins(roster: StaffMember[]): number {
+  return roster.filter((member) => member.active && member.role === "admin").length;
+}
+
+export type StaffDeleteBlockReason = "self" | "lastAdmin" | "accessDenied";
+
+export function getStaffDeleteBlockReason(
+  target: StaffMember,
+  actor: StaffMember | null | undefined,
+  roster: StaffMember[],
+): StaffDeleteBlockReason | null {
+  if (!canManageStaff(actor?.role)) return "accessDenied";
+  if (target.id === actor?.id) return "self";
+  if (target.role === "admin" && countActiveAdmins(roster) <= 1) return "lastAdmin";
+  return null;
+}
+
+export function canDeleteStaffMember(
+  target: StaffMember,
+  actor: StaffMember | null | undefined,
+  roster: StaffMember[],
+): boolean {
+  return getStaffDeleteBlockReason(target, actor, roster) === null;
 }

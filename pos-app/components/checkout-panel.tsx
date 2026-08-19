@@ -1,30 +1,42 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { ArrowLeft, ArrowRight, Printer } from "lucide-react";
-import { NumericInputField } from "@/components/numeric-input-field";
-import { PercentPresetButtons } from "@/components/percent-preset-buttons";
+import { ArrowLeft, ArrowRight, Calculator, Printer } from "lucide-react";
+import { FloatingCalculator } from "@/components/floating-calculator";
+import {
+  NumericInputField,
+  type NumericInputFieldHandle,
+} from "@/components/numeric-input-field";
+import {
+  CHECKOUT_PERCENT_PRESETS,
+  PercentPresetButtons,
+} from "@/components/percent-preset-buttons";
 import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
 import {
   buildCheckoutTotals,
   calcTipFromPercent,
   lineTotal,
-  ordersFromLines,
+  mergeCheckoutLines,
   remainingLines,
+  scaleOrdersForEqualSplit,
+  ordersFromLines,
   type CheckoutLine,
   type CheckoutSubmitPayload,
   type DiscountType,
   type SplitMode,
 } from "@/lib/checkout-calculations";
+import { formatEurFromCzk } from "@/lib/currency";
 import { formatPosPrice, priceDisplayOptionsFromSettings } from "@/lib/price-display";
 import { buildReceiptLines } from "@/lib/receipt-calculations";
 import { buildCfdCheckoutPayload, type CfdCheckoutPayload } from "@/lib/cfd-display";
 import { playPaymentSuccessSound } from "@/lib/notification-sound";
 import type { MenuItem, OrderItem, PaymentMethod } from "@/lib/types";
-import { filterButtonClass, paymentFilterClass } from "@/lib/theme-classes";
+import { filterButtonClass } from "@/lib/theme-classes";
 
-type CheckoutPanelView = "main" | "split" | "discount" | "tip";
+type CheckoutPanelView = "main" | "split";
+type AdjustmentMode = "tip" | "discount" | null;
+type SplitPhase = "pick-items" | "checkout";
 
 interface CheckoutPanelProps {
   lines: CheckoutLine[];
@@ -94,9 +106,25 @@ export function CheckoutPanel({
     (amount: number) => formatPosPrice(amount, priceOptions),
     [priceOptions],
   );
-  const keyboardPortalTargetId = "checkout-numeric-keyboard-dock";
+  const displayCzkOnly = useCallback(
+    (amount: number) => formatPosPrice(amount, { enableRounding: priceOptions.enableRounding }),
+    [priceOptions],
+  );
+  const eurSecondary = useCallback(
+    (amount: number) =>
+      priceOptions.showEur
+        ? formatEurFromCzk(amount, priceOptions.eurRate)
+        : null,
+    [priceOptions],
+  );
+
+  const customAmountRef = useRef<NumericInputFieldHandle>(null);
+  const cashGivenRef = useRef<NumericInputFieldHandle>(null);
 
   const [panelView, setPanelView] = useState<CheckoutPanelView>("main");
+  const [splitPhase, setSplitPhase] = useState<SplitPhase>("checkout");
+  const [adjustmentMode, setAdjustmentMode] = useState<AdjustmentMode>(null);
+  const [keepChangeAsTip, setKeepChangeAsTip] = useState(false);
   const [discountType, setDiscountType] = useState<DiscountType>("percent");
   const [discountValue, setDiscountValue] = useState(0);
   const [discountPreset, setDiscountPreset] = useState<number | null>(null);
@@ -107,7 +135,15 @@ export function CheckoutPanel({
   const [cashGiven, setCashGiven] = useState("");
   const [roundUpTotal, setRoundUpTotal] = useState("");
   const [splitMode, setSplitMode] = useState<SplitMode>("total");
-  const [splitCount, setSplitCount] = useState(2);
+  const [splitCountInput, setSplitCountInput] = useState("2");
+  const [calculatorOpen, setCalculatorOpen] = useState(false);
+  const splitCount = useMemo(() => {
+    const trimmed = splitCountInput.trim();
+    if (!trimmed) return 2;
+    const parsed = Number(trimmed);
+    if (Number.isNaN(parsed)) return 2;
+    return Math.min(20, Math.max(2, Math.floor(parsed)));
+  }, [splitCountInput]);
   const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
   const [printReceipt, setPrintReceipt] = useState(settings.autoPrintOnPayment);
@@ -135,9 +171,12 @@ export function CheckoutPanel({
     setPaymentMethod("card");
     setCashGiven("");
     setRoundUpTotal("");
-    setSplitCount(2);
+    setSplitCountInput("2");
     setSplitMode("total");
+    setSplitPhase("checkout");
     setPanelView("main");
+    setAdjustmentMode(null);
+    setKeepChangeAsTip(false);
     setLocalError(null);
     setEqualPaymentsMade(0);
     splitSessionRef.current = { active: false, mode: "total", count: 2 };
@@ -161,8 +200,9 @@ export function CheckoutPanel({
     }
 
     setSplitMode(session.mode);
-    setSplitCount(session.count);
+    setSplitCountInput(String(session.count));
     setPanelView("split");
+    setSplitPhase(session.mode === "items" ? "pick-items" : "checkout");
     if (session.mode === "items") {
       setSelectedLineIds([]);
     } else {
@@ -180,10 +220,23 @@ export function CheckoutPanel({
     [orderSummary, menuById],
   );
 
-  const orderSubtotal = useMemo(
-    () => orderSummary.reduce((sum, item) => sum + item.price * item.quantity, 0),
-    [orderSummary],
-  );
+  const handleSplitModeChange = (mode: "equal" | "items") => {
+    setSplitMode(mode);
+    if (mode === "equal") {
+      setSelectedLineIds(lines.map((line) => line.lineId));
+      setSplitPhase("checkout");
+      return;
+    }
+    setSelectedLineIds([]);
+    setSplitPhase("pick-items");
+  };
+
+  const exitSplitToMain = () => {
+    setPanelView("main");
+    setSplitMode("total");
+    setSplitPhase("checkout");
+    setSelectedLineIds(lines.map((line) => line.lineId));
+  };
 
   useEffect(() => {
     if (splitMode === "items") {
@@ -236,10 +289,18 @@ export function CheckoutPanel({
 
   const totals = useMemo(() => {
     if (usingRoundUp) {
+      const perPersonTotal = roundUpNum!;
+      if (splitMode === "equal" && splitCount > 1) {
+        return {
+          ...baseTotals,
+          grandTotal: perPersonTotal * splitCount,
+          amountDueNow: perPersonTotal,
+        };
+      }
       return {
         ...baseTotals,
-        grandTotal: roundUpNum!,
-        amountDueNow: roundUpNum!,
+        grandTotal: perPersonTotal,
+        amountDueNow: perPersonTotal,
       };
     }
 
@@ -269,23 +330,41 @@ export function CheckoutPanel({
   ]);
 
   const chargeTotal = totals.amountDueNow;
-  const changeDueAmount =
-    usingCashGiven && !usingRoundUp ? Math.max(0, cashGivenNum - chargeTotal) : 0;
   const totalTip = tipAmount;
+  const rawChangeDue =
+    usingCashGiven && !usingRoundUp ? Math.max(0, cashGivenNum - chargeTotal) : 0;
+  const keepAsTipAmount = keepChangeAsTip ? rawChangeDue : 0;
+  const changeDueAmount = keepChangeAsTip ? 0 : rawChangeDue;
+  const totalTipWithKeep = totalTip + keepAsTipAmount;
   const insufficientPayment =
-    (usingCashGiven && cashGivenNum < chargeTotal) ||
-    (usingRoundUp && roundUpNum < billAmount);
+    paymentMethod === "cash" &&
+    ((usingCashGiven && cashGivenNum < chargeTotal) ||
+      (usingRoundUp && roundUpNum < billAmount));
+
+  const splitCheckoutOrders = useMemo(() => {
+    if (splitMode === "items") {
+      return ordersFromLines(totals.payableLines);
+    }
+    return orderSummary;
+  }, [splitMode, totals.payableLines, orderSummary]);
+
+  const splitCheckoutSummaryRows = useMemo(
+    () => buildReceiptLines(splitCheckoutOrders, menuById),
+    [splitCheckoutOrders, menuById],
+  );
 
   useEffect(() => {
     if (!onCfdUpdate || !tableLabel) return;
+    if (splitMode === "items" && selectedLineIds.length === 0) return;
+
     const displayOrders =
       splitMode === "items" ? ordersFromLines(totals.payableLines) : orderSummary;
     onCfdUpdate(
       buildCfdCheckoutPayload(tableLabel, displayOrders, menuItems, {
         subtotal: totals.subtotal,
         discount: totals.discountAmount,
-        tip: totalTip,
-        grandTotal: totals.grandTotal,
+        tip: totalTipWithKeep,
+        grandTotal: totals.grandTotal + keepAsTipAmount,
         amountDueNow: totals.amountDueNow,
         amountGiven:
           paymentMethod === "cash" && usingCashGiven && !insufficientPayment
@@ -295,6 +374,7 @@ export function CheckoutPanel({
           paymentMethod === "cash" && usingCashGiven && !usingRoundUp && !insufficientPayment
             ? changeDueAmount
             : undefined,
+        staffInitiated: splitMode === "items",
       }),
     );
   }, [
@@ -303,12 +383,16 @@ export function CheckoutPanel({
     orderSummary,
     menuItems,
     splitMode,
+    selectedLineIds,
     totals.payableLines,
     totals.subtotal,
     totals.discountAmount,
     totals.grandTotal,
     totals.amountDueNow,
-    totalTip,
+    totalTipWithKeep,
+    keepChangeAsTip,
+    keepAsTipAmount,
+    changeDueAmount,
     paymentMethod,
     usingCashGiven,
     usingRoundUp,
@@ -394,8 +478,9 @@ export function CheckoutPanel({
     !usingRoundUp && tipMode === "custom" && customTip > 0 ? String(customTip) : "";
   const discountValueDisplay = discountValue > 0 ? String(discountValue) : "";
 
-  const handleCheckout = async () => {
+  const handleCheckout = async (method: PaymentMethod = paymentMethod) => {
     setLocalError(null);
+    setPaymentMethod(method);
 
     if (lines.length === 0) {
       setLocalError(translate("nothingToCheckout"));
@@ -407,36 +492,45 @@ export function CheckoutPanel({
       return;
     }
 
-    if (insufficientPayment) {
+    if (method === "cash" && insufficientPayment) {
       setLocalError(translate("insufficientCash"));
       return;
     }
 
-    const paidOrders = ordersFromLines(totals.payableLines);
+    const isEqualSplit = splitMode === "equal" && splitCount > 1;
+    const mergedOrders = mergeCheckoutLines(totals.payableLines);
+    const paidOrders = isEqualSplit
+      ? scaleOrdersForEqualSplit(mergedOrders, splitCount)
+      : mergedOrders;
     const remaining = splitMode === "items" ? remainingLines(lines, selectedLineIds) : undefined;
 
     const payment = {
-      paymentMethod,
+      paymentMethod: method,
       subtotal: totals.subtotal,
       discountType,
       discountValue,
       discountAmount: totals.discountAmount,
-      tip: totalTip,
-      grandTotal: chargeTotal,
+      tip: totalTipWithKeep,
+      grandTotal: chargeTotal + keepAsTipAmount,
       amountDueNow: chargeTotal,
       amountGiven:
-        paymentMethod === "cash" && usingCashGiven
+        method === "cash" && usingCashGiven
           ? cashGivenNum
           : usingRoundUp
             ? roundUpNum
             : undefined,
       changeDue:
-        paymentMethod === "cash" && usingCashGiven && !usingRoundUp
+        method === "cash" && usingCashGiven && !usingRoundUp
           ? changeDueAmount
           : usingRoundUp
             ? 0
             : undefined,
-      tipFromChange: usingRoundUp && roundUpTip > 0 ? roundUpTip : undefined,
+      tipFromChange:
+        usingRoundUp && roundUpTip > 0
+          ? roundUpTip
+          : keepAsTipAmount > 0
+            ? keepAsTipAmount
+            : undefined,
       splitMode,
       splitCount: splitMode === "equal" ? splitCount : 1,
     };
@@ -464,8 +558,9 @@ export function CheckoutPanel({
       const count = mode === "equal" ? payload.payment.splitCount : splitCount;
       splitSessionRef.current = { active: true, mode, count };
       setSplitMode(mode);
-      setSplitCount(count);
+      setSplitCountInput(String(count));
       setPanelView("split");
+      setSplitPhase(mode === "items" ? "pick-items" : "checkout");
       setCashGiven("");
       setRoundUpTotal("");
       if (mode === "equal") {
@@ -477,14 +572,24 @@ export function CheckoutPanel({
     }
   };
 
-  const submitLabel = confirmLabel
-    ? `${confirmLabel} · ${displayPrice(totals.amountDueNow)}`
-    : `${translate("checkout")} · ${displayPrice(totals.amountDueNow)}`;
+  const numericFieldProps = {
+    floatingKeyboard: true,
+    hideKeyboardToggle: true,
+    openOnFocus: true,
+  } as const;
+
+  const toggleCalculator = () => setCalculatorOpen((open) => !open);
+
+  const toggleAdjustmentMode = (mode: "tip" | "discount") => {
+    setAdjustmentMode((current) => (current === mode ? null : mode));
+  };
 
   const splitActive = splitMode !== "total";
-  const inSplitLayout = panelView === "split" || (panelView === "discount" && splitMode !== "total");
+  const inSplitLayout = panelView === "split";
+  const inSplitItemPicker = inSplitLayout && splitMode === "items" && splitPhase === "pick-items";
+  const inSplitCheckout = inSplitLayout && !inSplitItemPicker;
   const discountActive = totals.discountAmount > 0;
-  const tipActive = totalTip > 0;
+  const tipActive = totalTipWithKeep > 0;
 
   const optionButtonClass = (active: boolean) =>
     `min-h-[52px] flex-1 rounded-xl border px-3 py-3 text-base font-semibold transition-colors sm:min-h-[56px] sm:text-lg ${
@@ -496,224 +601,19 @@ export function CheckoutPanel({
   const togglePanel = (panel: CheckoutPanelView) => {
     if (panel === "split") {
       if (panelView === "split") {
-        setPanelView("main");
+        exitSplitToMain();
         return;
       }
       setSplitMode("items");
       setSelectedLineIds([]);
+      setSplitPhase("pick-items");
       setPanelView("split");
       return;
     }
-    setPanelView((prev) => (prev === panel ? "main" : panel));
   };
-
-  const openDiscountFromSplit = () => setPanelView("discount");
-
-  const optionTabClass = (panel: CheckoutPanelView) =>
-    optionButtonClass(panelView === panel || (panel === "split" && splitActive && panelView === "main"));
-
-  const discountPanelContent = (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-3">
-        {(
-          [
-            ["percent", translate("discountPercent")],
-            ["fixed", translate("discountFixed")],
-          ] as const
-        ).map(([type, label]) => (
-          <button
-            key={type}
-            type="button"
-            onClick={() => {
-              setDiscountType(type);
-              setDiscountPreset(null);
-            }}
-            className={`min-h-[52px] flex-1 rounded-xl py-3 text-base font-semibold sm:text-lg ${
-              discountType === type
-                ? "bg-orange-600 text-white"
-                : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      {discountType === "percent" && (
-        <PercentPresetButtons
-          selected={discountPreset}
-          onSelect={handleDiscountPreset}
-          activeClassName="bg-orange-600 text-white"
-          inactiveClassName="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
-        />
-      )}
-      <NumericInputField
-        value={discountValueDisplay}
-        onChange={(raw) => {
-          if (discountType === "percent") {
-            handleDiscountValueChange(raw);
-            return;
-          }
-          setDiscountPreset(null);
-          setDiscountValue(Math.max(0, Number(raw) || 0));
-        }}
-        allowDecimal={discountType !== "percent"}
-        placeholder={discountType === "percent" ? "0 %" : "0 Kč"}
-        keyboardPortalTargetId={keyboardPortalTargetId}
-      />
-    </div>
-  );
-
-  const tipPanelContent = (
-    <div className="space-y-4">
-      <PercentPresetButtons
-        selected={!usingRoundUp && tipMode === "preset" ? tipPreset : null}
-        onSelect={handleTipPreset}
-      />
-      <label className="block">
-        <span className="text-base font-medium text-gray-600 dark:text-gray-300">{translate("customTip")}</span>
-        <NumericInputField
-          value={customTipDisplay}
-          onChange={handleCustomTipChange}
-          allowDecimal={false}
-          placeholder="0 Kč"
-          className="mt-2"
-          keyboardPortalTargetId={keyboardPortalTargetId}
-        />
-      </label>
-      {usingRoundUp && (
-        <p className="text-base text-emerald-700 dark:text-emerald-400">
-          {translate("autoTipFromPayment")}: {displayPrice(roundUpTip)}
-        </p>
-      )}
-    </div>
-  );
-
-  const paymentDetailsContent = (options: { showTip?: boolean; compact?: boolean } = {}) => {
-    const { showTip = false, compact = false } = options;
-    return (
-      <div className="space-y-4">
-        {!compact && (
-          <div className="rounded-2xl border-2 border-blue-200 bg-blue-50/70 px-6 py-5 dark:border-blue-900 dark:bg-blue-950/30">
-            <p className="text-sm font-bold uppercase tracking-wide text-blue-800 dark:text-blue-200">
-              {translate("amountDueNow")}
-            </p>
-            <p className="mt-2 text-4xl font-bold tabular-nums text-blue-950 sm:text-5xl dark:text-blue-50">
-              {displayPrice(billAmount)}
-            </p>
-          </div>
-        )}
-
-        {showTip && (
-          <div className="rounded-2xl border border-gray-200 bg-white px-5 py-4 dark:border-gray-700 dark:bg-gray-900/50">
-            <p className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {translate("tip")}
-            </p>
-            {tipPanelContent}
-          </div>
-        )}
-
-        {paymentMethod === "cash" && (
-          <label className="block">
-            <span className="text-base font-semibold text-gray-600 dark:text-gray-300">
-              {translate("amountGiven")}
-            </span>
-            <p className="mt-1 text-sm text-gray-400 dark:text-gray-500">
-              {translate("cashReceivedHint")}
-            </p>
-            <NumericInputField
-              id="checkout-cash-given"
-              value={cashGiven}
-              onChange={handleCashGivenChange}
-              allowDecimal={false}
-              placeholder={displayPrice(chargeTotal)}
-              className={`mt-1 ${insufficientPayment && usingCashGiven ? "[&_input]:border-red-400 dark:[&_input]:border-red-600" : ""}`}
-              keyboardPortalTargetId={keyboardPortalTargetId}
-            />
-          </label>
-        )}
-
-        <label className="block">
-          <span className="text-base font-semibold text-gray-600 dark:text-gray-300">
-            {translate("roundUpTotal")}
-          </span>
-          <p className="mt-1 text-sm text-gray-400 dark:text-gray-500">
-            {translate("roundUpTotalHint")}
-          </p>
-          <NumericInputField
-            id="checkout-round-up"
-            value={roundUpTotal}
-            onChange={handleRoundUpChange}
-            allowDecimal={false}
-            placeholder={displayPrice(billAmount)}
-            className={`mt-1 ${insufficientPayment && usingRoundUp ? "[&_input]:border-red-400 dark:[&_input]:border-red-600" : ""}`}
-            keyboardPortalTargetId={keyboardPortalTargetId}
-          />
-        </label>
-
-        {insufficientPayment && (
-          <p className="text-base font-medium text-red-600 dark:text-red-400">
-            {translate("insufficientCash")}
-          </p>
-        )}
-
-        {usingCashGiven && !usingRoundUp && !insufficientPayment && changeDueAmount > 0 && (
-          <div className="rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 dark:border-amber-800 dark:bg-amber-950/40">
-            <SummaryRow large label={translate("changeDue")} value={displayPrice(changeDueAmount)} />
-          </div>
-        )}
-
-        {usingRoundUp && !insufficientPayment && roundUpTip > 0 && (
-          <div className="rounded-2xl border border-emerald-300 bg-emerald-50 px-5 py-4 dark:border-emerald-800 dark:bg-emerald-950/40">
-            <SummaryRow large label={translate("tipFromChange")} value={displayPrice(roundUpTip)} highlight />
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const splitPaymentSummary = (
-    <div className="space-y-2 rounded-xl border border-gray-200 bg-white px-3 py-3 dark:border-gray-700 dark:bg-gray-900/50 sm:space-y-3 sm:rounded-2xl sm:px-4 sm:py-4">
-      <SummaryRow label={translate("subtotal")} value={displayPrice(totals.subtotal)} />
-      {discountActive ? (
-        <SummaryRow
-          label={translate("discount")}
-          value={`−${displayPrice(totals.discountAmount)}`}
-          highlight
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={openDiscountFromSplit}
-          className="text-xs font-medium text-orange-600 hover:text-orange-700 sm:text-sm dark:text-orange-400"
-        >
-          + {translate("discount")}
-        </button>
-      )}
-      {discountActive && (
-        <button
-          type="button"
-          onClick={openDiscountFromSplit}
-          className="text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400"
-        >
-          {translate("discount")}…
-        </button>
-      )}
-      {tipActive && (
-        <SummaryRow label={translate("tip")} value={displayPrice(totalTip)} highlight />
-      )}
-      <div className="border-t border-dashed border-gray-200 pt-2 sm:pt-3 dark:border-gray-700">
-        <SummaryRow
-          large
-          emphasize
-          label={translate("amountDueNow")}
-          value={displayPrice(totals.amountDueNow)}
-        />
-      </div>
-    </div>
-  );
 
   const splitModePicker = (
-    <div className="flex flex-wrap gap-3">
+    <div className="grid grid-cols-2 gap-2">
       {(
         [
           ["equal", translate("splitEqually")],
@@ -723,8 +623,8 @@ export function CheckoutPanel({
         <button
           key={mode}
           type="button"
-          onClick={() => setSplitMode(mode)}
-          className={`min-h-[48px] flex-1 rounded-xl px-4 py-2.5 text-base font-semibold sm:min-h-[52px] ${filterButtonClass(splitMode === mode)}`}
+          onClick={() => handleSplitModeChange(mode)}
+          className={`min-h-[48px] rounded-xl px-4 py-2.5 text-base font-semibold sm:min-h-[52px] ${filterButtonClass(splitMode === mode)}`}
         >
           {label}
         </button>
@@ -732,102 +632,79 @@ export function CheckoutPanel({
     </div>
   );
 
-  const splitItemsLeftPanel = (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {splitMode === "items" ? (
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4">
-          <div className="flex min-h-0 flex-col rounded-xl border border-gray-200 dark:border-gray-700">
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 px-3 py-2 sm:px-4 sm:py-3 dark:border-gray-700">
-              <p className="text-xs font-bold uppercase tracking-wide text-gray-500 sm:text-sm dark:text-gray-400">
-                {translate("remainingItems")}
-              </p>
-              {remainingBillLines.length > 0 && (
-                <button
-                  type="button"
-                  onClick={moveAllToBill}
-                  className="shrink-0 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-semibold text-blue-700 hover:border-blue-400 hover:bg-blue-50 dark:border-gray-600 dark:bg-gray-800 dark:text-blue-300 dark:hover:border-blue-600"
-                  title={translate("splitMoveAllToBill")}
-                >
-                  {translate("splitMoveAllToBill")}
-                </button>
-              )}
-            </div>
-            <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-2 sm:space-y-2 sm:p-3">
-              {remainingBillLines.length === 0 ? (
-                <li className="py-8 text-center text-sm text-gray-400 sm:text-base">—</li>
-              ) : (
-                remainingBillLines.map((line) => (
-                  <li key={line.lineId}>
-                    <button
-                      type="button"
-                      onClick={() => moveToBill(line.lineId)}
-                      className="flex w-full items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-left text-sm hover:border-blue-400 sm:gap-3 sm:rounded-xl sm:px-4 sm:py-2.5 sm:text-base dark:border-gray-600 dark:bg-gray-900 dark:hover:border-blue-600"
-                    >
-                      <span className="min-w-0 flex-1 font-medium text-gray-900 dark:text-gray-100">{line.name}</span>
-                      <span className="shrink-0 tabular-nums text-sm font-semibold text-gray-600 sm:text-base">{displayPrice(lineTotal(line))}</span>
-                      <ArrowRight className="h-4 w-4 shrink-0 text-blue-600 sm:h-5 sm:w-5" />
-                    </button>
-                  </li>
-                ))
-              )}
-            </ul>
-          </div>
-
-          <div className="flex min-h-0 flex-col rounded-xl border-2 border-blue-300 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20">
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-blue-200 px-3 py-2 sm:px-4 sm:py-3 dark:border-blue-900">
-              <p className="text-xs font-bold uppercase tracking-wide text-blue-800 sm:text-sm dark:text-blue-200">
-                {translate("currentBill")}
-              </p>
-              {currentBillLines.length > 0 && (
-                <button
-                  type="button"
-                  onClick={moveAllToRemaining}
-                  className="shrink-0 rounded-md border border-blue-300 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:border-gray-400 hover:bg-gray-50 dark:border-blue-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-gray-600"
-                  title={translate("splitMoveAllToRemaining")}
-                >
-                  {translate("splitMoveAllToRemaining")}
-                </button>
-              )}
-            </div>
-            <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-2 sm:space-y-2 sm:p-3">
-              {currentBillLines.length === 0 ? (
-                <li className="py-8 text-center text-sm text-gray-500 sm:text-base">{translate("selectItemsToPay")}</li>
-              ) : (
-                currentBillLines.map((line) => (
-                  <li key={line.lineId}>
-                    <button
-                      type="button"
-                      onClick={() => moveToRemaining(line.lineId)}
-                      className="flex w-full items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-left text-sm sm:gap-3 sm:rounded-xl sm:px-4 sm:py-2.5 sm:text-base dark:border-blue-900 dark:bg-gray-900"
-                    >
-                      <ArrowLeft className="h-4 w-4 shrink-0 text-gray-400 sm:h-5 sm:w-5" />
-                      <span className="min-w-0 flex-1 font-medium text-gray-900 dark:text-gray-100">{line.name}</span>
-                      <span className="shrink-0 tabular-nums text-sm font-semibold text-gray-600 sm:text-base">{displayPrice(lineTotal(line))}</span>
-                    </button>
-                  </li>
-                ))
-              )}
-            </ul>
-          </div>
-        </div>
-      ) : (
-        <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-gray-200 dark:border-gray-700">
-          <p className="shrink-0 border-b border-gray-200 px-4 py-3 text-sm font-bold uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
-            {translate("itemName")}
+  const splitItemPickerColumns = (
+    <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
+      <div className="flex min-h-0 flex-col rounded-xl border border-gray-200 dark:border-gray-700">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 px-4 py-3 dark:border-gray-700">
+          <p className="text-sm font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            {translate("remainingItems")}
           </p>
-          <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
-            {lines.map((line) => (
-              <li
-                key={line.lineId}
-                className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-gray-600 dark:bg-gray-900"
-              >
-                <span className="min-w-0 flex-1 font-medium text-gray-900 dark:text-gray-100">{line.name}</span>
-                <span className="shrink-0 tabular-nums font-semibold text-gray-600">{displayPrice(lineTotal(line))}</span>
-              </li>
-            ))}
-          </ul>
+          {remainingBillLines.length > 0 && (
+            <button
+              type="button"
+              onClick={moveAllToBill}
+              className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:border-blue-400 hover:bg-blue-50 dark:border-gray-600 dark:bg-gray-800 dark:text-blue-300"
+            >
+              {translate("splitMoveAllToBill")}
+            </button>
+          )}
         </div>
-      )}
+        <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+          {remainingBillLines.length === 0 ? (
+            <li className="py-12 text-center text-sm text-gray-400">—</li>
+          ) : (
+            remainingBillLines.map((line) => (
+              <li key={line.lineId}>
+                <button
+                  type="button"
+                  onClick={() => moveToBill(line.lineId)}
+                  className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left hover:border-blue-400 dark:border-gray-600 dark:bg-gray-900 dark:hover:border-blue-600"
+                >
+                  <span className="min-w-0 flex-1 font-medium text-gray-900 dark:text-gray-100">{line.name}</span>
+                  <span className="shrink-0 tabular-nums font-semibold text-gray-600">{displayPrice(lineTotal(line))}</span>
+                  <ArrowRight className="h-5 w-5 shrink-0 text-blue-600" />
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      </div>
+
+      <div className="flex min-h-0 flex-col rounded-xl border-2 border-blue-300 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-blue-200 px-4 py-3 dark:border-blue-900">
+          <p className="text-sm font-bold uppercase tracking-wide text-blue-800 dark:text-blue-200">
+            {translate("currentBill")}
+          </p>
+          {currentBillLines.length > 0 && (
+            <button
+              type="button"
+              onClick={moveAllToRemaining}
+              className="shrink-0 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:border-gray-400 dark:border-blue-800 dark:bg-gray-900 dark:text-gray-200"
+            >
+              {translate("splitMoveAllToRemaining")}
+            </button>
+          )}
+        </div>
+        <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+          {currentBillLines.length === 0 ? (
+            <li className="py-12 text-center text-sm text-gray-500">{translate("selectItemsToPay")}</li>
+          ) : (
+            currentBillLines.map((line) => (
+              <li key={line.lineId}>
+                <button
+                  type="button"
+                  onClick={() => moveToRemaining(line.lineId)}
+                  className="flex w-full items-center gap-3 rounded-xl border border-blue-200 bg-white px-4 py-3 text-left dark:border-blue-900 dark:bg-gray-900"
+                >
+                  <ArrowLeft className="h-5 w-5 shrink-0 text-gray-400" />
+                  <span className="min-w-0 flex-1 font-medium text-gray-900 dark:text-gray-100">{line.name}</span>
+                  <span className="shrink-0 tabular-nums font-semibold text-gray-600">{displayPrice(lineTotal(line))}</span>
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      </div>
     </div>
   );
 
@@ -835,14 +712,19 @@ export function CheckoutPanel({
     <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm dark:border-gray-700 dark:bg-gray-900/40 sm:text-base">
       <label className="font-medium text-gray-600 dark:text-gray-300">{translate("splitCount")}</label>
       <NumericInputField
-        value={String(splitCount)}
+        value={splitCountInput}
         onChange={(raw) => {
-          const next = Math.min(20, Math.max(2, Number(raw) || 2));
-          setSplitCount(next);
+          const digits = raw.replace(/\D/g, "");
+          if (digits === "") {
+            setSplitCountInput("");
+            return;
+          }
+          const parsed = Number(digits);
+          setSplitCountInput(String(Math.min(20, parsed)));
         }}
         allowDecimal={false}
         inputClassName="w-20 rounded-lg border border-gray-200 px-3 py-2 text-base text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-        keyboardPortalTargetId={keyboardPortalTargetId}
+        {...numericFieldProps}
       />
       <span className="font-semibold text-emerald-700 dark:text-emerald-400">
         {translate("perPerson")}: {displayPrice(baseTotals.amountDueNow)}
@@ -857,31 +739,392 @@ export function CheckoutPanel({
     </div>
   );
 
-  const compactCheckoutFooter = (
-    <div className={`flex gap-3 border-t border-gray-200 pt-3 dark:border-gray-700 ${inSplitLayout ? "flex-col" : "flex-col sm:flex-row sm:items-center"}`}>
-      <label className={`flex cursor-pointer items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-medium text-gray-700 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-200 ${inSplitLayout ? "" : "sm:shrink-0"}`}>
+  const renderOrderSummaryAside = (
+    rows: typeof summaryRows,
+    header: string,
+    totalsBlock: {
+      subtotal: number;
+      discountAmount: number;
+      grandTotal: number;
+    },
+  ) => (
+    <aside className="flex min-h-0 w-full flex-col border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-950/20 lg:w-1/2 lg:border-b-0 lg:border-r">
+      <div className="shrink-0 border-b border-gray-200 px-5 py-4 dark:border-gray-700">
+        <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{header}</p>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6">
+        <div className="grid grid-cols-[minmax(0,1fr)_5.5rem_5.5rem] gap-x-3 border-b border-gray-300 pb-2 text-xs font-bold uppercase tracking-wide text-gray-500 dark:border-gray-600 dark:text-gray-400 sm:grid-cols-[minmax(0,1fr)_6rem_6rem] sm:text-sm">
+          <span>{translate("itemName")}</span>
+          <span className="text-right">{translate("price")}</span>
+          <span className="text-right">{translate("total")}</span>
+        </div>
+        <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+          {rows.map((row, index) => (
+            <li
+              key={`${row.code}-${index}`}
+              className="grid grid-cols-[minmax(0,1fr)_5.5rem_5.5rem] gap-x-3 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_6rem_6rem] sm:text-base"
+            >
+              <span className="min-w-0 font-medium text-gray-900 dark:text-gray-100">
+                {row.name}
+                {row.quantity > 1 ? ` ×${row.quantity}` : ""}
+              </span>
+              <span className="text-right tabular-nums text-gray-600 dark:text-gray-300">
+                {displayCzkOnly(row.unitPrice)}
+              </span>
+              <span className="text-right tabular-nums font-semibold text-gray-900 dark:text-gray-100">
+                {displayCzkOnly(row.lineTotal)}
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-4 space-y-2 border-t border-gray-300 pt-4 dark:border-gray-600">
+          <div className="flex items-start justify-between gap-3">
+            <span className="text-base font-semibold text-gray-700 dark:text-gray-300">
+              {translate("subtotal")}
+            </span>
+            <div className="text-right">
+              <p className="text-base font-bold tabular-nums text-gray-900 dark:text-gray-100">
+                {displayCzkOnly(totalsBlock.subtotal)}
+              </p>
+              {eurSecondary(totalsBlock.subtotal) && (
+                <p className="text-sm tabular-nums text-gray-500 dark:text-gray-400">
+                  {eurSecondary(totalsBlock.subtotal)}
+                </p>
+              )}
+            </div>
+          </div>
+          {discountActive && (
+            <div className="flex items-center justify-between gap-3 text-orange-700 dark:text-orange-400">
+              <span>{translate("discount")}</span>
+              <span className="tabular-nums">−{displayCzkOnly(totalsBlock.discountAmount)}</span>
+            </div>
+          )}
+          {tipActive && (
+            <div className="flex items-center justify-between gap-3 text-emerald-700 dark:text-emerald-400">
+              <span>{translate("tip")}</span>
+              <span className="tabular-nums">{displayCzkOnly(totalTipWithKeep)}</span>
+            </div>
+          )}
+          <div className="flex items-start justify-between gap-3 border-t border-gray-300 pt-3 dark:border-gray-600">
+            <span className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              {translate("grandTotal")}
+            </span>
+            <div className="text-right">
+              <p className="text-lg font-bold tabular-nums text-gray-900 dark:text-gray-100">
+                {displayCzkOnly(totalsBlock.grandTotal + keepAsTipAmount)}
+              </p>
+              {eurSecondary(totalsBlock.grandTotal + keepAsTipAmount) && (
+                <p className="text-sm tabular-nums text-gray-500 dark:text-gray-400">
+                  {eurSecondary(totalsBlock.grandTotal + keepAsTipAmount)}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+
+  const mainPaymentPanel = (
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" onClick={() => togglePanel("split")} className={optionButtonClass(splitActive)}>
+          ✂️ {translate("splitBill")}
+        </button>
+        <button type="button" onClick={toggleCalculator} className={optionButtonClass(calculatorOpen)}>
+          <span className="inline-flex items-center justify-center gap-2">
+            <Calculator className="h-5 w-5" />
+            {translate("calculator")}
+          </span>
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => toggleAdjustmentMode("tip")}
+          className={optionButtonClass(adjustmentMode === "tip")}
+        >
+          💡 {translate("tip")}
+        </button>
+        <button
+          type="button"
+          onClick={() => toggleAdjustmentMode("discount")}
+          className={optionButtonClass(adjustmentMode === "discount")}
+        >
+          🏷️ {translate("discount")}
+        </button>
+      </div>
+
+      {adjustmentMode === "discount" && (
+        <div className="grid grid-cols-2 gap-2">
+          {(
+            [
+              ["percent", translate("discountPercent")],
+              ["fixed", translate("discountFixed")],
+            ] as const
+          ).map(([type, label]) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => {
+                setDiscountType(type);
+                setDiscountPreset(null);
+              }}
+              className={`min-h-[44px] rounded-xl text-sm font-semibold sm:min-h-[48px] sm:text-base ${
+                discountType === type
+                  ? "bg-orange-600 text-white"
+                  : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {(adjustmentMode === "tip" ||
+        (adjustmentMode === "discount" && discountType === "percent")) && (
+        <PercentPresetButtons
+          presets={CHECKOUT_PERCENT_PRESETS}
+          selected={
+            adjustmentMode === "tip"
+              ? !usingRoundUp && tipMode === "preset"
+                ? tipPreset
+                : null
+              : discountPreset
+          }
+          onSelect={adjustmentMode === "tip" ? handleTipPreset : handleDiscountPreset}
+          activeClassName={
+            adjustmentMode === "discount" ? "bg-orange-600 text-white" : "bg-blue-600 text-white"
+          }
+        />
+      )}
+
+      {inSplitCheckout && equalSplitControls}
+
+      {adjustmentMode && (
+        <label className="block">
+          <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">
+            {translate("customAmount")}
+          </span>
+          <NumericInputField
+            ref={customAmountRef}
+            value={adjustmentMode === "tip" ? customTipDisplay : discountValueDisplay}
+            onChange={(raw) => {
+              if (adjustmentMode === "tip") {
+                handleCustomTipChange(raw);
+                return;
+              }
+              if (discountType === "percent") {
+                handleDiscountValueChange(raw);
+                return;
+              }
+              setDiscountPreset(null);
+              setDiscountValue(Math.max(0, Number(raw) || 0));
+            }}
+            allowDecimal={adjustmentMode === "tip" ? false : discountType !== "percent"}
+            placeholder={
+              adjustmentMode === "tip" ? "0 Kč" : discountType === "percent" ? "0 %" : "0 Kč"
+            }
+            className="mt-1.5"
+            inputClassName="pos-input min-h-[52px] text-lg font-semibold tabular-nums"
+            {...numericFieldProps}
+          />
+        </label>
+      )}
+
+      <label className="block">
+        <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">
+          {translate("amountGiven")}
+        </span>
+        <NumericInputField
+          ref={cashGivenRef}
+          id="checkout-cash-given-main"
+          value={cashGiven}
+          onChange={handleCashGivenChange}
+          allowDecimal={false}
+          placeholder={displayPrice(chargeTotal)}
+          className={`mt-1.5 ${insufficientPayment && usingCashGiven ? "[&_input]:border-red-400 dark:[&_input]:border-red-600" : ""}`}
+          inputClassName="pos-input min-h-[52px] text-lg font-semibold tabular-nums"
+          {...numericFieldProps}
+        />
+      </label>
+
+      <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+        <input
+          type="checkbox"
+          checked={keepChangeAsTip}
+          onChange={(event) => setKeepChangeAsTip(event.target.checked)}
+          className="h-4 w-4 rounded border-gray-300"
+        />
+        {translate("keepAsTip")}
+      </label>
+
+      {usingCashGiven && !insufficientPayment && rawChangeDue > 0 && !keepChangeAsTip && (
+        <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+          → {translate("changeDue")}: {displayPrice(rawChangeDue)}
+        </p>
+      )}
+
+      {keepChangeAsTip && keepAsTipAmount > 0 && (
+        <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+          + {translate("tip")}: {displayPrice(keepAsTipAmount)}
+        </p>
+      )}
+
+      {insufficientPayment && usingCashGiven && (
+        <p className="text-sm font-medium text-red-600 dark:text-red-400">
+          {translate("insufficientCash")}
+        </p>
+      )}
+
+      <div className="rounded-xl border border-blue-200 bg-blue-50/80 px-4 py-3 dark:border-blue-900 dark:bg-blue-950/30">
+        <SummaryRow
+          large
+          emphasize
+          label={translate("amountDueNow")}
+          value={displayPrice(chargeTotal)}
+          highlight
+        />
+      </div>
+    </div>
+  );
+
+  const splitItemsSelected = splitMode !== "items" || selectedLineIds.length > 0;
+
+  const mainPaymentFooter = (
+    <div className="shrink-0 space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700">
+      <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
         <Printer className="h-4 w-4 shrink-0 text-gray-500" />
-        <span className={inSplitLayout ? "text-xs sm:text-sm" : ""}>{translate("checkoutPrintReceipt")}</span>
+        {translate("checkoutPrintReceipt")}
         <input
           type="checkbox"
           checked={printReceipt}
           onChange={(event) => setPrintReceipt(event.target.checked)}
-          className="h-4 w-4 rounded border-gray-300"
+          className="ml-auto h-4 w-4 rounded border-gray-300"
         />
       </label>
-      <button
-        type="button"
-        disabled={isSaving || lines.length === 0 || insufficientPayment}
-        onClick={() => void handleCheckout()}
-        className={`flex items-center justify-center gap-2 rounded-xl bg-emerald-600 font-bold text-white shadow-sm disabled:opacity-40 ${
-          inSplitLayout
-            ? "min-h-[52px] w-full px-3 py-3 text-sm sm:text-base"
-            : "min-h-[56px] w-full flex-1 gap-3 py-4 text-lg sm:min-h-[64px] sm:py-5 sm:text-xl"
-        }`}
-      >
-        <Printer className={`shrink-0 ${inSplitLayout ? "h-5 w-5" : "h-6 w-6"}`} />
-        <span className="truncate text-center leading-snug">{isSaving ? "..." : submitLabel}</span>
-      </button>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <button
+          type="button"
+          disabled={isSaving || lines.length === 0 || !splitItemsSelected}
+          onClick={() => void handleCheckout("card")}
+          className="min-h-[56px] rounded-xl bg-blue-600 px-3 py-3 text-base font-bold text-white shadow-sm disabled:opacity-40 sm:min-h-[60px] sm:text-lg"
+        >
+          {isSaving ? "..." : `${translate("payByCard")} — ${displayPrice(chargeTotal)}`}
+        </button>
+        <button
+          type="button"
+          disabled={
+            isSaving ||
+            lines.length === 0 ||
+            !splitItemsSelected ||
+            (usingCashGiven && insufficientPayment)
+          }
+          onClick={() => void handleCheckout("cash")}
+          className="min-h-[56px] rounded-xl bg-emerald-600 px-3 py-3 text-base font-bold text-white shadow-sm disabled:opacity-40 sm:min-h-[60px] sm:text-lg"
+        >
+          {isSaving ? "..." : `${translate("payInCash")} — ${displayPrice(chargeTotal)}`}
+        </button>
+      </div>
+    </div>
+  );
+
+  const splitItemPickerScreen = (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0 space-y-3 border-b border-gray-200 px-5 py-4 dark:border-gray-700">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={exitSplitToMain}
+            className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200"
+          >
+            <ArrowLeft className="h-4 w-4 shrink-0" />
+            {translate("payment")}
+          </button>
+          <h3 className="min-w-0 flex-1 text-lg font-bold text-gray-900 sm:text-xl dark:text-gray-100">
+            ✂️ {translate("splitBill")}
+          </h3>
+        </div>
+        {tableLabel && (
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+            {translate("table")} {tableLabel}
+          </p>
+        )}
+        {splitModePicker}
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-4 sm:px-6">
+        {splitItemPickerColumns}
+      </div>
+      <div className="shrink-0 border-t border-gray-200 px-5 py-4 dark:border-gray-700 sm:px-6">
+        <button
+          type="button"
+          disabled={currentBillLines.length === 0}
+          onClick={() => {
+            setLocalError(null);
+            if (currentBillLines.length === 0) {
+              setLocalError(translate("selectItemsToPay"));
+              return;
+            }
+            setSplitPhase("checkout");
+          }}
+          className="min-h-[56px] w-full rounded-xl bg-blue-600 px-4 py-3 text-base font-bold text-white shadow-sm disabled:opacity-40 sm:min-h-[60px] sm:text-lg"
+        >
+          {translate("proceedToCheckout")}
+          {currentBillLines.length > 0
+            ? ` · ${displayPrice(totals.amountDueNow)}`
+            : ""}
+        </button>
+      </div>
+    </div>
+  );
+
+  const paymentCheckoutLayout = (
+    rows: typeof summaryRows,
+    header: string,
+    onBack?: () => void,
+    backLabel?: string,
+  ) => (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {onBack && (
+        <div className="shrink-0 border-b border-gray-200 px-5 py-3 dark:border-gray-700 lg:hidden">
+          <button
+            type="button"
+            onClick={onBack}
+            className="flex items-center gap-2 text-sm font-semibold text-gray-600 dark:text-gray-300"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            {backLabel ?? translate("backToOrder")}
+          </button>
+        </div>
+      )}
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        {renderOrderSummaryAside(rows, header, {
+          subtotal: totals.subtotal,
+          discountAmount: totals.discountAmount,
+          grandTotal: totals.grandTotal,
+        })}
+        <div className="flex min-h-0 w-full flex-col lg:w-1/2">
+          {onBack && (
+            <div className="hidden shrink-0 border-b border-gray-200 px-5 py-3 dark:border-gray-700 lg:block">
+              <button
+                type="button"
+                onClick={onBack}
+                className="flex items-center gap-2 text-sm font-semibold text-gray-600 dark:text-gray-300"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                {backLabel ?? translate("backToOrder")}
+              </button>
+            </div>
+          )}
+          <div className="flex min-h-0 flex-1 flex-col px-5 py-4 sm:px-6">
+            {mainPaymentPanel}
+          </div>
+          <div className="px-5 pb-4 sm:px-6">{mainPaymentFooter}</div>
+        </div>
+      </div>
     </div>
   );
 
@@ -893,244 +1136,30 @@ export function CheckoutPanel({
         </p>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        {inSplitLayout ? (
-          <>
-            {/* Split — left 3/4: item picker */}
-            <aside className="flex min-h-0 flex-col border-b border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-900/40 lg:w-3/4 lg:border-b-0 lg:border-r">
-              <div className="shrink-0 space-y-3 border-b border-gray-200 px-4 py-3 sm:px-5 sm:py-4 dark:border-gray-700">
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPanelView("main");
-                      setSplitMode("total");
-                      setSelectedLineIds(lines.map((line) => line.lineId));
-                    }}
-                    className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200"
-                  >
-                    <ArrowLeft className="h-4 w-4 shrink-0" />
-                    {translate("payment")}
-                  </button>
-                  <h3 className="min-w-0 flex-1 text-lg font-bold text-gray-900 sm:text-xl dark:text-gray-100">
-                    ✂️ {translate("splitBill")}
-                  </h3>
-                </div>
-                {tableLabel && (
-                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    {translate("table")} {tableLabel}
-                  </p>
-                )}
-                {splitModePicker}
-              </div>
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-3 sm:px-5 sm:py-4">{splitItemsLeftPanel}</div>
-            </aside>
-
-            {/* Split — right 1/4: summary + payment */}
-            <div className="flex min-h-0 min-w-0 flex-col lg:w-1/4">
-              <div className="shrink-0 border-b border-gray-200 px-3 py-3 sm:px-4 dark:border-gray-700">
-                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500 sm:text-sm dark:text-gray-400">
-                  {translate("paymentMethod")}
-                </p>
-                <div className="flex flex-col gap-2">
-                  {(["cash", "card"] as const).map((method) => (
-                    <button
-                      key={method}
-                      type="button"
-                      onClick={() => setPaymentMethod(method)}
-                      className={`min-h-[44px] w-full text-sm font-semibold capitalize sm:min-h-[48px] sm:text-base ${paymentFilterClass(paymentMethod === method, method)}`}
-                    >
-                      {translate(method)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-3 sm:px-4">
-                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
-                  {panelView === "discount" ? (
-                    <>
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setPanelView("split")}
-                          className="flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400"
-                        >
-                          <ArrowLeft className="h-4 w-4" />
-                          {translate("splitBill")}
-                        </button>
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                          {translate("discount")}
-                        </h3>
-                      </div>
-                      {discountPanelContent}
-                    </>
-                  ) : (
-                    <>
-                      {splitPaymentSummary}
-                      {equalSplitControls}
-                      <div className="rounded-xl border border-gray-200 bg-white px-3 py-3 dark:border-gray-700 dark:bg-gray-900/50 sm:rounded-2xl sm:px-4 sm:py-4">
-                        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500 sm:mb-3 sm:text-sm dark:text-gray-400">
-                          {translate("tip")}
-                        </p>
-                        {tipPanelContent}
-                      </div>
-                      {paymentDetailsContent({ showTip: false, compact: true })}
-                    </>
-                  )}
-                </div>
-                {panelView !== "discount" && compactCheckoutFooter}
-              </div>
-            </div>
-          </>
+      <div className="flex min-h-0 flex-1 flex-col">
+        {inSplitItemPicker ? (
+          splitItemPickerScreen
+        ) : inSplitCheckout ? (
+          paymentCheckoutLayout(
+            splitCheckoutSummaryRows,
+            `${translate("payment")}${tableLabel ? ` — ${translate("table")} ${tableLabel}` : ""}${
+              splitMode === "equal" ? ` · ${translate("splitEqually")}` : ` · ${translate("payByItem")}`
+            }`,
+            splitMode === "items"
+              ? () => setSplitPhase("pick-items")
+              : exitSplitToMain,
+            splitMode === "items" ? translate("payByItem") : translate("payment"),
+          )
         ) : (
-          <>
-            {/* Left — receipt-style bill preview */}
-            <aside className="flex min-h-0 flex-col border-b border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-900/40 lg:w-1/2 lg:border-b-0 lg:border-r xl:w-[48%]">
-              <div className="shrink-0 border-b border-dashed border-gray-300 px-6 py-4 dark:border-gray-600">
-                <p className="text-center text-sm font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">
-                  {translate("paymentSummary")}
-                </p>
-                {tableLabel && (
-                  <p className="mt-2 text-center text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">
-                    {translate("table")} {tableLabel}
-                  </p>
-                )}
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 sm:px-8">
-                <div className="mx-auto max-w-2xl font-mono text-base leading-relaxed text-gray-900 sm:text-lg dark:text-gray-100">
-                  <div className="mb-3 flex justify-between border-b border-dashed border-gray-400 pb-2 text-sm font-bold uppercase text-gray-500 dark:border-gray-500 dark:text-gray-400">
-                    <span>{translate("itemName")}</span>
-                    <span>{translate("price")}</span>
-                  </div>
-                  <ul className="space-y-3">
-                    {summaryRows.map((row, index) => (
-                      <li key={`${row.code}-${index}`} className="border-b border-dotted border-gray-200 pb-3 dark:border-gray-700">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="min-w-0 flex-1">
-                            <span className="text-sm text-gray-500 dark:text-gray-400">{row.code}</span>
-                            <p className="text-lg font-semibold sm:text-xl">{row.name}</p>
-                            {row.quantity > 1 && (
-                              <p className="text-sm text-gray-500">× {row.quantity}</p>
-                            )}
-                          </div>
-                          <span className="shrink-0 text-lg font-bold tabular-nums sm:text-xl">{displayPrice(row.lineTotal)}</span>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="my-4 border-b-2 border-dashed border-gray-800 dark:border-gray-300" />
-                  <div className="flex justify-between text-lg font-bold sm:text-xl">
-                    <span>{translate("subtotal")}</span>
-                    <span className="tabular-nums">{displayPrice(orderSubtotal)}</span>
-                  </div>
-                  {discountActive && (
-                    <div className="mt-2 flex justify-between text-base text-orange-700 sm:text-lg dark:text-orange-400">
-                      <span>{translate("discount")}</span>
-                      <span className="tabular-nums">−{displayPrice(totals.discountAmount)}</span>
-                    </div>
-                  )}
-                  {tipActive && (
-                    <div className="mt-2 flex justify-between text-base text-emerald-700 sm:text-lg dark:text-emerald-400">
-                      <span>{translate("tip")}</span>
-                      <span className="tabular-nums">{displayPrice(totalTip)}</span>
-                    </div>
-                  )}
-                  <div className="mt-3 flex justify-between border-t-2 border-gray-800 pt-3 text-xl font-bold sm:text-2xl dark:border-gray-300">
-                    <span>{translate("grandTotal")}</span>
-                    <span className="tabular-nums">{displayPrice(totals.grandTotal)}</span>
-                  </div>
-                  {(splitMode === "equal" && splitCount > 1) ||
-                  (splitMode !== "equal" && totals.amountDueNow !== totals.grandTotal) ? (
-                    <div className="mt-2 flex justify-between text-lg font-bold text-blue-800 sm:text-xl dark:text-blue-300">
-                      <span>{translate("amountDueNow")}</span>
-                      <span className="tabular-nums">{displayPrice(totals.amountDueNow)}</span>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </aside>
-
-            {/* Right — panel area */}
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:w-1/2 xl:w-[52%]">
-              <div className="shrink-0 space-y-4 border-b border-gray-200 bg-inherit px-5 py-4 sm:px-8 dark:border-gray-700">
-                <div className="flex gap-3">
-                  <button type="button" onClick={() => togglePanel("split")} className={optionTabClass("split")}>
-                    ✂️ {translate("splitBill")}
-                  </button>
-                  <button type="button" onClick={() => togglePanel("discount")} className={optionTabClass("discount")}>
-                    🏷️ {translate("discount")}
-                  </button>
-                  <button type="button" onClick={() => togglePanel("tip")} className={optionTabClass("tip")}>
-                    💡 {translate("tip")}
-                  </button>
-                </div>
-                <div>
-                  <p className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                    {translate("paymentMethod")}
-                  </p>
-                  <div className="flex gap-3">
-                    {(["cash", "card"] as const).map((method) => (
-                      <button
-                        key={method}
-                        type="button"
-                        onClick={() => setPaymentMethod(method)}
-                        className={`min-h-[56px] flex-1 text-lg font-semibold capitalize sm:min-h-[64px] sm:text-xl ${paymentFilterClass(paymentMethod === method, method)}`}
-                      >
-                        {translate(method)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-4 sm:px-8 sm:py-5">
-                {panelView === "discount" && (
-                  <div className="mb-3 shrink-0 flex items-center gap-3">
-                    {splitActive && (
-                      <button
-                        type="button"
-                        onClick={() => setPanelView("split")}
-                        className="flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400"
-                      >
-                        <ArrowLeft className="h-4 w-4" />
-                        {translate("splitBill")}
-                      </button>
-                    )}
-                    <h3 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">
-                      {translate("discount")}
-                    </h3>
-                  </div>
-                )}
-                {panelView === "tip" && (
-                  <div className="mb-3 shrink-0">
-                    <h3 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">
-                      {translate("tip")}
-                    </h3>
-                  </div>
-                )}
-
-                <div className="min-h-0 flex-1 overflow-y-auto">
-                  {panelView === "discount" && discountPanelContent}
-                  {panelView === "tip" && tipPanelContent}
-                  {panelView === "main" && paymentDetailsContent()}
-                </div>
-              </div>
-            </div>
-          </>
+          paymentCheckoutLayout(
+            summaryRows,
+            tableLabel
+              ? `${translate("payment")} — ${translate("table")} ${tableLabel}`
+              : translate("payment"),
+          )
         )}
       </div>
-
-      <div
-        id={keyboardPortalTargetId}
-        className="empty:hidden shrink-0 border-t border-gray-200 bg-gray-50 px-4 py-2 dark:border-gray-700 dark:bg-gray-900/80"
-      />
-
-      {!inSplitLayout && (
-        <footer className="shrink-0 border-t border-gray-200 bg-inherit px-5 py-4 sm:px-6 dark:border-gray-700">
-          {compactCheckoutFooter}
-        </footer>
-      )}
+      <FloatingCalculator open={calculatorOpen} onClose={() => setCalculatorOpen(false)} />
     </div>
   );
 }

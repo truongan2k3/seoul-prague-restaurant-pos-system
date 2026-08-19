@@ -11,6 +11,7 @@ import { SettingsProvider, useSettings } from "@/contexts/settings-context";
 import { AdminDeletionPasswordModal } from "@/components/admin-deletion-password-modal";
 import { FullscreenToggle } from "@/components/fullscreen-toggle";
 import { ManagerPinModal } from "@/components/manager-pin-modal";
+import { StaffSwitchModal } from "@/components/staff-switch-modal";
 import { MobileRefreshGuard } from "@/components/mobile-refresh-guard";
 import { UnsavedWorkProvider } from "@/contexts/unsaved-work-context";
 
@@ -23,6 +24,7 @@ function PinGateWrapper({ children }: { children: React.ReactNode }) {
     >
       {children}
       <ManagerPinModal />
+      <StaffSwitchModal />
     </PinGateProvider>
   );
 }

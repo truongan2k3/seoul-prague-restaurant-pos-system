@@ -1,4 +1,8 @@
-import type { CheckoutPaymentRecord } from "@/lib/checkout-calculations";
+import {
+  buildEqualSplitShareAmounts,
+  equalSplitShareRatio,
+  type CheckoutPaymentRecord,
+} from "@/lib/checkout-calculations";
 import {
   autoServeActor,
   isReadyForAutoServe,
@@ -653,10 +657,23 @@ export async function checkoutTable(
     closeTable?: boolean;
   },
 ) {
-  const ratio =
+  const ratio = equalSplitShareRatio(payment.splitMode, payment.splitCount);
+
+  const shareAmounts =
     payment.splitMode === "equal" && payment.splitCount > 1
-      ? 1 / payment.splitCount
-      : 1;
+      ? buildEqualSplitShareAmounts({
+          subtotal: payment.subtotal,
+          discountAmount: payment.discountAmount,
+          tip: payment.tip,
+          amountDueNow: payment.amountDueNow,
+          splitCount: payment.splitCount,
+        })
+      : {
+          subtotal: Number((payment.subtotal * ratio).toFixed(2)),
+          discountAmount: Number((payment.discountAmount * ratio).toFixed(2)),
+          tip: Number((payment.tip * ratio).toFixed(2)),
+          amountDueNow: Number(payment.amountDueNow.toFixed(2)),
+        };
 
   const paidItemIds = orders.map((item) => item.id).filter((id): id is string => Boolean(id));
 
@@ -723,12 +740,12 @@ export async function checkoutTable(
     table_label: tableLabel,
     staff_id: staffId ?? null,
     staff_name: staffName,
-    subtotal: Number((payment.subtotal * ratio).toFixed(2)),
-    discount_amount: Number((payment.discountAmount * ratio).toFixed(2)),
+    subtotal: shareAmounts.subtotal,
+    discount_amount: shareAmounts.discountAmount,
     discount_type: payment.discountValue > 0 ? payment.discountType : null,
     discount_value: payment.discountValue,
-    tip: Number((payment.tip * ratio).toFixed(2)),
-    grand_total: Number(payment.amountDueNow.toFixed(2)),
+    tip: shareAmounts.tip,
+    grand_total: shareAmounts.amountDueNow,
     payment_method: payment.paymentMethod,
     amount_given: payment.amountGiven ?? null,
     change_due: payment.changeDue ?? null,

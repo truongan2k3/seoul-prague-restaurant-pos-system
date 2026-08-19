@@ -10,6 +10,7 @@ import { Modal } from "@/components/modal";
 import { OnScreenKeyboard } from "@/components/on-screen-keyboard";
 import { OrderLineToolbar } from "@/components/order-line-toolbar";
 import { TableActivityLogPanel } from "@/components/table-activity-log-panel";
+import { ElapsedTimer } from "@/components/live-clock";
 import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
@@ -17,6 +18,10 @@ import { useSettings } from "@/contexts/settings-context";
 import { useRegisterUnsavedWork } from "@/contexts/unsaved-work-context";
 import { shouldPrintKitchenOnSend } from "@/lib/kitchen-fulfillment-mode";
 import { orderLineKitchenPanelClass, resolveKitchenStatus } from "@/lib/auto-serve";
+import {
+  itemKitchenTimerStart,
+  resolveTableOccupiedSince,
+} from "@/lib/order-item-timers";
 import { categoriesForOrdering } from "@/lib/category-utils";
 import { sortMenuItemsForDisplay } from "@/lib/menu-sort";
 import { formatPosPrice, priceDisplayOptionsFromSettings } from "@/lib/price-display";
@@ -133,7 +138,7 @@ interface NewOrderModalProps {
   onAppendCartNoPrint?: (orders: OrderItem[]) => void | Promise<void>;
   onCheckout?: (orders: OrderItem[]) => void | Promise<void>;
   onCloseTable?: () => void | Promise<void>;
-  onManage?: () => void;
+  onChangeTable?: () => void;
   onSaveExistingOrders?: (
     orders: OrderItem[],
     options?: { silent?: boolean; printOrders?: OrderItem[] },
@@ -327,7 +332,7 @@ export function NewOrderModal({
   onAppendCartNoPrint,
   onCheckout,
   onCloseTable,
-  onManage,
+  onChangeTable,
   onSaveExistingOrders,
   onRefreshExistingOrders,
   isSaving = false,
@@ -866,6 +871,11 @@ export function NewOrderModal({
     mode === "append"
       ? `${translate("addMoreItems")} — ${translate("table")} ${tableLabel}`
       : `${translate("newOrder")} — ${translate("table")} ${tableLabel}`;
+
+  const tableOccupiedSince =
+    mode === "append" && table
+      ? resolveTableOccupiedSince(table, submittedOrdersRaw)
+      : null;
 
   const quickAdd = (item: MenuItem) => {
     if (!item.isAvailable) return;
@@ -1463,10 +1473,10 @@ export function NewOrderModal({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {onManage && mode === "append" && (
+          {onChangeTable && mode === "append" && (
             <button
               type="button"
-              onClick={onManage}
+              onClick={onChangeTable}
               className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-700 dark:border-gray-600 dark:text-gray-200"
             >
               {translate("changeTable")}
@@ -1508,6 +1518,7 @@ export function NewOrderModal({
               const status = normalizeOrderItemStatus(line.status);
               const kitchen = resolveKitchenStatus(line);
               const statusClass = orderLineKitchenPanelClass(line);
+              const prepTimerStart = itemKitchenTimerStart(line);
 
               return (
                 <li
@@ -1537,13 +1548,21 @@ export function NewOrderModal({
                       <p className="text-base font-semibold leading-snug">
                         {line.quantity}× {displayName}
                       </p>
-                      <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide opacity-80">
-                        {translate(
-                          kitchen === "ready"
-                            ? "ready"
-                            : kitchen === "served"
-                              ? "served"
-                              : statusTranslationKey(status),
+                      <p className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide opacity-80">
+                        <span>
+                          {translate(
+                            kitchen === "ready"
+                              ? "ready"
+                              : kitchen === "served"
+                                ? "served"
+                                : statusTranslationKey(status),
+                          )}
+                        </span>
+                        {prepTimerStart && (
+                          <ElapsedTimer
+                            start={prepTimerStart}
+                            className="rounded bg-amber-200/80 px-1.5 py-0.5 font-mono text-[10px] normal-case tracking-normal text-amber-950 dark:bg-amber-900/60 dark:text-amber-100"
+                          />
                         )}
                       </p>
                       {(line.notes || line.notesTranslated) && (
@@ -1804,9 +1823,19 @@ export function NewOrderModal({
               >
                 {modalTitle}
               </h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {translate("orderTapHint")}
-              </p>
+              {tableOccupiedSince ? (
+                <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                  <span>{translate("tableOccupiedSince")}</span>
+                  <ElapsedTimer
+                    start={tableOccupiedSince}
+                    className="rounded-md bg-gray-100 px-2 py-0.5 font-mono text-xs font-semibold tabular-nums text-gray-800 dark:bg-gray-800 dark:text-gray-100"
+                  />
+                </p>
+              ) : (
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {translate("orderTapHint")}
+                </p>
+              )}
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <button

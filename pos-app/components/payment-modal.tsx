@@ -39,6 +39,7 @@ export function PaymentModal({
 
   const lines = useMemo(() => expandCheckoutLines(orders), [orders]);
   const [checkoutSessionKey, setCheckoutSessionKey] = useState(0);
+  const wasOpenRef = useRef(false);
 
   useEffect(() => {
     if (open) setCheckoutSessionKey((key) => key + 1);
@@ -63,7 +64,14 @@ export function PaymentModal({
   }, []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      wasOpenRef.current = false;
+      return;
+    }
+    const justOpened = !wasOpenRef.current;
+    wasOpenRef.current = true;
+    if (!justOpened) return;
+
     const subtotal = orders.reduce((sum, item) => sum + item.price * item.quantity, 0);
     void sendCfdEvent(
       "START_CHECKOUT",

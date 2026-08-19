@@ -12,6 +12,7 @@ import {
 
 const PULL_THRESHOLD_PX = 72;
 const MAX_PULL_PX = 120;
+const SCROLL_TOP_TOLERANCE_PX = 2;
 
 function isMobileTouchDevice(): boolean {
   if (typeof window === "undefined") return false;
@@ -20,6 +21,42 @@ function isMobileTouchDevice(): boolean {
 
 function pageScrollTop(): number {
   return window.scrollY || document.documentElement.scrollTop || 0;
+}
+
+function isScrollableElement(el: HTMLElement): boolean {
+  const style = window.getComputedStyle(el);
+  const overflowY = style.overflowY;
+  if (overflowY !== "auto" && overflowY !== "scroll" && overflowY !== "overlay") {
+    return false;
+  }
+  return el.scrollHeight > el.clientHeight + SCROLL_TOP_TOLERANCE_PX;
+}
+
+/** Nearest ancestor that scrolls vertically (modal lists, panels, etc.). */
+function findScrollableAncestor(node: EventTarget | null): HTMLElement | null {
+  if (!(node instanceof Element)) return null;
+
+  let el: Element | null = node;
+  while (el && el !== document.documentElement) {
+    if (el instanceof HTMLElement && isScrollableElement(el)) {
+      return el;
+    }
+    el = el.parentElement;
+  }
+  return null;
+}
+
+/** Pull-to-refresh only when every scroll container in the chain is at the top. */
+function canStartPullToRefresh(scrollable: HTMLElement | null): boolean {
+  if (pageScrollTop() > SCROLL_TOP_TOLERANCE_PX) return false;
+
+  let el: HTMLElement | null = scrollable;
+  while (el) {
+    if (el.scrollTop > SCROLL_TOP_TOLERANCE_PX) return false;
+    el = findScrollableAncestor(el.parentElement);
+  }
+
+  return true;
 }
 
 export function MobileRefreshGuard() {
@@ -37,6 +74,7 @@ export function MobileRefreshGuard() {
   const trackingPull = useRef(false);
   const pullActive = useRef(false);
   const pullPxRef = useRef(0);
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     hasUnsavedRef.current = hasUnsavedWork;
@@ -78,10 +116,17 @@ export function MobileRefreshGuard() {
     if (!isMobileTouchDevice()) return;
 
     const onTouchStart = (event: TouchEvent) => {
-      if (event.touches.length !== 1 || pageScrollTop() > 2) {
+      if (event.touches.length !== 1) {
         trackingPull.current = false;
         return;
       }
+
+      scrollContainerRef.current = findScrollableAncestor(event.target);
+      if (!canStartPullToRefresh(scrollContainerRef.current)) {
+        trackingPull.current = false;
+        return;
+      }
+
       trackingPull.current = true;
       touchStartY.current = event.touches[0]?.clientY ?? 0;
       pullActive.current = false;
@@ -89,8 +134,9 @@ export function MobileRefreshGuard() {
 
     const onTouchMove = (event: TouchEvent) => {
       if (!trackingPull.current || event.touches.length !== 1) return;
-      if (pageScrollTop() > 2) {
+      if (!canStartPullToRefresh(scrollContainerRef.current)) {
         trackingPull.current = false;
+        pullActive.current = false;
         setPullPx(0);
         return;
       }
@@ -112,6 +158,7 @@ export function MobileRefreshGuard() {
     const onTouchEnd = () => {
       if (!trackingPull.current) return;
       trackingPull.current = false;
+      scrollContainerRef.current = null;
       const shouldRefresh = pullActive.current && pullPxRef.current >= PULL_THRESHOLD_PX;
       pullActive.current = false;
       pullPxRef.current = 0;

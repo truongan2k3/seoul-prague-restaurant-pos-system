@@ -18,10 +18,9 @@ import { DEFAULT_RECEIPT_PAPER_WIDTH_MM, receiptRasterWidthDots } from "@/lib/re
 import { DEFAULT_RECEIPT_BRANDING_VISIBILITY } from "@/lib/receipt-branding";
 import {
   bitmapImgHtml,
-  blankPngDataUrl,
   ensureCjkPrintFont,
   RECEIPT_BITMAP_DPR,
-  RECEIPT_BITMAP_H_PAD,
+  RECEIPT_BITMAP_HORIZONTAL_PAD,
   textToPngDataUrl,
   textToPngItemRowDataUrl,
   textToPngSplitRowDataUrl,
@@ -31,7 +30,6 @@ import {
 } from "@/src/lib/printTextBitmap";
 
 /** Raster width set per print job from paper width (1 dot ≈ 1 canvas px). */
-const FOOTER_SPACER_PX = 40;
 const DIVIDER = "--------------------------------";
 
 function resolveTemplate(data: ReceiptData, template?: ReceiptTemplate): ReceiptTemplate {
@@ -123,9 +121,9 @@ export async function buildBitmapReceiptHtml(
     fontWeight: weight,
     fontFamily: fontStack,
     dpr: RECEIPT_BITMAP_DPR,
-    horizontalPad: RECEIPT_BITMAP_H_PAD,
-    paddingY: 4,
-    lineGap: 4,
+    horizontalPad: RECEIPT_BITMAP_HORIZONTAL_PAD,
+    paddingY: 2,
+    lineGap: 2,
   });
 
   const emit = (url: string, alt: string) => {
@@ -241,11 +239,11 @@ export async function buildBitmapReceiptHtml(
     wrap: false,
   });
 
-  pushSplit("Kód Položka", "Částka", typography.metaPx, weights.primary);
+  pushSplit("Položka", "Částka", typography.metaPx, weights.primary);
 
   for (const item of data.items) {
     const amount = `${formatReceiptAmount(item.lineTotal)} ${item.taxGroup}`;
-    pushItem(`${item.code} ${item.name}`.trim(), amount, typography.itemPx, weights.primary);
+    pushItem(item.name.trim(), amount, typography.itemPx, weights.primary);
   }
 
   pushLine(DIVIDER, {
@@ -275,7 +273,7 @@ export async function buildBitmapReceiptHtml(
     pushSplit("Spropitné:", formatReceiptAmount(data.tip), typography.metaPx, weights.secondary);
   }
 
-  pushSplit("CELKEM", formatReceiptAmount(data.grandTotal), typography.celkemPx, weights.primary);
+  pushSplit("CELKEM", formatReceiptAmount(data.grandTotal), typography.itemPx, weights.primary);
 
   if (data.showEur && data.eurRate) {
     pushLine(`≈ ${formatEurFromCzk(data.grandTotal, data.eurRate)}`, {
@@ -311,7 +309,7 @@ export async function buildBitmapReceiptHtml(
       wrap: false,
     });
     pushLine("PLATBA KARTOU / CARD PAYMENT", {
-      size: typography.itemPx,
+      size: typography.metaPx,
       weight: weights.primary,
       align: "center",
       wrap: false,
@@ -361,11 +359,6 @@ export async function buildBitmapReceiptHtml(
       });
     }
   }
-
-  emit(
-    blankPngDataUrl(fullWidthPx, FOOTER_SPACER_PX, RECEIPT_BITMAP_DPR),
-    "footer-spacer",
-  );
 
   const html = `<div class="receipt-bitmap">${blocks.join("")}</div>`;
   return { html, pngs };

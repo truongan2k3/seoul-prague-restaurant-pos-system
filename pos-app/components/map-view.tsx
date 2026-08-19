@@ -8,11 +8,8 @@ import { TableEditModal } from "@/components/table-edit-modal";
 import { useApp } from "@/contexts/app-context";
 import { TABLE_CARD_WIDTH } from "@/lib/table-layout";
 import { tableIdsWithSlaBreach } from "@/lib/order-sla";
-import { segmentButtonClass } from "@/lib/theme-classes";
 import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
 import { updateTablePosition } from "@/src/lib/supabase-data";
-
-type StatusFilter = "opening" | "waiting" | "ready";
 
 interface MapViewProps {
   tables: RestaurantTable[];
@@ -41,7 +38,6 @@ export function MapView({
 }: MapViewProps) {
   const { translate } = useApp();
   const mapRef = useRef<HTMLDivElement>(null);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("opening");
   const [editMode, setEditMode] = useState(false);
   const [editingTable, setEditingTable] = useState<RestaurantTable | null>(null);
   const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
@@ -71,11 +67,6 @@ export function MapView({
     }, 520);
     return bottom;
   }, [tables, positions]);
-
-  const matchesFilter = (status: RestaurantTable["status"]) => {
-    if (statusFilter === "opening") return status === "empty";
-    return status === statusFilter;
-  };
 
   const finishDrag = useCallback(async () => {
     if (!dragState) return;
@@ -137,17 +128,19 @@ export function MapView({
           <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             {translate("map")}
           </h1>
-          <div className="pos-segment">
-            {(["opening", "waiting", "ready"] as const).map((f) => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => setStatusFilter(f)}
-                className={`px-3 py-1.5 text-sm ${segmentButtonClass(statusFilter === f)}`}
-              >
-                {translate(f === "opening" ? "opening" : f)}
-              </button>
-            ))}
+          <div className="hidden items-center gap-3 text-xs text-gray-500 sm:flex dark:text-gray-400">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full border border-gray-400 bg-gray-100 dark:border-gray-600 dark:bg-gray-800" />
+              {translate("available")}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.7)]" />
+              {translate("preparing")}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]" />
+              {translate("ready")}
+            </span>
           </div>
           <button
             type="button"
@@ -197,7 +190,6 @@ export function MapView({
                     table={table}
                     menuItems={menuItems}
                     orderItems={tableOrderItems}
-                    dimmed={!matchesFilter(table.status)}
                     slaAlert={slaAlertTableIds.has(table.id)}
                     compact
                     editMode={editMode}
@@ -235,7 +227,6 @@ export function MapView({
                     table={table}
                     menuItems={menuItems}
                     orderItems={tableOrderItems}
-                    dimmed={!matchesFilter(table.status)}
                     slaAlert={slaAlertTableIds.has(table.id)}
                     editMode
                     onEdit={() => setEditingTable(table)}
@@ -246,7 +237,6 @@ export function MapView({
                     table={table}
                     menuItems={menuItems}
                     orderItems={tableOrderItems}
-                    dimmed={!matchesFilter(table.status)}
                     slaAlert={slaAlertTableIds.has(table.id)}
                     onClick={() => onTableClick(table)}
                   />

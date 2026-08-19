@@ -30,6 +30,8 @@ export interface CfdCheckoutPayload {
   amountGiven?: number;
   /** Change to return when amountGiven exceeds the charge. */
   changeDue?: number;
+  /** Staff picked items on POS — show checkout even during thank-you. */
+  staffInitiated?: boolean;
 }
 
 export interface CfdEventPayload {
@@ -64,6 +66,7 @@ export function buildCfdCheckoutPayload(
     amountDueNow: number;
     amountGiven?: number;
     changeDue?: number;
+    staffInitiated?: boolean;
   },
 ): CfdCheckoutPayload {
   const menuById = new Map(menuItems.map((item) => [item.id, item]));
@@ -101,6 +104,7 @@ export function buildCfdCheckoutPayload(
     amountDueNow: totals.amountDueNow,
     amountGiven: totals.amountGiven,
     changeDue: totals.changeDue,
+    staffInitiated: totals.staffInitiated,
   };
 }
 

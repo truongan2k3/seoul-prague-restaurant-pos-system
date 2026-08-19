@@ -20,6 +20,8 @@ import { deleteSaleRecords, updateSaleRecord } from "@/src/lib/sales-actions";
 type EditScope = "payment" | "full";
 
 function saleToPaymentRecord(sale: SaleRecord): CheckoutPaymentRecord {
+  const isEqualShare =
+    sale.splitMode === "equal" && (sale.splitCount ?? 1) > 1;
   return {
     paymentMethod: sale.paymentMethod,
     subtotal: sale.subtotal,
@@ -31,8 +33,9 @@ function saleToPaymentRecord(sale: SaleRecord): CheckoutPaymentRecord {
     amountDueNow: sale.grandTotal,
     amountGiven: sale.amountGiven,
     changeDue: sale.changeDue,
-    splitMode: sale.splitMode ?? "total",
-    splitCount: sale.splitCount ?? 1,
+    // DB stores per-share amounts; avoid halving again on reprint.
+    splitMode: isEqualShare ? "total" : (sale.splitMode ?? "total"),
+    splitCount: 1,
   };
 }
 

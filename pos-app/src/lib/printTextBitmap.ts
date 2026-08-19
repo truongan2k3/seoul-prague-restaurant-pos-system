@@ -48,22 +48,30 @@ export function containsCjk(text: string): boolean {
   return /[\u3400-\u9fff\uf900-\ufaff]/.test(text);
 }
 
-function effectiveMaxWidth(maxWidthPx: number, fontSizePx: number, horizontalPad = 0): number {
+function effectiveMaxWidth(
+  maxWidthPx: number,
+  fontSizePx: number,
+  horizontalPad: BitmapHorizontalPad | undefined,
+): number {
+  const pad = resolveBitmapHorizontalPad(horizontalPad);
+  const inset = pad.left + pad.right;
   const margin =
-    horizontalPad > 0
-      ? Math.max(4, Math.round(fontSizePx * 0.08))
+    inset > 0
+      ? Math.max(4, Math.round(fontSizePx * 0.06))
       : Math.max(10, Math.round(fontSizePx * 0.15));
-  return Math.max(1, maxWidthPx - horizontalPad * 2 - margin);
+  return Math.max(1, maxWidthPx - inset - margin);
 }
 
 function bitmapX(
   align: "left" | "center" | "right",
   maxWidthPx: number,
-  horizontalPad: number,
+  horizontalPad: BitmapHorizontalPad | undefined,
 ): number {
-  if (align === "center") return maxWidthPx / 2;
-  if (align === "right") return maxWidthPx - horizontalPad;
-  return horizontalPad;
+  const pad = resolveBitmapHorizontalPad(horizontalPad);
+  const contentWidth = maxWidthPx - pad.left - pad.right;
+  if (align === "center") return pad.left + contentWidth / 2;
+  if (align === "right") return maxWidthPx - pad.right;
+  return pad.left;
 }
 
 function breakLongSegment(
@@ -149,6 +157,16 @@ export function wrapTextLines(
   return lines.length > 0 ? lines : [""];
 }
 
+export type BitmapHorizontalPad = number | { left: number; right: number };
+
+export function resolveBitmapHorizontalPad(
+  pad: BitmapHorizontalPad | undefined,
+): { left: number; right: number } {
+  if (pad == null) return { left: 0, right: 0 };
+  if (typeof pad === "number") return { left: pad, right: pad };
+  return pad;
+}
+
 export interface BitmapTextOptions {
   /** CSS pixel width of the bitmap (content width for 80mm ≈ 560). */
   maxWidthPx: number;
@@ -163,15 +181,24 @@ export interface BitmapTextOptions {
   dpr?: number;
   /** Override canvas font stack (defaults to kitchen CJK stack). */
   fontFamily?: string;
-  /** Horizontal inset so right-aligned text is not clipped at paper edge. */
-  horizontalPad?: number;
+  /** Horizontal inset — number applies both sides; legacy receipts use larger right inset. */
+  horizontalPad?: BitmapHorizontalPad;
 }
 
 /** Native 72mm thermal width (~576 dots) — match ESC/POS raster 1:1. */
 export { DEFAULT_RECEIPT_PAPER_WIDTH_MM, receiptRasterWidthDots } from "@/lib/receipt-raster";
 export const RECEIPT_RASTER_WIDTH_PX = 576;
 export const RECEIPT_BITMAP_DPR = 1;
-export const RECEIPT_BITMAP_H_PAD = 6;
+/** Legacy thermal printers often clip the right edge — keep text inset on that side. */
+export const RECEIPT_BITMAP_H_PAD_LEFT = 4;
+export const RECEIPT_BITMAP_H_PAD_RIGHT = 28;
+/** @deprecated Use RECEIPT_BITMAP_H_PAD_LEFT / RECEIPT_BITMAP_H_PAD_RIGHT */
+export const RECEIPT_BITMAP_H_PAD = RECEIPT_BITMAP_H_PAD_LEFT;
+
+export const RECEIPT_BITMAP_HORIZONTAL_PAD: BitmapHorizontalPad = {
+  left: RECEIPT_BITMAP_H_PAD_LEFT,
+  right: RECEIPT_BITMAP_H_PAD_RIGHT,
+};
 
 /** Paint black text on transparent canvas → PNG data URL. */
 export function textToPngDataUrl(text: string, options: BitmapTextOptions): string {
@@ -183,7 +210,7 @@ export function textToPngDataUrl(text: string, options: BitmapTextOptions): stri
   const paddingY = options.paddingY ?? 2;
   const lineGap = options.lineGap ?? 4;
   const align = options.align ?? "left";
-  const horizontalPad = options.horizontalPad ?? 0;
+  const horizontalPad = options.horizontalPad;
 
   const measure = document.createElement("canvas");
   const mctx = measure.getContext("2d");
@@ -254,8 +281,8 @@ export function textToPngItemRowDataUrl(
 
   bitmapFont(mctx, options);
   const { paddingY, lineHeight } = lineMetrics(options);
-  const horizontalPad = options.horizontalPad ?? 0;
-  const fullWidth = effectiveMaxWidth(options.maxWidthPx, options.fontSizePx, horizontalPad);
+  const pad = resolveBitmapHorizontalPad(options.horizontalPad);
+  const fullWidth = effectiveMaxWidth(options.maxWidthPx, options.fontSizePx, options.horizontalPad);
   const gap = 10;
   const rightWidth = trimmedRight ? mctx.measureText(trimmedRight).width : 0;
   const leftWrapWidth = Math.max(40, fullWidth - rightWidth - (trimmedRight ? gap : 0));
@@ -277,10 +304,10 @@ export function textToPngItemRowDataUrl(
 
   leftLines.forEach((line, index) => {
     ctx.textAlign = "left";
-    ctx.fillText(line, horizontalPad, paddingY + index * lineHeight);
+    ctx.fillText(line, pad.left, paddingY + index * lineHeight);
     if (index === 0 && trimmedRight) {
       ctx.textAlign = "right";
-      ctx.fillText(trimmedRight, options.maxWidthPx - horizontalPad, paddingY);
+      ctx.fillText(trimmedRight, options.maxWidthPx - pad.right, paddingY);
     }
   });
 
@@ -304,7 +331,7 @@ export function textToPngTwoColumnDataUrl(
 
   bitmapFont(mctx, options);
   const { paddingY, lineHeight } = lineMetrics(options);
-  const horizontalPad = options.horizontalPad ?? 0;
+  const pad = resolveBitmapHorizontalPad(options.horizontalPad);
   const rowCount = Math.max(left.length, right.length, 1);
   const contentHeight = rowCount * lineHeight + paddingY * 2;
 
@@ -326,11 +353,11 @@ export function textToPngTwoColumnDataUrl(
     const rightText = right[i] ?? "";
     if (leftText) {
       ctx.textAlign = "left";
-      ctx.fillText(leftText, horizontalPad, y);
+      ctx.fillText(leftText, pad.left, y);
     }
     if (rightText) {
       ctx.textAlign = "right";
-      ctx.fillText(rightText, options.maxWidthPx - horizontalPad, y);
+      ctx.fillText(rightText, options.maxWidthPx - pad.right, y);
     }
   }
 
@@ -360,11 +387,12 @@ export function textToPngThreeColumnDataUrl(
 
   bitmapFont(mctx, options);
   const { paddingY, lineHeight } = lineMetrics(options);
-  const horizontalPad = options.horizontalPad ?? 0;
+  const pad = resolveBitmapHorizontalPad(options.horizontalPad);
   const contentHeight = lineHeight + paddingY * 2;
   const width = options.maxWidthPx;
-  const midX = width * 0.68 - horizontalPad;
-  const rightX = width - horizontalPad;
+  const contentWidth = width - pad.left - pad.right;
+  const midX = pad.left + contentWidth * 0.62;
+  const rightX = width - pad.right;
 
   const canvas = document.createElement("canvas");
   canvas.width = Math.ceil(width * dpr);
@@ -379,7 +407,7 @@ export function textToPngThreeColumnDataUrl(
   ctx.textBaseline = "top";
 
   ctx.textAlign = "left";
-  ctx.fillText(leftText.trim(), horizontalPad, paddingY);
+  ctx.fillText(leftText.trim(), pad.left, paddingY);
   ctx.textAlign = "right";
   ctx.fillText(midText.trim(), midX, paddingY);
   ctx.fillText(rightText.trim(), rightX, paddingY);

@@ -42,12 +42,11 @@ export function wrapReceiptText(text: string, maxWidth: number): string[] {
 
 /** Item row(s): price on first line; long names wrap at word boundaries. */
 export function receiptItemEscPosLines(
-  code: string,
   name: string,
   amount: string,
   width = RECEIPT_LINE_WIDTH,
 ): string[] {
-  const left = `${code} ${name}`.trim();
+  const left = name.trim();
   const right = amount.trim();
   if (!right) return wrapReceiptText(left, width);
 

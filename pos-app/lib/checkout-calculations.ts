@@ -93,6 +93,7 @@ export function buildCheckoutTotals(input: {
   };
 }
 
+
 export function calcChangeDue(amountGiven: number, amountDue: number) {
   return Math.max(0, amountGiven - amountDue);
 }
@@ -122,6 +123,76 @@ export function ordersFromLines(lines: OrderItem[]): OrderItem[] {
     const { lineId: _lineId, ...item } = line as OrderItem & { lineId?: string };
     return item;
   });
+}
+
+function checkoutLineMergeKey(line: OrderItem) {
+  return [
+    line.id ?? "",
+    line.menuItemId ?? "",
+    line.name,
+    line.price,
+    line.notes ?? "",
+    line.station ?? "",
+  ].join("\0");
+}
+
+/** Collapse unit-expanded checkout lines back into consolidated order rows. */
+export function mergeCheckoutLines(lines: Array<OrderItem & { lineId?: string }>): OrderItem[] {
+  const merged: OrderItem[] = [];
+  const indexByKey = new Map<string, number>();
+
+  for (const line of lines) {
+    const key = checkoutLineMergeKey(line);
+    const existingIndex = indexByKey.get(key);
+    if (existingIndex === undefined) {
+      indexByKey.set(key, merged.length);
+      const { lineId: _lineId, ...item } = line;
+      merged.push({ ...item });
+      continue;
+    }
+    merged[existingIndex] = {
+      ...merged[existingIndex],
+      quantity: merged[existingIndex].quantity + line.quantity,
+    };
+  }
+
+  return merged;
+}
+
+/** Scale line prices for one equal-split share (quantities unchanged). */
+export function scaleOrdersForEqualSplit(orders: OrderItem[], splitCount: number): OrderItem[] {
+  if (splitCount <= 1) return orders;
+  const ratio = 1 / splitCount;
+  return orders.map((item) => ({
+    ...item,
+    price: Number((item.price * ratio).toFixed(2)),
+  }));
+}
+
+export function equalSplitShareRatio(splitMode: SplitMode, splitCount: number) {
+  return splitMode === "equal" && splitCount > 1 ? 1 / splitCount : 1;
+}
+
+/** Per-person amounts for equal split; reconciles rounding into tip. */
+export function buildEqualSplitShareAmounts(input: {
+  subtotal: number;
+  discountAmount: number;
+  tip: number;
+  amountDueNow: number;
+  splitCount: number;
+}) {
+  const ratio = 1 / input.splitCount;
+  const subtotal = Number((input.subtotal * ratio).toFixed(2));
+  const discountAmount = Number((input.discountAmount * ratio).toFixed(2));
+  const tip = Number(
+    (input.amountDueNow - subtotal + discountAmount).toFixed(2),
+  );
+  return {
+    subtotal,
+    discountAmount,
+    tip,
+    amountDueNow: input.amountDueNow,
+  };
 }
 
 export function remainingLines(

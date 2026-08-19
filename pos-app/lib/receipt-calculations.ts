@@ -204,20 +204,7 @@ export function buildReceiptData(input: {
       ? input.payment.discountValue
       : undefined;
 
-  const taxGroups = calcReceiptTaxGroups(
-    items,
-    input.payment.subtotal,
-    input.payment.discountAmount,
-  ).map((row) =>
-    ratio < 1
-      ? {
-          ...row,
-          gross: row.gross * ratio,
-          base: row.base * ratio,
-          vat: row.vat * ratio,
-        }
-      : row,
-  );
+  const taxGroups = calcReceiptTaxGroups(items, subtotal, discountAmount);
 
   return {
     orderNumber: generateOrderNumber(closedAt),

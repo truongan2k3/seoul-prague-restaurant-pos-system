@@ -18,6 +18,8 @@ export interface RevenueStats {
   cash: number;
   card: number;
   tips: number;
+  cashTips: number;
+  cardTips: number;
   orderCount: number;
 }
 
@@ -37,6 +39,12 @@ export function computeRevenueStats(sales: SaleRecord[]): RevenueStats {
       .filter((sale) => sale.paymentMethod === "card")
       .reduce((sum, sale) => sum + saleNetTotal(sale), 0),
     tips: sales.reduce((sum, sale) => sum + sale.tip, 0),
+    cashTips: sales
+      .filter((sale) => sale.paymentMethod === "cash")
+      .reduce((sum, sale) => sum + sale.tip, 0),
+    cardTips: sales
+      .filter((sale) => sale.paymentMethod === "card")
+      .reduce((sum, sale) => sum + sale.tip, 0),
     orderCount: sales.length,
   };
 }

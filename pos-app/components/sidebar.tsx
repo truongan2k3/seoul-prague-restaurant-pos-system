@@ -12,18 +12,23 @@ import {
   Map,
   Moon,
   Package,
+  QrCode,
   Settings,
   Sun,
   User,
   Users,
 } from "lucide-react";
 import { LanguageSelector } from "@/components/language-selector";
+import { StaffSelfProfileModal } from "@/components/staff-self-profile-modal";
 import { useApp } from "@/contexts/app-context";
 import { useAuth } from "@/contexts/auth-context";
 import { usePendingReservationCount } from "@/hooks/use-pending-reservation-count";
+import { useNotifications } from "@/contexts/notification-context";
 import { navButtonClass } from "@/lib/theme-classes";
 import { canAccessNavTabForMember } from "@/lib/staff-roles";
 import type { NavId } from "@/lib/types";
+import { mapStaffResponse } from "@/src/lib/supabase-data";
+import { updateStaffSelfProfile, type StaffSelfProfileInput } from "@/src/lib/staff-actions";
 
 const SIDEBAR_COLLAPSED_KEY = "pos-sidebar-collapsed";
 
@@ -34,6 +39,7 @@ export const navItems = [
   { id: "history" as const, labelKey: "history" as const, icon: History },
   { id: "summary" as const, labelKey: "summary" as const, icon: BarChart3 },
   { id: "storage" as const, labelKey: "storage" as const, icon: Package },
+  { id: "dynamicQr" as const, labelKey: "dynamicQrServices" as const, icon: QrCode },
   { id: "staff" as const, labelKey: "staffManagement" as const, icon: Users },
   { id: "settings" as const, labelKey: "settings" as const, icon: Settings },
 ] as const;
@@ -49,10 +55,22 @@ function readCollapsedPreference(): boolean {
 }
 
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
-  const { theme, setTheme, currentStaffUser, setStaff, staffList, translate } = useApp();
+  const {
+    theme,
+    setTheme,
+    currentStaffUser,
+    switchStaff,
+    staffList,
+    setStaff,
+    refreshStaffList,
+    translate,
+  } = useApp();
+  const { pushNotification } = useNotifications();
   const { business, session, logout } = useAuth();
   const pendingReservationCount = usePendingReservationCount();
   const [collapsed, setCollapsed] = useState(false);
+  const [selfProfileOpen, setSelfProfileOpen] = useState(false);
+  const [selfProfileSaving, setSelfProfileSaving] = useState(false);
 
   useEffect(() => {
     setCollapsed(readCollapsedPreference());
@@ -76,6 +94,29 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
 
   const collapseSidebar = () => {
     persistCollapsed(true);
+  };
+
+  const openSelfProfile = () => {
+    if (!currentStaffUser) return;
+    setSelfProfileOpen(true);
+  };
+
+  const handleSaveSelfProfile = async (input: StaffSelfProfileInput) => {
+    if (!currentStaffUser) return;
+    setSelfProfileSaving(true);
+    const { data, error } = await updateStaffSelfProfile(currentStaffUser.id, currentStaffUser, input);
+    setSelfProfileSaving(false);
+    if (error) {
+      pushNotification({ message: error.message, playSound: false });
+      throw error;
+    }
+    await refreshStaffList();
+    if (data) {
+      const [updated] = mapStaffResponse([data]);
+      if (updated) setStaff(updated);
+    }
+    setSelfProfileOpen(false);
+    pushNotification({ message: translate("settingsSavedSuccess"), playSound: false });
   };
 
   const handleTabChange = (tab: NavId) => {
@@ -238,7 +279,14 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
                     value={currentStaffUser?.id ?? ""}
                     onChange={(e) => {
                       const member = staffList.find((s) => s.id === e.target.value);
-                      if (member) setStaff(member);
+                      if (!member) return;
+                      const started = switchStaff(member);
+                      if (!started) {
+                        pushNotification({
+                          message: translate("staffSwitchPasswordMissing"),
+                          playSound: false,
+                        });
+                      }
                     }}
                     className="min-h-[44px] w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                   >
@@ -250,11 +298,16 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
                   </select>
                 </div>
 
-                <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-800">
+                <button
+                  type="button"
+                  onClick={openSelfProfile}
+                  title={translate("staffSelfProfileTap")}
+                  className="flex w-full items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:border-zinc-600 dark:hover:bg-zinc-700"
+                >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-200 text-gray-700 dark:bg-zinc-600 dark:text-zinc-100">
                     <User className="h-5 w-5" />
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">
                       {currentStaffUser?.name ?? "—"}
                     </span>
@@ -264,19 +317,29 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
                       </span>
                     )}
                   </div>
-                </div>
+                </button>
               </>
             ) : (
-              <div
-                className="flex h-10 w-full items-center justify-center rounded-lg border border-gray-200 bg-gray-50 dark:border-zinc-700 dark:bg-zinc-800"
-                title={currentStaffUser?.name}
+              <button
+                type="button"
+                onClick={openSelfProfile}
+                title={translate("staffSelfProfileTap")}
+                className="flex h-10 w-full items-center justify-center rounded-lg border border-gray-200 bg-gray-50 transition hover:bg-gray-100 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700"
               >
                 <User className="h-5 w-5 text-gray-600 dark:text-zinc-300" />
-              </div>
+              </button>
             )}
           </div>
         </aside>
       </div>
+
+      <StaffSelfProfileModal
+        open={selfProfileOpen}
+        member={currentStaffUser}
+        onClose={() => setSelfProfileOpen(false)}
+        onSave={handleSaveSelfProfile}
+        isSaving={selfProfileSaving}
+      />
     </>
   );
 }

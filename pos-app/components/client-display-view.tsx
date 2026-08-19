@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { LanguageSelector } from "@/components/language-selector";
 import {
@@ -327,6 +327,8 @@ export function ClientDisplayView() {
   const [clientState, setClientState] = useState<CfdClientState>("idle");
   const [checkout, setCheckout] = useState<CfdCheckoutPayload | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(THANK_YOU_SECONDS);
+  const clientStateRef = useRef(clientState);
+  clientStateRef.current = clientState;
 
   const slideshow = useMemo(() => resolveCfdSlideshow(settings), [settings]);
   const reviewQrImageUrl = settings.cfdReviewQrImageUrl.trim();
@@ -334,6 +336,9 @@ export function ClientDisplayView() {
   useEffect(() => {
     return subscribeCfdEvents({
       onStartCheckout: (payload) => {
+        if (clientStateRef.current === "thankyou" && !payload.staffInitiated) {
+          return;
+        }
         setCheckout(payload);
         setClientState("checkout");
       },

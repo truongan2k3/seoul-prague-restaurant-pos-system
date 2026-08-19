@@ -181,7 +181,7 @@ export function OrderItemChecklist({
 
           const rowBody = (
             <>
-              {!useTapWorkflow && !isCancelled && (
+              {onToggle && !useTapWorkflow && !isCancelled && (
                 <input
                   type="checkbox"
                   checked={kitchenDone || isGroupSelected(item)}

@@ -9,6 +9,7 @@ import { SummaryView } from "@/components/summary-view";
 import { StorageView } from "@/components/storage-view";
 import { StaffView } from "@/components/staff-view";
 import { SettingsView } from "@/components/settings-view";
+import { DynamicQrServicesView } from "@/components/dynamic-qr-services-view";
 import { ReadyNotificationListener } from "@/components/ready-notification-listener";
 import { CallWaiterListener } from "@/components/call-waiter-listener";
 import { Sidebar } from "@/components/sidebar";
@@ -238,9 +239,11 @@ export function DashboardShell() {
             tables={tables}
             orderItems={orderItems}
             menuItems={menuItems}
-            onRefresh={refreshPosData}
-            onOpenTable={tableOrder.openManageTable}
+            onOpenTable={(tableId) => tableOrder.openNewOrder(tableId, "append")}
+            onCheckout={tableOrder.openCheckoutForTable}
+            onChangeTable={tableOrder.openChangeTable}
             actionError={tableOrder.actionError}
+            checkoutBusy={tableOrder.isSaving}
           />
         );
       case "reservations":
@@ -269,6 +272,8 @@ export function DashboardShell() {
             }}
           />
         );
+      case "dynamicQr":
+        return <DynamicQrServicesView />;
       case "staff":
         return <StaffView onRefresh={() => void refreshStaffList()} />;
       case "settings":

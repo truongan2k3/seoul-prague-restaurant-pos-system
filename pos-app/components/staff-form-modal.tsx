@@ -20,6 +20,7 @@ const NAV_LABEL_KEYS: Record<NavId, TranslationKey> = {
   history: "history",
   summary: "summary",
   storage: "storage",
+  dynamicQr: "dynamicQrServices",
   staff: "staffManagement",
   settings: "settings",
 };
@@ -31,11 +32,13 @@ const emptyForm = (): StaffInput => ({
   active: true,
   allowedNav: defaultNavTabsForRole("server"),
   requirePinForActions: false,
+  requireSwitchPassword: false,
 });
 
 interface StaffFormModalProps {
   open: boolean;
   member?: StaffMember | null;
+  canDelete?: boolean;
   onClose: () => void;
   onSave: (input: StaffInput) => Promise<void>;
   onDelete?: () => Promise<void>;
@@ -53,6 +56,7 @@ const ROLE_LABELS: Record<StaffRole, string> = {
 export function StaffFormModal({
   open,
   member,
+  canDelete = false,
   onClose,
   onSave,
   onDelete,
@@ -75,6 +79,7 @@ export function StaffFormModal({
           ? [...member.allowedNav]
           : defaultNavTabsForRole(member.role),
         requirePinForActions: member.requirePinForActions ?? false,
+        requireSwitchPassword: member.requireSwitchPassword ?? false,
       });
     } else {
       setForm(emptyForm());
@@ -107,6 +112,10 @@ export function StaffFormModal({
       setError(translate("staffPinInvalid"));
       return;
     }
+    if (form.requireSwitchPassword && !form.pin) {
+      setError(translate("staffSwitchPasswordRequired"));
+      return;
+    }
     if (form.allowedNav.length === 0) {
       setError(translate("staffNavRequired"));
       return;
@@ -125,7 +134,7 @@ export function StaffFormModal({
       title={member ? translate("staffEditMember") : translate("staffNewMember")}
       footer={
         <div className="flex flex-wrap items-center justify-between gap-2">
-          {member && onDelete ? (
+          {member && onDelete && canDelete ? (
             <button
               type="button"
               disabled={isSaving}
@@ -188,7 +197,7 @@ export function StaffFormModal({
         <label className="block">
           <span className="pos-label">{translate("staffPin")}</span>
           <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-            {translate("staffPinApproverHint")}
+            {translate("staffPinSessionHint")}
           </p>
           <input
             type="password"
@@ -200,6 +209,7 @@ export function StaffFormModal({
             }
             className="pos-input mt-1 tracking-[0.4em]"
             placeholder="••••"
+            autoComplete="new-password"
           />
         </label>
 
@@ -219,6 +229,25 @@ export function StaffFormModal({
           <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
             {translate("staffPermissions")}
           </p>
+
+          <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-lg border border-gray-100 px-3 py-3 dark:border-gray-700">
+            <input
+              type="checkbox"
+              checked={form.requireSwitchPassword}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, requireSwitchPassword: e.target.checked }))
+              }
+              className="mt-0.5 h-4 w-4 rounded border-gray-300"
+            />
+            <span>
+              <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                {translate("staffRequireSwitchPassword")}
+              </span>
+              <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+                {translate("staffRequireSwitchPasswordHint")}
+              </span>
+            </span>
+          </label>
 
           <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-lg border border-gray-100 px-3 py-3 dark:border-gray-700">
             <input

@@ -15,3 +15,10 @@ WHERE category = 'Drinks' AND station = 'kitchen';
 
 UPDATE public.menu_items SET station = 'kitchen', item_type = 'food'
 WHERE category IN ('Hotpot', 'Meat');
+
+-- Staff security (PIN gate + switch-profile password)
+ALTER TABLE public.staff
+  ADD COLUMN IF NOT EXISTS require_pin_for_actions boolean NOT NULL DEFAULT false;
+
+ALTER TABLE public.staff
+  ADD COLUMN IF NOT EXISTS require_switch_password boolean NOT NULL DEFAULT false;

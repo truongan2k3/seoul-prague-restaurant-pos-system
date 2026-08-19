@@ -1,68 +1,58 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ShoppingBag } from "lucide-react";
-import { CancelReasonModal } from "@/components/cancel-reason-modal";
-import { LiveClock } from "@/components/live-clock";
+import { useMemo } from "react";
+import { ElapsedTimer, LiveClock } from "@/components/live-clock";
 import { NotificationBell } from "@/components/notification-bell";
-import { OrderItemChecklist, TicketActionBar } from "@/components/order-item-checklist";
+import { OrderItemChecklist } from "@/components/order-item-checklist";
 import { useApp } from "@/contexts/app-context";
-import { usePinGate } from "@/contexts/pin-gate-context";
-import { useNotifications } from "@/contexts/notification-context";
 import { filterItemsForBoard } from "@/lib/order-board";
 import { aggregateDisplayItems } from "@/lib/order-item-aggregate";
-import { resolveActionItemIds, resolveSelectedItemIds } from "@/lib/order-item-selection";
-import { normalizeOrderItemStatus } from "@/lib/order-status";
+import { resolveTableOccupiedSince } from "@/lib/order-item-timers";
 import { isTablePaidInProgress } from "@/lib/table-payment";
-import { canVoidOrderItems } from "@/lib/staff-roles";
 import { formatPrice } from "@/lib/i18n/translations";
 import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
-import {
-  cancelOrderItems,
-  markItemsLate,
-} from "@/src/lib/table-actions";
 
 function OrderCard({
   table,
   items,
+  rawItems,
   total,
   translate,
   menuItems,
   language,
-  selectedIds,
-  lateIds,
-  onToggle,
-  onToggleAll,
-  onLate,
-  onCancel,
-  onManage,
-  busy,
-  canCancel,
-  showDelay,
+  onOpen,
+  onCheckout,
+  onChangeTable,
+  checkoutBusy,
 }: {
   table: RestaurantTable;
   items: OrderItem[];
+  rawItems: OrderItem[];
   total: number;
   translate: ReturnType<typeof useApp>["translate"];
   menuItems: MenuItem[];
   language: ReturnType<typeof useApp>["language"];
-  selectedIds: Set<string>;
-  lateIds: Set<string>;
-  onToggle: (itemId: string) => void;
-  onToggleAll: () => void;
-  onLate: () => void;
-  onCancel: () => void;
-  onManage: () => void;
-  busy: boolean;
-  canCancel: boolean;
-  showDelay: boolean;
+  onOpen: () => void;
+  onCheckout: () => void;
+  onChangeTable: () => void;
+  checkoutBusy?: boolean;
 }) {
   const isReady = table.status === "ready";
   const isPaidInProgress = isTablePaidInProgress(table);
+  const tableOccupiedSince = resolveTableOccupiedSince(table, rawItems);
 
   return (
     <article
-      className={`mb-4 flex break-inside-avoid flex-col rounded-xl border p-4 shadow-sm ${
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+      className={`mb-4 flex break-inside-avoid cursor-pointer flex-col rounded-xl border p-4 shadow-sm transition-opacity hover:opacity-95 ${
         isPaidInProgress
           ? "border-emerald-300 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/40"
           : isReady
@@ -70,11 +60,7 @@ function OrderCard({
             : "border-orange-200 bg-white dark:border-orange-900 dark:bg-gray-900"
       }`}
     >
-      <button
-        type="button"
-        onClick={onManage}
-        className="flex shrink-0 items-start justify-between text-left transition-opacity hover:opacity-90"
-      >
+      <div className="flex shrink-0 items-start justify-between">
         <div>
           <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
             {translate("table")}
@@ -97,12 +83,17 @@ function OrderCard({
               {translate(isReady ? "ready" : "waiting")}
             </p>
           )}
-          <p className="mt-2 inline-flex items-center gap-1 rounded-lg bg-gray-900 px-2.5 py-1 text-xs font-semibold text-white dark:bg-gray-100 dark:text-gray-900">
-            <ShoppingBag className="h-3.5 w-3.5" />
-            {translate("manageTable")}
-          </p>
+          {tableOccupiedSince && (
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+              <span className="text-gray-500 dark:text-gray-400">{translate("tableOccupiedSince")}</span>
+              <ElapsedTimer
+                start={tableOccupiedSince}
+                className="font-mono tabular-nums text-gray-900 dark:text-gray-100"
+              />
+            </p>
+          )}
         </div>
-      </button>
+      </div>
 
       <div className="mt-3 min-h-0 flex-1 border-t border-gray-100 pt-3 dark:border-gray-800">
         <OrderItemChecklist
@@ -110,30 +101,35 @@ function OrderCard({
           menuItems={menuItems}
           language={language}
           translate={translate}
-          selectedIds={selectedIds}
-          lateIds={lateIds}
-          onToggle={onToggle}
-          onToggleAll={onToggleAll}
           variant="floor"
           dense
         />
       </div>
 
-      <footer className="mt-3 space-y-3 border-t border-gray-200 pt-3 dark:border-gray-800">
-        <TicketActionBar
-          translate={translate}
-          disabled={busy || items.length === 0}
-          onDone={() => undefined}
-          onLate={onLate}
-          onCancel={onCancel}
-          showCancel={canCancel}
-          showMarkServed={false}
-          showDelay={showDelay}
-          variant="floor"
-        />
+      <footer
+        className="mt-3 space-y-3 border-t border-gray-200 pt-3 dark:border-gray-800"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="flex items-center justify-between text-sm font-bold text-gray-900 dark:text-gray-100">
           <span>{translate("total")}</span>
           <span className="text-base tabular-nums">{formatPrice(total)}</span>
+        </div>
+        <div className="flex items-stretch gap-2">
+          <button
+            type="button"
+            onClick={onCheckout}
+            disabled={checkoutBusy || items.length === 0 || isPaidInProgress}
+            className="flex-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {translate("checkout")}
+          </button>
+          <button
+            type="button"
+            onClick={onChangeTable}
+            className="shrink-0 rounded-xl bg-amber-400 px-3 py-2 text-xs font-bold text-amber-950 transition-colors hover:bg-amber-500"
+          >
+            {translate("changeTable")}
+          </button>
         </div>
       </footer>
     </article>
@@ -144,30 +140,22 @@ export function OrderView({
   tables,
   orderItems,
   menuItems,
-  onRefresh,
   onOpenTable,
+  onCheckout,
+  onChangeTable,
   actionError,
+  checkoutBusy,
 }: {
   tables: RestaurantTable[];
   orderItems: OrderItem[];
   menuItems: MenuItem[];
-  onRefresh?: () => void;
   onOpenTable: (tableId: string) => void;
+  onCheckout: (tableId: string) => void;
+  onChangeTable: (tableId: string) => void;
   actionError?: string | null;
+  checkoutBusy?: boolean;
 }) {
-  const { translate, currentStaffUser, language } = useApp();
-  const { requestPin } = usePinGate();
-  const { pushToast } = useNotifications();
-  const [busy, setBusy] = useState(false);
-  const [selectedByTable, setSelectedByTable] = useState<Record<string, Set<string>>>({});
-  const [lateIds, setLateIds] = useState<Set<string>>(new Set());
-  const [cancelTarget, setCancelTarget] = useState<{
-    tableId: string;
-    itemIds: string[];
-  } | null>(null);
-
-  const actor = currentStaffUser?.name ?? "Staff";
-  const canCancel = canVoidOrderItems(currentStaffUser?.role);
+  const { translate, language } = useApp();
 
   const activeTables = useMemo(() => {
     const tableIdsWithWork = new Set(orderItems.map((item) => item.tableId).filter(Boolean));
@@ -176,63 +164,6 @@ export function OrderView({
       .filter((t) => t.status !== "empty" && tableIdsWithWork.has(t.id))
       .sort((a, b) => (a.occupiedAt?.getTime() ?? 0) - (b.occupiedAt?.getTime() ?? 0));
   }, [tables, orderItems]);
-
-  const getSelectedForTable = (tableId: string) => selectedByTable[tableId] ?? new Set<string>();
-
-  const resolveTargetIds = (tableId: string, tableItems: OrderItem[]) =>
-    resolveSelectedItemIds(tableItems, getSelectedForTable(tableId));
-
-  const toggleItem = (tableId: string, itemId: string) => {
-    setSelectedByTable((prev) => {
-      const current = new Set(prev[tableId] ?? []);
-      if (current.has(itemId)) current.delete(itemId);
-      else current.add(itemId);
-      return { ...prev, [tableId]: current };
-    });
-  };
-
-  const toggleAll = (tableId: string, tableItems: OrderItem[]) => {
-    const ids = tableItems.map((item) => item.id).filter((id): id is string => Boolean(id));
-    setSelectedByTable((prev) => {
-      const current = prev[tableId] ?? new Set<string>();
-      const allSelected = ids.length > 0 && ids.every((id) => current.has(id));
-      return { ...prev, [tableId]: allSelected ? new Set<string>() : new Set(ids) };
-    });
-  };
-
-  const handleLate = async (tableId: string, tableItems: OrderItem[]) => {
-    const selected = getSelectedForTable(tableId);
-    const itemIds = resolveActionItemIds(
-      tableItems,
-      selected,
-      (item) => normalizeOrderItemStatus(item.status) === "preparing",
-    );
-    if (itemIds.length === 0 || busy) return;
-    setBusy(true);
-    await markItemsLate(itemIds, actor);
-    setLateIds((prev) => new Set([...prev, ...itemIds]));
-    setBusy(false);
-  };
-
-  const handleCancelRequest = (tableId: string, tableItems: OrderItem[]) => {
-    const itemIds = resolveTargetIds(tableId, tableItems);
-    if (itemIds.length === 0) {
-      pushToast({ message: translate("selectItemsToCancel") });
-      return;
-    }
-
-    requestPin(() => setCancelTarget({ tableId, itemIds }));
-  };
-
-  const handleCancelConfirm = async (reason: string) => {
-    if (!cancelTarget || busy) return;
-    setBusy(true);
-    await cancelOrderItems(cancelTarget.itemIds, cancelTarget.tableId, reason, actor);
-    setSelectedByTable((prev) => ({ ...prev, [cancelTarget.tableId]: new Set() }));
-    setCancelTarget(null);
-    setBusy(false);
-    onRefresh?.();
-  };
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
@@ -265,51 +196,33 @@ export function OrderView({
         ) : (
           <div className="mx-auto max-w-[1600px] columns-1 gap-4 md:columns-2 lg:columns-3 xl:columns-4">
             {activeTables.map((table) => {
-              const itemsForTable = aggregateDisplayItems(
-                filterItemsForBoard(
-                  orderItems.filter((item) => item.tableId === table.id),
-                  "floor",
-                ),
+              const rawItems = filterItemsForBoard(
+                orderItems.filter((item) => item.tableId === table.id),
+                "floor",
               );
+              const itemsForTable = aggregateDisplayItems(rawItems);
               const total = itemsForTable.reduce((s, i) => s + i.price * i.quantity, 0);
-              const showDelay = itemsForTable.some(
-                (item) => normalizeOrderItemStatus(item.status) === "preparing",
-              );
 
               return (
                 <OrderCard
                   key={table.id}
                   table={table}
                   items={itemsForTable}
+                  rawItems={rawItems}
                   total={total}
                   translate={translate}
                   menuItems={menuItems}
                   language={language}
-                  selectedIds={getSelectedForTable(table.id)}
-                  lateIds={lateIds}
-                  onToggle={(itemId) => toggleItem(table.id, itemId)}
-                  onToggleAll={() => toggleAll(table.id, itemsForTable)}
-                  onLate={() => void handleLate(table.id, itemsForTable)}
-                  onCancel={() => handleCancelRequest(table.id, itemsForTable)}
-                  onManage={() => onOpenTable(table.id)}
-                  busy={busy}
-                  canCancel={canCancel}
-                  showDelay={showDelay}
+                  onOpen={() => onOpenTable(table.id)}
+                  onCheckout={() => onCheckout(table.id)}
+                  onChangeTable={() => onChangeTable(table.id)}
+                  checkoutBusy={checkoutBusy}
                 />
               );
             })}
           </div>
         )}
       </div>
-
-      <CancelReasonModal
-        open={cancelTarget !== null}
-        itemCount={cancelTarget?.itemIds.length ?? 0}
-        translate={translate}
-        onClose={() => setCancelTarget(null)}
-        onConfirm={handleCancelConfirm}
-        isSaving={busy}
-      />
     </div>
   );
 }

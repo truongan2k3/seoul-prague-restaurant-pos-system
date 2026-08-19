@@ -18,7 +18,16 @@ export type DiscountType = "percent" | "fixed";
 export type SplitMode = "total" | "equal" | "items";
 export type LanguageCode = "en" | "cs" | "zh";
 export type ThemeMode = "light" | "dark";
-export type NavId = "map" | "order" | "reservations" | "history" | "summary" | "storage" | "staff" | "settings";
+export type NavId =
+  | "map"
+  | "order"
+  | "reservations"
+  | "history"
+  | "summary"
+  | "storage"
+  | "dynamicQr"
+  | "staff"
+  | "settings";
 
 export type WeekdayKey =
   | "monday"
@@ -420,6 +429,8 @@ export interface StaffMember {
   allowedNav?: NavId[];
   /** When true, sensitive actions prompt for a manager PIN. Default: off. */
   requirePinForActions?: boolean;
+  /** When true, sidebar profile switch requires this member's PIN. */
+  requireSwitchPassword?: boolean;
 }
 
 export type VisitSource = "reservation" | "walk_in";

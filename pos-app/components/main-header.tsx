@@ -13,6 +13,7 @@ const TAB_LABEL_KEYS: Record<NavId, TranslationKey> = {
   history: "history",
   summary: "summary",
   storage: "storage",
+  dynamicQr: "dynamicQrServices",
   staff: "staffManagement",
   settings: "settings",
 };

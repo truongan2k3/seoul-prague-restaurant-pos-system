@@ -11,7 +11,7 @@ import {
 } from "react";
 import { t, type TranslationKey } from "@/lib/i18n/translations";
 import { DEFAULT_EUR_RATE, DEFAULT_USD_RATE } from "@/lib/currency";
-import { canManageStaff, roleCanApproveWithPin } from "@/lib/staff-roles";
+import { canManageStaff, roleCanApproveWithPin, staffRequiresSwitchPassword } from "@/lib/staff-roles";
 import type { LanguageCode, StaffMember, ThemeMode } from "@/lib/types";
 import { fetchStaff, mapStaffResponse } from "@/src/lib/supabase-data";
 
@@ -24,8 +24,7 @@ const USD_RATE_KEY = "pos-usd-rate";
 const SOUND_MAIN_KEY = "pos-sound-main";
 const SOUND_KITCHEN_KEY = "pos-sound-kitchen";
 
-/** Mock session user until login flow is built — Master Liu (manager). */
-const MOCK_LOGGED_IN_STAFF_ID = "30000000-0000-4000-a000-000000000006";
+const STAFF_SESSION_KEY = "pos-staff-session-id";
 
 function readStoredBoolean(key: string, fallback = false): boolean {
   if (typeof window === "undefined") return fallback;
@@ -64,6 +63,12 @@ interface AppContextValue {
   currentStaffUser: StaffMember | null;
   staffList: StaffMember[];
   refreshStaffList: () => Promise<void>;
+  switchStaff: (member: StaffMember) => boolean;
+  staffSwitchOpen: boolean;
+  staffSwitchTarget: StaffMember | null;
+  staffSwitchError: boolean;
+  submitStaffSwitchPassword: (pin: string) => void;
+  cancelStaffSwitch: () => void;
   canManageStaff: boolean;
   translate: (key: TranslationKey) => string;
   verifyManagerPin: (pin: string) => boolean;
@@ -99,17 +104,30 @@ const fallbackStaff: StaffMember[] = [
   },
 ];
 
-function resolveMockSessionUser(list: StaffMember[]): StaffMember | null {
-  return list.find((member) => member.id === MOCK_LOGGED_IN_STAFF_ID) ?? list[0] ?? null;
+function readStoredStaffSessionId(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(STAFF_SESSION_KEY);
+}
+
+function resolveSessionUser(list: StaffMember[]): StaffMember | null {
+  const storedId = readStoredStaffSessionId();
+  if (storedId) {
+    const stored = list.find((member) => member.id === storedId && member.active);
+    if (stored) return stored;
+  }
+  return list.find((member) => member.active && member.role === "admin") ?? list.find((m) => m.active) ?? null;
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<LanguageCode>("en");
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [staffList, setStaffList] = useState<StaffMember[]>(fallbackStaff);
-  const [currentStaffUser, setCurrentStaffUser] = useState<StaffMember | null>(
-    resolveMockSessionUser(fallbackStaff),
+  const [currentStaffUser, setCurrentStaffUser] = useState<StaffMember | null>(() =>
+    resolveSessionUser(fallbackStaff),
   );
+  const [staffSwitchOpen, setStaffSwitchOpen] = useState(false);
+  const [staffSwitchTarget, setStaffSwitchTarget] = useState<StaffMember | null>(null);
+  const [staffSwitchError, setStaffSwitchError] = useState(false);
   const [receiptShowEur, setReceiptShowEurState] = useState(false);
   const [receiptShowUsd, setReceiptShowUsdState] = useState(false);
   const [eurRate, setEurRateState] = useState(DEFAULT_EUR_RATE);
@@ -126,9 +144,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const mapped = mapStaffResponse(data);
     setStaffList(mapped);
     setCurrentStaffUser((prev) => {
-      const sessionId = prev?.id ?? MOCK_LOGGED_IN_STAFF_ID;
-      return mapped.find((member) => member.id === sessionId) ?? resolveMockSessionUser(mapped);
+      const sessionId = prev?.id ?? readStoredStaffSessionId();
+      if (sessionId) {
+        const match = mapped.find((member) => member.id === sessionId && member.active);
+        if (match) return match;
+      }
+      return resolveSessionUser(mapped);
     });
+  }, []);
+
+  const applyStaffSession = useCallback((member: StaffMember) => {
+    setCurrentStaffUser(member);
+    localStorage.setItem(STAFF_SESSION_KEY, member.id);
   }, []);
 
   useEffect(() => {
@@ -204,9 +231,58 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const translate = useCallback((key: TranslationKey) => t(language, key), [language]);
 
-  const setStaff = useCallback((member: StaffMember | null) => {
-    setCurrentStaffUser(member);
+  const setStaff = useCallback(
+    (member: StaffMember | null) => {
+      if (member) {
+        applyStaffSession(member);
+      } else {
+        setCurrentStaffUser(null);
+        localStorage.removeItem(STAFF_SESSION_KEY);
+      }
+    },
+    [applyStaffSession],
+  );
+
+  const cancelStaffSwitch = useCallback(() => {
+    setStaffSwitchOpen(false);
+    setStaffSwitchTarget(null);
+    setStaffSwitchError(false);
   }, []);
+
+  const switchStaff = useCallback(
+    (member: StaffMember): boolean => {
+      if (!member.active) return false;
+      if (member.id === currentStaffUser?.id) return true;
+
+      if (staffRequiresSwitchPassword(member)) {
+        if (!member.pin) {
+          console.warn(`[Staff] ${member.name} requires a switch PIN but none is set.`);
+          return false;
+        }
+        setStaffSwitchTarget(member);
+        setStaffSwitchError(false);
+        setStaffSwitchOpen(true);
+        return true;
+      }
+
+      applyStaffSession(member);
+      return true;
+    },
+    [applyStaffSession, currentStaffUser?.id],
+  );
+
+  const submitStaffSwitchPassword = useCallback(
+    (pin: string) => {
+      if (!staffSwitchTarget) return;
+      if (staffSwitchTarget.pin !== pin) {
+        setStaffSwitchError(true);
+        return;
+      }
+      applyStaffSession(staffSwitchTarget);
+      cancelStaffSwitch();
+    },
+    [applyStaffSession, cancelStaffSwitch, staffSwitchTarget],
+  );
 
   const verifyManagerPin = useCallback(
     (pin: string) =>
@@ -236,6 +312,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       currentStaffUser,
       staffList,
       refreshStaffList,
+      switchStaff,
+      staffSwitchOpen,
+      staffSwitchTarget,
+      staffSwitchError,
+      submitStaffSwitchPassword,
+      cancelStaffSwitch,
       canManageStaff: canManageStaff(currentStaffUser?.role),
       translate,
       verifyManagerPin,
@@ -273,6 +355,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLanguage,
       setThemeMode,
       setStaff,
+      switchStaff,
+      staffSwitchOpen,
+      staffSwitchTarget,
+      staffSwitchError,
+      submitStaffSwitchPassword,
+      cancelStaffSwitch,
       soundMainEnabled,
       soundKitchenEnabled,
       setSoundMainEnabled,

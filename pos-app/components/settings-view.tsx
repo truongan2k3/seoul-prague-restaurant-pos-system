@@ -17,6 +17,7 @@ import {
 import { KitchenPrintLayoutEditor } from "@/components/kitchen-print-layout-editor";
 import { KitchenTicketSpacingPreview } from "@/components/kitchen-ticket-spacing-preview";
 import { ReceiptBrandingEditor } from "@/components/receipt-branding-editor";
+import { ReceiptPrintPreview } from "@/components/receipt-print-preview";
 import { LiveClock } from "@/components/live-clock";
 import { MenuCustomizationManager } from "@/components/menu-customization-manager";
 import { useApp } from "@/contexts/app-context";
@@ -32,7 +33,9 @@ import {
   type SettingsPageDraft,
 } from "@/src/lib/settings-actions";
 import { WEEKDAY_KEYS } from "@/lib/reservation-slots";
+import { buildTestReceiptData } from "@/lib/receipt-calculations";
 import { RECEIPT_FONT_OPTIONS } from "@/lib/receipt-print-styles";
+import { draftToReceiptTemplate } from "@/src/components/ReceiptPrint";
 import { MarqueeSettingsEditor } from "@/components/marquee-settings-editor";
 import type { TranslationKey } from "@/lib/i18n/translations";
 import { pingPrintBridge } from "@/src/lib/print-bridge-client";
@@ -93,7 +96,7 @@ export function SettingsView({
     useSettings();
   const { business, updateBranding } = useAuth();
   const { pushNotification } = useNotifications();
-  const { printTestReceipt } = useReceiptPrint();
+  const { printTestReceipt, openReceiptPreview } = useReceiptPrint();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const cfdQrInputRef = useRef<HTMLInputElement>(null);
@@ -604,16 +607,6 @@ export function SettingsView({
               ))}
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => printTestReceipt()}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold dark:border-gray-600"
-              >
-                {translate("settingsTestPrint")} (Preview)
-              </button>
-            </div>
-
             <label className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
               <div>
                 <span className="text-sm text-gray-800 dark:text-gray-200">{translate("settingsAutoPrint")}</span>
@@ -1056,6 +1049,35 @@ export function SettingsView({
                   updateDraft("receiptFooterNote", patch.receiptFooterNote);
                 }
               }}
+            />
+
+            <ReceiptPrintPreview
+              draft={draft}
+              translate={translate}
+              onOpenFullPreview={() => {
+                const previewTemplate = draftToReceiptTemplate(draft);
+                openReceiptPreview(
+                  buildTestReceiptData({
+                    brandName: previewTemplate.brandName,
+                    brandAddress: previewTemplate.brandAddress,
+                    legalName: previewTemplate.legalName,
+                    companyAddress: previewTemplate.companyAddress,
+                    ico: previewTemplate.ico,
+                    dic: previewTemplate.dic,
+                    phone: previewTemplate.phone,
+                    footerLines: previewTemplate.footerLines,
+                  }),
+                  {
+                    template: previewTemplate,
+                    font: {
+                      receiptFontFamily: draft.receiptFontFamily,
+                      receiptFontSize: draft.receiptFontSize,
+                      receiptFontWeight: draft.receiptFontWeight,
+                    },
+                  },
+                );
+              }}
+              onTestPrint={printTestReceipt}
             />
           </section>
 

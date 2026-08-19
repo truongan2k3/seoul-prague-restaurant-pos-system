@@ -334,6 +334,10 @@ export function buildThermalPrintCss(
     max-width: 100%;
     height: auto;
   }
+  body:has(.receipt-bitmap),
+  .receipt-inner:has(.receipt-bitmap) {
+    padding: 0 !important;
+  }
   .receipt-bitmap-row {
     display: flex;
     justify-content: space-between;

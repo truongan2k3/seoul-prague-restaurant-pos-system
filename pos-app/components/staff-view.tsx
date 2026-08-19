@@ -6,7 +6,7 @@ import { LiveClock } from "@/components/live-clock";
 import { StaffFormModal } from "@/components/staff-form-modal";
 import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
-import { canManageStaff } from "@/lib/staff-roles";
+import { canDeleteStaffMember, canManageStaff, getStaffDeleteBlockReason } from "@/lib/staff-roles";
 import type { StaffMember, StaffRole } from "@/lib/types";
 import {
   createStaff,
@@ -78,10 +78,18 @@ export function StaffView({ onRefresh }: StaffViewProps) {
 
   const handleDelete = async () => {
     if (!editing) return;
+    const blockReason = getStaffDeleteBlockReason(editing, currentStaffUser, staffList);
+    if (blockReason) {
+      setError(translate(staffDeleteBlockKey(blockReason)));
+      return;
+    }
     await new Promise<void>((resolve) => {
       requestPin(async () => {
         setIsSaving(true);
-        const { error: deleteError } = await deleteStaff(editing.id);
+        const { error: deleteError } = await deleteStaff(editing.id, {
+          actor: currentStaffUser,
+          roster: staffList,
+        });
         setIsSaving(false);
         if (deleteError) {
           setError(deleteError.message);
@@ -95,6 +103,14 @@ export function StaffView({ onRefresh }: StaffViewProps) {
         resolve();
       });
     });
+  };
+
+  const staffDeleteBlockKey = (
+    reason: ReturnType<typeof getStaffDeleteBlockReason>,
+  ): "staffCannotDeleteSelf" | "staffCannotDeleteLastAdmin" | "staffAccessDenied" => {
+    if (reason === "self") return "staffCannotDeleteSelf";
+    if (reason === "lastAdmin") return "staffCannotDeleteLastAdmin";
+    return "staffAccessDenied";
   };
 
   return (
@@ -193,28 +209,33 @@ export function StaffView({ onRefresh }: StaffViewProps) {
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              requestPin(async () => {
-                                setIsSaving(true);
-                                setError(null);
-                                const { error: deleteError } = await deleteStaff(member.id);
-                                setIsSaving(false);
-                                if (deleteError) {
-                                  setError(deleteError.message);
-                                  return;
-                                }
-                                logAction("delete staff", member.name);
-                                onRefresh();
-                              })
-                            }
-                            disabled={isSaving}
-                            className="rounded-lg p-2 text-red-500 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-950"
-                            aria-label={`Delete ${member.name}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {canDeleteStaffMember(member, currentStaffUser, staffList) && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                requestPin(async () => {
+                                  setIsSaving(true);
+                                  setError(null);
+                                  const { error: deleteError } = await deleteStaff(member.id, {
+                                    actor: currentStaffUser,
+                                    roster: staffList,
+                                  });
+                                  setIsSaving(false);
+                                  if (deleteError) {
+                                    setError(deleteError.message);
+                                    return;
+                                  }
+                                  logAction("delete staff", member.name);
+                                  onRefresh();
+                                })
+                              }
+                              disabled={isSaving}
+                              className="rounded-lg p-2 text-red-500 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-950"
+                              aria-label={`Delete ${member.name}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -229,13 +250,20 @@ export function StaffView({ onRefresh }: StaffViewProps) {
       <StaffFormModal
         open={formOpen}
         member={editing}
+        canDelete={
+          editing ? canDeleteStaffMember(editing, currentStaffUser, staffList) : false
+        }
         onClose={() => {
           setFormOpen(false);
           setEditing(null);
           setError(null);
         }}
         onSave={handleSave}
-        onDelete={editing ? handleDelete : undefined}
+        onDelete={
+          editing && canDeleteStaffMember(editing, currentStaffUser, staffList)
+            ? handleDelete
+            : undefined
+        }
         isSaving={isSaving}
       />
     </div>

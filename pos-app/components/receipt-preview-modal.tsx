@@ -7,6 +7,7 @@ import {
   receiptTypographyCssVars,
   receiptTypographyFromSettings,
 } from "@/lib/receipt-print-styles";
+import type { AppSettings } from "@/lib/types";
 import { ReceiptBodyContent, type ReceiptTemplate } from "@/src/components/ReceiptPrint";
 import type { ReceiptData } from "@/lib/receipt-calculations";
 
@@ -14,6 +15,7 @@ interface ReceiptPreviewModalProps {
   open: boolean;
   data: ReceiptData | null;
   template?: ReceiptTemplate;
+  font?: Pick<AppSettings, "receiptFontFamily" | "receiptFontSize" | "receiptFontWeight">;
   onClose: () => void;
   onPrint: () => void;
 }
@@ -22,6 +24,7 @@ export function ReceiptPreviewModal({
   open,
   data,
   template,
+  font,
   onClose,
   onPrint,
 }: ReceiptPreviewModalProps) {
@@ -29,8 +32,15 @@ export function ReceiptPreviewModal({
 
   if (!data) return null;
 
-  const typography = receiptTypographyFromSettings(settings);
+  const typography = receiptTypographyFromSettings(
+    font ?? {
+      receiptFontFamily: settings.receiptFontFamily,
+      receiptFontSize: settings.receiptFontSize,
+      receiptFontWeight: settings.receiptFontWeight,
+    },
+  );
   const thermalStyle = receiptTypographyCssVars(typography);
+  const fontLabel = font ?? settings;
 
   return (
     <Modal
@@ -60,8 +70,8 @@ export function ReceiptPreviewModal({
       }
     >
       <p className="mb-3 text-center text-xs text-gray-500 dark:text-gray-400">
-        Preview at true 80mm width ({settings.receiptFontFamily} · {settings.receiptFontSize} ·{" "}
-        {settings.receiptFontWeight}). Use Print / Save PDF — set margins to None and disable headers/footers.
+        Preview at true 80mm width ({fontLabel.receiptFontFamily} · {fontLabel.receiptFontSize} ·{" "}
+        {fontLabel.receiptFontWeight}). Use Print / Save PDF — set margins to None and disable headers/footers.
       </p>
       <div className="receipt-preview-stage mx-auto max-w-full">
         <div className="receipt-preview-frame mx-auto w-[280px] sm:w-[320px]">

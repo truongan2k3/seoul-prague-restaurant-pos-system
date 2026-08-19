@@ -317,7 +317,10 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                   {translate("card")}: {formatCzk(stats.card)}
                 </span>
                 <span>
-                  {translate("tips")}: {formatCzk(stats.tips)}
+                  {translate("tipsCash")}: {formatCzk(stats.cashTips)}
+                </span>
+                <span>
+                  {translate("tipsCard")}: {formatCzk(stats.cardTips)}
                 </span>
                 <span className="text-gray-500 dark:text-gray-400">
                   {translate("totalCollected")}: {formatCzk(stats.grandTotal)}

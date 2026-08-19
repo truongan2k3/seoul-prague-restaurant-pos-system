@@ -45,9 +45,13 @@ export function LiveClock({ className }: { className?: string }) {
 }
 
 export function formatElapsed(start: Date, nowMs: number = Date.now()): string {
-  const totalSeconds = Math.floor((nowMs - start.getTime()) / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
+  const totalSeconds = Math.max(0, Math.floor((nowMs - start.getTime()) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 

@@ -245,12 +245,12 @@ export function buildReceiptEscPosLines(
   );
 
   lines.push("--------------------------------");
-  lines.push(padLine("Kód Položka", "Částka"));
+  lines.push(padLine("Položka", "Částka"));
 
   for (const item of data.items) {
     const amount = `${formatReceiptAmount(item.lineTotal)} ${item.taxGroup}`;
     lines.push(
-      ...receiptItemEscPosLines(item.code, item.name, amount, RECEIPT_LINE_WIDTH),
+      ...receiptItemEscPosLines(item.name, amount, RECEIPT_LINE_WIDTH),
     );
   }
 
@@ -386,9 +386,9 @@ export async function printReceiptData(
             bitmapBytes =
               bitmapPngs.length > 0
                 ? await buildEscPosFromPngs(bitmapPngs, {
-                    feedBetweenDots: 4,
-                    bottomBlankRasterDots: 72,
-                    bottomFeedLines: 8,
+                    feedBetweenDots: 0,
+                    bottomBlankRasterDots: 16,
+                    bottomFeedLines: 2,
                     rasterWidthDots,
                   })
                 : textBytes;

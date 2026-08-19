@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ManageTableModal } from "@/components/manage-table-modal";
+import { ChangeTableModal } from "@/components/change-table-modal";
 import { NewOrderModal } from "@/components/new-order-modal";
 import { PaymentModal } from "@/components/payment-modal";
 import type { CheckoutSubmitPayload } from "@/components/checkout-panel";
@@ -21,6 +21,7 @@ import {
   appendOrdersToTable,
   checkoutTable,
   forceCloseTable,
+  mergeTables,
   occupyTable,
   transferTable,
   updateTableOrders,
@@ -29,7 +30,7 @@ import { mapTableRow } from "@/src/lib/supabase-data";
 
 export type TableOrderModalState =
   | { type: "new-order"; tableId: string; mode: "new" | "append" }
-  | { type: "manage-table"; tableId: string }
+  | { type: "change-table"; tableId: string; returnTo?: "new-order-append" }
   | { type: "checkout"; tableId: string; orders: OrderItem[] }
   | null;
 
@@ -60,9 +61,9 @@ export function useTableOrderWorkflow({
 
   const selectedTable = modal ? tables.find((t) => t.id === modal.tableId) : undefined;
 
-  const openManageTable = (tableId: string) => {
+  const openChangeTable = (tableId: string, returnTo?: "new-order-append") => {
     setActionError(null);
-    setModal({ type: "manage-table", tableId });
+    setModal({ type: "change-table", tableId, returnTo });
   };
 
   const openNewOrder = (tableId: string, mode: "new" | "append" = "new") => {
@@ -197,7 +198,7 @@ export function useTableOrderWorkflow({
     options?: { silent?: boolean; printOrders?: OrderItem[] },
   ) => {
     const targetTableId =
-      tableId ?? (modal?.type === "manage-table" || modal?.type === "new-order" ? modal.tableId : undefined);
+      tableId ?? (modal?.type === "new-order" ? modal.tableId : undefined);
     if (!targetTableId) return;
     setIsSaving(true);
     setActionError(null);
@@ -241,24 +242,22 @@ export function useTableOrderWorkflow({
         console.warn("[KitchenPrint] Failed:", printError);
       });
     }
-    if (modal?.type === "manage-table" && orders.length === 0) {
-      setModal(null);
-    }
     onRefresh();
   };
 
-  const handleProceedToCheckout = async (orders: OrderItem[]) => {
-    if (!selectedTable || orders.length === 0) return;
-    if (selectedTable.paymentStatus === "paid") return;
+  const handleProceedToCheckout = async (orders: OrderItem[], explicitTableId?: string) => {
+    const tableId = explicitTableId ?? modal?.tableId ?? selectedTable?.id;
+    if (!tableId || orders.length === 0) return;
 
-    const tableId = modal?.tableId ?? selectedTable.id;
+    const table = tables.find((t) => t.id === tableId);
+    if (!table || table.paymentStatus === "paid") return;
 
     setIsSaving(true);
     setActionError(null);
     const { data, error } = await updateTableOrders(tableId, orders, {
       staffId: staff?.id,
       staffName: staff?.name,
-      tableLabel: selectedTable?.label,
+      tableLabel: table.label,
     });
     setIsSaving(false);
 
@@ -276,7 +275,7 @@ export function useTableOrderWorkflow({
   };
 
   const handleForceCloseTable = async () => {
-    if (!modal || (modal.type !== "new-order" && modal.type !== "manage-table")) return;
+    if (!modal || modal.type !== "new-order") return;
     setIsSaving(true);
     setActionError(null);
     const { data, error } = await forceCloseTable(modal.tableId);
@@ -359,17 +358,19 @@ export function useTableOrderWorkflow({
 
       setModal({ type: "checkout", tableId: modal.tableId, orders: nextOrders });
 
-      const subtotal = nextOrders.reduce((sum, item) => sum + item.price * item.quantity, 0);
-      void sendCfdEvent(
-        "START_CHECKOUT",
-        buildCfdCheckoutPayload(selectedTable.label, nextOrders, menuItems, {
-          subtotal,
-          discount: 0,
-          tip: 0,
-          grandTotal: subtotal,
-          amountDueNow: subtotal,
-        }),
-      );
+      if (payload.payment.splitMode !== "items") {
+        const subtotal = nextOrders.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        void sendCfdEvent(
+          "START_CHECKOUT",
+          buildCfdCheckoutPayload(selectedTable.label, nextOrders, menuItems, {
+            subtotal,
+            discount: 0,
+            tip: 0,
+            grandTotal: subtotal,
+            amountDueNow: subtotal,
+          }),
+        );
+      }
       onRefresh();
       return;
     }
@@ -420,19 +421,45 @@ export function useTableOrderWorkflow({
     onRefresh();
   };
 
-  const handleTransfer = async (toId: string) => {
-    if (!modal || modal.type !== "manage-table") return;
+  const finishChangeTable = (fromId: string, toId: string, action: "transfer" | "merge") => {
+    const fromLabel = tables.find((t) => t.id === fromId)?.label ?? fromId;
+    const toLabel = tables.find((t) => t.id === toId)?.label ?? toId;
+    logAction(action === "merge" ? "merge table" : "transfer table", `${fromLabel} → ${toLabel}`);
+
+    if (modal?.type === "change-table" && modal.returnTo === "new-order-append") {
+      setModal({ type: "new-order", tableId: toId, mode: "append" });
+    } else {
+      setModal(null);
+    }
+    onRefresh();
+  };
+
+  const handleTransferTable = async (toId: string) => {
+    if (!modal || modal.type !== "change-table") return;
     setIsSaving(true);
     setActionError(null);
-    const { error } = await transferTable(modal.tableId, toId);
+    const fromId = modal.tableId;
+    const { error } = await transferTable(fromId, toId);
     setIsSaving(false);
     if (error) {
       setActionError(error.message);
       return;
     }
-    logAction("transfer table", `${selectedTable?.label} → ${toId}`);
-    setModal(null);
-    onRefresh();
+    finishChangeTable(fromId, toId, "transfer");
+  };
+
+  const handleMergeTable = async (toId: string) => {
+    if (!modal || modal.type !== "change-table") return;
+    setIsSaving(true);
+    setActionError(null);
+    const fromId = modal.tableId;
+    const { error } = await mergeTables([fromId], toId);
+    setIsSaving(false);
+    if (error) {
+      setActionError(error.message);
+      return;
+    }
+    finishChangeTable(fromId, toId, "merge");
   };
 
   const floorItemsForTable = (tableId: string) =>
@@ -443,19 +470,20 @@ export function useTableOrderWorkflow({
 
   const modals = (
     <>
-      {selectedTable && modal?.type === "manage-table" && (
-        <ManageTableModal
+      {selectedTable && modal?.type === "change-table" && (
+        <ChangeTableModal
           open
           table={selectedTable}
           allTables={tables}
-          menuItems={menuItems}
-          orderItems={floorItemsForTable(selectedTable.id)}
-          onClose={() => setModal({ type: "new-order", tableId: selectedTable.id, mode: "append" })}
-          onSaveOrders={handleSaveOrders}
-          onTransfer={handleTransfer}
-          onProceedToCheckout={handleProceedToCheckout}
-          onAddItems={() => openNewOrder(selectedTable.id, "append")}
-          onRefresh={onRefresh}
+          onClose={() => {
+            if (modal.returnTo === "new-order-append") {
+              setModal({ type: "new-order", tableId: selectedTable.id, mode: "append" });
+            } else {
+              setModal(null);
+            }
+          }}
+          onTransfer={handleTransferTable}
+          onMerge={handleMergeTable}
           isSaving={isSaving}
           error={actionError}
         />
@@ -489,7 +517,7 @@ export function useTableOrderWorkflow({
           onAppendCartNoPrint={handleAppendCartNoPrint}
           onCheckout={handleProceedToCheckout}
           onCloseTable={handleForceCloseTable}
-          onManage={() => openManageTable(selectedTable.id)}
+          onChangeTable={() => openChangeTable(selectedTable.id, "new-order-append")}
           onSaveExistingOrders={(orders, options) =>
             handleSaveOrders(orders, selectedTable.id, options)
           }
@@ -504,9 +532,17 @@ export function useTableOrderWorkflow({
     modal,
     actionError,
     setActionError,
-    openManageTable,
+    openChangeTable,
     openNewOrder,
+    openCheckoutForTable: (tableId: string) => {
+      const orders = filterItemsForBoard(
+        orderItems.filter((item) => item.tableId === tableId),
+        "floor",
+      );
+      void handleProceedToCheckout(orders, tableId);
+    },
     handleTableClick,
     tableOrderModals: modals,
+    isSaving,
   };
 }

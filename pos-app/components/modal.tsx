@@ -1,7 +1,8 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
+import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 
 interface ModalProps {
   open: boolean;
@@ -24,39 +25,10 @@ export function Modal({
   bodyClassName = "",
   scrollBody = true,
 }: ModalProps) {
-  useEffect(() => {
-    if (!open) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = "";
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open, onClose]);
-
-  if (!open) return null;
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="modal-title"
-    >
-      <button
-        type="button"
-        aria-label="Close modal"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/60"
-      />
-      <div
-        className={`relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800 sm:max-h-[92vh] sm:rounded-xl ${
+    <ModalOverlay open={open} onClose={onClose} ariaLabelledBy="modal-title">
+      <ModalPanel
+        className={`flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800 sm:max-h-[92vh] sm:rounded-xl ${
           size === "xl"
             ? "sm:max-w-4xl"
             : size === "lg"
@@ -93,7 +65,7 @@ export function Modal({
             {footer}
           </div>
         )}
-      </div>
-    </div>
+      </ModalPanel>
+    </ModalOverlay>
   );
 }

@@ -2,6 +2,7 @@
 
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { OnScreenNumericKeyboard } from "@/components/on-screen-numeric-keyboard";
 import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
@@ -19,17 +20,20 @@ export function ManagerPinModal() {
     }
   }, [pinOpen]);
 
-  if (!pinOpen) return null;
-
   const handleSubmit = () => {
     if (!pin.trim()) return;
     submitPin(pin);
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center p-2 sm:items-center sm:p-4">
-      <button type="button" aria-label="Close" onClick={cancelPin} className="absolute inset-0 bg-black/50" />
-      <div className="relative z-10 flex max-h-[92vh] w-full max-w-sm flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800">
+    <ModalOverlay
+      open={pinOpen}
+      onClose={cancelPin}
+      zIndexClass="z-[60]"
+      className="flex items-end justify-center p-2 sm:items-center sm:p-4"
+      backdropClassName="bg-black/50"
+    >
+      <ModalPanel className="flex max-h-[92vh] w-full max-w-sm flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800">
         <div className="shrink-0 p-4 pb-2 sm:p-6 sm:pb-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -83,7 +87,7 @@ export function ManagerPinModal() {
             allowDecimal={false}
           />
         </div>
-      </div>
-    </div>
+      </ModalPanel>
+    </ModalOverlay>
   );
 }

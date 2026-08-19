@@ -228,6 +228,11 @@ export interface AppSettings {
   marqueeOnKds: boolean;
   /** Show on /bar display */
   marqueeOnBar: boolean;
+  /** Show changelog modal on each POS refresh */
+  changelogPopupEnabled: boolean;
+  changelogPopupTitle: string;
+  /** Plain text; one bullet per line */
+  changelogPopupBody: string;
 }
 
 export type StaffRole = "admin" | "manager" | "server" | "kitchen" | "bar";

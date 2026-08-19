@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Printer, Trash2, X } from "lucide-react";
+import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { useAdminDeletionGate } from "@/contexts/admin-deletion-gate-context";
 import { NumericInputField } from "@/components/numeric-input-field";
 import { TableActivityLogPanel } from "@/components/table-activity-log-panel";
@@ -214,13 +215,14 @@ export function OrderHistoryModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="order-history-title"
-        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-gray-900"
-      >
+    <ModalOverlay
+      open
+      onClose={onClose}
+      className="flex items-center justify-center p-4"
+      backdropClassName="bg-black/50"
+      ariaLabelledBy="order-history-title"
+    >
+      <ModalPanel className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-gray-900">
         <div className="flex items-start justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-800">
           <div>
             <h2 id="order-history-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -486,7 +488,7 @@ export function OrderHistoryModal({
             )
           )}
         </div>
-      </div>
-    </div>
+      </ModalPanel>
+    </ModalOverlay>
   );
 }

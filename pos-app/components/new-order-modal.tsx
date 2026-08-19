@@ -7,6 +7,7 @@ import { ItemCustomizeModal, type CustomizeResult } from "@/components/item-cust
 import { GrillGuestCountModal } from "@/components/grill-guest-count-modal";
 import { LinePriceEditor } from "@/components/line-price-editor";
 import { Modal } from "@/components/modal";
+import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { OnScreenKeyboard } from "@/components/on-screen-keyboard";
 import { OrderLineToolbar } from "@/components/order-line-toolbar";
 import { TableActivityLogPanel } from "@/components/table-activity-log-panel";
@@ -455,14 +456,6 @@ export function NewOrderModal({
     setSubmittedBaseline([]);
     setPendingCancels([]);
     setUnsavedConfirmMode(null);
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "";
-    };
   }, [open]);
 
   useEffect(() => {
@@ -1799,22 +1792,16 @@ export function NewOrderModal({
     </>
   );
 
-  if (!open) return null;
-
   return (
     <>
-      <div
-        className="fixed inset-0 z-50 flex flex-col sm:items-center sm:justify-center sm:p-4"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="pos-order-title"
+      <ModalOverlay
+        open={open}
+        className="flex flex-col sm:items-center sm:justify-center sm:p-4"
+        backdropClassName="bg-black/65"
+        ariaLabelledBy="pos-order-title"
+        lockScroll
       >
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 bg-black/65"
-        />
-
-        <div className="relative z-10 flex h-[100dvh] max-h-[100dvh] w-full max-w-[1400px] flex-col overflow-hidden rounded-none border border-gray-200 bg-white shadow-2xl sm:h-[min(94vh,920px)] sm:max-h-[min(94vh,920px)] sm:rounded-2xl dark:border-gray-700 dark:bg-gray-900">
+        <ModalPanel className="flex h-[100dvh] max-h-[100dvh] w-full max-w-[1400px] flex-col overflow-hidden rounded-none border border-gray-200 bg-white shadow-2xl sm:h-[min(94vh,920px)] sm:max-h-[min(94vh,920px)] sm:rounded-2xl dark:border-gray-700 dark:bg-gray-900">
           <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700 sm:px-5 sm:py-4">
             <div>
               <h2
@@ -2023,8 +2010,8 @@ export function NewOrderModal({
           </span>
           <ChevronRight className="h-5 w-5 shrink-0" />
         </button>
-      </div>
-      </div>
+        </ModalPanel>
+      </ModalOverlay>
 
       {noteLine && (
         <div className="relative z-[60]">
@@ -2233,20 +2220,17 @@ export function NewOrderModal({
       )}
 
       {kitchenMessageOpen && (
-        <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:p-4">
-          <div
-            aria-hidden="true"
-            className="absolute inset-0 bg-black/50"
-            onClick={() => {
-              if (!kitchenMessageBusy) setKitchenMessageOpen(false);
-            }}
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="kitchen-message-title"
-            className="relative z-10 w-full max-w-lg rounded-t-2xl border border-gray-200 bg-white p-4 shadow-xl sm:rounded-2xl dark:border-gray-700 dark:bg-gray-900 sm:p-5"
-          >
+        <ModalOverlay
+          open={kitchenMessageOpen}
+          onClose={() => {
+            if (!kitchenMessageBusy) setKitchenMessageOpen(false);
+          }}
+          zIndexClass="z-[60]"
+          className="flex items-end justify-center sm:items-center sm:p-4"
+          backdropClassName="bg-black/50"
+          ariaLabelledBy="kitchen-message-title"
+        >
+          <ModalPanel className="w-full max-w-lg rounded-t-2xl border border-gray-200 bg-white p-4 shadow-xl sm:rounded-2xl dark:border-gray-700 dark:bg-gray-900 sm:p-5">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
                 <h3
@@ -2326,8 +2310,8 @@ export function NewOrderModal({
                     : translate("kitchenMessageSave")}
               </button>
             </div>
-          </div>
-        </div>
+          </ModalPanel>
+        </ModalOverlay>
       )}
 
       {customItemOpen && (
@@ -2493,14 +2477,19 @@ export function NewOrderModal({
       />
 
       {discardConfirmOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div aria-hidden="true" className="absolute inset-0 bg-black/50" />
-          <div
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="unsaved-changes-title"
-            className="relative z-10 w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-700 dark:bg-gray-900"
-          >
+        <ModalOverlay
+          open={discardConfirmOpen}
+          onClose={() => {
+            setDiscardConfirmOpen(false);
+            setUnsavedConfirmMode(null);
+          }}
+          zIndexClass="z-[60]"
+          className="flex items-center justify-center p-4"
+          backdropClassName="bg-black/50"
+          role="alertdialog"
+          ariaLabelledBy="unsaved-changes-title"
+        >
+          <ModalPanel className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-700 dark:bg-gray-900">
             <p
               id="unsaved-changes-title"
               className="text-sm leading-relaxed text-gray-800 dark:text-gray-100"
@@ -2540,8 +2529,8 @@ export function NewOrderModal({
                   : translate("discardLeave")}
               </button>
             </div>
-          </div>
-        </div>
+          </ModalPanel>
+        </ModalOverlay>
       )}
     </>
   );

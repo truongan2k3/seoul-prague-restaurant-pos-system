@@ -1600,6 +1600,60 @@ export function SettingsView({
               {translate("settingsAutoSyncHint")}
             </p>
           </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-6 md:col-span-2 dark:border-gray-700 dark:bg-gray-800">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="font-semibold text-gray-900 dark:text-gray-100">
+                  {translate("settingsChangelogPopup")}
+                </h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  {translate("settingsChangelogPopupHint")}
+                </p>
+              </div>
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-700">
+                <input
+                  type="checkbox"
+                  checked={draft.changelogPopupEnabled}
+                  onChange={(event) => updateDraft("changelogPopupEnabled", event.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                  {translate("settingsChangelogPopupEnabled")}
+                </span>
+              </label>
+            </div>
+
+            <div className="mt-4 grid gap-4">
+              <label className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">
+                  {translate("settingsChangelogPopupTitle")}
+                </span>
+                <input
+                  type="text"
+                  value={draft.changelogPopupTitle}
+                  onChange={(event) => updateDraft("changelogPopupTitle", event.target.value)}
+                  className="pos-input mt-1"
+                  placeholder={translate("changelogPopupDefaultTitle")}
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">
+                  {translate("settingsChangelogPopupBody")}
+                </span>
+                <textarea
+                  value={draft.changelogPopupBody}
+                  onChange={(event) => updateDraft("changelogPopupBody", event.target.value)}
+                  rows={8}
+                  className="pos-input mt-1 min-h-[160px] resize-y font-mono text-sm"
+                  placeholder={translate("settingsChangelogPopupBodyPlaceholder")}
+                />
+                <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
+                  {translate("settingsChangelogPopupBodyHint")}
+                </span>
+              </label>
+            </div>
+          </section>
         </div>
         )}
 

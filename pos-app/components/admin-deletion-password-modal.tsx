@@ -2,6 +2,7 @@
 
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { useApp } from "@/contexts/app-context";
 import { useAdminDeletionGate } from "@/contexts/admin-deletion-gate-context";
 
@@ -14,8 +15,6 @@ export function AdminDeletionPasswordModal() {
     if (!modalOpen) setPassword("");
   }, [modalOpen]);
 
-  if (!modalOpen) return null;
-
   const handleSubmit = () => {
     submitPassword(password);
   };
@@ -25,9 +24,14 @@ export function AdminDeletionPasswordModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <button type="button" aria-label="Close" onClick={handleCancel} className="absolute inset-0 bg-black/50" />
-      <div className="relative z-10 w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-gray-700 dark:bg-gray-800">
+    <ModalOverlay
+      open={modalOpen}
+      onClose={handleCancel}
+      zIndexClass="z-[60]"
+      className="flex items-center justify-center p-4"
+      backdropClassName="bg-black/50"
+    >
+      <ModalPanel className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-gray-700 dark:bg-gray-800">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             {translate("adminDeletionTitle")}
@@ -71,7 +75,7 @@ export function AdminDeletionPasswordModal() {
             {translate("confirmDelete")}
           </button>
         </div>
-      </div>
-    </div>
+      </ModalPanel>
+    </ModalOverlay>
   );
 }

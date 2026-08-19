@@ -22,3 +22,12 @@ ALTER TABLE public.staff
 
 ALTER TABLE public.staff
   ADD COLUMN IF NOT EXISTS require_switch_password boolean NOT NULL DEFAULT false;
+
+ALTER TABLE public.settings
+  ADD COLUMN IF NOT EXISTS changelog_popup_enabled boolean DEFAULT false;
+
+ALTER TABLE public.settings
+  ADD COLUMN IF NOT EXISTS changelog_popup_title text DEFAULT '';
+
+ALTER TABLE public.settings
+  ADD COLUMN IF NOT EXISTS changelog_popup_body text DEFAULT '';

@@ -135,6 +135,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   marqueeOnKds: false,
   marqueeOnBar: false,
   marqueeConfigs: defaultMarqueeConfigs(),
+  changelogPopupEnabled: false,
+  changelogPopupTitle: "What's new",
+  changelogPopupBody: "",
 };
 
 type SettingsRow = {
@@ -200,6 +203,9 @@ type SettingsRow = {
   marquee_on_kds?: boolean | null;
   marquee_on_bar?: boolean | null;
   marquee_configs?: unknown;
+  changelog_popup_enabled?: boolean | null;
+  changelog_popup_title?: string | null;
+  changelog_popup_body?: string | null;
 };
 
 function parseNumericSetting(value: number | string | null | undefined, fallback: number): number {
@@ -430,6 +436,12 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
         marqueeOnBar: legacy.marqueeOnBar,
       };
     })(),
+    changelogPopupEnabled:
+      row.changelog_popup_enabled ?? DEFAULT_APP_SETTINGS.changelogPopupEnabled,
+    changelogPopupTitle:
+      row.changelog_popup_title ?? DEFAULT_APP_SETTINGS.changelogPopupTitle,
+    changelogPopupBody:
+      row.changelog_popup_body ?? DEFAULT_APP_SETTINGS.changelogPopupBody,
   };
 }
 
@@ -557,6 +569,15 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
     if (partial.marqueeOnClient !== undefined) payload.marquee_on_client = partial.marqueeOnClient;
     if (partial.marqueeOnKds !== undefined) payload.marquee_on_kds = partial.marqueeOnKds;
     if (partial.marqueeOnBar !== undefined) payload.marquee_on_bar = partial.marqueeOnBar;
+  }
+  if (partial.changelogPopupEnabled !== undefined) {
+    payload.changelog_popup_enabled = partial.changelogPopupEnabled;
+  }
+  if (partial.changelogPopupTitle !== undefined) {
+    payload.changelog_popup_title = partial.changelogPopupTitle;
+  }
+  if (partial.changelogPopupBody !== undefined) {
+    payload.changelog_popup_body = partial.changelogPopupBody;
   }
   return payload;
 }
@@ -758,6 +779,9 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "adminDeletionPassword"
     | "marqueeConfigs"
     | "soundConfigs"
+    | "changelogPopupEnabled"
+    | "changelogPopupTitle"
+    | "changelogPopupBody"
   >;
 
 export function pickPrinterBillDraft(settings: AppSettings): PrinterBillSettingsDraft {
@@ -813,5 +837,8 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     adminDeletionPassword: settings.adminDeletionPassword,
     marqueeConfigs: resolveMarqueeConfigs(settings),
     soundConfigs: settings.soundConfigs,
+    changelogPopupEnabled: settings.changelogPopupEnabled,
+    changelogPopupTitle: settings.changelogPopupTitle,
+    changelogPopupBody: settings.changelogPopupBody,
   };
 }

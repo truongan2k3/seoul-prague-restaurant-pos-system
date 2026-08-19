@@ -779,6 +779,18 @@ const en = {
   settingsAutoSyncTitle: "Auto-sync (tablet / phone)",
   settingsAutoSyncHint:
     "When the screen was off or the app was in the background for more than 5 minutes, orders and menu sync automatically when you return. After 1 hour without use, data syncs again while the app stays open. Pull down on mobile to refresh manually — you will be asked to save first if needed.",
+  settingsChangelogPopup: "Changelog popup",
+  settingsChangelogPopupHint:
+    "Shows a notice on every page refresh until staff tap I understand. Edit the message below and save settings.",
+  settingsChangelogPopupEnabled: "Show on refresh",
+  settingsChangelogPopupTitle: "Popup title",
+  settingsChangelogPopupBody: "Changelog message",
+  settingsChangelogPopupBodyPlaceholder:
+    "One change per line, e.g.\nNew checkout layout\nFixed receipt print on old printer",
+  settingsChangelogPopupBodyHint: "Each line appears as a bullet in the popup.",
+  changelogPopupDefaultTitle: "What's new",
+  changelogPopupUnderstand: "I understand",
+  changelogPopupEmptyBody: "No changelog text configured yet.",
   callWaiter: "Call Waiter",
   callingWaiter: "Calling…",
   callWaiterToast: "Kitchen is calling for a waiter!",
@@ -1577,6 +1589,18 @@ const cs: Record<TranslationKey, string> = {
   settingsAutoSyncTitle: "Automatická synchronizace (tablet / telefon)",
   settingsAutoSyncHint:
     "Po vypnutí obrazovky nebo přepnutí aplikace na pozadí déle než 5 minut se po návratu automaticky synchronizují objednávky a menu. Po 1 hodině bez použití se data synchronizují znovu, dokud je aplikace otevřená. Na mobilu tahem dolů obnovíte ručně — při neuložených změnách se nejdřív zeptáme.",
+  settingsChangelogPopup: "Popup s novinkami",
+  settingsChangelogPopupHint:
+    "Při každém obnovení stránky zobrazí upozornění, dokud personál neklepne na Rozumím. Upravte text a uložte nastavení.",
+  settingsChangelogPopupEnabled: "Zobrazit po obnovení",
+  settingsChangelogPopupTitle: "Nadpis popupu",
+  settingsChangelogPopupBody: "Text novinek",
+  settingsChangelogPopupBodyPlaceholder:
+    "Jedna novinka na řádek, např.\nNové rozhraní platby\nOprava tisku účtenky",
+  settingsChangelogPopupBodyHint: "Každý řádek se zobrazí jako odrážka v popupu.",
+  changelogPopupDefaultTitle: "Co je nového",
+  changelogPopupUnderstand: "Rozumím",
+  changelogPopupEmptyBody: "Zatím není nastaven žádný text novinek.",
   callWaiter: "Zavolat obsluhu",
   callingWaiter: "Volám…",
   callWaiterToast: "Kuchyně volá obsluhu!",
@@ -2359,6 +2383,18 @@ const zh: Record<TranslationKey, string> = {
   settingsAutoSyncTitle: "自动同步（平板 / 手机）",
   settingsAutoSyncHint:
     "屏幕关闭或应用在后台超过 5 分钟后，返回时会自动同步订单和菜单。应用保持打开且 1 小时无操作时会再次同步。手机上可下拉手动刷新——如有未保存内容会先询问是否保存。",
+  settingsChangelogPopup: "更新说明弹窗",
+  settingsChangelogPopupHint:
+    "每次刷新页面时显示通知，员工点击“我知道了”后关闭。编辑下方内容并保存设置。",
+  settingsChangelogPopupEnabled: "刷新时显示",
+  settingsChangelogPopupTitle: "弹窗标题",
+  settingsChangelogPopupBody: "更新说明",
+  settingsChangelogPopupBodyPlaceholder:
+    "每行一条，例如：\n新结账界面\n修复旧打印机收据",
+  settingsChangelogPopupBodyHint: "每行在弹窗中显示为一个项目符号。",
+  changelogPopupDefaultTitle: "更新内容",
+  changelogPopupUnderstand: "我知道了",
+  changelogPopupEmptyBody: "尚未配置更新说明。",
   callWaiter: "呼叫服务员",
   callingWaiter: "呼叫中…",
   callWaiterToast: "厨房正在呼叫服务员！",

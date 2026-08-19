@@ -1,7 +1,8 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { OnScreenNumericKeyboard } from "@/components/on-screen-numeric-keyboard";
 import { useApp } from "@/contexts/app-context";
 
@@ -24,22 +25,27 @@ export function StaffSwitchModal() {
     }
   }, [staffSwitchOpen]);
 
-  if (!staffSwitchOpen || !staffSwitchTarget) return null;
+  const open = Boolean(staffSwitchOpen && staffSwitchTarget);
+  const targetRef = useRef(staffSwitchTarget);
+  if (staffSwitchTarget) targetRef.current = staffSwitchTarget;
+  const target = staffSwitchTarget ?? targetRef.current;
 
   const handleSubmit = () => {
     if (!pin.trim()) return;
     submitStaffSwitchPassword(pin);
   };
 
+  if (!target) return null;
+
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center p-2 sm:items-center sm:p-4">
-      <button
-        type="button"
-        aria-label="Close"
-        onClick={cancelStaffSwitch}
-        className="absolute inset-0 bg-black/50"
-      />
-      <div className="relative z-10 flex max-h-[92vh] w-full max-w-sm flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800">
+    <ModalOverlay
+      open={open}
+      onClose={cancelStaffSwitch}
+      zIndexClass="z-[60]"
+      className="flex items-end justify-center p-2 sm:items-center sm:p-4"
+      backdropClassName="bg-black/50"
+    >
+      <ModalPanel className="flex max-h-[92vh] w-full max-w-sm flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800">
         <div className="shrink-0 p-4 pb-2 sm:p-6 sm:pb-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -54,7 +60,7 @@ export function StaffSwitchModal() {
             </button>
           </div>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-            {translate("staffSwitchPasswordHint").replace("{name}", staffSwitchTarget.name)}
+            {translate("staffSwitchPasswordHint").replace("{name}", target.name)}
           </p>
           <input
             type="password"
@@ -98,7 +104,7 @@ export function StaffSwitchModal() {
             allowDecimal={false}
           />
         </div>
-      </div>
-    </div>
+      </ModalPanel>
+    </ModalOverlay>
   );
 }

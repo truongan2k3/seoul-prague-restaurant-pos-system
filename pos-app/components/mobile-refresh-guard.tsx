@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { useApp } from "@/contexts/app-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { useUnsavedWork } from "@/contexts/unsaved-work-context";
@@ -214,15 +215,16 @@ export function MobileRefreshGuard() {
         </div>
       )}
 
-      {dialogOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-          <div aria-hidden="true" className="absolute inset-0 bg-black/50" />
-          <div
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="refresh-guard-title"
-            className="relative z-10 w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-700 dark:bg-gray-900"
-          >
+      <ModalOverlay
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        zIndexClass="z-[110]"
+        className="flex items-center justify-center p-4"
+        backdropClassName="bg-black/50"
+        role="alertdialog"
+        ariaLabelledBy="refresh-guard-title"
+      >
+        <ModalPanel className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-700 dark:bg-gray-900">
             <p
               id="refresh-guard-title"
               className="text-sm leading-relaxed text-gray-800 dark:text-gray-100"
@@ -257,9 +259,8 @@ export function MobileRefreshGuard() {
                 {translate("refreshConfirmCancel")}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+        </ModalPanel>
+      </ModalOverlay>
     </>
   );
 }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, X } from "lucide-react";
 import { CheckoutPanel, type CheckoutSubmitPayload } from "@/components/checkout-panel";
+import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { useApp } from "@/contexts/app-context";
 import { expandCheckoutLines } from "@/lib/checkout-calculations";
 import {
@@ -85,33 +86,17 @@ export function PaymentModal({
     );
   }, [open, table.label, orders, menuItems]);
 
-  useEffect(() => {
-    if (!open) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") handleClose();
-    };
-
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = "";
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open, handleClose]);
-
-  if (!open) return null;
-
   const title = `${translate("payment")} — ${translate("table")} ${table.label}`;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-gray-900"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="payment-modal-title"
+    <ModalOverlay
+      open={open}
+      onClose={handleClose}
+      showBackdrop={false}
+      className="flex flex-col"
+      ariaLabelledBy="payment-modal-title"
     >
+      <ModalPanel className="flex h-full w-full flex-col bg-white dark:bg-gray-900">
       <header className="flex shrink-0 items-center gap-3 border-b border-gray-200 bg-inherit px-4 py-4 sm:px-6 dark:border-gray-700">
         <button
           type="button"
@@ -157,6 +142,7 @@ export function PaymentModal({
         confirmLabel={translate("confirmPrintReceipt")}
         sessionResetKey={checkoutSessionKey}
       />
-    </div>
+      </ModalPanel>
+    </ModalOverlay>
   );
 }

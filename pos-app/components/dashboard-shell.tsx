@@ -14,6 +14,7 @@ import { ReadyNotificationListener } from "@/components/ready-notification-liste
 import { CallWaiterListener } from "@/components/call-waiter-listener";
 import { Sidebar } from "@/components/sidebar";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
+import { ChangelogPopupGate } from "@/components/changelog-popup-gate";
 import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
 import { useTableOrderWorkflow } from "@/hooks/use-table-order-workflow";
 import { useSessionHealth } from "@/hooks/use-session-health";
@@ -302,6 +303,7 @@ export function DashboardShell() {
         <main className="flex-1 overflow-hidden">{content}</main>
       </div>
       {tableOrder.tableOrderModals}
+      <ChangelogPopupGate />
     </div>
   );
 }

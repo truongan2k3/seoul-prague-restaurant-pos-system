@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { playCustomAlertSound, unlockNotificationAudio } from "@/lib/notification-sound";
+import { MODAL_FADE_MS, useModalPresence } from "@/hooks/use-modal-presence";
 import { useSettings } from "@/contexts/settings-context";
 
 const TOAST_DURATION_MS = 10_000;
@@ -104,7 +105,17 @@ function NotificationDrawer({
   onClose: () => void;
   onMarkAllRead: () => void;
 }) {
-  if (!open) return null;
+  const { mounted, visible } = useModalPresence(open);
+
+  useEffect(() => {
+    if (!mounted) return;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mounted]);
+
+  if (!mounted) return null;
 
   return (
     <>
@@ -112,10 +123,16 @@ function NotificationDrawer({
         type="button"
         aria-label="Close notifications"
         onClick={onClose}
-        className="fixed inset-0 z-[90] bg-black/40"
+        className={`fixed inset-0 z-[90] bg-black/40 transition-opacity ease-out ${
+          visible ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        style={{ transitionDuration: `${MODAL_FADE_MS}ms` }}
       />
       <aside
-        className="fixed inset-y-0 right-0 z-[95] flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900"
+        className={`fixed inset-y-0 right-0 z-[95] flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-2xl transition-all ease-out dark:border-gray-700 dark:bg-gray-900 ${
+          visible ? "translate-x-0 opacity-100" : "translate-x-3 opacity-0"
+        }`}
+        style={{ transitionDuration: `${MODAL_FADE_MS}ms` }}
         role="dialog"
         aria-modal="true"
         aria-label="Notification history"

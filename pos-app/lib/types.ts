@@ -108,7 +108,12 @@ export interface NetworkPrinter {
 /** Configurable alert sounds (paths under /public/sounds). */
 export interface SoundConfigs {
   callWaiter: string;
+  /** Kitchen / bar KDS new ticket bell. */
   newOrder: string;
+  /** Main POS when a new order is recorded. */
+  mainNewOrder: string;
+  /** Main POS when an item is marked ready. */
+  itemReady: string;
   paymentSuccess: string;
 }
 

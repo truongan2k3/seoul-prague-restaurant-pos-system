@@ -26,7 +26,7 @@ import { useNotifications } from "@/contexts/notification-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { useSettings } from "@/contexts/settings-context";
 import { useRegisterUnsavedWork } from "@/contexts/unsaved-work-context";
-import { playTestAlertSound } from "@/lib/notification-sound";
+import { playCustomAlertSound, playTestAlertSound } from "@/lib/notification-sound";
 import { SOUND_FILE_OPTIONS } from "@/lib/auto-serve";
 import {
   pickSettingsPageDraft,
@@ -89,8 +89,12 @@ export function SettingsView({
     setUsdRate,
     soundMainEnabled,
     soundKitchenEnabled,
+    notifyMainNewOrderEnabled,
+    soundMainNewOrderEnabled,
     setSoundMainEnabled,
     setSoundKitchenEnabled,
+    setNotifyMainNewOrderEnabled,
+    setSoundMainNewOrderEnabled,
   } = useApp();
   const { settings, saving, error: settingsError, saveSettingsPageDraft, uploadAlertSound, uploadCfdReviewQrImage, saveSettings } =
     useSettings();
@@ -1413,14 +1417,27 @@ export function SettingsView({
                   {
                     key: "callWaiter" as const,
                     label: translate("soundCallWaiter"),
+                    testVariant: "newOrder" as const,
+                  },
+                  {
+                    key: "mainNewOrder" as const,
+                    label: translate("soundMainNewOrder"),
+                    testVariant: "newOrder" as const,
                   },
                   {
                     key: "newOrder" as const,
                     label: translate("soundNewOrder"),
+                    testVariant: "newOrder" as const,
+                  },
+                  {
+                    key: "itemReady" as const,
+                    label: translate("soundItemReady"),
+                    testVariant: "ready" as const,
                   },
                   {
                     key: "paymentSuccess" as const,
                     label: translate("soundPaymentSuccess"),
+                    testVariant: "ready" as const,
                   },
                 ] as const
               ).map((row) => (
@@ -1445,7 +1462,9 @@ export function SettingsView({
                     </select>
                     <button
                       type="button"
-                      onClick={() => playTestAlertSound(draft.soundConfigs[row.key])}
+                      onClick={() =>
+                        playCustomAlertSound(draft.soundConfigs[row.key], row.testVariant)
+                      }
                       className="shrink-0 rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold dark:border-gray-600"
                     >
                       Test
@@ -1461,9 +1480,30 @@ export function SettingsView({
               {translate("soundNotifications")}
             </h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Toggle bell sounds on this device. Visual toasts still appear when sound is off.
+              {translate("soundDeviceHint")}
             </p>
             <div className="mt-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Main POS
+              </p>
+              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
+                <span className="text-sm text-gray-800 dark:text-gray-200">{translate("soundMainNewOrderNotify")}</span>
+                <input
+                  type="checkbox"
+                  checked={notifyMainNewOrderEnabled}
+                  onChange={(event) => setNotifyMainNewOrderEnabled(event.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+              </label>
+              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
+                <span className="text-sm text-gray-800 dark:text-gray-200">{translate("soundMainNewOrderBell")}</span>
+                <input
+                  type="checkbox"
+                  checked={soundMainNewOrderEnabled}
+                  onChange={(event) => setSoundMainNewOrderEnabled(event.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+              </label>
               <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
                 <span className="text-sm text-gray-800 dark:text-gray-200">{translate("soundMainPos")}</span>
                 <input
@@ -1473,6 +1513,9 @@ export function SettingsView({
                   className="h-4 w-4 rounded border-gray-300"
                 />
               </label>
+              <p className="pt-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Kitchen / Bar
+              </p>
               <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
                 <span className="text-sm text-gray-800 dark:text-gray-200">{translate("soundKitchen")}</span>
                 <input

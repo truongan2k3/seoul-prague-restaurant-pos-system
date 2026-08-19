@@ -10,6 +10,8 @@ export const AUTO_SERVE_POLL_MS = 10_000;
 export const DEFAULT_SOUND_CONFIGS: SoundConfigs = {
   callWaiter: "/sounds/bell.mp3",
   newOrder: "/sounds/new_order.mp3",
+  mainNewOrder: "/sounds/new_order.mp3",
+  itemReady: "/sounds/bell.mp3",
   paymentSuccess: "/sounds/success.mp3",
 };
 
@@ -101,6 +103,18 @@ export function parseSoundConfigs(value: unknown): SoundConfigs {
         : typeof row.newOrder === "string"
           ? row.newOrder
           : DEFAULT_SOUND_CONFIGS.newOrder,
+    mainNewOrder:
+      typeof row.main_new_order === "string"
+        ? row.main_new_order
+        : typeof row.mainNewOrder === "string"
+          ? row.mainNewOrder
+          : DEFAULT_SOUND_CONFIGS.mainNewOrder,
+    itemReady:
+      typeof row.item_ready === "string"
+        ? row.item_ready
+        : typeof row.itemReady === "string"
+          ? row.itemReady
+          : DEFAULT_SOUND_CONFIGS.itemReady,
     paymentSuccess:
       typeof row.payment_success === "string"
         ? row.payment_success
@@ -114,6 +128,8 @@ export function soundConfigsToDb(configs: SoundConfigs) {
   return {
     call_waiter: configs.callWaiter,
     new_order: configs.newOrder,
+    main_new_order: configs.mainNewOrder,
+    item_ready: configs.itemReady,
     payment_success: configs.paymentSuccess,
   };
 }

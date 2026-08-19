@@ -30,7 +30,7 @@ export interface PushNotificationInput {
   id?: string;
   message: string;
   staffName?: string;
-  playSound?: boolean | "ready" | "newOrder";
+  playSound?: false | "ready" | "newOrder" | "mainNewOrder";
 }
 
 interface NotificationContextValue {
@@ -235,19 +235,25 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         setTimeout(() => dismissToast(notificationId), TOAST_DURATION_MS),
       );
 
-      if (playSound === "newOrder") {
-        playCustomAlertSound(
-          settings.soundConfigs?.newOrder || settings.customAlertSoundUrl,
-          "newOrder",
-        );
-      } else if (playSound !== false) {
-        playCustomAlertSound(
-          settings.soundConfigs?.newOrder || settings.customAlertSoundUrl,
-          "ready",
-        );
-      }
+      if (playSound === false) return;
+
+      const soundUrl =
+        playSound === "mainNewOrder"
+          ? settings.soundConfigs?.mainNewOrder || settings.soundConfigs?.newOrder
+          : playSound === "newOrder"
+            ? settings.soundConfigs?.newOrder
+            : settings.soundConfigs?.itemReady || settings.customAlertSoundUrl;
+
+      const bellVariant = playSound === "ready" ? "ready" : "newOrder";
+      playCustomAlertSound(soundUrl || settings.customAlertSoundUrl, bellVariant);
     },
-    [dismissToast, settings.customAlertSoundUrl, settings.soundConfigs?.newOrder],
+    [
+      dismissToast,
+      settings.customAlertSoundUrl,
+      settings.soundConfigs?.itemReady,
+      settings.soundConfigs?.mainNewOrder,
+      settings.soundConfigs?.newOrder,
+    ],
   );
 
   const pushToast = useCallback(

@@ -11,6 +11,7 @@ import { StaffView } from "@/components/staff-view";
 import { SettingsView } from "@/components/settings-view";
 import { DynamicQrServicesView } from "@/components/dynamic-qr-services-view";
 import { ReadyNotificationListener } from "@/components/ready-notification-listener";
+import { MainNewOrderNotificationListener } from "@/components/main-new-order-notification-listener";
 import { CallWaiterListener } from "@/components/call-waiter-listener";
 import { Sidebar } from "@/components/sidebar";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
@@ -296,6 +297,7 @@ export function DashboardShell() {
   return (
     <div className="flex h-[100dvh] bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <ReadyNotificationListener tables={tables} menuItems={menuItems} />
+      <MainNewOrderNotificationListener tables={tables} />
       <CallWaiterListener />
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">

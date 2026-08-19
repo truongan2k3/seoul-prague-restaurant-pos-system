@@ -23,6 +23,8 @@ const EUR_RATE_KEY = "pos-eur-rate";
 const USD_RATE_KEY = "pos-usd-rate";
 const SOUND_MAIN_KEY = "pos-sound-main";
 const SOUND_KITCHEN_KEY = "pos-sound-kitchen";
+const NOTIFY_MAIN_NEW_ORDER_KEY = "pos-notify-main-new-order";
+const SOUND_MAIN_NEW_ORDER_KEY = "pos-sound-main-new-order";
 
 const STAFF_SESSION_KEY = "pos-staff-session-id";
 
@@ -83,8 +85,12 @@ interface AppContextValue {
   setUsdRate: (value: number) => void;
   soundMainEnabled: boolean;
   soundKitchenEnabled: boolean;
+  notifyMainNewOrderEnabled: boolean;
+  soundMainNewOrderEnabled: boolean;
   setSoundMainEnabled: (value: boolean) => void;
   setSoundKitchenEnabled: (value: boolean) => void;
+  setNotifyMainNewOrderEnabled: (value: boolean) => void;
+  setSoundMainNewOrderEnabled: (value: boolean) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -134,6 +140,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [usdRate, setUsdRateState] = useState(DEFAULT_USD_RATE);
   const [soundMainEnabled, setSoundMainEnabledState] = useState(true);
   const [soundKitchenEnabled, setSoundKitchenEnabledState] = useState(true);
+  const [notifyMainNewOrderEnabled, setNotifyMainNewOrderEnabledState] = useState(true);
+  const [soundMainNewOrderEnabled, setSoundMainNewOrderEnabledState] = useState(true);
 
   const refreshStaffList = useCallback(async () => {
     const { data, error } = await fetchStaff();
@@ -167,6 +175,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setUsdRateState(readStoredNumber(USD_RATE_KEY, DEFAULT_USD_RATE));
     setSoundMainEnabledState(readStoredBoolean(SOUND_MAIN_KEY, true));
     setSoundKitchenEnabledState(readStoredBoolean(SOUND_KITCHEN_KEY, true));
+    setNotifyMainNewOrderEnabledState(readStoredBoolean(NOTIFY_MAIN_NEW_ORDER_KEY, true));
+    setSoundMainNewOrderEnabledState(readStoredBoolean(SOUND_MAIN_NEW_ORDER_KEY, true));
     void refreshStaffList();
   }, [refreshStaffList]);
 
@@ -200,6 +210,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setSoundKitchenEnabled = useCallback((value: boolean) => {
     setSoundKitchenEnabledState(value);
     localStorage.setItem(SOUND_KITCHEN_KEY, String(value));
+  }, []);
+
+  const setNotifyMainNewOrderEnabled = useCallback((value: boolean) => {
+    setNotifyMainNewOrderEnabledState(value);
+    localStorage.setItem(NOTIFY_MAIN_NEW_ORDER_KEY, String(value));
+  }, []);
+
+  const setSoundMainNewOrderEnabled = useCallback((value: boolean) => {
+    setSoundMainNewOrderEnabledState(value);
+    localStorage.setItem(SOUND_MAIN_NEW_ORDER_KEY, String(value));
   }, []);
 
   const setLanguage = useCallback((lang: LanguageCode) => {
@@ -332,8 +352,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setUsdRate,
       soundMainEnabled,
       soundKitchenEnabled,
+      notifyMainNewOrderEnabled,
+      soundMainNewOrderEnabled,
       setSoundMainEnabled,
       setSoundKitchenEnabled,
+      setNotifyMainNewOrderEnabled,
+      setSoundMainNewOrderEnabled,
     }),
     [
       language,
@@ -363,8 +387,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cancelStaffSwitch,
       soundMainEnabled,
       soundKitchenEnabled,
+      notifyMainNewOrderEnabled,
+      soundMainNewOrderEnabled,
       setSoundMainEnabled,
       setSoundKitchenEnabled,
+      setNotifyMainNewOrderEnabled,
+      setSoundMainNewOrderEnabled,
     ],
   );
 

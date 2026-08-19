@@ -13,6 +13,19 @@ import type { DateRange } from "@/lib/summary-analytics";
 
 export type ServiceChannel = "dine_in" | "takeaway";
 
+/** Takeaway tables for tax summary (S sebou) — VAT on receipt stays item-based like dine-in. */
+const TAKEAWAY_TABLE_CODES = new Set(["s1", "s2", "s3", "s5"]);
+
+/** Leading table code from label, e.g. "S5 打包" → "S5". */
+export function parseTableCode(tableLabel: string): string {
+  const match = tableLabel.trim().match(/^([A-Za-z]+\d*)/);
+  return match?.[1] ?? tableLabel.trim();
+}
+
+export function isTakeawayTable(tableLabel: string): boolean {
+  return TAKEAWAY_TABLE_CODES.has(parseTableCode(tableLabel).toLowerCase());
+}
+
 export interface TaxSummaryRow {
   label: string;
   rate?: number;
@@ -65,21 +78,12 @@ export function taxGroupLabel(group: TaxGroup): string {
   return group === "A" ? `A  ${VAT_RATES.A}%` : `B  ${VAT_RATES.B}%`;
 }
 
-/** Takeaway when table label mentions s sebou / takeaway / balení. */
+/** Takeaway only for configured table codes (S1, S2, S3, S5) in tax summary. */
 export function inferServiceChannel(tableLabel: string): ServiceChannel {
-  const normalized = tableLabel.trim().toLowerCase();
-  if (!normalized) return "dine_in";
-  if (/\b(sebou|takeaway|balen[ií]|baleni|s\s*sebou)\b/.test(normalized)) {
-    return "takeaway";
-  }
-  if (normalized.startsWith("ss") || normalized === "s") return "takeaway";
-  return "dine_in";
+  return isTakeawayTable(tableLabel) ? "takeaway" : "dine_in";
 }
 
 export function resolveSaleServiceChannel(sale: SaleRecord): ServiceChannel {
-  if (sale.serviceChannel === "takeaway" || sale.serviceChannel === "dine_in") {
-    return sale.serviceChannel;
-  }
   return inferServiceChannel(sale.tableLabel);
 }
 

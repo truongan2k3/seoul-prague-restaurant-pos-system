@@ -40,17 +40,12 @@ export async function fetchOrderLogsForItems(orderItemIds: string[]) {
 
 /** All order_logs for every line on this table (including cancelled rows). */
 export async function fetchOrderLogsForTable(tableId: string, since?: Date) {
-  let itemsQuery = supabase
+  const { data: items, error: itemsError } = await supabase
     .from("order_items")
     .select("id, name, created_at")
     .eq("table_id", tableId)
     .order("created_at", { ascending: true });
 
-  if (since) {
-    itemsQuery = itemsQuery.gte("created_at", since.toISOString());
-  }
-
-  const { data: items, error: itemsError } = await itemsQuery;
   if (itemsError) return { data: [] as OrderLogEntry[], error: itemsError, itemNames: new Map<string, string>() };
 
   const itemNames = new Map<string, string>(
@@ -58,5 +53,9 @@ export async function fetchOrderLogsForTable(tableId: string, since?: Date) {
   );
   const ids = [...itemNames.keys()];
   const logsRes = await fetchOrderLogsForItems(ids);
-  return { ...logsRes, itemNames };
+  const data =
+    since != null
+      ? logsRes.data.filter((entry) => entry.createdAt.getTime() >= since.getTime())
+      : logsRes.data;
+  return { ...logsRes, data, itemNames };
 }

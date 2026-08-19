@@ -115,7 +115,7 @@ export function buildReceiptLines(
   orders: OrderItem[],
   menuById: Map<string, MenuItem>,
 ): ReceiptLineItem[] {
-  return orders.map((item, index) => {
+  const raw = orders.map((item, index) => {
     const menuItem = item.menuItemId ? menuById.get(item.menuItemId) : undefined;
     const matchedMenu =
       menuItem ??
@@ -132,6 +132,33 @@ export function buildReceiptLines(
       taxGroup: resolveTaxGroup(matchedMenu, item),
     };
   });
+
+  return mergeReceiptLines(raw);
+}
+
+function receiptLineMergeKey(line: ReceiptLineItem): string {
+  return `${line.name}\u0000${line.unitPrice.toFixed(2)}\u0000${line.taxGroup}`;
+}
+
+/** Combine identical items on printed receipt (same name, price, VAT group). */
+export function mergeReceiptLines(lines: ReceiptLineItem[]): ReceiptLineItem[] {
+  const merged: ReceiptLineItem[] = [];
+  const indexByKey = new Map<string, number>();
+
+  for (const line of lines) {
+    const key = receiptLineMergeKey(line);
+    const existingIndex = indexByKey.get(key);
+    if (existingIndex === undefined) {
+      indexByKey.set(key, merged.length);
+      merged.push({ ...line });
+      continue;
+    }
+    const existing = merged[existingIndex];
+    existing.quantity += line.quantity;
+    existing.lineTotal += line.lineTotal;
+  }
+
+  return merged;
 }
 
 /** VAT-inclusive gross → base (Základ) and DPH */

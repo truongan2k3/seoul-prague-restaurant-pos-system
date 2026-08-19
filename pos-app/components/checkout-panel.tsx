@@ -160,27 +160,31 @@ export function CheckoutPanel({
     setPrintReceipt(settings.autoPrintOnPayment);
   }, [settings.autoPrintOnPayment]);
 
-  const resetCheckoutForm = useCallback(() => {
-    const currentLines = linesRef.current;
-    setSelectedLineIds(currentLines.map((line) => line.lineId));
+  const resetPaymentAdjustments = useCallback(() => {
     setDiscountValue(0);
     setDiscountPreset(null);
     setCustomTip(0);
     setTipPreset(null);
     setTipMode("custom");
+    setAdjustmentMode(null);
+    setKeepChangeAsTip(false);
+    setRoundUpTotal("");
+  }, []);
+
+  const resetCheckoutForm = useCallback(() => {
+    const currentLines = linesRef.current;
+    setSelectedLineIds(currentLines.map((line) => line.lineId));
+    resetPaymentAdjustments();
     setPaymentMethod("card");
     setCashGiven("");
-    setRoundUpTotal("");
     setSplitCountInput("2");
     setSplitMode("total");
     setSplitPhase("checkout");
     setPanelView("main");
-    setAdjustmentMode(null);
-    setKeepChangeAsTip(false);
     setLocalError(null);
     setEqualPaymentsMade(0);
     splitSessionRef.current = { active: false, mode: "total", count: 2 };
-  }, []);
+  }, [resetPaymentAdjustments]);
 
   useEffect(() => {
     resetCheckoutForm();
@@ -336,6 +340,7 @@ export function CheckoutPanel({
   const keepAsTipAmount = keepChangeAsTip ? rawChangeDue : 0;
   const changeDueAmount = keepChangeAsTip ? 0 : rawChangeDue;
   const totalTipWithKeep = totalTip + keepAsTipAmount;
+  const payTotal = totals.grandTotal + keepAsTipAmount;
   const insufficientPayment =
     paymentMethod === "cash" &&
     ((usingCashGiven && cashGivenNum < chargeTotal) ||
@@ -364,8 +369,8 @@ export function CheckoutPanel({
         subtotal: totals.subtotal,
         discount: totals.discountAmount,
         tip: totalTipWithKeep,
-        grandTotal: totals.grandTotal + keepAsTipAmount,
-        amountDueNow: totals.amountDueNow,
+        grandTotal: payTotal,
+        amountDueNow: payTotal,
         amountGiven:
           paymentMethod === "cash" && usingCashGiven && !insufficientPayment
             ? cashGivenNum
@@ -392,6 +397,7 @@ export function CheckoutPanel({
     totalTipWithKeep,
     keepChangeAsTip,
     keepAsTipAmount,
+    payTotal,
     changeDueAmount,
     paymentMethod,
     usingCashGiven,
@@ -562,7 +568,7 @@ export function CheckoutPanel({
       setPanelView("split");
       setSplitPhase(mode === "items" ? "pick-items" : "checkout");
       setCashGiven("");
-      setRoundUpTotal("");
+      resetPaymentAdjustments();
       if (mode === "equal") {
         setEqualPaymentsMade((count) => count + 1);
       }
@@ -985,7 +991,7 @@ export function CheckoutPanel({
           large
           emphasize
           label={translate("amountDueNow")}
-          value={displayPrice(chargeTotal)}
+          value={displayPrice(payTotal)}
           highlight
         />
       </div>
@@ -1013,7 +1019,7 @@ export function CheckoutPanel({
           onClick={() => void handleCheckout("card")}
           className="min-h-[56px] rounded-xl bg-blue-600 px-3 py-3 text-base font-bold text-white shadow-sm disabled:opacity-40 sm:min-h-[60px] sm:text-lg"
         >
-          {isSaving ? "..." : `${translate("payByCard")} — ${displayPrice(chargeTotal)}`}
+          {isSaving ? "..." : `${translate("payByCard")} — ${displayPrice(payTotal)}`}
         </button>
         <button
           type="button"
@@ -1026,7 +1032,7 @@ export function CheckoutPanel({
           onClick={() => void handleCheckout("cash")}
           className="min-h-[56px] rounded-xl bg-emerald-600 px-3 py-3 text-base font-bold text-white shadow-sm disabled:opacity-40 sm:min-h-[60px] sm:text-lg"
         >
-          {isSaving ? "..." : `${translate("payInCash")} — ${displayPrice(chargeTotal)}`}
+          {isSaving ? "..." : `${translate("payInCash")} — ${displayPrice(payTotal)}`}
         </button>
       </div>
     </div>

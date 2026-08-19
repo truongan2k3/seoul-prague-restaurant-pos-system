@@ -5,34 +5,13 @@ import { History } from "lucide-react";
 import { useApp } from "@/contexts/app-context";
 import {
   formatActivityTimelineLine,
-  orderLogToTimeline,
-  tableActivityToTimeline,
+  mergeActivityTimeline,
   type ActivityTimelineEntry,
 } from "@/lib/format-table-activity";
-import type { OrderLogEntry, TableActivityLogEntry } from "@/lib/types";
+import type { OrderLogEntry } from "@/lib/types";
 import { fetchOrderLogsForTable } from "@/src/lib/order-log-actions";
 import { fetchTableActivityLogs } from "@/src/lib/table-activity-log-actions";
-
-function mergeTimeline(
-  tableLogs: TableActivityLogEntry[],
-  orderLogs: OrderLogEntry[],
-  itemNameByOrderId: Map<string, string>,
-): ActivityTimelineEntry[] {
-  const combined: ActivityTimelineEntry[] = [
-    ...tableLogs.map(tableActivityToTimeline),
-    ...orderLogs.map((entry) =>
-      orderLogToTimeline(entry, itemNameByOrderId.get(entry.orderId)),
-    ),
-  ];
-  combined.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-  const seen = new Set<string>();
-  return combined.filter((entry) => {
-    const key = `${entry.action}|${entry.itemName ?? ""}|${entry.staffName}|${entry.createdAt.getTime()}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
+import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
 
 interface TableActivityLogPanelProps {
   tableId: string;
@@ -93,9 +72,25 @@ export function TableActivityLogPanel({
       if (label) names.set(id, label);
     }
 
-    setEntries(mergeTimeline(tableRes.data, orderRes.data, names));
+    setEntries(mergeActivityTimeline(tableRes.data, orderRes.data, names, since));
     setLoading(false);
   }, [snapshot, tableId, since, orderItemIds, itemNameByOrderId]);
+
+  useEffect(() => {
+    if (!open || snapshot) return;
+    const unsubscribe = subscribeToPostgresRowChanges(
+      `table-activity-${tableId}`,
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "table_activity_logs",
+        filter: `table_id=eq.${tableId}`,
+      },
+      () => void load(),
+      { debounceMs: 300 },
+    );
+    return unsubscribe;
+  }, [open, snapshot, tableId, load]);
 
   useEffect(() => {
     if (!open) return;

@@ -112,7 +112,7 @@ function CheckoutView({
   checkout: CfdCheckoutPayload;
   translate: (key: TranslationKey) => string;
 }) {
-  const displayTotal = checkout.amountDueNow ?? checkout.total;
+  const displayTotal = checkout.total ?? checkout.amountDueNow;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

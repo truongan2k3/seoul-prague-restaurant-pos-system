@@ -171,7 +171,11 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
                     {business?.name ?? "POS"}
                   </p>
                   <p className="truncate text-xs text-gray-500 dark:text-zinc-400">
-                    {session?.username ? `@${session.username}` : translate("cashierFloor")}
+                    {currentStaffUser
+                      ? `${currentStaffUser.name}${currentStaffUser.username ? ` · @${currentStaffUser.username}` : ""} · ${currentStaffUser.role}`
+                      : session?.username
+                        ? `@${session.username} (${translate("staffLoginTitle")})`
+                        : translate("cashierFloor")}
                   </p>
                 </div>
               </div>

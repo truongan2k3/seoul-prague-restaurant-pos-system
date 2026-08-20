@@ -67,9 +67,10 @@ export function canAccessNavTabForMember(
   member: StaffMember | null | undefined,
   tab: NavId,
 ): boolean {
+  // Admin always gets staff management + settings regardless of custom allowedNav.
+  if (tab === "staff" && canManageStaff(member?.role)) return true;
+  if (tab === "settings" && member?.role === "admin") return true;
   if (!effectiveNavTabs(member).includes(tab)) return false;
-  // Staff management UI still requires Admin/Manager role.
-  if (tab === "staff" && !canManageStaff(member?.role)) return false;
   return true;
 }
 
@@ -96,7 +97,7 @@ export function canVoidOrderItems(role: StaffRole | undefined): boolean {
 }
 
 export function countActiveAdmins(roster: StaffMember[]): number {
-  return roster.filter((member) => member.active && member.role === "admin").length;
+  return roster.filter((member) => member.active && canManageStaff(member.role)).length;
 }
 
 export type StaffDeleteBlockReason = "self" | "lastAdmin" | "accessDenied";

@@ -6,22 +6,13 @@ import { useNotifications } from "@/contexts/notification-context";
 import { useSettings } from "@/contexts/settings-context";
 import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
 import { playCustomAlertSound } from "@/lib/notification-sound";
-import type { OrderItem, RestaurantTable } from "@/lib/types";
-import { subscribeToOrderItemInserts } from "@/src/lib/supabase-data";
+import type { RestaurantTable } from "@/lib/types";
 
-const TABLE_NOTIFY_DEBOUNCE_MS = 500;
+/** Collapse multi-line sent_to_kitchen logs from one Send into one alert. */
+const TABLE_NOTIFY_DEBOUNCE_MS = 1200;
 
 interface MainNewOrderNotificationListenerProps {
   tables: RestaurantTable[];
-}
-
-function countBillableLines(orders: unknown): number {
-  if (!Array.isArray(orders)) return 0;
-  return orders.reduce((sum, entry) => {
-    const item = entry as Partial<OrderItem>;
-    const qty = typeof item.quantity === "number" ? item.quantity : 1;
-    return sum + Math.max(0, qty);
-  }, 0);
 }
 
 export function MainNewOrderNotificationListener({
@@ -31,24 +22,17 @@ export function MainNewOrderNotificationListener({
   const { settings } = useSettings();
   const { pushNotification } = useNotifications();
   const pendingByTableRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  const notifiedAtRef = useRef(new Map<string, number>());
+  const tableLabelsRef = useRef(new Map<string, string>());
+
+  tableLabelsRef.current = new Map(tables.map((table) => [table.id, table.label]));
 
   const notifyRef = useRef<(tableId: string, tableLabel?: string) => void>(() => {});
   notifyRef.current = (tableId: string, tableLabel?: string) => {
     if (!notifyMainNewOrderEnabled && !soundMainNewOrderEnabled) return;
 
-    const now = Date.now();
-    const lastAt = notifiedAtRef.current.get(tableId) ?? 0;
-    if (now - lastAt < TABLE_NOTIFY_DEBOUNCE_MS) return;
-
-    const label =
-      tableLabel ??
-      tables.find((table) => table.id === tableId)?.label ??
-      "?";
+    const label = tableLabel ?? tableLabelsRef.current.get(tableId) ?? "?";
     const message = translate("newOrderFromTable").replace("{table}", label);
-    const notificationId = `main-new-table-${tableId}-${now}`;
-
-    notifiedAtRef.current.set(tableId, now);
+    const notificationId = `main-new-table-${tableId}-${Date.now()}`;
 
     if (notifyMainNewOrderEnabled) {
       pushNotification({
@@ -79,38 +63,8 @@ export function MainNewOrderNotificationListener({
   useEffect(() => {
     if (!notifyMainNewOrderEnabled && !soundMainNewOrderEnabled) return;
 
-    const tableLabels = new Map(tables.map((table) => [table.id, table.label]));
-
-    const unsubItems = subscribeToOrderItemInserts((row) => {
-      if (row.is_cancelled) return;
-      scheduleNotify(row.table_id, tableLabels.get(row.table_id));
-    }, "order-items-main-new-order");
-
-    const unsubTables = subscribeToPostgresRowChanges(
-      "main-new-order-tables",
-      { event: "UPDATE", schema: "public", table: "tables" },
-      (payload) => {
-        const row = payload.new as Record<string, unknown>;
-        const old = (payload.old as Record<string, unknown> | null) ?? null;
-        const tableId = typeof row.id === "string" ? row.id : null;
-        if (!tableId) return;
-
-        const newCount = countBillableLines(row.orders);
-        const oldCount = countBillableLines(old?.orders);
-        const becameOccupied =
-          old?.status === "empty" && row.status !== "empty" && newCount > 0;
-
-        if (newCount > oldCount || becameOccupied) {
-          const label =
-            typeof row.label === "string"
-              ? row.label
-              : tableLabels.get(tableId);
-          scheduleNotify(tableId, label);
-        }
-      },
-    );
-
-    const unsubActivity = subscribeToPostgresRowChanges(
+    // Only staff "Send to kitchen" logs — not checkout, not table sync noise.
+    return subscribeToPostgresRowChanges(
       "main-new-order-activity",
       { event: "INSERT", schema: "public", table: "table_activity_logs" },
       (payload) => {
@@ -121,18 +75,12 @@ export function MainNewOrderNotificationListener({
           typeof row.table_label === "string" && row.table_label.trim()
             ? row.table_label
             : tableId
-              ? tableLabels.get(tableId)
+              ? tableLabelsRef.current.get(tableId)
               : undefined;
         scheduleNotify(tableId, label);
       },
     );
-
-    return () => {
-      unsubItems();
-      unsubTables();
-      unsubActivity();
-    };
-  }, [tables, notifyMainNewOrderEnabled, soundMainNewOrderEnabled]);
+  }, [notifyMainNewOrderEnabled, soundMainNewOrderEnabled]);
 
   useEffect(() => {
     const pending = pendingByTableRef.current;

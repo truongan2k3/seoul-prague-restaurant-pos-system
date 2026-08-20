@@ -35,60 +35,31 @@ export function tableActivityToTimeline(entry: TableActivityLogEntry): ActivityT
   };
 }
 
-/** Normalize order_logs actions to match table_activity_logs vocabulary. */
-function normalizeTimelineAction(action: string): string {
-  if (action === "preparing") return "sent_to_kitchen";
-  return action;
-}
-
-function timelineDedupeKey(entry: ActivityTimelineEntry): string {
-  const item = entry.itemName?.trim().toLowerCase() ?? "";
-  return `${normalizeTimelineAction(entry.action)}|${item}`;
-}
-
-/** Merge table + order logs; first actor wins when the same item/action was logged again. */
+/** Merge table + order logs chronologically; staff comes from persisted log rows. */
 export function mergeActivityTimeline(
   tableLogs: TableActivityLogEntry[],
   orderLogs: OrderLogEntry[],
   itemNameByOrderId: Map<string, string>,
   since?: Date,
 ): ActivityTimelineEntry[] {
-  const sentToKitchenItems = new Set(
-    tableLogs
-      .filter((entry) => entry.action === "sent_to_kitchen" && entry.itemName?.trim())
-      .map((entry) => entry.itemName!.trim().toLowerCase()),
-  );
-
-  const combined: ActivityTimelineEntry[] = [
-    ...tableLogs.map(tableActivityToTimeline),
-    ...orderLogs
-      .filter((entry) => {
-        if (entry.action !== "preparing") return true;
-        const itemName = itemNameByOrderId.get(entry.orderId)?.trim().toLowerCase();
-        return !itemName || !sentToKitchenItems.has(itemName);
-      })
-      .map((entry) => orderLogToTimeline(entry, itemNameByOrderId.get(entry.orderId))),
-  ];
+  const tableEntries = tableLogs.map(tableActivityToTimeline);
+  const orderEntries = orderLogs
+    .filter((entry) => entry.action !== "preparing")
+    .map((entry) => orderLogToTimeline(entry, itemNameByOrderId.get(entry.orderId)));
 
   const sinceMs = since?.getTime();
-  const inSession = sinceMs
-    ? combined.filter((entry) => entry.createdAt.getTime() >= sinceMs)
-    : combined;
-
-  inSession.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-
-  const earliestByKey = new Map<string, ActivityTimelineEntry>();
-  for (const entry of inSession) {
-    const key = timelineDedupeKey(entry);
-    const existing = earliestByKey.get(key);
-    if (!existing || entry.createdAt.getTime() < existing.createdAt.getTime()) {
-      earliestByKey.set(key, entry);
-    }
-  }
-
-  return [...earliestByKey.values()].sort(
-    (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+  const combined = [...tableEntries, ...orderEntries].filter((entry) =>
+    sinceMs ? entry.createdAt.getTime() >= sinceMs : true,
   );
+
+  combined.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+  const seenIds = new Set<string>();
+  return combined.filter((entry) => {
+    if (seenIds.has(entry.id)) return false;
+    seenIds.add(entry.id);
+    return true;
+  });
 }
 
 const PAYMENT_LABEL_KEYS: Record<string, TranslationKey> = {

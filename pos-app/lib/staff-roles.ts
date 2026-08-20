@@ -22,7 +22,12 @@ export function normalizeStaffRole(role: string): StaffRole {
 }
 
 export function canManageStaff(role: StaffRole | undefined): boolean {
-  return role === "admin" || role === "manager";
+  return role === "admin";
+}
+
+/** Admin bypasses manager passcode prompts for sensitive actions. */
+export function staffBypassesManagerPasscode(role: StaffRole | undefined): boolean {
+  return role === "admin";
 }
 
 /** Default tabs for a role when `allowedNav` is not set. */

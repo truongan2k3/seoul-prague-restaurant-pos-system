@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { LanguageSelector } from "@/components/language-selector";
 import { StaffSelfProfileModal } from "@/components/staff-self-profile-modal";
+import { StaffQuickSwitchModal } from "@/components/staff-quick-switch-modal";
 import { useApp } from "@/contexts/app-context";
 import { useAuth } from "@/contexts/auth-context";
 import { usePendingReservationCount } from "@/hooks/use-pending-reservation-count";
@@ -58,7 +59,6 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
     theme,
     setTheme,
     currentStaffUser,
-    switchStaff,
     staffList,
     setStaff,
     refreshStaffList,
@@ -69,6 +69,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const pendingReservationCount = usePendingReservationCount();
   const [collapsed, setCollapsed] = useState(false);
   const [selfProfileOpen, setSelfProfileOpen] = useState(false);
+  const [quickSwitchOpen, setQuickSwitchOpen] = useState(false);
   const [selfProfileSaving, setSelfProfileSaving] = useState(false);
 
   useEffect(() => {
@@ -79,7 +80,6 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
     canAccessNavTabForMember(currentStaffUser, item.id),
   );
 
-  const activeStaffOptions = staffList.filter((member) => member.active);
   const isExpanded = !collapsed;
 
   const persistCollapsed = (value: boolean) => {
@@ -273,27 +273,6 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
 
             {isExpanded ? (
               <>
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-zinc-500">
-                    {translate("staff")}
-                  </label>
-                  <select
-                    value={currentStaffUser?.id ?? ""}
-                    onChange={(e) => {
-                      const member = staffList.find((s) => s.id === e.target.value);
-                      if (!member) return;
-                      switchStaff(member);
-                    }}
-                    className="min-h-[44px] w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                  >
-                    {activeStaffOptions.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
                 <button
                   type="button"
                   onClick={openSelfProfile}
@@ -309,21 +288,40 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
                     </span>
                     {currentStaffUser && (
                       <span className="block truncate text-[10px] uppercase tracking-wide text-gray-500 dark:text-zinc-400">
-                        {currentStaffUser.role}
+                        {currentStaffUser.username ? `@${currentStaffUser.username}` : currentStaffUser.role}
                       </span>
                     )}
                   </div>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => setQuickSwitchOpen(true)}
+                  className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-950/60"
+                >
+                  <Users className="h-4 w-4 shrink-0" />
+                  {translate("staffQuickSwitchButton")}
+                </button>
               </>
             ) : (
-              <button
-                type="button"
-                onClick={openSelfProfile}
-                title={translate("staffSelfProfileTap")}
-                className="flex h-10 w-full items-center justify-center rounded-lg border border-gray-200 bg-gray-50 transition hover:bg-gray-100 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700"
-              >
-                <User className="h-5 w-5 text-gray-600 dark:text-zinc-300" />
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setQuickSwitchOpen(true)}
+                  title={translate("staffQuickSwitchButton")}
+                  className="flex h-10 w-full items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 transition hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:hover:bg-emerald-950/60"
+                >
+                  <Users className="h-5 w-5 text-emerald-700 dark:text-emerald-300" />
+                </button>
+                <button
+                  type="button"
+                  onClick={openSelfProfile}
+                  title={translate("staffSelfProfileTap")}
+                  className="flex h-10 w-full items-center justify-center rounded-lg border border-gray-200 bg-gray-50 transition hover:bg-gray-100 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+                >
+                  <User className="h-5 w-5 text-gray-600 dark:text-zinc-300" />
+                </button>
+              </>
             )}
           </div>
         </aside>
@@ -336,6 +334,8 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         onSave={handleSaveSelfProfile}
         isSaving={selfProfileSaving}
       />
+
+      <StaffQuickSwitchModal open={quickSwitchOpen} onClose={() => setQuickSwitchOpen(false)} />
     </>
   );
 }

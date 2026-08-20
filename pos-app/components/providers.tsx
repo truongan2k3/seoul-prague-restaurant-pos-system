@@ -3,13 +3,12 @@
 import { AppProvider, useApp } from "@/contexts/app-context";
 import { AuthProvider } from "@/contexts/auth-context";
 import { PinGateProvider } from "@/contexts/pin-gate-context";
-import { canManageStaff } from "@/lib/staff-roles";
+import { staffBypassesManagerPasscode } from "@/lib/staff-roles";
 import { ReceiptPrintProvider } from "@/contexts/receipt-print-context";
 import { NotificationProvider } from "@/contexts/notification-context";
 import { SettingsProvider, useSettings } from "@/contexts/settings-context";
 import { ManagerPasscodeModal } from "@/components/manager-passcode-modal";
 import { FullscreenToggle } from "@/components/fullscreen-toggle";
-import { StaffSwitchModal } from "@/components/staff-switch-modal";
 import { MobileRefreshGuard } from "@/components/mobile-refresh-guard";
 import { UnsavedWorkProvider } from "@/contexts/unsaved-work-context";
 
@@ -19,7 +18,7 @@ function PinGateWrapper({ children }: { children: React.ReactNode }) {
   return (
     <PinGateProvider
       verifyPin={(passcode) => passcode === settings.adminDeletionPassword}
-      bypassPin={canManageStaff(currentStaffUser?.role)}
+      bypassPin={staffBypassesManagerPasscode(currentStaffUser?.role)}
     >
       <UnsavedWorkProvider>
         {children}
@@ -27,7 +26,6 @@ function PinGateWrapper({ children }: { children: React.ReactNode }) {
         <FullscreenToggle variant="fab" />
       </UnsavedWorkProvider>
       <ManagerPasscodeModal />
-      <StaffSwitchModal />
     </PinGateProvider>
   );
 }

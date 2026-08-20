@@ -2,7 +2,6 @@
 
 import {
   canDeleteStaffMember,
-  canManageStaff,
   parseAllowedNav,
 } from "@/lib/staff-roles";
 import type { NavId, StaffMember, StaffRole } from "@/lib/types";
@@ -42,7 +41,7 @@ type StaffRow = {
 const STAFF_SELECT =
   "id, name, role, username, active, allowed_nav";
 
-async function requireManagerContext() {
+async function requireAdminContext() {
   const businessSession = await readAuthSession();
   if (!businessSession) {
     return { error: new Error("Business login required.") };
@@ -65,8 +64,8 @@ async function requireManagerContext() {
   }
 
   const [actor] = mapStaffResponse([actorRow as StaffRow]);
-  if (!actor || !canManageStaff(actor.role)) {
-    return { error: new Error("Only admin or manager can manage staff.") };
+  if (!actor || actor.role !== "admin") {
+    return { error: new Error("Only admin can manage staff.") };
   }
 
   return { businessSession, actor, supabase };
@@ -115,7 +114,7 @@ function validateStaffInput(input: StaffInput, isCreate: boolean) {
 }
 
 export async function createStaff(input: StaffInput) {
-  const ctx = await requireManagerContext();
+  const ctx = await requireAdminContext();
   if ("error" in ctx && ctx.error) {
     return { data: null, error: ctx.error };
   }
@@ -139,7 +138,7 @@ export async function createStaff(input: StaffInput) {
 }
 
 export async function updateStaff(id: string, input: StaffInput) {
-  const ctx = await requireManagerContext();
+  const ctx = await requireAdminContext();
   if ("error" in ctx && ctx.error) {
     return { data: null, error: ctx.error };
   }
@@ -257,7 +256,7 @@ export async function deleteStaff(
     roster?: StaffMember[];
   },
 ) {
-  const ctx = await requireManagerContext();
+  const ctx = await requireAdminContext();
   if ("error" in ctx && ctx.error) {
     return { error: ctx.error };
   }
@@ -275,6 +274,12 @@ export async function deleteStaff(
       };
     }
   }
+
+  await supabase.from("sales").update({ staff_id: null }).eq("staff_id", id);
+  await supabase.from("order_items").update({ staff_id: null }).eq("staff_id", id);
+  await supabase.from("action_logs").update({ staff_id: null }).eq("staff_id", id);
+  await supabase.from("reservations").update({ staff_id: null }).eq("staff_id", id);
+  await supabase.from("table_activity_logs").update({ staff_id: null }).eq("staff_id", id);
 
   return supabase.from("staff").delete().eq("id", id).eq("business_id", businessSession.businessId);
 }

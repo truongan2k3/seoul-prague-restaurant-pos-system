@@ -6,7 +6,7 @@ interface PinGateContextValue {
   requestPin: (onSuccess: () => void) => void;
   pinOpen: boolean;
   pinError: string | null;
-  submitPin: (pin: string) => Promise<void>;
+  submitPin: (passcode: string) => void;
   cancelPin: () => void;
 }
 
@@ -18,7 +18,7 @@ export function PinGateProvider({
   bypassPin = false,
 }: {
   children: ReactNode;
-  verifyPin: (pin: string) => Promise<boolean>;
+  verifyPin: (passcode: string) => boolean;
   bypassPin?: boolean;
 }) {
   const [pinOpen, setPinOpen] = useState(false);
@@ -35,9 +35,8 @@ export function PinGateProvider({
     setPinOpen(true);
   };
 
-  const submitPin = async (pin: string) => {
-    const ok = await verifyPin(pin);
-    if (ok) {
+  const submitPin = (passcode: string) => {
+    if (verifyPin(passcode)) {
       setPinOpen(false);
       setPinError(null);
       const callback = onSuccess;
@@ -55,9 +54,7 @@ export function PinGateProvider({
   };
 
   return (
-    <PinGateContext.Provider
-      value={{ requestPin, pinOpen, pinError, submitPin, cancelPin }}
-    >
+    <PinGateContext.Provider value={{ requestPin, pinOpen, pinError, submitPin, cancelPin }}>
       {children}
     </PinGateContext.Provider>
   );

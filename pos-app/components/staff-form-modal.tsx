@@ -30,11 +30,8 @@ const emptyForm = (): StaffInput => ({
   username: "",
   password: "",
   role: "server",
-  pin: "",
   active: true,
   allowedNav: defaultNavTabsForRole("server"),
-  requirePinForActions: false,
-  requireSwitchPassword: false,
 });
 
 interface StaffFormModalProps {
@@ -77,13 +74,10 @@ export function StaffFormModal({
         username: member.username ?? "",
         password: "",
         role: member.role,
-        pin: "",
         active: member.active,
         allowedNav: member.allowedNav?.length
           ? [...member.allowedNav]
           : defaultNavTabsForRole(member.role),
-        requirePinForActions: member.requirePinForActions ?? false,
-        requireSwitchPassword: member.requireSwitchPassword ?? false,
       });
     } else {
       setForm(emptyForm());
@@ -94,7 +88,6 @@ export function StaffFormModal({
     setForm((prev) => {
       const has = prev.allowedNav.includes(tab);
       const next = has ? prev.allowedNav.filter((id) => id !== tab) : [...prev.allowedNav, tab];
-      // Always keep at least one tab so the user is never locked out of POS.
       return { ...prev, allowedNav: next.length > 0 ? next : ["map"] };
     });
   };
@@ -122,10 +115,6 @@ export function StaffFormModal({
     }
     if (form.password?.trim() && form.password.trim().length < 4) {
       setError(translate("staffPasswordTooShort"));
-      return;
-    }
-    if (form.pin && !/^\d{4}$/.test(form.pin)) {
-      setError(translate("staffPinInvalid"));
       return;
     }
     if (form.allowedNav.length === 0) {
@@ -232,25 +221,6 @@ export function StaffFormModal({
           />
         </label>
 
-        <label className="block">
-          <span className="pos-label">{translate("staffPin")}</span>
-          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-            {translate("staffPinApproverHint")}
-          </p>
-          <input
-            type="password"
-            inputMode="numeric"
-            maxLength={4}
-            value={form.pin}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, "").slice(0, 4) }))
-            }
-            className="pos-input mt-1 tracking-[0.4em]"
-            placeholder="••••"
-            autoComplete="new-password"
-          />
-        </label>
-
         <label className="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-3 dark:border-gray-600">
           <input
             type="checkbox"
@@ -265,48 +235,6 @@ export function StaffFormModal({
 
         <div className="rounded-lg border border-gray-200 px-3 py-3 dark:border-gray-600">
           <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-            {translate("staffPermissions")}
-          </p>
-
-          <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-lg border border-gray-100 px-3 py-3 dark:border-gray-700">
-            <input
-              type="checkbox"
-              checked={form.requireSwitchPassword}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, requireSwitchPassword: e.target.checked }))
-              }
-              className="mt-0.5 h-4 w-4 rounded border-gray-300"
-            />
-            <span>
-              <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
-                {translate("staffRequireSwitchPassword")}
-              </span>
-              <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
-                {translate("staffRequireSwitchPasswordHint")}
-              </span>
-            </span>
-          </label>
-
-          <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-lg border border-gray-100 px-3 py-3 dark:border-gray-700">
-            <input
-              type="checkbox"
-              checked={form.requirePinForActions}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, requirePinForActions: e.target.checked }))
-              }
-              className="mt-0.5 h-4 w-4 rounded border-gray-300"
-            />
-            <span>
-              <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
-                {translate("staffRequirePinForActions")}
-              </span>
-              <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
-                {translate("staffRequirePinForActionsHint")}
-              </span>
-            </span>
-          </label>
-
-          <p className="mt-4 text-sm font-medium text-gray-900 dark:text-gray-100">
             {translate("staffAllowedTabs")}
           </p>
           <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">

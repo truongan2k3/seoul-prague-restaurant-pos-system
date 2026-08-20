@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, Pencil, Trash2 } from "lucide-react";
 import { LiveClock } from "@/components/live-clock";
 import { OrderHistoryModal } from "@/components/order-history-modal";
-import { useAdminDeletionGate } from "@/contexts/admin-deletion-gate-context";
+import { usePinGate } from "@/contexts/pin-gate-context";
 import { useApp } from "@/contexts/app-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { formatCzk } from "@/lib/currency";
@@ -71,7 +71,7 @@ function toMonthInputValue(date = new Date()): string {
 export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   const { translate, language, currentStaffUser, logAction } = useApp();
   const { pushNotification } = useNotifications();
-  const { requestDeletion } = useAdminDeletionGate();
+  const { requestPin } = usePinGate();
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -192,25 +192,25 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   const confirmDeleteSelected = () => {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
-    requestDeletion(() =>
+    requestPin(() =>
       runDelete(() => deleteSaleRecords(ids), `Deleted ${ids.length} sale(s)`),
     );
   };
 
   const confirmDeleteByDate = () => {
-    requestDeletion(() =>
+    requestPin(() =>
       runDelete(() => deleteSalesByDate(deleteDate), `Deleted sales on ${deleteDate}`),
     );
   };
 
   const confirmDeleteMonth = () => {
-    requestDeletion(() =>
+    requestPin(() =>
       runDelete(() => deleteSalesByMonth(deleteMonth), `Deleted sales for ${deleteMonth}`),
     );
   };
 
   const confirmDeleteOne = (sale: SaleRecord) => {
-    requestDeletion(() =>
+    requestPin(() =>
       runDelete(
         () => deleteSaleRecords([sale.id]),
         `Deleted sale ${generateOrderNumber(sale.closedAt)} (${sale.tableLabel})`,

@@ -96,6 +96,7 @@ export function SettingsView({
     setSoundKitchenEnabled,
     setNotifyMainNewOrderEnabled,
     setSoundMainNewOrderEnabled,
+    currentStaffUser,
   } = useApp();
   const { settings, saving, error: settingsError, saveSettingsPageDraft, uploadEventAlertSound, uploadCfdReviewQrImage, saveSettings } =
     useSettings();
@@ -129,6 +130,10 @@ export function SettingsView({
     { id: "general", labelKey: "settingsTabGeneral" },
     { id: "security", labelKey: "settingsTabSecurity" },
   ];
+
+  const visibleSettingsTabs = settingsTabs.filter(
+    (tab) => tab.id !== "security" || currentStaffUser?.role === "admin",
+  );
 
   const weekdayLabels: Record<WeekdayKey, string> = {
     monday: translate("settingsDayMonday"),
@@ -358,7 +363,7 @@ export function SettingsView({
           className="-mb-px flex gap-1 overflow-x-auto pb-px pt-1"
           aria-label={translate("settings")}
         >
-          {settingsTabs.map((tab) => {
+          {visibleSettingsTabs.map((tab) => {
             const active = activeSettingsTab === tab.id;
             return (
               <button
@@ -1761,7 +1766,7 @@ export function SettingsView({
             </div>
 
             <p className="mt-4 text-xs text-amber-800 dark:text-amber-400">
-              {translate("staffPinGateSettingsHint")}
+              {translate("settingsManagerPasscodeHint")}
             </p>
           </section>
         </div>

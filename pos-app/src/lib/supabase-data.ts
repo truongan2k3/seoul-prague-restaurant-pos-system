@@ -359,8 +359,6 @@ export function mapStaffResponse(
         username?: string | null;
         active?: boolean | null;
         allowed_nav?: unknown;
-        require_pin_for_actions?: boolean | null;
-        require_switch_password?: boolean | null;
       }[]
     | null,
 ) {
@@ -371,8 +369,6 @@ export function mapStaffResponse(
     role: normalizeStaffRole(s.role),
     active: s.active ?? true,
     allowedNav: parseAllowedNav(s.allowed_nav),
-    requirePinForActions: s.require_pin_for_actions ?? false,
-    requireSwitchPassword: s.require_switch_password ?? false,
   }));
 }
 

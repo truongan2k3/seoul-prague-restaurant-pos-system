@@ -440,10 +440,6 @@ export interface StaffMember {
    * Custom POS tabs this member may see. When empty/undefined, role defaults apply.
    */
   allowedNav?: NavId[];
-  /** When true, sensitive actions prompt for a manager PIN. Default: off. */
-  requirePinForActions?: boolean;
-  /** When true, sidebar profile switch requires this member's PIN. */
-  requireSwitchPassword?: boolean;
 }
 
 export type VisitSource = "reservation" | "walk_in";

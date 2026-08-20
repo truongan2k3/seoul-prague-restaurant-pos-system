@@ -3,7 +3,6 @@
 import {
   canDeleteStaffMember,
   canManageStaff,
-  defaultNavTabsForRole,
   parseAllowedNav,
 } from "@/lib/staff-roles";
 import type { NavId, StaffMember, StaffRole } from "@/lib/types";
@@ -19,19 +18,15 @@ export interface StaffInput {
   /** Required when creating; omit or leave empty to keep existing password on edit. */
   password?: string;
   role: StaffRole;
-  pin: string;
   active: boolean;
   allowedNav: NavId[];
-  requirePinForActions: boolean;
-  requireSwitchPassword: boolean;
 }
 
 export interface StaffSelfProfileInput {
   currentPassword?: string;
   newPassword?: string;
-  pin: string;
-  requirePinForActions: boolean;
-  requireSwitchPassword: boolean;
+  /** Admin only — change own login username. */
+  newUsername?: string;
 }
 
 type StaffRow = {
@@ -39,13 +34,13 @@ type StaffRow = {
   name: string;
   role: string;
   username?: string | null;
-  pin?: string | null;
   active?: boolean | null;
   allowed_nav?: unknown;
-  require_pin_for_actions?: boolean | null;
-  require_switch_password?: boolean | null;
   business_id?: string | null;
 };
+
+const STAFF_SELECT =
+  "id, name, role, username, active, allowed_nav";
 
 async function requireManagerContext() {
   const businessSession = await readAuthSession();
@@ -61,7 +56,7 @@ async function requireManagerContext() {
   const supabase = createSupabaseAdmin();
   const { data: actorRow, error } = await supabase
     .from("staff")
-    .select("id, name, role, username, active, allowed_nav, require_pin_for_actions, require_switch_password")
+    .select(STAFF_SELECT)
     .eq("id", staffSession.staffId)
     .maybeSingle();
 
@@ -83,12 +78,12 @@ function staffRowPayload(businessId: string, input: StaffInput, passwordHash?: s
     name: input.name.trim(),
     username: input.username.trim().toLowerCase(),
     role: input.role,
-    pin: input.pin.trim() || null,
     active: input.active,
     allowed_nav: allowedNav ?? null,
-    require_pin_for_actions: input.requirePinForActions,
-    require_switch_password: input.requireSwitchPassword,
     business_id: businessId,
+    pin: null,
+    require_pin_for_actions: false,
+    require_switch_password: false,
   };
   if (passwordHash && passwordSalt) {
     payload.password_hash = passwordHash;
@@ -113,9 +108,6 @@ function validateStaffInput(input: StaffInput, isCreate: boolean) {
   if (input.password?.trim() && input.password.trim().length < 4) {
     return "Password must be at least 4 characters.";
   }
-  if (input.pin && !/^\d{4}$/.test(input.pin)) {
-    return "PIN must be exactly 4 digits.";
-  }
   if (input.allowedNav.length === 0) {
     return "Select at least one POS tab.";
   }
@@ -138,7 +130,7 @@ export async function createStaff(input: StaffInput) {
   const { data, error } = await supabase
     .from("staff")
     .insert(staffRowPayload(businessSession.businessId, input, hash, salt))
-    .select("id, name, role, username, active, allowed_nav, require_pin_for_actions, require_switch_password")
+    .select(STAFF_SELECT)
     .single();
 
   if (error) return { data: null, error };
@@ -171,7 +163,7 @@ export async function updateStaff(id: string, input: StaffInput) {
     .update(staffRowPayload(businessSession.businessId, input, passwordHash, passwordSalt))
     .eq("id", id)
     .eq("business_id", businessSession.businessId)
-    .select("id, name, role, username, active, allowed_nav, require_pin_for_actions, require_switch_password")
+    .select(STAFF_SELECT)
     .single();
 
   if (error) return { data: null, error };
@@ -196,18 +188,21 @@ export async function updateStaffSelfProfile(
     return { data: null, error: new Error("Business login required.") };
   }
 
-  if (input.pin && !/^\d{4}$/.test(input.pin)) {
-    return { data: null, error: new Error("PIN must be exactly 4 digits.") };
-  }
-
   const supabase = createSupabaseAdmin();
-  const updatePayload: Record<string, unknown> = {
-    require_pin_for_actions: input.requirePinForActions,
-    require_switch_password: input.requireSwitchPassword,
-  };
+  const updatePayload: Record<string, unknown> = {};
 
-  if (input.pin.trim()) {
-    updatePayload.pin = input.pin.trim();
+  if (input.newUsername !== undefined) {
+    if (member.role !== "admin") {
+      return { data: null, error: new Error("Only admin can change username.") };
+    }
+    const trimmed = input.newUsername.trim().toLowerCase();
+    if (!trimmed) {
+      return { data: null, error: new Error("Username is required.") };
+    }
+    if (!/^[a-z0-9._-]{2,32}$/i.test(trimmed)) {
+      return { data: null, error: new Error("Username must be 2–32 characters (letters, numbers, . _ -).") };
+    }
+    updatePayload.username = trimmed;
   }
 
   if (input.newPassword?.trim()) {
@@ -238,12 +233,16 @@ export async function updateStaffSelfProfile(
     updatePayload.password_salt = salt;
   }
 
+  if (Object.keys(updatePayload).length === 0) {
+    return { data: member, error: null };
+  }
+
   const { data, error } = await supabase
     .from("staff")
     .update(updatePayload)
     .eq("id", member.id)
     .eq("business_id", businessSession.businessId)
-    .select("id, name, role, username, active, allowed_nav, require_pin_for_actions, require_switch_password")
+    .select(STAFF_SELECT)
     .single();
 
   if (error) return { data: null, error };

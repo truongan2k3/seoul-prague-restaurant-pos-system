@@ -17,7 +17,6 @@ import {
   getCurrentStaffMemberAction,
   listStaffAction,
   switchStaffAction,
-  verifyManagerPinAction,
 } from "@/src/lib/staff-auth-actions";
 
 const THEME_STORAGE_KEY = "pos-theme";
@@ -76,7 +75,6 @@ interface AppContextValue {
   cancelStaffSwitch: () => void;
   canManageStaff: boolean;
   translate: (key: TranslationKey) => string;
-  verifyManagerPin: (pin: string) => Promise<boolean>;
   logAction: (action: string, details?: string) => void;
   receiptShowEur: boolean;
   receiptShowUsd: boolean;
@@ -261,8 +259,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [applyStaffSession, cancelStaffSwitch, staffSwitchTarget],
   );
 
-  const verifyManagerPin = useCallback(async (pin: string) => verifyManagerPinAction(pin), []);
-
   const logAction = useCallback(
     (action: string, details?: string) => {
       if (!currentStaffUser) return;
@@ -290,7 +286,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cancelStaffSwitch,
       canManageStaff: canManageStaff(currentStaffUser?.role),
       translate,
-      verifyManagerPin,
       logAction,
       receiptShowEur,
       receiptShowUsd,
@@ -316,7 +311,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       staffList,
       refreshStaffList,
       translate,
-      verifyManagerPin,
       logAction,
       receiptShowEur,
       receiptShowUsd,

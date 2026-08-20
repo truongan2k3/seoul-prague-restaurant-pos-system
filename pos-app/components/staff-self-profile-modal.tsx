@@ -22,28 +22,24 @@ export function StaffSelfProfileModal({
   isSaving = false,
 }: StaffSelfProfileModalProps) {
   const { translate } = useApp();
+  const [username, setUsername] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [pin, setPin] = useState("");
-  const [requirePinForActions, setRequirePinForActions] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isAdmin = member?.role === "admin";
 
   useEffect(() => {
     if (!open || !member) return;
     setError(null);
+    setUsername(member.username ?? "");
     setCurrentPassword("");
     setNewPassword("");
-    setPin("");
-    setRequirePinForActions(member.requirePinForActions ?? false);
   }, [open, member]);
 
   if (!member) return null;
 
   const handleSubmit = async () => {
-    if (pin && !/^\d{4}$/.test(pin)) {
-      setError(translate("staffPinInvalid"));
-      return;
-    }
     if (newPassword.trim() && !currentPassword.trim()) {
       setError(translate("staffCurrentPasswordRequired"));
       return;
@@ -52,13 +48,15 @@ export function StaffSelfProfileModal({
       setError(translate("staffPasswordTooShort"));
       return;
     }
+    if (isAdmin && !username.trim()) {
+      setError(translate("staffUsernameRequired"));
+      return;
+    }
     setError(null);
     await onSave({
       currentPassword: currentPassword.trim() || undefined,
       newPassword: newPassword.trim() || undefined,
-      pin,
-      requirePinForActions,
-      requireSwitchPassword: member.requireSwitchPassword ?? false,
+      newUsername: isAdmin ? username.trim() : undefined,
     });
   };
 
@@ -94,11 +92,20 @@ export function StaffSelfProfileModal({
 
         <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-600 dark:bg-gray-900/40">
           <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{member.name}</p>
-          <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-            {member.role}
-            {member.username ? ` · @${member.username}` : ""}
-          </p>
+          <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{member.role}</p>
         </div>
+
+        {isAdmin && (
+          <label className="block">
+            <span className="pos-label">{translate("staffUsername")}</span>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="pos-input mt-1"
+              autoComplete="username"
+            />
+          </label>
+        )}
 
         <div className="rounded-lg border border-gray-200 px-3 py-3 dark:border-gray-600">
           <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -125,40 +132,6 @@ export function StaffSelfProfileModal({
             />
           </label>
         </div>
-
-        <label className="block">
-          <span className="pos-label">{translate("staffPin")}</span>
-          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-            {translate("staffPinGateSettingsHint")}
-          </p>
-          <input
-            type="password"
-            inputMode="numeric"
-            maxLength={4}
-            value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-            className="pos-input mt-1 tracking-[0.4em]"
-            placeholder="••••"
-            autoComplete="new-password"
-          />
-        </label>
-
-        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-100 px-3 py-3 dark:border-gray-700">
-          <input
-            type="checkbox"
-            checked={requirePinForActions}
-            onChange={(e) => setRequirePinForActions(e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-gray-300"
-          />
-          <span>
-            <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
-              {translate("staffRequirePinForActions")}
-            </span>
-            <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
-              {translate("staffRequirePinForActionsHint")}
-            </span>
-          </span>
-        </label>
       </div>
     </Modal>
   );

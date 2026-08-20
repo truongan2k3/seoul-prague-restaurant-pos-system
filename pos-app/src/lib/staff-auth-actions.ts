@@ -1,7 +1,7 @@
 "use server";
 
-import { canManageStaff, normalizeStaffRole, roleCanApproveWithPin } from "@/lib/staff-roles";
-import type { StaffMember, StaffRole } from "@/lib/types";
+import { canManageStaff, normalizeStaffRole } from "@/lib/staff-roles";
+import type { StaffMember } from "@/lib/types";
 import { hashPassword, verifyPassword } from "@/src/lib/auth/password";
 import { readAuthSession } from "@/src/lib/auth/session";
 import {
@@ -23,10 +23,10 @@ type StaffRow = {
   pin?: string | null;
   active?: boolean | null;
   allowed_nav?: unknown;
-  require_pin_for_actions?: boolean | null;
-  require_switch_password?: boolean | null;
   business_id?: string | null;
 };
+
+const STAFF_SELECT = "id, name, role, username, active, allowed_nav, business_id";
 
 function toStaffSession(row: StaffRow, businessId: string): StaffSessionPayload {
   return {
@@ -62,8 +62,7 @@ export async function getCurrentStaffMemberAction(): Promise<StaffMember | null>
   if (!staffSession) return null;
 
   const supabase = createSupabaseAdmin();
-  const selectFields =
-    "id, name, role, username, active, allowed_nav, require_pin_for_actions, require_switch_password, business_id";
+  const selectFields = STAFF_SELECT;
 
   let { data, error } = await supabase
     .from("staff")
@@ -103,9 +102,7 @@ export async function listStaffAction(): Promise<{ data: StaffMember[]; error?: 
   const supabase = createSupabaseAdmin();
   const { data, error } = await supabase
     .from("staff")
-    .select(
-      "id, name, role, username, active, allowed_nav, require_pin_for_actions, require_switch_password",
-    )
+    .select(STAFF_SELECT)
     .eq("business_id", businessSession.businessId)
     .order("name");
 
@@ -116,9 +113,7 @@ export async function listStaffAction(): Promise<{ data: StaffMember[]; error?: 
   if ((data ?? []).length === 0) {
     const { data: legacy, error: legacyError } = await supabase
       .from("staff")
-      .select(
-        "id, name, role, username, active, allowed_nav, require_pin_for_actions, require_switch_password",
-      )
+      .select(STAFF_SELECT)
       .is("business_id", null)
       .order("name");
 
@@ -282,26 +277,6 @@ export async function changeStaffPasswordAction(currentPassword: string, newPass
   }
 
   return { ok: true as const };
-}
-
-export async function verifyManagerPinAction(pin: string): Promise<boolean> {
-  const businessSession = await requireBusinessSession();
-  if (!businessSession || !pin.trim()) return false;
-
-  const supabase = createSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("staff")
-    .select("role, pin, active")
-    .eq("business_id", businessSession.businessId)
-    .eq("active", true);
-
-  if (error || !data) return false;
-
-  return (data as { role: string; pin?: string | null; active?: boolean }[]).some(
-    (member) =>
-      roleCanApproveWithPin(normalizeStaffRole(member.role) as StaffRole) &&
-      member.pin === pin.trim(),
-  );
 }
 
 function staffUsernameFromName(name: string) {

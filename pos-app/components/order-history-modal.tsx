@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Printer, Trash2, X } from "lucide-react";
 import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
-import { useAdminDeletionGate } from "@/contexts/admin-deletion-gate-context";
+import { usePinGate } from "@/contexts/pin-gate-context";
 import { NumericInputField } from "@/components/numeric-input-field";
 import { TableActivityLogPanel } from "@/components/table-activity-log-panel";
 import { useApp } from "@/contexts/app-context";
@@ -72,7 +72,7 @@ export function OrderHistoryModal({
   const { translate, currentStaffUser, logAction } = useApp();
   const { printReceipt } = useReceiptPrint();
   const { pushNotification } = useNotifications();
-  const { requestDeletion } = useAdminDeletionGate();
+  const { requestPin } = usePinGate();
   const [editScope, setEditScope] = useState<EditScope | false>(resolvedInitialScope);
   const [editItems, setEditItems] = useState<OrderItem[]>(sale.items);
   const [editDiscount, setEditDiscount] = useState(sale.discountAmount);
@@ -198,7 +198,7 @@ export function OrderHistoryModal({
   };
 
   const handleDelete = () => {
-    requestDeletion(async () => {
+    requestPin(async () => {
       const { data, error } = await deleteSaleRecords([sale.id]);
       if (error) {
         pushNotification({ message: translate("historyDeleteFailed") });

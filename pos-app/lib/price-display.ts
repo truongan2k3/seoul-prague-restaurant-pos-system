@@ -35,3 +35,17 @@ export function priceDisplayOptionsFromSettings(settings: {
     eurRate: settings.eurExchangeRate,
   };
 }
+
+/** Menu / cart lines — EUR optional separately from checkout totals. */
+export function menuPriceDisplayOptionsFromSettings(settings: {
+  enablePriceRounding: boolean;
+  showEurCurrency: boolean;
+  showEurOnMenu: boolean;
+  eurExchangeRate: number;
+}): PriceDisplayOptions {
+  return {
+    enableRounding: settings.enablePriceRounding,
+    showEur: settings.showEurCurrency && settings.showEurOnMenu,
+    eurRate: settings.eurExchangeRate,
+  };
+}

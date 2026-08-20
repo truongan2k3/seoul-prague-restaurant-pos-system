@@ -108,6 +108,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   menuItemLayout: "vertical",
   enablePriceRounding: true,
   showEurCurrency: false,
+  showEurOnMenu: false,
   eurExchangeRate: 25,
   reservationTimeStep: 30,
   reservationMaxGuestsPerSlot: 20,
@@ -177,6 +178,7 @@ type SettingsRow = {
   menu_item_layout?: string | null;
   enable_price_rounding?: boolean | null;
   show_eur_currency?: boolean | null;
+  show_eur_on_menu?: boolean | null;
   eur_exchange_rate?: number | string | null;
   reservation_time_step?: number | null;
   reservation_max_guests_per_slot?: number | null;
@@ -386,6 +388,7 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     menuItemLayout: parseMenuItemLayout(row.menu_item_layout),
     enablePriceRounding: row.enable_price_rounding ?? DEFAULT_APP_SETTINGS.enablePriceRounding,
     showEurCurrency: row.show_eur_currency ?? DEFAULT_APP_SETTINGS.showEurCurrency,
+    showEurOnMenu: row.show_eur_on_menu ?? DEFAULT_APP_SETTINGS.showEurOnMenu,
     eurExchangeRate: parseNumericSetting(row.eur_exchange_rate, DEFAULT_APP_SETTINGS.eurExchangeRate),
     reservationTimeStep: row.reservation_time_step ?? DEFAULT_APP_SETTINGS.reservationTimeStep,
     reservationMaxGuestsPerSlot:
@@ -517,6 +520,7 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   if (partial.menuItemLayout !== undefined) payload.menu_item_layout = partial.menuItemLayout;
   if (partial.enablePriceRounding !== undefined) payload.enable_price_rounding = partial.enablePriceRounding;
   if (partial.showEurCurrency !== undefined) payload.show_eur_currency = partial.showEurCurrency;
+  if (partial.showEurOnMenu !== undefined) payload.show_eur_on_menu = partial.showEurOnMenu;
   if (partial.eurExchangeRate !== undefined) payload.eur_exchange_rate = partial.eurExchangeRate;
   if (partial.reservationTimeStep !== undefined) payload.reservation_time_step = partial.reservationTimeStep;
   if (partial.reservationMaxGuestsPerSlot !== undefined) {
@@ -773,6 +777,7 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "menuItemLayout"
     | "enablePriceRounding"
     | "showEurCurrency"
+    | "showEurOnMenu"
     | "eurExchangeRate"
     | "reservationTimeStep"
     | "reservationMaxGuestsPerSlot"
@@ -831,6 +836,7 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     menuItemLayout: settings.menuItemLayout,
     enablePriceRounding: settings.enablePriceRounding,
     showEurCurrency: settings.showEurCurrency,
+    showEurOnMenu: settings.showEurOnMenu,
     eurExchangeRate: settings.eurExchangeRate,
     reservationTimeStep: settings.reservationTimeStep,
     reservationMaxGuestsPerSlot: settings.reservationMaxGuestsPerSlot,

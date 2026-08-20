@@ -1194,6 +1194,24 @@ export function SettingsView({
                   className="h-4 w-4 rounded border-gray-300"
                 />
               </label>
+              {draft.showEurCurrency && (
+                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
+                  <div>
+                    <span className="text-sm text-gray-800 dark:text-gray-200">
+                      {translate("settingsShowEurOnMenu")}
+                    </span>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                      {translate("settingsShowEurOnMenuHint")}
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={draft.showEurOnMenu}
+                    onChange={(event) => updateDraft("showEurOnMenu", event.target.checked)}
+                    className="h-4 w-4 shrink-0 rounded border-gray-300"
+                  />
+                </label>
+              )}
             </div>
 
             {draft.showEurCurrency && (
@@ -1219,7 +1237,7 @@ export function SettingsView({
           <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("receiptCurrency")}</h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              EUR display is configured above. USD remains a receipt-only option on this device.
+              {translate("settingsReceiptCurrencyHint")}
             </p>
             <div className="mt-4 space-y-3">
               <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">

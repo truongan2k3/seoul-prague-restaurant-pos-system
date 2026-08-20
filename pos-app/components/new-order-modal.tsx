@@ -25,7 +25,7 @@ import {
 } from "@/lib/order-item-timers";
 import { categoriesForOrdering } from "@/lib/category-utils";
 import { sortMenuItemsForDisplay } from "@/lib/menu-sort";
-import { formatPosPrice, priceDisplayOptionsFromSettings } from "@/lib/price-display";
+import { formatPosPrice, menuPriceDisplayOptionsFromSettings } from "@/lib/price-display";
 import {
   cartLineDisplayName,
   menuItemDisplayName,
@@ -275,27 +275,25 @@ function MenuOrderItemButton({
         type="button"
         disabled={unavailable}
         onClick={onAdd}
-        className={`flex w-full min-h-[52px] flex-row items-center gap-2.5 rounded-lg border px-2 py-1.5 ${buttonClass}`}
+        className={`flex w-full min-h-[52px] flex-row items-start gap-2.5 rounded-lg border px-2 py-2 ${buttonClass}`}
       >
         <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-md bg-gray-100 dark:bg-gray-800">
           <MenuItemImage item={item} label={label} />
           {qtyBadge}
         </div>
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-          <p className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
+        <div className="min-w-0 flex-1">
+          <p className="break-words text-sm font-semibold leading-snug text-gray-900 dark:text-gray-100">
             {label}
             {unavailable && (
-              <span className="ml-2 text-xs font-semibold text-red-500">({soldOutLabel})</span>
+              <span className="ml-1 text-xs font-semibold text-red-500">({soldOutLabel})</span>
             )}
           </p>
-          <div className="flex shrink-0 items-center gap-2 text-right">
-            {showMenuPrices && (
-              <p className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-                {formatOrderPrice(item.price)}
-              </p>
-            )}
-            <p className="hidden text-[10px] text-gray-400 sm:block">{station}</p>
-          </div>
+          {showMenuPrices && (
+            <p className="mt-0.5 text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+              {formatOrderPrice(item.price)}
+            </p>
+          )}
+          <p className="mt-0.5 text-[10px] text-gray-400">{station}</p>
         </div>
       </button>
     );
@@ -308,7 +306,7 @@ function MenuOrderItemButton({
         {qtyBadge}
       </div>
       <div className="px-3 py-3">
-        <p className="line-clamp-2 text-sm font-semibold leading-snug text-gray-900 dark:text-gray-100">
+        <p className="break-words text-sm font-semibold leading-snug text-gray-900 dark:text-gray-100">
           {label}
         </p>
         {metaRow}
@@ -342,7 +340,7 @@ export function NewOrderModal({
   const { requestPin } = usePinGate();
   const { settings } = useSettings();
   const { printKitchenStaffMessage } = useReceiptPrint();
-  const priceOptions = priceDisplayOptionsFromSettings(settings);
+  const priceOptions = menuPriceDisplayOptionsFromSettings(settings);
   const formatOrderPrice = (amount: number) => formatPosPrice(amount, priceOptions);
   const showMenuPrices = settings.showPricesOnOrderScreen;
   const menuItemLayout = settings.menuItemLayout;

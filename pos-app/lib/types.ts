@@ -192,6 +192,8 @@ export interface AppSettings {
   menuItemLayout: MenuItemLayout;
   enablePriceRounding: boolean;
   showEurCurrency: boolean;
+  /** When true, menu tiles show CZK + EUR; checkout uses showEurCurrency regardless. */
+  showEurOnMenu: boolean;
   eurExchangeRate: number;
   reservationTimeStep: number;
   reservationMaxGuestsPerSlot: number;

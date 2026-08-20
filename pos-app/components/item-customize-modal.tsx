@@ -12,7 +12,7 @@ import {
   optionLabel,
   resolveSelectedOptions,
 } from "@/lib/menu-customization";
-import { formatPosPrice, priceDisplayOptionsFromSettings } from "@/lib/price-display";
+import { formatPosPrice, menuPriceDisplayOptionsFromSettings } from "@/lib/price-display";
 import { menuItemDisplayName } from "@/lib/menu-display";
 import type { MenuItem, SelectedMenuOption } from "@/lib/types";
 
@@ -35,7 +35,7 @@ interface ItemCustomizeModalProps {
 export function ItemCustomizeModal({ open, item, onClose, onConfirm }: ItemCustomizeModalProps) {
   const { translate, language } = useApp();
   const { settings } = useSettings();
-  const priceOptions = priceDisplayOptionsFromSettings(settings);
+  const priceOptions = menuPriceDisplayOptionsFromSettings(settings);
   const formatOrderPrice = (amount: number) => formatPosPrice(amount, priceOptions);
   const config = item.customizationConfig;
 

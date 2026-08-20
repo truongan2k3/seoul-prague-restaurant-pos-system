@@ -29,7 +29,7 @@ export default function RegisterPage() {
 
   useEffect(() => {
     if (!loading && session) {
-      router.replace("/");
+      router.replace("/staff-login");
     }
   }, [loading, session, router]);
 
@@ -42,7 +42,7 @@ export default function RegisterPage() {
     setSubmitting(false);
 
     if (result.ok) {
-      router.replace("/");
+      router.replace("/staff-login");
       router.refresh();
       return;
     }

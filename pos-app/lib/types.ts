@@ -432,8 +432,9 @@ export interface MenuItem {
 export interface StaffMember {
   id: string;
   name: string;
+  /** Login username (unique per business). */
+  username?: string;
   role: StaffRole;
-  pin?: string;
   active: boolean;
   /**
    * Custom POS tabs this member may see. When empty/undefined, role defaults apply.

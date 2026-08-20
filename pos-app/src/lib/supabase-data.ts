@@ -356,7 +356,7 @@ export function mapStaffResponse(
         id: string;
         name: string;
         role: string;
-        pin?: string | null;
+        username?: string | null;
         active?: boolean | null;
         allowed_nav?: unknown;
         require_pin_for_actions?: boolean | null;
@@ -367,8 +367,8 @@ export function mapStaffResponse(
   return (data ?? []).map((s) => ({
     id: s.id,
     name: s.name,
+    username: s.username ?? undefined,
     role: normalizeStaffRole(s.role),
-    pin: s.pin ?? undefined,
     active: s.active ?? true,
     allowedNav: parseAllowedNav(s.allowed_nav),
     requirePinForActions: s.require_pin_for_actions ?? false,

@@ -27,6 +27,8 @@ const NAV_LABEL_KEYS: Record<NavId, TranslationKey> = {
 
 const emptyForm = (): StaffInput => ({
   name: "",
+  username: "",
+  password: "",
   role: "server",
   pin: "",
   active: true,
@@ -72,8 +74,10 @@ export function StaffFormModal({
     if (member) {
       setForm({
         name: member.name,
+        username: member.username ?? "",
+        password: "",
         role: member.role,
-        pin: member.pin ?? "",
+        pin: "",
         active: member.active,
         allowedNav: member.allowedNav?.length
           ? [...member.allowedNav]
@@ -108,12 +112,20 @@ export function StaffFormModal({
       setError(translate("staffNameRequired"));
       return;
     }
-    if (form.pin && !/^\d{4}$/.test(form.pin)) {
-      setError(translate("staffPinInvalid"));
+    if (!form.username.trim()) {
+      setError(translate("staffUsernameRequired"));
       return;
     }
-    if (form.requireSwitchPassword && !form.pin) {
-      setError(translate("staffSwitchPasswordRequired"));
+    if (!member && !form.password?.trim()) {
+      setError(translate("staffPasswordRequired"));
+      return;
+    }
+    if (form.password?.trim() && form.password.trim().length < 4) {
+      setError(translate("staffPasswordTooShort"));
+      return;
+    }
+    if (form.pin && !/^\d{4}$/.test(form.pin)) {
+      setError(translate("staffPinInvalid"));
       return;
     }
     if (form.allowedNav.length === 0) {
@@ -195,9 +207,35 @@ export function StaffFormModal({
         </label>
 
         <label className="block">
+          <span className="pos-label">{translate("staffUsername")}</span>
+          <input
+            value={form.username}
+            onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+            className="pos-input mt-1"
+            autoComplete="off"
+            placeholder={translate("staffUsernamePlaceholder")}
+          />
+        </label>
+
+        <label className="block">
+          <span className="pos-label">{translate("staffPassword")}</span>
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+            {member ? translate("staffPasswordEditHint") : translate("staffPasswordCreateHint")}
+          </p>
+          <input
+            type="password"
+            value={form.password ?? ""}
+            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+            className="pos-input mt-1"
+            autoComplete="new-password"
+            placeholder="••••••"
+          />
+        </label>
+
+        <label className="block">
           <span className="pos-label">{translate("staffPin")}</span>
           <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-            {translate("staffPinSessionHint")}
+            {translate("staffPinApproverHint")}
           </p>
           <input
             type="password"

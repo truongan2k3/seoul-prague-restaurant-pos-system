@@ -8,6 +8,7 @@ import {
   writeAuthSession,
   type AuthSessionPayload,
 } from "@/src/lib/auth/session";
+import { clearStaffSession } from "@/src/lib/auth/staff-session";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 
 const DEFAULT_BUSINESS_NAME = "JING CHENG";
@@ -234,6 +235,7 @@ export async function loginAction(username: string, password: string) {
   const mapped = mapBusiness(business as BusinessRow);
   await ensureSettingsForBusiness(mapped.id);
   const session = toSessionPayload(mapped, row);
+  await clearStaffSession();
   await writeAuthSession(session);
 
   return { ok: true as const, session };
@@ -308,16 +310,28 @@ export async function registerBusinessAction(input: {
     return { ok: false as const, error: "registerFailed" };
   }
 
+  await supabase.from("staff").insert({
+    business_id: business.id,
+    name: `${businessName} Admin`,
+    username,
+    password_hash: hash,
+    password_salt: salt,
+    role: "admin",
+    active: true,
+  });
+
   await ensureSettingsForBusiness(business.id);
 
   const mapped = mapBusiness(business as BusinessRow);
   const session = toSessionPayload(mapped, account as BusinessAccountRow);
+  await clearStaffSession();
   await writeAuthSession(session);
 
   return { ok: true as const, session };
 }
 
 export async function logoutAction() {
+  await clearStaffSession();
   await clearAuthSession();
   return { ok: true as const };
 }

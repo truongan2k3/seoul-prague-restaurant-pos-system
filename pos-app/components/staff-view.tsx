@@ -155,6 +155,7 @@ export function StaffView({ onRefresh }: StaffViewProps) {
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-400">
                   <th className="px-6 py-3">Name</th>
+                  <th className="px-4 py-3">Username</th>
                   <th className="px-4 py-3">Role</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-6 py-3 text-right">Actions</th>
@@ -163,7 +164,7 @@ export function StaffView({ onRefresh }: StaffViewProps) {
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {staffList.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={5} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                       No staff members yet.
                     </td>
                   </tr>
@@ -182,6 +183,9 @@ export function StaffView({ onRefresh }: StaffViewProps) {
                             Current session
                           </span>
                         )}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300">
+                        {member.username ?? "—"}
                       </td>
                       <td className="px-4 py-3">
                         <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-200">

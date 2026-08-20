@@ -22,7 +22,7 @@ export function ManagerPinModal() {
 
   const handleSubmit = () => {
     if (!pin.trim()) return;
-    submitPin(pin);
+    void submitPin(pin);
   };
 
   return (

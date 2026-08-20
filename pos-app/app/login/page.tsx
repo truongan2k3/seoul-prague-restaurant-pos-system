@@ -27,7 +27,7 @@ function LoginForm() {
 
   useEffect(() => {
     if (!loading && session) {
-      router.replace(nextPath);
+      router.replace(`/staff-login?next=${encodeURIComponent(nextPath)}`);
     }
   }, [loading, session, router, nextPath]);
 
@@ -40,7 +40,7 @@ function LoginForm() {
     setSubmitting(false);
 
     if (result.ok) {
-      router.replace(nextPath);
+      router.replace(`/staff-login?next=${encodeURIComponent(nextPath)}`);
       router.refresh();
       return;
     }

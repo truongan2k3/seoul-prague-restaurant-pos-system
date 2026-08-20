@@ -27,7 +27,6 @@ import { useNotifications } from "@/contexts/notification-context";
 import { navButtonClass } from "@/lib/theme-classes";
 import { canAccessNavTabForMember } from "@/lib/staff-roles";
 import type { NavId } from "@/lib/types";
-import { mapStaffResponse } from "@/src/lib/supabase-data";
 import { updateStaffSelfProfile, type StaffSelfProfileInput } from "@/src/lib/staff-actions";
 
 const SIDEBAR_COLLAPSED_KEY = "pos-sidebar-collapsed";
@@ -112,8 +111,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
     }
     await refreshStaffList();
     if (data) {
-      const [updated] = mapStaffResponse([data]);
-      if (updated) setStaff(updated);
+      setStaff(data);
     }
     setSelfProfileOpen(false);
     pushNotification({ message: translate("settingsSavedSuccess"), playSound: false });
@@ -280,13 +278,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
                     onChange={(e) => {
                       const member = staffList.find((s) => s.id === e.target.value);
                       if (!member) return;
-                      const started = switchStaff(member);
-                      if (!started) {
-                        pushNotification({
-                          message: translate("staffSwitchPasswordMissing"),
-                          playSound: false,
-                        });
-                      }
+                      switchStaff(member);
                     }}
                     className="min-h-[44px] w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                   >

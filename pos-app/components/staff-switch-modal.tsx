@@ -3,10 +3,7 @@
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
-import { OnScreenNumericKeyboard } from "@/components/on-screen-numeric-keyboard";
 import { useApp } from "@/contexts/app-context";
-
-const PIN_MAX_LENGTH = 4;
 
 export function StaffSwitchModal() {
   const {
@@ -17,11 +14,13 @@ export function StaffSwitchModal() {
     submitStaffSwitchPassword,
     cancelStaffSwitch,
   } = useApp();
-  const [pin, setPin] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!staffSwitchOpen) {
-      setPin("");
+      setPassword("");
+      setSubmitting(false);
     }
   }, [staffSwitchOpen]);
 
@@ -30,9 +29,11 @@ export function StaffSwitchModal() {
   if (staffSwitchTarget) targetRef.current = staffSwitchTarget;
   const target = staffSwitchTarget ?? targetRef.current;
 
-  const handleSubmit = () => {
-    if (!pin.trim()) return;
-    submitStaffSwitchPassword(pin);
+  const handleSubmit = async () => {
+    if (!password.trim() || submitting) return;
+    setSubmitting(true);
+    await submitStaffSwitchPassword(password);
+    setSubmitting(false);
   };
 
   if (!target) return null;
@@ -64,13 +65,12 @@ export function StaffSwitchModal() {
           </p>
           <input
             type="password"
-            inputMode="numeric"
-            readOnly
-            maxLength={PIN_MAX_LENGTH}
-            value={pin}
-            aria-label={translate("staffPin")}
-            className="pos-input mt-4 text-center text-2xl tracking-[0.5em]"
-            placeholder="••••"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            aria-label={translate("staffPassword")}
+            className="pos-input mt-4"
+            autoComplete="current-password"
+            placeholder="••••••"
           />
           {staffSwitchError && (
             <p className="mt-2 text-sm text-red-600 dark:text-red-400">
@@ -87,22 +87,13 @@ export function StaffSwitchModal() {
             </button>
             <button
               type="button"
-              onClick={handleSubmit}
-              disabled={pin.length < 4}
+              onClick={() => void handleSubmit()}
+              disabled={!password.trim() || submitting}
               className="flex-1 rounded-lg bg-gray-900 py-2.5 text-sm font-medium text-white disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900"
             >
-              {translate("confirm")}
+              {submitting ? translate("authSigningIn") : translate("confirm")}
             </button>
           </div>
-        </div>
-
-        <div className="shrink-0 border-t border-gray-200 bg-gray-50 px-2 py-2 dark:border-gray-700 dark:bg-gray-900/80">
-          <OnScreenNumericKeyboard
-            value={pin}
-            onChange={(next) => setPin(next.replace(/\D/g, "").slice(0, PIN_MAX_LENGTH))}
-            onHide={cancelStaffSwitch}
-            allowDecimal={false}
-          />
         </div>
       </ModalPanel>
     </ModalOverlay>

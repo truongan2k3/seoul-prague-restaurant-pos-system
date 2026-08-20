@@ -150,7 +150,7 @@ interface StationBoardProps {
 }
 
 export function StationBoard({ station, variant = station }: StationBoardProps) {
-  const { language, staffName, setStaffName, setLanguage, translate } = useStationScreen();
+  const { language, setLanguage, translate } = useStationScreen();
   const { settings } = useSettings();
   const screenEnabled = usesKitchenScreen(settings.kitchenFulfillmentMode);
   const { currentStaffUser } = useApp();
@@ -168,7 +168,7 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
   const seenCancelledIdsRef = useRef<Set<string>>(new Set());
   const cancelAlertReadyRef = useRef(false);
 
-  const actor = staffName.trim() || (station === "kitchen" ? "Kitchen" : "Bar");
+  const actor = currentStaffUser?.name?.trim() || (station === "kitchen" ? "Kitchen" : "Bar");
 
   const reload = useCallback(async () => {
     await autoFirePendingItems(actor, station);
@@ -421,15 +421,10 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
             language={language}
             onLanguageChange={setLanguage}
           />
-          <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2">
+          <div className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100">
             <User className="h-4 w-4 text-zinc-400" />
-            <input
-              value={staffName}
-              onChange={(e) => setStaffName(e.target.value)}
-              placeholder="Staff name"
-              className="w-32 bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
-            />
-          </label>
+            <span>{currentStaffUser?.name ?? translate("staff")}</span>
+          </div>
           <LiveClock className="text-lg font-bold tabular-nums text-zinc-200" />
         </div>
       </header>

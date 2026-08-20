@@ -1,6 +1,8 @@
 import type { TableActivityLogEntry } from "@/lib/types";
 import { supabase } from "@/src/lib/supabase";
 
+export { logTableActivity } from "@/src/lib/activity-log-server";
+
 type TableActivityLogRow = {
   id: string;
   table_id: string | null;
@@ -26,28 +28,6 @@ function mapRow(row: TableActivityLogRow): TableActivityLogEntry {
     meta: row.meta ?? undefined,
     createdAt: new Date(row.created_at),
   };
-}
-
-export async function logTableActivity(input: {
-  tableId: string;
-  tableLabel?: string;
-  orderItemId?: string;
-  itemName?: string;
-  action: string;
-  staffId?: string;
-  staffName: string;
-  meta?: Record<string, unknown>;
-}) {
-  return supabase.from("table_activity_logs").insert({
-    table_id: input.tableId,
-    table_label: input.tableLabel ?? null,
-    order_item_id: input.orderItemId ?? null,
-    item_name: input.itemName ?? null,
-    action: input.action,
-    staff_id: input.staffId ?? null,
-    staff_name: input.staffName.trim() || "Staff",
-    meta: input.meta ?? {},
-  });
 }
 
 export async function fetchTableActivityLogs(tableId: string, since?: Date) {

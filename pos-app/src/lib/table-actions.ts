@@ -17,6 +17,7 @@ import {
   tableActivityLogsToSnapshot,
 } from "@/src/lib/table-activity-log-actions";
 import { completeReservationForTable, findActiveReservationForTable, mapReservationRow } from "@/src/lib/reservation-actions";
+import { resolveStaffActor } from "@/src/lib/staff-actor";
 import { mapOrderItemRow, type SupabaseOrderItemRow } from "@/src/lib/supabase-data";
 import { supabase } from "@/src/lib/supabase";
 import { inferServiceChannel } from "@/lib/tax-summary";
@@ -230,19 +231,19 @@ async function insertOrderRowsWithLogs(
   staffName?: string,
   tableLabel?: string,
 ) {
-  const orderRows = buildOrderRows(tableId, orders, staffId);
+  const actor = await resolveStaffActor({ staffId, staffName });
+  const orderRows = buildOrderRows(tableId, orders, actor.staffId);
   if (orderRows.length === 0) return { error: null as Error | null };
 
   const { data, error } = await supabase.from("order_items").insert(orderRows).select("id");
   if (error) return { error };
 
-  const actor = staffName ?? "Staff";
   for (let index = 0; index < (data ?? []).length; index += 1) {
     const row = data![index];
     const kitchenStatus = orderRows[index]?.kitchen_status ?? "pending";
     const logStatus =
       kitchenStatus === "served" || kitchenStatus === "ready" ? kitchenStatus : "preparing";
-    await logOrderStatusChange(row.id, logStatus, actor);
+    await logOrderStatusChange(row.id, logStatus, actor.staffName);
   }
 
   const sentItems = orders.filter((item) => !(item.skipPrint && item.hideOnKds));
@@ -252,7 +253,7 @@ async function insertOrderRowsWithLogs(
       tableId,
       sentItems,
       "sent_to_kitchen",
-      { staffId, staffName },
+      actor,
       tableLabel,
     );
   }
@@ -261,7 +262,7 @@ async function insertOrderRowsWithLogs(
       tableId,
       savedItems,
       "save_no_print",
-      { staffId, staffName },
+      actor,
       tableLabel,
     );
   }
@@ -382,10 +383,10 @@ export async function updateTableOrders(
   },
 ) {
   const activeOrders = orders.filter((item) => item.quantity > 0);
-  const staff = {
+  const staff = await resolveStaffActor({
     staffId: options?.staffId,
     staffName: options?.staffName,
-  };
+  });
 
   const { data: existingRows, error: fetchItemsError } = await supabase
     .from("order_items")
@@ -421,23 +422,21 @@ export async function updateTableOrders(
         .in("id", openIds);
       if (cancelError) return { data: null, error: cancelError };
 
-      if (options?.staffName) {
-        const cancelledRows = (existingRows ?? [])
-          .filter(
-            (row) =>
-              openIds.includes(row.id) &&
-              !row.is_cancelled &&
-              row.kitchen_status !== "cancelled" &&
-              row.kitchen_status !== "archived",
-          )
-          .map((row) => ({ id: row.id, name: String(row.name) }));
-        await logCancelledItemsActivity(
-          tableId,
-          cancelledRows,
-          staff,
-          options.tableLabel,
-        );
-      }
+      const cancelledRows = (existingRows ?? [])
+        .filter(
+          (row) =>
+            openIds.includes(row.id) &&
+            !row.is_cancelled &&
+            row.kitchen_status !== "cancelled" &&
+            row.kitchen_status !== "archived",
+        )
+        .map((row) => ({ id: row.id, name: String(row.name) }));
+      await logCancelledItemsActivity(
+        tableId,
+        cancelledRows,
+        staff,
+        options?.tableLabel,
+      );
     }
 
     await syncTableOrdersFromDb(tableId);
@@ -468,23 +467,21 @@ export async function updateTableOrders(
       .neq("kitchen_status", "archived");
     if (cancelError) return { data: null, error: cancelError };
 
-    if (options?.staffName) {
-      const cancelledRows = (existingRows ?? [])
-        .filter(
-          (row) =>
-            idsToCancel.includes(row.id) &&
-            !row.is_cancelled &&
-            row.kitchen_status !== "cancelled" &&
-            row.kitchen_status !== "archived",
-        )
-        .map((row) => ({ id: row.id, name: String(row.name) }));
-      await logCancelledItemsActivity(
-        tableId,
-        cancelledRows,
-        staff,
-        options.tableLabel,
-      );
-    }
+    const cancelledRows = (existingRows ?? [])
+      .filter(
+        (row) =>
+          idsToCancel.includes(row.id) &&
+          !row.is_cancelled &&
+          row.kitchen_status !== "cancelled" &&
+          row.kitchen_status !== "archived",
+      )
+      .map((row) => ({ id: row.id, name: String(row.name) }));
+    await logCancelledItemsActivity(
+      tableId,
+      cancelledRows,
+      staff,
+      options?.tableLabel,
+    );
   }
 
   for (const unit of desiredUnits) {
@@ -495,24 +492,22 @@ export async function updateTableOrders(
       .eq("id", unit.id);
     if (updateError) return { data: null, error: updateError };
 
-    if (options?.staffName) {
-      const prev = (existingRows ?? []).find((row) => row.id === unit.id);
-      if (prev) {
-        const prevNotes = `${prev.notes ?? ""}|${prev.notes_translated ?? ""}`;
-        const nextNotes = `${unit.notes ?? ""}|${unit.notesTranslated ?? ""}`;
-        if (prevNotes !== nextNotes) {
-          const { error: logError } = await logTableActivity({
-            tableId,
-            tableLabel: options.tableLabel,
-            orderItemId: unit.id,
-            itemName: unit.name,
-            action: "add_note",
-            staffId: staff.staffId,
-            staffName: staff.staffName ?? "Staff",
-          });
-          if (logError) {
-            console.warn("[TableActivityLog] Failed to write note entry:", logError.message);
-          }
+    const prev = (existingRows ?? []).find((row) => row.id === unit.id);
+    if (prev) {
+      const prevNotes = `${prev.notes ?? ""}|${prev.notes_translated ?? ""}`;
+      const nextNotes = `${unit.notes ?? ""}|${unit.notesTranslated ?? ""}`;
+      if (prevNotes !== nextNotes) {
+        const { error: logError } = await logTableActivity({
+          tableId,
+          tableLabel: options?.tableLabel,
+          orderItemId: unit.id,
+          itemName: unit.name,
+          action: "add_note",
+          staffId: staff.staffId,
+          staffName: staff.staffName,
+        });
+        if (logError) {
+          console.warn("[TableActivityLog] Failed to write note entry:", logError.message);
         }
       }
     }
@@ -530,7 +525,7 @@ export async function updateTableOrders(
     if (itemsError) return { data: null, error: itemsError };
   }
 
-  if (options?.printOrders?.length && options.staffName) {
+  if (options?.printOrders?.length) {
     await logAggregatedItemsActivity(
       tableId,
       options.printOrders,
@@ -540,7 +535,7 @@ export async function updateTableOrders(
     );
   }
 
-  if (options?.silent && options.staffName) {
+  if (options?.silent) {
     const existingAgg = aggregateOrderItems(
       (existingRows ?? []).map((row) => mapOrderItemRow(row as SupabaseOrderItemRow)),
     );
@@ -657,6 +652,7 @@ export async function checkoutTable(
     closeTable?: boolean;
   },
 ) {
+  const staff = await resolveStaffActor({ staffId, staffName });
   const ratio = equalSplitShareRatio(payment.splitMode, payment.splitCount);
 
   const shareAmounts =
@@ -689,8 +685,8 @@ export async function checkoutTable(
     tableId,
     tableLabel,
     action: "checkout",
-    staffId: staffId ?? undefined,
-    staffName,
+    staffId: staff.staffId,
+    staffName: staff.staffName,
     meta: {
       paymentMethod: payment.paymentMethod,
       amount: payment.amountDueNow,
@@ -740,8 +736,8 @@ export async function checkoutTable(
   const { error: saleError } = await supabase.from("sales").insert({
     table_id: tableId,
     table_label: tableLabel,
-    staff_id: staffId ?? null,
-    staff_name: staffName,
+    staff_id: staff.staffId ?? null,
+    staff_name: staff.staffName,
     subtotal: shareAmounts.subtotal,
     discount_amount: shareAmounts.discountAmount,
     discount_type: payment.discountValue > 0 ? payment.discountType : null,
@@ -1066,6 +1062,11 @@ export async function cancelOrderItems(
 ) {
   if (itemIds.length === 0) return { error: null };
 
+  const staff = await resolveStaffActor({
+    staffId: options?.staffId,
+    staffName,
+  });
+
   const { data: rowsToCancel, error: fetchError } = await supabase
     .from("order_items")
     .select("id, name")
@@ -1074,7 +1075,7 @@ export async function cancelOrderItems(
 
   const cancelledAt = new Date().toISOString();
   for (const itemId of itemIds) {
-    await logOrderStatusChange(itemId, `cancelled: ${reason}`, staffName);
+    await logOrderStatusChange(itemId, `cancelled: ${reason}`, staff.staffName);
     const { error } = await supabase
       .from("order_items")
       .update({
@@ -1091,7 +1092,7 @@ export async function cancelOrderItems(
   await logCancelledItemsActivity(
     tableId,
     (rowsToCancel ?? []).map((row) => ({ id: row.id, name: String(row.name) })),
-    { staffId: options?.staffId, staffName },
+    staff,
     options?.tableLabel,
     reason,
   );

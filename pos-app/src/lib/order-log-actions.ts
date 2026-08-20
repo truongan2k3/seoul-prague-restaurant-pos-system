@@ -1,17 +1,7 @@
 import type { OrderLogEntry } from "@/lib/types";
 import { supabase } from "@/src/lib/supabase";
 
-export async function logOrderStatusChange(
-  orderId: string,
-  action: string,
-  staffName: string,
-) {
-  return supabase.from("order_logs").insert({
-    order_id: orderId,
-    action,
-    staff_name: staffName,
-  });
-}
+export { logOrderStatusChange } from "@/src/lib/activity-log-server";
 
 export async function fetchOrderLogsForItems(orderItemIds: string[]) {
   if (orderItemIds.length === 0) {

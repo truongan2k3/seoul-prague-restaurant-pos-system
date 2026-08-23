@@ -23,6 +23,7 @@ export interface CustomizeResult {
   displayName: string;
   kitchenModifierText: string;
   itemNote: string;
+  translateItemNote: boolean;
 }
 
 interface ItemCustomizeModalProps {
@@ -41,11 +42,13 @@ export function ItemCustomizeModal({ open, item, onClose, onConfirm }: ItemCusto
 
   const [selections, setSelections] = useState<Record<string, string>>({});
   const [itemNote, setItemNote] = useState("");
+  const [translateItemNote, setTranslateItemNote] = useState(false);
 
   useEffect(() => {
     if (!open || !config) return;
     setSelections(getDefaultSelections(config, item));
     setItemNote("");
+    setTranslateItemNote(false);
   }, [open, item, config]);
 
   const selectedOptions = useMemo(
@@ -81,6 +84,7 @@ export function ItemCustomizeModal({ open, item, onClose, onConfirm }: ItemCusto
       displayName,
       kitchenModifierText,
       itemNote: itemNote.trim(),
+      translateItemNote,
     });
   };
 
@@ -179,6 +183,20 @@ export function ItemCustomizeModal({ open, item, onClose, onConfirm }: ItemCusto
             className="mt-2 w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-base dark:border-gray-700 dark:bg-gray-800"
           />
         </label>
+
+        {itemNote.trim() ? (
+          <label className="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl border border-gray-200 px-4 py-3 dark:border-gray-700">
+            <input
+              type="checkbox"
+              checked={translateItemNote}
+              onChange={(event) => setTranslateItemNote(event.target.checked)}
+              className="h-5 w-5 rounded border-gray-300"
+            />
+            <span className="text-sm text-gray-800 dark:text-gray-200">
+              {translate("translateToChinese")}
+            </span>
+          </label>
+        ) : null}
 
         <div className="rounded-xl bg-gray-50 px-4 py-3 text-sm dark:bg-gray-900">
           <p className="font-semibold text-gray-900 dark:text-gray-100">{displayName}</p>

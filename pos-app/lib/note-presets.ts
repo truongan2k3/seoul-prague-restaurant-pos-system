@@ -29,10 +29,16 @@ export async function finalizeNoteTranslation(
   selectedIds: string[],
   freeText: string,
   language: LanguageCode,
+  options?: { translate?: boolean },
 ): Promise<{ note: string; noteTranslated: string }> {
   const selected = presets.filter((preset) => selectedIds.includes(preset.id));
   const presetLabels = selected.map((preset) => presetLabel(preset, language));
   const trimmedFree = freeText.trim();
+  const note = [...presetLabels, trimmedFree].filter(Boolean).join(", ");
+
+  if (!options?.translate) {
+    return { note, noteTranslated: note };
+  }
 
   const presetZh = await Promise.all(
     selected.map(async (preset) => {
@@ -48,7 +54,6 @@ export async function finalizeNoteTranslation(
     translatedFree = await translateNoteToChineseAction(trimmedFree);
   }
 
-  const note = [...presetLabels, trimmedFree].filter(Boolean).join(", ");
   const noteTranslated = [...presetZh, translatedFree].filter(Boolean).join(", ");
 
   return { note, noteTranslated };

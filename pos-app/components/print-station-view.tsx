@@ -7,6 +7,9 @@ import { LanguageSelector } from "@/components/language-selector";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
 import { shouldPrintKitchenOnSend } from "@/lib/kitchen-fulfillment-mode";
 import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
+import { applyTableRealtimeEvent } from "@/lib/realtime-pos-sync";
+import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
+import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
 import { subscribeToKitchenPrintMessage } from "@/lib/pos-notifications";
 import { pingPrintBridge } from "@/src/lib/print-bridge-client";
 import { printKitchenMessage, printKitchenTicket } from "@/src/lib/printKitchenTicket";
@@ -15,6 +18,7 @@ import {
   loadMenuItemsResolved,
   mapOrderItemRow,
   mapTableRow,
+  subscribeToMenuChanges,
   subscribeToOrderItemInserts,
   type SupabaseOrderItemRow,
 } from "@/src/lib/supabase-data";
@@ -75,6 +79,20 @@ export function PrintStationView() {
         setPrinting(false);
       });
   }, []);
+
+  const reloadTables = useCallback(async () => {
+    const tablesRes = await fetchTableSummaries();
+    if (tablesRes.data) setTables(tablesRes.data.map(mapTableRow));
+  }, []);
+
+  const reloadMenu = useCallback(async () => {
+    const menuRes = await loadMenuItemsResolved();
+    if (menuRes.data) setMenuItems(menuRes.data);
+  }, []);
+
+  const reloadCatalog = useCallback(async () => {
+    await Promise.all([reloadTables(), reloadMenu()]);
+  }, [reloadMenu, reloadTables]);
 
   const flushTableBatch = useCallback(
     (tableId: string) => {
@@ -152,20 +170,22 @@ export function PrintStationView() {
   );
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const [tablesRes, menuRes] = await Promise.all([
-        fetchTableSummaries(),
-        loadMenuItemsResolved(),
-      ]);
-      if (cancelled) return;
-      if (tablesRes.data) setTables(tablesRes.data.map(mapTableRow));
-      if (menuRes.data) setMenuItems(menuRes.data);
-    })();
+    void reloadCatalog();
+    const unsubTables = subscribeToPostgresRowChanges(
+      "print-station-tables",
+      { event: "*", schema: "public", table: "tables" },
+      (payload) => {
+        setTables((prev) => applyTableRealtimeEvent(prev, payload));
+      },
+    );
+    const unsubMenu = subscribeToMenuChanges(() => void reloadMenu());
+    const unsubSoft = subscribePosSoftRefresh(() => void reloadCatalog());
     return () => {
-      cancelled = true;
+      unsubTables();
+      unsubMenu();
+      unsubSoft();
     };
-  }, []);
+  }, [reloadCatalog, reloadMenu]);
 
   useEffect(() => {
     let alive = true;

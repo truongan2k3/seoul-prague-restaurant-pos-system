@@ -5,7 +5,7 @@ import type {
 } from "@supabase/supabase-js";
 import { supabase } from "@/src/lib/supabase";
 
-const DEFAULT_DEBOUNCE_MS = 400;
+const DEFAULT_DEBOUNCE_MS = 800;
 const RECONNECT_DELAY_MS = 2_000;
 
 let channelSeq = 0;

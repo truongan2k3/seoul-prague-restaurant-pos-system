@@ -27,8 +27,28 @@ import {
 } from "@/src/lib/option-group-library-actions";
 import { subscribeToPostgresChanges, subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
 import { supabase } from "@/src/lib/supabase";
+import type { Station } from "@/lib/types";
 
-interface SupabaseTableRow {
+/** Floor map / KDS metadata — excludes heavy `orders` JSON (use order_items instead). */
+export const TABLE_SUMMARY_COLUMNS =
+  "id, label, type, shape, status, payment_status, fulfillment_status, grid_column, grid_row, pos_x, pos_y, occupied_at";
+
+export const TABLE_WITH_ORDERS_COLUMNS = `${TABLE_SUMMARY_COLUMNS}, orders`;
+
+export const ORDER_ITEM_COLUMNS =
+  "id, table_id, menu_item_id, staff_id, name, price, quantity, notes, notes_translated, is_printed_note, skip_print, hide_on_kds, station, status, kitchen_status, ready_at, is_cancelled, cancel_reason, cancelled_at, selected_addons, created_at, updated_at, modifiers";
+
+export const MENU_ITEM_COLUMNS =
+  "id, name, name_en, name_cz, name_zh, price, category, category_id, station, item_type, tax_group, sold_out, is_available, sort_order, display_order, image_url, description, description_en, description_cz, description_zh, customization_config, bill_only";
+
+export const CATEGORY_COLUMNS = "id, name, type, display_order, created_at";
+
+export const INVENTORY_COLUMNS = "id, name, category, quantity, unit, sold_out";
+
+export const SALES_COLUMNS =
+  "id, table_label, staff_name, subtotal, discount_amount, tip, grand_total, payment_method, amount_given, change_due, split_mode, split_count, items, activity_log, closed_at, reservation_id, guest_name, guest_phone, party_size, visit_source, service_channel";
+
+export interface SupabaseTableRow {
   id: string;
   label: string;
   type: "regular" | "special";
@@ -41,7 +61,7 @@ interface SupabaseTableRow {
   pos_x?: number | null;
   pos_y?: number | null;
   occupied_at: string | null;
-  orders: OrderItem[] | null;
+  orders?: OrderItem[] | null;
 }
 
 interface SupabaseMenuItemRow {
@@ -243,13 +263,21 @@ export function mapMenuItemAddonRow(row: SupabaseMenuItemAddonRow): MenuItemAddo
 }
 
 export async function fetchTables() {
-  return supabase.from("tables").select("*").order("label");
+  return fetchTableSummaries();
+}
+
+export async function fetchTableSummaries() {
+  return supabase.from("tables").select(TABLE_SUMMARY_COLUMNS).order("label");
+}
+
+export async function fetchTablesWithOrders() {
+  return supabase.from("tables").select(TABLE_WITH_ORDERS_COLUMNS).order("label");
 }
 
 export async function fetchMenuItems() {
   const ordered = await supabase
     .from("menu_items")
-    .select("*")
+    .select(MENU_ITEM_COLUMNS)
     .order("display_order", { ascending: true })
     .order("name_en", { ascending: true });
 
@@ -257,7 +285,7 @@ export async function fetchMenuItems() {
 
   return supabase
     .from("menu_items")
-    .select("*")
+    .select(MENU_ITEM_COLUMNS)
     .order("sort_order", { ascending: true })
     .order("name_en", { ascending: true });
 }
@@ -265,7 +293,7 @@ export async function fetchMenuItems() {
 export async function fetchCategories() {
   const result = await supabase
     .from("categories")
-    .select("*")
+    .select(CATEGORY_COLUMNS)
     .order("display_order", { ascending: true })
     .order("name", { ascending: true });
 
@@ -325,10 +353,33 @@ export async function loadMenuItemsResolved() {
 }
 
 export async function fetchOrderItems() {
+  return fetchActiveOrderItems();
+}
+
+/** Open session lines only — skips KDS-archived cancel rows. */
+export async function fetchActiveOrderItems() {
   return supabase
     .from("order_items")
-    .select("*")
-    .not("status", "eq", "served")
+    .select(ORDER_ITEM_COLUMNS)
+    .neq("kitchen_status", "archived")
+    .order("created_at");
+}
+
+export async function fetchStationOrderItems(station: Station) {
+  const kitchenStatusQuery = await supabase
+    .from("order_items")
+    .select(ORDER_ITEM_COLUMNS)
+    .eq("station", station)
+    .in("kitchen_status", ["pending", "ready", "served", "cancelled"])
+    .order("created_at");
+
+  if (!kitchenStatusQuery.error) return kitchenStatusQuery;
+
+  return supabase
+    .from("order_items")
+    .select(ORDER_ITEM_COLUMNS)
+    .eq("station", station)
+    .in("status", ["pending", "preparing", "ready", "served"])
     .order("created_at");
 }
 
@@ -337,13 +388,13 @@ export async function fetchStaff() {
 }
 
 export async function fetchSales(since?: Date) {
-  let query = supabase.from("sales").select("*").order("closed_at", { ascending: false });
+  let query = supabase.from("sales").select(SALES_COLUMNS).order("closed_at", { ascending: false });
   if (since) query = query.gte("closed_at", since.toISOString());
   return query;
 }
 
 export async function fetchInventory() {
-  return supabase.from("inventory_items").select("*").order("name");
+  return supabase.from("inventory_items").select(INVENTORY_COLUMNS).order("name");
 }
 
 export function mapTablesResponse(data: SupabaseTableRow[] | null) {
@@ -462,19 +513,27 @@ export function mapInventoryResponse(
   }));
 }
 
-export function subscribeToTableChanges(onChange: () => void) {
+export function subscribeToTableChanges(
+  onChange: () => void,
+  options?: { debounceMs?: number },
+) {
   return subscribeToPostgresChanges(
     "tables-realtime",
     { event: "*", schema: "public", table: "tables" },
     onChange,
+    options,
   );
 }
 
-export function subscribeToOrderItemChanges(onChange: () => void) {
+export function subscribeToOrderItemChanges(
+  onChange: () => void,
+  options?: { debounceMs?: number },
+) {
   return subscribeToPostgresChanges(
     "order-items-realtime",
     { event: "*", schema: "public", table: "order_items" },
     onChange,
+    options,
   );
 }
 
@@ -524,19 +583,27 @@ export function subscribeToOrderItemInserts(
   );
 }
 
-export function subscribeToMenuChanges(onChange: () => void) {
+export function subscribeToMenuChanges(
+  onChange: () => void,
+  options?: { debounceMs?: number },
+) {
   return subscribeToPostgresChanges(
     "menu-realtime",
     { event: "*", schema: "public", table: "menu_items" },
     onChange,
+    options,
   );
 }
 
-export function subscribeToCategoryChanges(onChange: () => void) {
+export function subscribeToCategoryChanges(
+  onChange: () => void,
+  options?: { debounceMs?: number },
+) {
   return subscribeToPostgresChanges(
     "categories-realtime",
     { event: "*", schema: "public", table: "categories" },
     onChange,
+    options,
   );
 }
 
@@ -579,11 +646,15 @@ export async function updateTableMetadata(
   return supabase.from("tables").update(payload).eq("id", tableId);
 }
 
-export function subscribeToInventoryChanges(onChange: () => void) {
+export function subscribeToInventoryChanges(
+  onChange: () => void,
+  options?: { debounceMs?: number },
+) {
   return subscribeToPostgresChanges(
     "inventory-realtime",
     { event: "*", schema: "public", table: "inventory_items" },
     onChange,
+    options,
   );
 }
 

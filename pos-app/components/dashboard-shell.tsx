@@ -16,6 +16,7 @@ import { CallWaiterListener } from "@/components/call-waiter-listener";
 import { Sidebar } from "@/components/sidebar";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { ChangelogPopupGate } from "@/components/changelog-popup-gate";
+import { POS_EGRESS } from "@/lib/egress-config";
 import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
 import { useTableOrderWorkflow } from "@/hooks/use-table-order-workflow";
 import { useSessionHealth } from "@/hooks/use-session-health";
@@ -23,10 +24,11 @@ import { useApp } from "@/contexts/app-context";
 import { AUTO_SERVE_POLL_MS } from "@/lib/auto-serve";
 import { canAccessNavTabForMember, firstAccessibleNavTab } from "@/lib/staff-roles";
 import {
+  fetchActiveOrderItems,
   fetchCategories,
   fetchInventory,
   fetchSales,
-  fetchTables,
+  fetchTableSummaries,
   loadMenuItemsResolved,
   mapCategoriesResponse,
   mapInventoryResponse,
@@ -34,14 +36,13 @@ import {
   mapSalesResponse,
   mapTablesResponse,
   subscribeToCategoryChanges,
-  subscribeToMenuChanges,
   subscribeToInventoryChanges,
-  subscribeToOrderItemChanges,
-  subscribeToTableChanges,
+  subscribeToMenuChanges,
   type SupabaseOrderItemRow,
 } from "@/src/lib/supabase-data";
+import { applyOrderItemRealtimeEvent, applyTableRealtimeEvent } from "@/lib/realtime-pos-sync";
+import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
 import { autoServeExpiredReadyItems } from "@/src/lib/table-actions";
-import { supabase } from "@/src/lib/supabase";
 import type { InventoryItem, MenuCategoryRecord, MenuItem, RestaurantTable, SaleRecord, OrderItem, NavId } from "@/lib/types";
 
 function LoadingShell() {
@@ -55,6 +56,13 @@ function LoadingShell() {
   );
 }
 
+function salesSince(days: number) {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  since.setHours(0, 0, 0, 0);
+  return since;
+}
+
 export function DashboardShell() {
   const { currentStaffUser, refreshStaffList } = useApp();
   const [activeTab, setActiveTab] = useState<NavId>("map");
@@ -64,11 +72,15 @@ export function DashboardShell() {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [salesLoaded, setSalesLoaded] = useState(false);
+  const [inventoryLoaded, setInventoryLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const realtimeOpts = { debounceMs: POS_EGRESS.REALTIME_DEBOUNCE_MS };
+
   const reloadTables = useCallback(async () => {
-    const { data, error: err } = await fetchTables();
+    const { data, error: err } = await fetchTableSummaries();
     if (!err) setTables(mapTablesResponse(data));
   }, []);
 
@@ -83,41 +95,47 @@ export function DashboardShell() {
   }, []);
 
   const reloadOrderItems = useCallback(async () => {
-    const { data, error: err } = await supabase
-      .from("order_items")
-      .select("*")
-      .order("created_at");
-    if (!err) setOrderItems((data as SupabaseOrderItemRow[] | null)?.map(mapOrderItemRow) ?? []);
+    const { data, error: err } = await fetchActiveOrderItems();
+    if (!err) {
+      setOrderItems((data as SupabaseOrderItemRow[] | null)?.map(mapOrderItemRow) ?? []);
+    }
   }, []);
 
   const reloadSales = useCallback(async () => {
-    const since = new Date();
-    since.setDate(since.getDate() - 90);
-    since.setHours(0, 0, 0, 0);
-    const { data, error: err } = await fetchSales(since);
-    if (!err) setSales(mapSalesResponse(data));
+    const { data, error: err } = await fetchSales(salesSince(POS_EGRESS.SUMMARY_SALES_DAYS));
+    if (!err) {
+      setSales(mapSalesResponse(data));
+      setSalesLoaded(true);
+    }
   }, []);
 
   const reloadInventory = useCallback(async () => {
     const { data, error: err } = await fetchInventory();
-    if (!err) setInventory(mapInventoryResponse(data));
+    if (!err) {
+      setInventory(mapInventoryResponse(data));
+      setInventoryLoaded(true);
+    }
   }, []);
+
+  const refreshFloorData = useCallback(() => {
+    void reloadTables();
+    void reloadOrderItems();
+  }, [reloadTables, reloadOrderItems]);
+
+  const refreshPosData = useCallback(() => {
+    refreshFloorData();
+    void reloadMenu();
+    void reloadCategories();
+  }, [refreshFloorData, reloadMenu, reloadCategories]);
 
   useEffect(() => {
     async function init() {
       setLoading(true);
-      const [t, m, c, o, s, i] = await Promise.all([
-        fetchTables(),
+      const [t, m, c, o] = await Promise.all([
+        fetchTableSummaries(),
         loadMenuItemsResolved(),
         fetchCategories(),
-        supabase.from("order_items").select("*").order("created_at"),
-        fetchSales((() => {
-          const since = new Date();
-          since.setDate(since.getDate() - 90);
-          since.setHours(0, 0, 0, 0);
-          return since;
-        })()),
-        fetchInventory(),
+        fetchActiveOrderItems(),
       ]);
       if (t.error) { setError(t.error.message); setLoading(false); return; }
       if (m.error) { setError(m.error.message); setLoading(false); return; }
@@ -127,37 +145,55 @@ export function DashboardShell() {
       if (!o.error) {
         setOrderItems((o.data as SupabaseOrderItemRow[] | null)?.map(mapOrderItemRow) ?? []);
       }
-      if (!s.error) setSales(mapSalesResponse(s.data));
-      if (!i.error) setInventory(mapInventoryResponse(i.data));
       setLoading(false);
     }
-    init();
+    void init();
   }, []);
 
   useEffect(() => {
     if (loading || error) return;
     const unsubs = [
-      subscribeToTableChanges(() => void reloadTables()),
-      subscribeToOrderItemChanges(() => void reloadOrderItems()),
-      subscribeToMenuChanges(() => void reloadMenu()),
+      subscribeToPostgresRowChanges(
+        "tables-row-sync",
+        { event: "*", schema: "public", table: "tables" },
+        (payload) => {
+          setTables((prev) => applyTableRealtimeEvent(prev, payload));
+        },
+      ),
+      subscribeToPostgresRowChanges(
+        "order-items-row-sync",
+        { event: "*", schema: "public", table: "order_items" },
+        (payload) => {
+          setOrderItems((prev) => applyOrderItemRealtimeEvent(prev, payload));
+        },
+      ),
+      subscribeToMenuChanges(() => void reloadMenu(), realtimeOpts),
       subscribeToCategoryChanges(() => {
         void reloadCategories();
         void reloadMenu();
-      }),
-      subscribeToInventoryChanges(() => void reloadInventory()),
+      }, realtimeOpts),
     ];
     return () => unsubs.forEach((u) => u());
-  }, [loading, error, reloadTables, reloadOrderItems, reloadMenu, reloadCategories, reloadInventory]);
+  }, [loading, error, reloadMenu, reloadCategories]);
 
-  // Floor also runs auto-serve so paid tables clear ~3 min after ready even if KDS is closed.
+  useEffect(() => {
+    if (loading || error || activeTab !== "storage") return;
+    if (!inventoryLoaded) void reloadInventory();
+    return subscribeToInventoryChanges(() => void reloadInventory(), realtimeOpts);
+  }, [loading, error, activeTab, inventoryLoaded, reloadInventory]);
+
+  useEffect(() => {
+    if (loading || error || activeTab !== "summary") return;
+    if (!salesLoaded) void reloadSales();
+  }, [loading, error, activeTab, salesLoaded, reloadSales]);
+
   useEffect(() => {
     if (loading || error) return;
     let cancelled = false;
     const run = async () => {
       const { servedIds } = await autoServeExpiredReadyItems();
       if (cancelled || servedIds.length === 0) return;
-      void reloadTables();
-      void reloadOrderItems();
+      refreshFloorData();
     };
     void run();
     const timer = window.setInterval(() => void run(), AUTO_SERVE_POLL_MS);
@@ -165,7 +201,7 @@ export function DashboardShell() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [loading, error, reloadTables, reloadOrderItems]);
+  }, [loading, error, refreshFloorData]);
 
   useEffect(() => {
     if (!currentStaffUser) return;
@@ -173,13 +209,6 @@ export function DashboardShell() {
       setActiveTab(firstAccessibleNavTab(currentStaffUser));
     }
   }, [currentStaffUser, activeTab]);
-
-  const refreshPosData = useCallback(() => {
-    void reloadTables();
-    void reloadMenu();
-    void reloadCategories();
-    void reloadOrderItems();
-  }, [reloadTables, reloadMenu, reloadCategories, reloadOrderItems]);
 
   const tableOrder = useTableOrderWorkflow({
     tables,
@@ -193,8 +222,8 @@ export function DashboardShell() {
   useSessionHealth({
     onRefresh: () => {
       refreshPosData();
-      void reloadSales();
-      void reloadInventory();
+      if (activeTab === "summary" || salesLoaded) void reloadSales();
+      if (activeTab === "storage" || inventoryLoaded) void reloadInventory();
     },
     isBusy: () => tableOrder.modal != null,
     enabled: !loading && !error,
@@ -204,10 +233,10 @@ export function DashboardShell() {
     if (loading || error) return;
     return subscribePosSoftRefresh(() => {
       refreshPosData();
-      void reloadSales();
-      void reloadInventory();
+      if (salesLoaded) void reloadSales();
+      if (inventoryLoaded) void reloadInventory();
     });
-  }, [loading, error, refreshPosData, reloadSales, reloadInventory]);
+  }, [loading, error, refreshPosData, salesLoaded, inventoryLoaded, reloadSales, reloadInventory]);
 
   if (loading) return <LoadingShell />;
   if (error) {

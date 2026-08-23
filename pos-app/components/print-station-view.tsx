@@ -11,7 +11,7 @@ import { subscribeToKitchenPrintMessage } from "@/lib/pos-notifications";
 import { pingPrintBridge } from "@/src/lib/print-bridge-client";
 import { printKitchenMessage, printKitchenTicket } from "@/src/lib/printKitchenTicket";
 import {
-  fetchTables,
+  fetchTableSummaries,
   loadMenuItemsResolved,
   mapOrderItemRow,
   mapTableRow,
@@ -155,7 +155,7 @@ export function PrintStationView() {
     let cancelled = false;
     void (async () => {
       const [tablesRes, menuRes] = await Promise.all([
-        fetchTables(),
+        fetchTableSummaries(),
         loadMenuItemsResolved(),
       ]);
       if (cancelled) return;

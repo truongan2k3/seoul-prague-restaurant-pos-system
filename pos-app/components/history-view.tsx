@@ -21,6 +21,7 @@ import {
   type SummaryPeriod,
 } from "@/lib/summary-analytics";
 import { filterButtonClass, paymentFilterClass } from "@/lib/theme-classes";
+import { POS_EGRESS } from "@/lib/egress-config";
 import type { MenuItem, SaleRecord } from "@/lib/types";
 import {
   deleteSaleRecords,
@@ -91,7 +92,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
     setLoading(true);
     setError(null);
     const since = new Date();
-    since.setDate(since.getDate() - 90);
+    since.setDate(since.getDate() - POS_EGRESS.HISTORY_SALES_DAYS);
     since.setHours(0, 0, 0, 0);
     const { data, error: fetchError } = await fetchSales(since);
     if (fetchError) {

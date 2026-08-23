@@ -203,7 +203,7 @@ function MenuItemImage({ item, label }: { item: MenuItem; label: string }) {
   if (item.imageUrl) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={item.imageUrl} alt={label} className="h-full w-full object-cover" />
+      <img src={item.imageUrl} alt={label} loading="lazy" decoding="async" className="h-full w-full object-cover" />
     );
   }
 

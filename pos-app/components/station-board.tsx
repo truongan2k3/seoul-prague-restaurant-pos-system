@@ -24,16 +24,21 @@ import {
 } from "@/lib/auto-serve";
 import { playCancelAlertSound } from "@/lib/notification-sound";
 import { broadcastCallWaiter } from "@/lib/pos-notifications";
-import { STATION_BOARD_KITCHEN_STATUSES, STATION_BOARD_STATUSES } from "@/lib/order-status";
 import { canVoidOrderItems } from "@/lib/staff-roles";
+import { POS_EGRESS } from "@/lib/egress-config";
 import type { MenuItem, OrderItem, RestaurantTable, Station } from "@/lib/types";
 import {
-  fetchTables,
+  applyStationOrderItemRealtimeEvent,
+  applyTableRealtimeEvent,
+} from "@/lib/realtime-pos-sync";
+import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
+import {
+  fetchStationOrderItems,
+  fetchTableSummaries,
   loadMenuItemsResolved,
   mapOrderItemRow,
   mapTablesResponse,
-  subscribeToOrderItemChanges,
-  subscribeToTableChanges,
+  subscribeToMenuChanges,
   type SupabaseOrderItemRow,
 } from "@/src/lib/supabase-data";
 import {
@@ -44,7 +49,6 @@ import {
   markItemsPreparing,
   markItemsReady,
 } from "@/src/lib/table-actions";
-import { supabase } from "@/src/lib/supabase";
 
 type StationOrderItem = OrderItem & {
   tableId: string;
@@ -169,30 +173,11 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
   const cancelAlertReadyRef = useRef(false);
 
   const actor = currentStaffUser?.name?.trim() || (station === "kitchen" ? "Kitchen" : "Bar");
+  const realtimeOpts = { debounceMs: POS_EGRESS.REALTIME_DEBOUNCE_MS };
 
-  const reload = useCallback(async () => {
+  const reloadStationItems = useCallback(async () => {
     await autoFirePendingItems(actor, station);
-
-    const kitchenStatusQuery = await supabase
-      .from("order_items")
-      .select("*")
-      .eq("station", station)
-      .in("kitchen_status", [...STATION_BOARD_KITCHEN_STATUSES])
-      .order("created_at");
-
-    const itemsRes = kitchenStatusQuery.error
-      ? await supabase
-          .from("order_items")
-          .select("*")
-          .eq("station", station)
-          .in("status", STATION_BOARD_STATUSES)
-          .order("created_at")
-      : kitchenStatusQuery;
-
-    const [tablesRes, menuRes] = await Promise.all([fetchTables(), loadMenuItemsResolved()]);
-
-    if (!tablesRes.error) setTables(mapTablesResponse(tablesRes.data));
-    if (!menuRes.error && menuRes.data) setMenuItems(menuRes.data);
+    const itemsRes = await fetchStationOrderItems(station);
     setItems(
       ((itemsRes.data as SupabaseOrderItemRow[] | null) ?? []).map((row) => ({
         ...mapOrderItemRow(row),
@@ -202,24 +187,52 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
     );
   }, [actor, station]);
 
+  const reloadTables = useCallback(async () => {
+    const tablesRes = await fetchTableSummaries();
+    if (!tablesRes.error) setTables(mapTablesResponse(tablesRes.data));
+  }, []);
+
+  const reloadMenu = useCallback(async () => {
+    const menuRes = await loadMenuItemsResolved();
+    if (!menuRes.error && menuRes.data) setMenuItems(menuRes.data);
+  }, []);
+
+  const reloadAll = useCallback(async () => {
+    await Promise.all([reloadStationItems(), reloadTables(), reloadMenu()]);
+  }, [reloadStationItems, reloadTables, reloadMenu]);
+
   useEffect(() => {
-    void reload();
-    const unsubItems = subscribeToOrderItemChanges(() => void reload());
-    const unsubTables = subscribeToTableChanges(() => void reload());
+    void reloadAll();
+    const unsubItems = subscribeToPostgresRowChanges(
+      `station-items-row-sync-${station}`,
+      { event: "*", schema: "public", table: "order_items" },
+      (payload) => {
+        setItems((prev) => applyStationOrderItemRealtimeEvent(prev, station, payload));
+      },
+    );
+    const unsubTables = subscribeToPostgresRowChanges(
+      `station-tables-row-sync-${station}`,
+      { event: "*", schema: "public", table: "tables" },
+      (payload) => {
+        setTables((prev) => applyTableRealtimeEvent(prev, payload));
+      },
+    );
+    const unsubMenu = subscribeToMenuChanges(() => void reloadMenu(), realtimeOpts);
     return () => {
       unsubItems();
       unsubTables();
+      unsubMenu();
     };
-  }, [reload]);
+  }, [reloadAll, reloadMenu, station]);
 
   useSessionHealth({
-    onRefresh: () => void reload(),
+    onRefresh: () => void reloadAll(),
     isBusy: () => busy || cancelTarget != null,
   });
 
   useEffect(() => {
-    return subscribePosSoftRefresh(() => void reload());
-  }, [reload]);
+    return subscribePosSoftRefresh(() => void reloadAll());
+  }, [reloadAll]);
 
   useEffect(() => {
     let cancelled = false;
@@ -231,7 +244,7 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
         console.warn("[AutoServe] Failed:", error.message);
         return;
       }
-      if (servedIds.length > 0) void reload();
+      if (servedIds.length > 0) void reloadStationItems();
     };
 
     void runAutoServe();
@@ -243,7 +256,7 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [station, reload]);
+  }, [station, reloadStationItems]);
 
   useEffect(() => {
     const cancelledIds = items
@@ -298,7 +311,8 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
     setBusy(true);
     await markItemsReady(itemIds, actor, tableId);
     setBusy(false);
-    void reload();
+    void reloadStationItems();
+    void reloadTables();
   };
 
   const handleUndoItemReady = async (tableId: string, itemIds: string[]) => {
@@ -306,7 +320,8 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
     setBusy(true);
     await markItemsPreparing(itemIds, actor, tableId);
     setBusy(false);
-    void reload();
+    void reloadStationItems();
+    void reloadTables();
   };
 
   const handleCancelItemRequest = (tableId: string, itemIds: string[]) => {
@@ -320,7 +335,8 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
     await cancelOrderItems(cancelTarget.itemIds, cancelTarget.tableId, reason, actor);
     setCancelTarget(null);
     setBusy(false);
-    void reload();
+    void reloadStationItems();
+    void reloadTables();
   };
 
   const handleAcknowledgeCancel = async (tableId: string, itemIds: string[]) => {
@@ -328,7 +344,8 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
     setBusy(true);
     await acknowledgeCancelledItems(itemIds, actor);
     setBusy(false);
-    void reload();
+    void reloadStationItems();
+    void reloadTables();
   };
 
   const handleCallWaiter = async () => {

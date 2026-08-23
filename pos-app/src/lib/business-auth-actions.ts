@@ -386,6 +386,7 @@ export async function uploadBusinessLogoAction(businessId: string, formData: For
 
   const { error: uploadError } = await supabase.storage.from("business_branding").upload(path, buffer, {
     contentType: file.type || `image/${ext === "svg" ? "svg+xml" : ext}`,
+    cacheControl: "31536000",
     upsert: true,
   });
 

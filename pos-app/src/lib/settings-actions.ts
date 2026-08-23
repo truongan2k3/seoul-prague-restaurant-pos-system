@@ -647,7 +647,7 @@ export async function uploadAlertSoundFile(file: File) {
 
   const path = `alert-${Date.now()}.${extension}`;
   const { error: uploadError } = await supabase.storage.from("audio_alerts").upload(path, file, {
-    cacheControl: "3600",
+    cacheControl: "31536000",
     upsert: true,
     contentType: file.type || (extension === "wav" ? "audio/wav" : "audio/mpeg"),
   });
@@ -673,9 +673,22 @@ async function uploadCfdMediaFile(file: File, prefix: string, allowedExtensions:
     };
   }
 
+  const isVideo = extension === "mp4" || extension === "webm";
+  const maxBytes = isVideo ? 12 * 1024 * 1024 : 2 * 1024 * 1024;
+  if (file.size > maxBytes) {
+    return {
+      data: null,
+      error: new Error(
+        isVideo
+          ? "Video must be ≤ 12 MB (compress or use a short clip to limit Storage egress)."
+          : "Image/GIF must be ≤ 2 MB (compress before upload).",
+      ),
+    };
+  }
+
   const path = `${prefix}-${Date.now()}.${extension}`;
   const { error: uploadError } = await supabase.storage.from("cfd_media").upload(path, file, {
-    cacheControl: "3600",
+    cacheControl: "31536000",
     upsert: true,
     contentType: file.type || undefined,
   });

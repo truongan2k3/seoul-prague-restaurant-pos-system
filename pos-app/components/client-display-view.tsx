@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { LanguageSelector } from "@/components/language-selector";
 import {
-  isCfdGifMedia,
   subscribeCfdEvents,
   type CfdCheckoutPayload,
   type CfdClientState,
@@ -246,57 +245,104 @@ function ThankYouView({
 
 function CfdSlideshowPlayer({ items }: { items: CfdSlideshowItem[] }) {
   const [index, setIndex] = useState(0);
-  const [replay, setReplay] = useState(0);
-  const item = items[index % items.length];
+  const item = items[Math.max(0, index % Math.max(items.length, 1))];
   const mediaClass = "max-h-full max-w-full object-contain";
   const singleItem = items.length <= 1;
+  // Stable list identity for timers (urls only) — avoid remount/refetch storms.
+  const urlsKey = items.map((entry) => entry.url).join("|");
 
   useEffect(() => {
     setIndex(0);
-    setReplay(0);
-  }, [items]);
+  }, [urlsKey]);
+
+  // Warm browser HTTP cache once so slide changes don't re-hit Storage CDN.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    for (const entry of items) {
+      if (entry.type === "video") {
+        const video = document.createElement("video");
+        video.preload = "auto";
+        video.muted = true;
+        video.src = entry.url;
+        video.load();
+        continue;
+      }
+      const img = new Image();
+      img.decoding = "async";
+      img.src = entry.url;
+    }
+  }, [urlsKey]);
 
   const goNext = useCallback(() => {
-    if (singleItem) {
-      setReplay((current) => current + 1);
-      return;
-    }
+    if (singleItem) return;
     setIndex((current) => (current + 1) % items.length);
   }, [items.length, singleItem]);
 
   useEffect(() => {
-    if (item.type === "video") return;
+    if (!item || item.type === "video") return;
+    // Single still/GIF stays on screen — remounting used to re-download every N seconds.
+    if (singleItem) return;
 
     const ms = cfdSlideshowItemDuration(item) * 1000;
     const timer = window.setTimeout(() => {
       goNext();
     }, ms);
     return () => window.clearTimeout(timer);
-  }, [index, item, goNext, replay]);
+  }, [index, item, goNext, singleItem]);
 
-  const mediaKey = `${item.url}-${replay}`;
+  useEffect(() => {
+    const nodes = document.querySelectorAll<HTMLVideoElement>("[data-cfd-slide-video]");
+    nodes.forEach((node, entryIndex) => {
+      if (entryIndex === index % items.length) {
+        void node.play().catch(() => undefined);
+      } else {
+        node.pause();
+        try {
+          node.currentTime = 0;
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+  }, [index, items.length]);
+
+  if (!item) {
+    return null;
+  }
 
   return (
     <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-zinc-950 px-4 py-4 sm:px-6 sm:py-6">
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-zinc-800 bg-black">
-        {item.type === "video" ? (
-          <video
-            key={mediaKey}
-            src={item.url}
-            autoPlay
-            muted
-            playsInline
-            loop={singleItem}
-            onEnded={singleItem ? undefined : goNext}
-            className={mediaClass}
-          />
-        ) : item.type === "gif" || isCfdGifMedia(item.url) ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img key={mediaKey} src={item.url} alt="Promotional display" className={mediaClass} />
-        ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img key={mediaKey} src={item.url} alt="Promotional display" className={mediaClass} />
-        )}
+      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-zinc-800 bg-black">
+        {items.map((entry, entryIndex) => {
+          const active = entryIndex === index % items.length;
+          const hiddenClass = active ? "relative z-10 opacity-100" : "pointer-events-none absolute inset-0 opacity-0";
+          if (entry.type === "video") {
+            return (
+              <video
+                key={entry.url}
+                data-cfd-slide-video
+                src={entry.url}
+                muted
+                playsInline
+                loop={singleItem}
+                preload="auto"
+                onEnded={singleItem ? undefined : active ? goNext : undefined}
+                className={`${mediaClass} ${hiddenClass}`}
+              />
+            );
+          }
+          return (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={entry.url}
+              src={entry.url}
+              alt="Promotional display"
+              decoding="async"
+              loading={entryIndex === 0 ? "eager" : "lazy"}
+              className={`${mediaClass} ${hiddenClass}`}
+            />
+          );
+        })}
       </div>
     </main>
   );

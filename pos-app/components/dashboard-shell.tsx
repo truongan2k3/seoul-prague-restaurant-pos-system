@@ -16,6 +16,7 @@ import { CallWaiterListener } from "@/components/call-waiter-listener";
 import { Sidebar } from "@/components/sidebar";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { ChangelogPopupGate } from "@/components/changelog-popup-gate";
+import { ReservationReminderListener } from "@/components/reservation-reminder-listener";
 import { POS_EGRESS } from "@/lib/egress-config";
 import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
 import { useTableOrderWorkflow } from "@/hooks/use-table-order-workflow";
@@ -335,6 +336,7 @@ export function DashboardShell() {
       </div>
       {tableOrder.tableOrderModals}
       <ChangelogPopupGate />
+      <ReservationReminderListener />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 -- Step 1: add columns (safe if already exist)
 -- Step 2: set terminal values
 
-ALTER TABLE settings ADD COLUMN IF NOT EXISTS admin_deletion_password text DEFAULT '1234';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS admin_deletion_password text DEFAULT '8888';
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS terminal_type text DEFAULT 'mock';
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS terminal_ip text DEFAULT '192.168.1.100';
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS terminal_port text DEFAULT '8080';

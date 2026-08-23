@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 
 interface PinGateContextValue {
-  requestPin: (onSuccess: () => void) => void;
+  requestPin: (onSuccess: () => void, options?: { force?: boolean }) => void;
   pinOpen: boolean;
   pinError: string | null;
   submitPin: (passcode: string) => void;
@@ -25,8 +25,8 @@ export function PinGateProvider({
   const [pinError, setPinError] = useState<string | null>(null);
   const [onSuccess, setOnSuccess] = useState<(() => void) | null>(null);
 
-  const requestPin = (callback: () => void) => {
-    if (bypassPin) {
+  const requestPin = (callback: () => void, options?: { force?: boolean }) => {
+    if (bypassPin && !options?.force) {
       callback();
       return;
     }

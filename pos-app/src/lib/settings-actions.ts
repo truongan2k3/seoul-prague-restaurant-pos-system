@@ -118,7 +118,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   receiptFontWeight: "normal",
   receiptFontFamily: "courier",
   receiptPrintBitmap: false,
-  adminDeletionPassword: "1234",
+  adminDeletionPassword: "8888",
   cfdAdVideoUrl: "",
   cfdAdSlideshow: [],
   menuCategorySortMode: "custom",

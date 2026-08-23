@@ -193,29 +193,34 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   const confirmDeleteSelected = () => {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
-    requestPin(() =>
-      runDelete(() => deleteSaleRecords(ids), `Deleted ${ids.length} sale(s)`),
+    requestPin(
+      () => runDelete(() => deleteSaleRecords(ids), `Deleted ${ids.length} sale(s)`),
+      { force: true },
     );
   };
 
   const confirmDeleteByDate = () => {
-    requestPin(() =>
-      runDelete(() => deleteSalesByDate(deleteDate), `Deleted sales on ${deleteDate}`),
+    requestPin(
+      () => runDelete(() => deleteSalesByDate(deleteDate), `Deleted sales on ${deleteDate}`),
+      { force: true },
     );
   };
 
   const confirmDeleteMonth = () => {
-    requestPin(() =>
-      runDelete(() => deleteSalesByMonth(deleteMonth), `Deleted sales for ${deleteMonth}`),
+    requestPin(
+      () => runDelete(() => deleteSalesByMonth(deleteMonth), `Deleted sales for ${deleteMonth}`),
+      { force: true },
     );
   };
 
   const confirmDeleteOne = (sale: SaleRecord) => {
-    requestPin(() =>
-      runDelete(
-        () => deleteSaleRecords([sale.id]),
-        `Deleted sale ${generateOrderNumber(sale.closedAt)} (${sale.tableLabel})`,
-      ),
+    requestPin(
+      () =>
+        runDelete(
+          () => deleteSaleRecords([sale.id]),
+          `Deleted sale ${generateOrderNumber(sale.closedAt)} (${sale.tableLabel})`,
+        ),
+      { force: true },
     );
   };
 

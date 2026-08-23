@@ -93,6 +93,6 @@ After deploy, your app will be live at `https://your-project.vercel.app`
 
 Push to `main` on GitHub — Vercel redeploys automatically.
 
-## Demo manager PIN
+## Demo manager passcode
 
-Default manager PIN for protected actions: **1234** (Master Liu)
+Default passcode for sensitive deletes: **8888** (Settings → Manager passcode).

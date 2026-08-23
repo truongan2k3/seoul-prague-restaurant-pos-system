@@ -27,8 +27,6 @@ const NAV_LABEL_KEYS: Record<NavId, TranslationKey> = {
 
 const emptyForm = (): StaffInput => ({
   name: "",
-  username: "",
-  password: "",
   role: "server",
   active: true,
   allowedNav: defaultNavTabsForRole("server"),
@@ -71,8 +69,6 @@ export function StaffFormModal({
     if (member) {
       setForm({
         name: member.name,
-        username: member.username ?? "",
-        password: "",
         role: member.role,
         active: member.active,
         allowedNav: member.allowedNav?.length
@@ -103,18 +99,6 @@ export function StaffFormModal({
   const handleSubmit = async () => {
     if (!form.name.trim()) {
       setError(translate("staffNameRequired"));
-      return;
-    }
-    if (!form.username.trim()) {
-      setError(translate("staffUsernameRequired"));
-      return;
-    }
-    if (!member && !form.password?.trim()) {
-      setError(translate("staffPasswordRequired"));
-      return;
-    }
-    if (form.password?.trim() && form.password.trim().length < 4) {
-      setError(translate("staffPasswordTooShort"));
       return;
     }
     if (form.allowedNav.length === 0) {
@@ -193,32 +177,6 @@ export function StaffFormModal({
               </option>
             ))}
           </select>
-        </label>
-
-        <label className="block">
-          <span className="pos-label">{translate("staffUsername")}</span>
-          <input
-            value={form.username}
-            onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
-            className="pos-input mt-1"
-            autoComplete="off"
-            placeholder={translate("staffUsernamePlaceholder")}
-          />
-        </label>
-
-        <label className="block">
-          <span className="pos-label">{translate("staffPassword")}</span>
-          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-            {member ? translate("staffPasswordEditHint") : translate("staffPasswordCreateHint")}
-          </p>
-          <input
-            type="password"
-            value={form.password ?? ""}
-            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-            className="pos-input mt-1"
-            autoComplete="new-password"
-            placeholder="••••••"
-          />
         </label>
 
         <label className="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-3 dark:border-gray-600">

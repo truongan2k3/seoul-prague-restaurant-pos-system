@@ -1,8 +1,7 @@
 "use server";
 
-import { canManageStaff, normalizeStaffRole } from "@/lib/staff-roles";
+import { ALL_NAV_TABS, normalizeStaffRole } from "@/lib/staff-roles";
 import type { StaffMember } from "@/lib/types";
-import { hashPassword, verifyPassword } from "@/src/lib/auth/password";
 import { readAuthSession } from "@/src/lib/auth/session";
 import {
   clearStaffSession,
@@ -18,15 +17,14 @@ type StaffRow = {
   name: string;
   role: string;
   username?: string | null;
-  password_hash?: string | null;
-  password_salt?: string | null;
-  pin?: string | null;
   active?: boolean | null;
   allowed_nav?: unknown;
   business_id?: string | null;
 };
 
 const STAFF_SELECT = "id, name, role, username, active, allowed_nav, business_id";
+
+const UNWANTED_STAFF_NAMES = new Set(["andy", "kien", "kiên"]);
 
 function toStaffSession(row: StaffRow, businessId: string): StaffSessionPayload {
   return {
@@ -132,58 +130,127 @@ export async function listStaffAction(): Promise<{ data: StaffMember[]; error?: 
   return { data: mapStaffResponse(data as StaffRow[]) };
 }
 
-async function findStaffForLogin(businessId: string, username: string) {
-  const supabase = createSupabaseAdmin();
-  const trimmed = username.trim().toLowerCase();
-
-  let { data, error } = await supabase
-    .from("staff")
-    .select("*")
-    .eq("business_id", businessId)
-    .ilike("username", trimmed)
-    .maybeSingle();
-
-  if (!data) {
-    const fallback = await supabase
-      .from("staff")
-      .select("*")
-      .is("business_id", null)
-      .ilike("username", trimmed)
-      .maybeSingle();
-    data = fallback.data;
-    error = fallback.error;
-  }
-
-  if (error || !data) return null;
-  return data as StaffRow;
+async function clearStaffForeignKeys(
+  supabase: ReturnType<typeof createSupabaseAdmin>,
+  staffId: string,
+) {
+  await supabase.from("sales").update({ staff_id: null }).eq("staff_id", staffId);
+  await supabase.from("order_items").update({ staff_id: null }).eq("staff_id", staffId);
+  await supabase.from("action_logs").update({ staff_id: null }).eq("staff_id", staffId);
+  await supabase.from("reservations").update({ staff_id: null }).eq("staff_id", staffId);
 }
 
-export async function staffLoginAction(username: string, password: string) {
+/** Remove Andy/Kiên, ensure Adam admin exists, set delete passcode default to 8888. */
+export async function ensureStaffRosterCleanup() {
+  const businessSession = await requireBusinessSession();
+  if (!businessSession) return;
+
+  const supabase = createSupabaseAdmin();
+  const businessId = businessSession.businessId;
+
+  await supabase.from("staff").update({ business_id: businessId }).is("business_id", null);
+
+  const { data: roster } = await supabase
+    .from("staff")
+    .select("id, name, username, role, active")
+    .eq("business_id", businessId);
+
+  for (const row of roster ?? []) {
+    const nameKey = String(row.name ?? "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFC");
+    const usernameKey = String(row.username ?? "")
+      .trim()
+      .toLowerCase();
+    if (UNWANTED_STAFF_NAMES.has(nameKey) || UNWANTED_STAFF_NAMES.has(usernameKey)) {
+      await clearStaffForeignKeys(supabase, row.id);
+      await supabase.from("staff").delete().eq("id", row.id);
+    }
+  }
+
+  const { data: adamRows } = await supabase
+    .from("staff")
+    .select("id")
+    .eq("business_id", businessId)
+    .ilike("name", "adam");
+
+  if (!adamRows?.length) {
+    await supabase.from("staff").insert({
+      name: "Adam",
+      role: "admin",
+      username: "adam",
+      active: true,
+      business_id: businessId,
+      allowed_nav: ALL_NAV_TABS,
+      pin: null,
+      require_pin_for_actions: false,
+      require_switch_password: false,
+      password_hash: null,
+      password_salt: null,
+    });
+  } else {
+    await supabase
+      .from("staff")
+      .update({
+        role: "admin",
+        active: true,
+        username: "adam",
+        allowed_nav: ALL_NAV_TABS,
+        require_pin_for_actions: false,
+        require_switch_password: false,
+      })
+      .eq("id", adamRows[0].id);
+  }
+
+  const { data: settingsRows } = await supabase
+    .from("settings")
+    .select("id, business_id, admin_deletion_password")
+    .or(`business_id.eq.${businessId},id.eq.1`);
+
+  for (const row of settingsRows ?? []) {
+    const current = String(row.admin_deletion_password ?? "").trim();
+    if (!current || current === "1234") {
+      await supabase
+        .from("settings")
+        .update({ admin_deletion_password: "8888" })
+        .eq("id", row.id);
+    }
+  }
+}
+
+/** Select a staff member for this device — no password required. */
+export async function selectStaffAction(staffId: string) {
   const businessSession = await requireBusinessSession();
   if (!businessSession) {
     return { ok: false as const, error: "businessSessionRequired" };
   }
 
-  await ensureDefaultStaffCredentials();
-
-  const trimmedUser = username.trim().toLowerCase();
-  const trimmedPass = password;
-  if (!trimmedUser || !trimmedPass) {
-    return { ok: false as const, error: "invalidCredentials" };
-  }
-
-  const row = await findStaffForLogin(businessSession.businessId, trimmedUser);
-  if (!row || !row.active) {
-    return { ok: false as const, error: "invalidCredentials" };
-  }
-  if (!row.password_hash || !row.password_salt) {
-    return { ok: false as const, error: "passwordNotSet" };
-  }
-  if (!verifyPassword(trimmedPass, row.password_hash, row.password_salt)) {
-    return { ok: false as const, error: "invalidCredentials" };
-  }
+  await ensureStaffRosterCleanup();
 
   const supabase = createSupabaseAdmin();
+  let { data, error } = await supabase
+    .from("staff")
+    .select("*")
+    .eq("id", staffId)
+    .eq("business_id", businessSession.businessId)
+    .maybeSingle();
+
+  if (!data) {
+    const fallback = await supabase.from("staff").select("*").eq("id", staffId).maybeSingle();
+    data = fallback.data;
+    error = fallback.error;
+  }
+
+  if (error || !data) {
+    return { ok: false as const, error: "invalidCredentials" };
+  }
+
+  const row = data as StaffRow;
+  if (!row.active) {
+    return { ok: false as const, error: "invalidCredentials" };
+  }
+
   const session = toStaffSession(row, businessSession.businessId);
   await supabase
     .from("staff")
@@ -194,129 +261,49 @@ export async function staffLoginAction(username: string, password: string) {
   return { ok: true as const, session, member: member ?? null };
 }
 
-export async function staffLogoutAction() {
-  await clearStaffSession();
-  return { ok: true as const };
-}
-
-export async function switchStaffAction(staffId: string, password: string) {
+/** @deprecated Use selectStaffAction — kept for older imports. */
+export async function staffLoginAction(username: string, _password?: string) {
   const businessSession = await requireBusinessSession();
   if (!businessSession) {
     return { ok: false as const, error: "businessSessionRequired" };
   }
 
+  await ensureStaffRosterCleanup();
+  const trimmed = username.trim().toLowerCase();
+  if (!trimmed) {
+    return { ok: false as const, error: "invalidCredentials" };
+  }
+
   const supabase = createSupabaseAdmin();
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("staff")
     .select("*")
-    .eq("id", staffId)
     .eq("business_id", businessSession.businessId)
+    .or(`username.ilike.${trimmed},name.ilike.${trimmed}`)
     .maybeSingle();
 
-  if (error || !data) {
+  if (!data?.id) {
     return { ok: false as const, error: "invalidCredentials" };
   }
 
-  const row = data as StaffRow;
-  if (!row.active) {
-    return { ok: false as const, error: "invalidCredentials" };
-  }
-  if (!row.password_hash || !row.password_salt) {
-    return { ok: false as const, error: "passwordNotSet" };
-  }
-  if (!verifyPassword(password, row.password_hash, row.password_salt)) {
-    return { ok: false as const, error: "invalidCredentials" };
-  }
-
-  const session = toStaffSession(row, businessSession.businessId);
-  await supabase
-    .from("staff")
-    .update({ business_id: businessSession.businessId })
-    .eq("id", row.id);
-  await writeStaffSession(session);
-  const [member] = mapStaffResponse([row]);
-  return { ok: true as const, member: member ?? null };
+  return selectStaffAction(data.id as string);
 }
 
-export async function changeStaffPasswordAction(currentPassword: string, newPassword: string) {
-  const staffSession = await getStaffSessionAction();
-  if (!staffSession) {
-    return { ok: false as const, error: "unauthorized" };
-  }
-
-  const trimmedCurrent = currentPassword.trim();
-  const trimmedNew = newPassword.trim();
-  if (!trimmedCurrent || !trimmedNew || trimmedNew.length < 4) {
-    return { ok: false as const, error: "invalidPassword" };
-  }
-
-  const supabase = createSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("staff")
-    .select("password_hash, password_salt")
-    .eq("id", staffSession.staffId)
-    .eq("business_id", staffSession.businessId)
-    .maybeSingle();
-
-  if (error || !data?.password_hash || !data.password_salt) {
-    return { ok: false as const, error: "passwordNotSet" };
-  }
-
-  if (!verifyPassword(trimmedCurrent, data.password_hash, data.password_salt)) {
-    return { ok: false as const, error: "invalidCredentials" };
-  }
-
-  const { hash, salt } = hashPassword(trimmedNew);
-  const { error: updateError } = await supabase
-    .from("staff")
-    .update({ password_hash: hash, password_salt: salt })
-    .eq("id", staffSession.staffId);
-
-  if (updateError) {
-    return { ok: false as const, error: updateError.message };
-  }
-
+export async function staffLogoutAction() {
+  await clearStaffSession();
   return { ok: true as const };
 }
 
-function staffUsernameFromName(name: string) {
-  return (
-    name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "")
-      .slice(0, 16) || "staff"
-  );
+export async function switchStaffAction(staffId: string, _password?: string) {
+  return selectStaffAction(staffId);
 }
 
+/** @deprecated Staff passwords removed. */
+export async function changeStaffPasswordAction() {
+  return { ok: false as const, error: "unsupported" };
+}
+
+/** @deprecated Use ensureStaffRosterCleanup. */
 export async function ensureDefaultStaffCredentials() {
-  const businessSession = await requireBusinessSession();
-  if (!businessSession) return;
-
-  const supabase = createSupabaseAdmin();
-
-  await supabase
-    .from("staff")
-    .update({ business_id: businessSession.businessId })
-    .is("business_id", null);
-
-  const { data: needsPassword } = await supabase
-    .from("staff")
-    .select("id, name, username, role")
-    .is("password_hash", null)
-    .or("role.in.(admin,cashier,manager),username.not.is.null");
-
-  for (const staff of needsPassword ?? []) {
-    const username = (staff.username as string | null)?.trim() || staffUsernameFromName(staff.name as string);
-    const { hash, salt } = hashPassword("1");
-    await supabase
-      .from("staff")
-      .update({
-        username: username.toLowerCase(),
-        password_hash: hash,
-        password_salt: salt,
-        business_id: businessSession.businessId,
-      })
-      .eq("id", staff.id);
-  }
+  return ensureStaffRosterCleanup();
 }

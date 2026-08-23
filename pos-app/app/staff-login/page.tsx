@@ -1,21 +1,17 @@
 "use client";
 
-import { FormEvent, Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LanguageSelector } from "@/components/language-selector";
 import { useApp } from "@/contexts/app-context";
 import { useAuth } from "@/contexts/auth-context";
+import type { StaffMember } from "@/lib/types";
 import {
-  ensureDefaultStaffCredentials,
+  ensureStaffRosterCleanup,
   getStaffSessionAction,
-  staffLoginAction,
+  listStaffAction,
+  selectStaffAction,
 } from "@/src/lib/staff-auth-actions";
-
-const STAFF_ERROR_KEYS = {
-  invalidCredentials: "staffLoginInvalid",
-  passwordNotSet: "staffLoginPasswordNotSet",
-  businessSessionRequired: "staffLoginBusinessRequired",
-} as const;
 
 function StaffLoginForm() {
   const router = useRouter();
@@ -24,11 +20,10 @@ function StaffLoginForm() {
   const { session, loading: authLoading, logout } = useAuth();
   const { translate } = useApp();
 
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [roster, setRoster] = useState<StaffMember[]>([]);
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [checkingStaff, setCheckingStaff] = useState(true);
-  const [errorKey, setErrorKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -40,13 +35,16 @@ function StaffLoginForm() {
 
     let cancelled = false;
     void (async () => {
-      await ensureDefaultStaffCredentials();
+      await ensureStaffRosterCleanup();
       const existing = await getStaffSessionAction();
       if (cancelled) return;
       if (existing) {
         router.replace(nextPath);
         return;
       }
+      const { data } = await listStaffAction();
+      if (cancelled) return;
+      setRoster((data ?? []).filter((member) => member.active));
       setCheckingStaff(false);
     })();
 
@@ -55,25 +53,18 @@ function StaffLoginForm() {
     };
   }, [authLoading, session, router, nextPath]);
 
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    setSubmitting(true);
-    setErrorKey(null);
-
-    const result = await staffLoginAction(username, password);
-    setSubmitting(false);
+  const handleSelect = async (member: StaffMember) => {
+    setSubmittingId(member.id);
+    setError(null);
+    const result = await selectStaffAction(member.id);
+    setSubmittingId(null);
 
     if (result.ok) {
       router.replace(nextPath);
       router.refresh();
       return;
     }
-
-    const key =
-      result.error && result.error in STAFF_ERROR_KEYS
-        ? STAFF_ERROR_KEYS[result.error as keyof typeof STAFF_ERROR_KEYS]
-        : "staffLoginInvalid";
-    setErrorKey(key);
+    setError(translate("staffLoginInvalid"));
   };
 
   if (authLoading || checkingStaff || !session) {
@@ -100,44 +91,36 @@ function StaffLoginForm() {
       <h2 className="text-lg font-semibold text-gray-900 dark:text-zinc-100">{translate("staffLoginTitle")}</h2>
       <p className="mt-2 text-sm text-gray-500 dark:text-zinc-400">{translate("staffLoginHint")}</p>
 
-      <form onSubmit={(event) => void handleSubmit(event)} className="mt-6 space-y-4">
-        <label className="block text-sm">
-          <span className="font-medium text-gray-700 dark:text-zinc-300">{translate("staffUsername")}</span>
-          <input
-            value={username}
-            onChange={(event) => setUsername(event.target.value)}
-            autoComplete="username"
-            className="pos-input mt-1"
-            required
-          />
-        </label>
-
-        <label className="block text-sm">
-          <span className="font-medium text-gray-700 dark:text-zinc-300">{translate("staffPassword")}</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete="current-password"
-            className="pos-input mt-1"
-            required
-          />
-        </label>
-
-        {errorKey && (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
-            {translate(errorKey as "staffLoginInvalid")}
+      <div className="mt-6 space-y-2">
+        {roster.length === 0 ? (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            {translate("staffLoginEmptyRoster")}
           </p>
+        ) : (
+          roster.map((member) => (
+            <button
+              key={member.id}
+              type="button"
+              disabled={submittingId != null}
+              onClick={() => void handleSelect(member)}
+              className="flex min-h-[52px] w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-emerald-500 hover:bg-emerald-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-emerald-500 dark:hover:bg-emerald-950/30"
+            >
+              <span className="text-base font-semibold text-gray-900 dark:text-zinc-100">
+                {member.name}
+              </span>
+              <span className="text-xs uppercase tracking-wide text-gray-500 dark:text-zinc-400">
+                {submittingId === member.id ? translate("authSigningIn") : member.role}
+              </span>
+            </button>
+          ))
         )}
+      </div>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="min-h-[48px] w-full rounded-xl bg-emerald-600 text-base font-bold text-white hover:bg-emerald-500 disabled:opacity-60"
-        >
-          {submitting ? translate("authSigningIn") : translate("staffLoginButton")}
-        </button>
-      </form>
+      {error && (
+        <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
+          {error}
+        </p>
+      )}
 
       <button
         type="button"

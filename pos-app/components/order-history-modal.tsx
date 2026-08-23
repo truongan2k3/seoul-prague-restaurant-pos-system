@@ -201,7 +201,7 @@ export function OrderHistoryModal({
       logAction("delete_sale", `Deleted sale ${generateOrderNumber(sale.closedAt)} · ${sale.tableLabel}`);
       pushNotification({ message: translate("historyDeleteSuccess") });
       onDeleted?.(sale.id);
-    });
+    }, { force: true });
   };
 
   return (

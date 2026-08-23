@@ -319,7 +319,7 @@ export function OptionGroupLibraryManager({
       }
       logAction("delete option group library", entry.nameEn);
       onChange();
-    });
+    }, { force: true });
   };
 
   return (

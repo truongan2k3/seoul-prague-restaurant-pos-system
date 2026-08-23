@@ -135,7 +135,7 @@ export function NotePresetManager({ presets, onChange }: NotePresetManagerProps)
       }
       logAction("delete special request", preset.labelEn);
       onChange();
-    });
+    }, { force: true });
   };
 
   return (

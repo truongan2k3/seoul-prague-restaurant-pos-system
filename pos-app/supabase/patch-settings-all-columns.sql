@@ -53,7 +53,7 @@ ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS receipt_font_family text DE
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS receipt_print_bitmap boolean DEFAULT false;
 
 -- Admin + card terminal
-ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS admin_deletion_password text DEFAULT '1234';
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS admin_deletion_password text DEFAULT '8888';
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS terminal_type text DEFAULT 'network';
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS terminal_ip text DEFAULT '192.168.1.105';
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS terminal_port text DEFAULT '2000';

@@ -4,8 +4,8 @@
 UPDATE public.staff
 SET role = 'admin',
     allowed_nav = NULL
-WHERE lower(username) = 'admin'
-   OR lower(name) IN ('andy', 'admin');
+WHERE lower(username) IN ('admin', 'adam')
+   OR lower(name) IN ('andy', 'admin', 'adam');
 
 -- Optional: list current staff roles
 SELECT name, username, role, allowed_nav FROM public.staff ORDER BY name;

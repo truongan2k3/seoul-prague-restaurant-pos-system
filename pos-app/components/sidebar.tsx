@@ -172,7 +172,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
                   </p>
                   <p className="truncate text-xs text-gray-500 dark:text-zinc-400">
                     {currentStaffUser
-                      ? `${currentStaffUser.name}${currentStaffUser.username ? ` · @${currentStaffUser.username}` : ""} · ${currentStaffUser.role}`
+                      ? `${currentStaffUser.name} · ${currentStaffUser.role}`
                       : session?.username
                         ? `@${session.username} (${translate("staffLoginTitle")})`
                         : translate("cashierFloor")}
@@ -288,7 +288,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
                     </span>
                     {currentStaffUser && (
                       <span className="block truncate text-[10px] uppercase tracking-wide text-gray-500 dark:text-zinc-400">
-                        {currentStaffUser.username ? `@${currentStaffUser.username}` : currentStaffUser.role}
+                        {currentStaffUser.role}
                       </span>
                     )}
                   </div>

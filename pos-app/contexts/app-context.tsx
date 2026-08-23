@@ -235,18 +235,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!member.active) return false;
       if (member.id === currentStaffUser?.id) return true;
 
-      setStaffSwitchTarget(member);
-      setStaffSwitchError(false);
-      setStaffSwitchOpen(true);
+      void (async () => {
+        const result = await switchStaffAction(member.id);
+        if (!result.ok || !result.member) return;
+        applyStaffSession(result.member);
+        await refreshStaffList();
+      })();
       return true;
     },
-    [currentStaffUser?.id],
+    [applyStaffSession, currentStaffUser?.id, refreshStaffList],
   );
 
   const submitStaffSwitchPassword = useCallback(
-    async (password: string) => {
+    async (_password: string) => {
       if (!staffSwitchTarget) return;
-      const result = await switchStaffAction(staffSwitchTarget.id, password);
+      const result = await switchStaffAction(staffSwitchTarget.id);
       if (!result.ok) {
         setStaffSwitchError(true);
         return;

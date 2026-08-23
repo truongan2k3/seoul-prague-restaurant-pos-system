@@ -152,7 +152,7 @@ export function MenuManager({ menuItems, categories, onChange }: MenuManagerProp
       }
       logAction("delete menu item", item.nameEn);
       onChange();
-    });
+    }, { force: true });
   };
 
   const handleToggleAvailable = async (item: MenuItem) => {

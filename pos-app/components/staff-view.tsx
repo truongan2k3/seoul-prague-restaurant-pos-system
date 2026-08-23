@@ -101,7 +101,7 @@ export function StaffView({ onRefresh }: StaffViewProps) {
         setEditing(null);
         onRefresh();
         resolve();
-      });
+      }, { force: true });
     });
   };
 
@@ -231,7 +231,7 @@ export function StaffView({ onRefresh }: StaffViewProps) {
                                   }
                                   logAction("delete staff", member.name);
                                   onRefresh();
-                                })
+                                }, { force: true })
                               }
                               disabled={isSaving}
                               className="rounded-lg p-2 text-red-500 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-950"

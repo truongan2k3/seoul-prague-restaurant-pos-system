@@ -62,7 +62,7 @@ export function InventoryManager({
       }
       logAction("delete inventory", item.name);
       onChange();
-    });
+    }, { force: true });
   };
 
   return (

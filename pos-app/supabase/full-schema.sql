@@ -11,12 +11,7 @@ CREATE TABLE IF NOT EXISTS public.staff (
 );
 
 INSERT INTO public.staff (id, name, role, pin) VALUES
-  ('30000000-0000-4000-a000-000000000001'::uuid, 'Andy', 'cashier', NULL),
-  ('30000000-0000-4000-a000-000000000002'::uuid, 'Lily', 'server', NULL),
-  ('30000000-0000-4000-a000-000000000003'::uuid, 'Adele', 'server', NULL),
-  ('30000000-0000-4000-a000-000000000004'::uuid, 'UK', 'server', NULL),
-  ('30000000-0000-4000-a000-000000000005'::uuid, 'Jennie', 'server', NULL),
-  ('30000000-0000-4000-a000-000000000006'::uuid, 'Master Liu', 'manager', '1234')
+  ('30000000-0000-4000-a000-000000000001'::uuid, 'Adam', 'cashier', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 -- ── Extend menu_items ─────────────────────────────────────────────────────────

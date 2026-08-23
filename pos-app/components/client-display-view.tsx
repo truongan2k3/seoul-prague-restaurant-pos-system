@@ -253,6 +253,7 @@ function CfdSlideshowPlayer({ items }: { items: CfdSlideshowItem[] }) {
   const singleItem = items.length <= 1;
   const blobUrls = useBlobUrlCache(items.map((entry) => entry.url));
   const resolveSrc = useCallback((url: string) => blobUrls[url] ?? "", [blobUrls]);
+  const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   // Stable list identity for timers (urls only) — avoid remount/refetch storms.
   const urlsKey = items.map((entry) => entry.url).join("|");
 
@@ -277,11 +278,19 @@ function CfdSlideshowPlayer({ items }: { items: CfdSlideshowItem[] }) {
     return () => window.clearTimeout(timer);
   }, [index, item, goNext, singleItem]);
 
+  // Play active video by URL ref — never index DOM video nodes (sparse when images mix in).
   useEffect(() => {
-    const nodes = document.querySelectorAll<HTMLVideoElement>("[data-cfd-slide-video]");
-    nodes.forEach((node, entryIndex) => {
-      if (entryIndex === index % items.length) {
-        void node.play().catch(() => undefined);
+    const activeUrl = items[index % Math.max(items.length, 1)]?.url;
+    for (const [url, node] of videoRefs.current) {
+      if (url === activeUrl) {
+        const play = () => {
+          void node.play().catch(() => undefined);
+        };
+        if (node.readyState >= 2) {
+          play();
+        } else {
+          node.addEventListener("loadeddata", play, { once: true });
+        }
       } else {
         node.pause();
         try {
@@ -290,8 +299,8 @@ function CfdSlideshowPlayer({ items }: { items: CfdSlideshowItem[] }) {
           /* ignore */
         }
       }
-    });
-  }, [index, items.length]);
+    }
+  }, [index, items, blobUrls]);
 
   if (!item) {
     return null;
@@ -317,10 +326,14 @@ function CfdSlideshowPlayer({ items }: { items: CfdSlideshowItem[] }) {
             return (
               <video
                 key={entry.url}
-                data-cfd-slide-video
+                ref={(node) => {
+                  if (node) videoRefs.current.set(entry.url, node);
+                  else videoRefs.current.delete(entry.url);
+                }}
                 src={src}
                 muted
                 playsInline
+                autoPlay={active}
                 loop={singleItem}
                 preload="auto"
                 onEnded={singleItem ? undefined : active ? goNext : undefined}

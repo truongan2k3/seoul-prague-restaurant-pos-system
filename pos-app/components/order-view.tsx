@@ -88,7 +88,7 @@ function OrderCard({
           onOpen();
         }
       }}
-      className={`flex h-[min(70vh,520px)] w-[min(85vw,320px)] shrink-0 snap-start cursor-pointer flex-col rounded-xl border p-4 shadow-sm transition-opacity hover:opacity-95 ${
+      className={`flex w-[min(85vw,320px)] shrink-0 snap-start cursor-pointer flex-col rounded-xl border p-4 shadow-sm transition-opacity hover:opacity-95 ${
         isPaidInProgress
           ? "border-emerald-300 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/40"
           : isReady
@@ -131,7 +131,7 @@ function OrderCard({
         </div>
       </div>
 
-      <div className="mt-3 min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain border-t border-gray-100 pt-3 dark:border-gray-800">
+      <div className="mt-3 space-y-4 border-t border-gray-100 pt-3 dark:border-gray-800">
         <OrderItemGroup
           title={translate("summaryFood")}
           items={foodItems}
@@ -149,7 +149,7 @@ function OrderCard({
       </div>
 
       <footer
-        className="mt-3 shrink-0 space-y-3 border-t border-gray-200 pt-3 dark:border-gray-800"
+        className="mt-3 space-y-3 border-t border-gray-200 pt-3 dark:border-gray-800"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between text-sm font-bold text-gray-900 dark:text-gray-100">
@@ -254,7 +254,7 @@ export function OrderView({
             {translate("noOrders")}
           </div>
         ) : (
-          <div className="-mx-1 flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain px-1 pb-2">
+          <div className="-mx-1 flex items-start snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain px-1 pb-2">
             {tableBundles.map((bundle) => (
               <OrderCard
                 key={bundle.table.id}

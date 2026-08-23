@@ -4,11 +4,11 @@ import { useEffect, useRef } from "react";
 import { useApp } from "@/contexts/app-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { useSettings } from "@/contexts/settings-context";
-import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
 import { playCustomAlertSound } from "@/lib/notification-sound";
 import type { RestaurantTable } from "@/lib/types";
+import { subscribeToOrderItemInserts } from "@/src/lib/supabase-data";
 
-/** Collapse multi-line sent_to_kitchen logs from one Send into one alert. */
+/** Collapse multi-line inserts from one Send into one alert. */
 const TABLE_NOTIFY_DEBOUNCE_MS = 1200;
 
 interface MainNewOrderNotificationListenerProps {
@@ -63,23 +63,11 @@ export function MainNewOrderNotificationListener({
   useEffect(() => {
     if (!notifyMainNewOrderEnabled && !soundMainNewOrderEnabled) return;
 
-    // Only staff "Send to kitchen" logs — not checkout, not table sync noise.
-    return subscribeToPostgresRowChanges(
-      "main-new-order-activity",
-      { event: "INSERT", schema: "public", table: "table_activity_logs" },
-      (payload) => {
-        const row = payload.new as Record<string, unknown>;
-        if (row.action !== "sent_to_kitchen") return;
-        const tableId = typeof row.table_id === "string" ? row.table_id : null;
-        const label =
-          typeof row.table_label === "string" && row.table_label.trim()
-            ? row.table_label
-            : tableId
-              ? tableLabelsRef.current.get(tableId)
-              : undefined;
-        scheduleNotify(tableId, label);
-      },
-    );
+    return subscribeToOrderItemInserts((row) => {
+      if (row.skip_print && row.hide_on_kds) return;
+      const tableId = row.table_id;
+      scheduleNotify(tableId, tableLabelsRef.current.get(tableId));
+    }, "main-new-order-items");
   }, [notifyMainNewOrderEnabled, soundMainNewOrderEnabled]);
 
   useEffect(() => {

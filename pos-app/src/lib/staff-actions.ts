@@ -279,7 +279,6 @@ export async function deleteStaff(
   await supabase.from("order_items").update({ staff_id: null }).eq("staff_id", id);
   await supabase.from("action_logs").update({ staff_id: null }).eq("staff_id", id);
   await supabase.from("reservations").update({ staff_id: null }).eq("staff_id", id);
-  await supabase.from("table_activity_logs").update({ staff_id: null }).eq("staff_id", id);
 
   return supabase.from("staff").delete().eq("id", id).eq("business_id", businessSession.businessId);
 }

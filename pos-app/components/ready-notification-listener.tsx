@@ -18,10 +18,10 @@ interface ReadyNotificationListenerProps {
 }
 
 async function resolveStaffName(orderId: string): Promise<string> {
-  let staffName = await fetchStaffNameForOrderAction(orderId, "ready");
+  let staffName = await fetchStaffNameForOrderAction(orderId);
   if (!staffName) {
     await new Promise((resolve) => setTimeout(resolve, 400));
-    staffName = await fetchStaffNameForOrderAction(orderId, "ready");
+    staffName = await fetchStaffNameForOrderAction(orderId);
   }
   return staffName ?? "Staff";
 }

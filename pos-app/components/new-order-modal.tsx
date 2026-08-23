@@ -10,7 +10,6 @@ import { Modal } from "@/components/modal";
 import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { OnScreenKeyboard } from "@/components/on-screen-keyboard";
 import { OrderLineToolbar } from "@/components/order-line-toolbar";
-import { TableActivityLogPanel } from "@/components/table-activity-log-panel";
 import { ElapsedTimer } from "@/components/live-clock";
 import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
@@ -404,7 +403,6 @@ export function NewOrderModal({
   const [customItemType, setCustomItemType] = useState<MenuItem["itemType"]>("food");
   const [customItemTaxGroup, setCustomItemTaxGroup] = useState<TaxGroup>("B");
   const [customItemError, setCustomItemError] = useState<string | null>(null);
-  const [activityLogRevision, setActivityLogRevision] = useState(0);
 
   useEffect(() => {
     if (!open) return;
@@ -666,7 +664,6 @@ export function NewOrderModal({
       });
       setSubmittedBaseline(orders);
       setPendingCancels([]);
-      setActivityLogRevision((value) => value + 1);
       onRefreshExistingOrders?.();
     } catch (error) {
       setSubmittedLineError(error instanceof Error ? error.message : "Failed to save order.");
@@ -1413,32 +1410,6 @@ export function NewOrderModal({
     selectedSubmittedLineId,
   ]);
 
-  const orderItemIdsForLog = useMemo(() => {
-    const ids = new Set<string>();
-    for (const line of submittedLines) {
-      if (line.id) ids.add(line.id);
-      line.unitIds?.forEach((id) => ids.add(id));
-    }
-    for (const item of submittedBaseline) {
-      if (item.id) ids.add(item.id);
-      item.unitIds?.forEach((id) => ids.add(id));
-    }
-    for (const entry of pendingCancels) ids.add(entry.itemId);
-    return [...ids];
-  }, [submittedLines, submittedBaseline, pendingCancels]);
-
-  const itemNameByOrderId = useMemo(() => {
-    const map = new Map<string, string>();
-    const addLine = (line: OrderItem) => {
-      const label = orderItemDisplayName(line, menuItems, language);
-      if (line.id) map.set(line.id, label);
-      line.unitIds?.forEach((id) => map.set(id, label));
-    };
-    for (const line of submittedBaseline) addLine(line);
-    for (const line of submittedLines) addLine(line);
-    return map;
-  }, [submittedLines, submittedBaseline, menuItems, language]);
-
   const isLineSentToKitchen = (line: OrderItem) => {
     if (line.isCancelled || line.hideOnKds || line.skipPrint) return false;
     const kitchen = resolveKitchenStatus(line);
@@ -1776,17 +1747,6 @@ export function NewOrderModal({
           )}
         </div>
       </div>
-
-      {table?.id && mode === "append" ? (
-        <TableActivityLogPanel
-          compact
-          tableId={table.id}
-          since={table.occupiedAt}
-          orderItemIds={orderItemIdsForLog}
-          itemNameByOrderId={itemNameByOrderId}
-          refreshKey={activityLogRevision}
-        />
-      ) : null}
     </>
   );
 

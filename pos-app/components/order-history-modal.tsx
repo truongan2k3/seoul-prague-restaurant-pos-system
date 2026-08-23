@@ -5,7 +5,6 @@ import { Printer, Trash2, X } from "lucide-react";
 import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { usePinGate } from "@/contexts/pin-gate-context";
 import { NumericInputField } from "@/components/numeric-input-field";
-import { TableActivityLogPanel } from "@/components/table-activity-log-panel";
 import { useApp } from "@/contexts/app-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
@@ -87,15 +86,6 @@ export function OrderHistoryModal({
   const canEdit = canManageStaff(currentStaffUser?.role);
   const editMode = editScope !== false;
   const paymentOnlyEdit = editScope === "payment";
-
-  const orderItemIds = useMemo(
-    () => sale.items.map((item) => item.id).filter((id): id is string => Boolean(id)),
-    [sale.items],
-  );
-  const itemNameById = useMemo(
-    () => new Map(sale.items.filter((item) => item.id).map((item) => [item.id!, item.name])),
-    [sale.items],
-  );
 
   const resetEditState = () => {
     setEditItems(sale.items);
@@ -419,14 +409,6 @@ export function OrderHistoryModal({
               <p className="mt-3 text-sm text-red-600 dark:text-red-400">{saveError}</p>
             )}
           </section>
-
-          <TableActivityLogPanel
-            tableId={sale.id}
-            snapshot={sale.activityLog}
-            orderItemIds={orderItemIds}
-            itemNameByOrderId={itemNameById}
-            defaultOpen
-          />
         </div>
 
         <div className="flex flex-wrap items-center gap-3 border-t border-gray-200 px-6 py-4 dark:border-gray-800">

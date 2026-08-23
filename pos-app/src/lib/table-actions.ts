@@ -10,12 +10,6 @@ import {
 } from "@/lib/auto-serve";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
 import type { OrderItem, Station } from "@/lib/types";
-import { logOrderStatusChange, fetchOrderLogsForItems } from "@/src/lib/order-log-actions";
-import {
-  fetchTableActivityLogs,
-  logTableActivity,
-  tableActivityLogsToSnapshot,
-} from "@/src/lib/table-activity-log-actions";
 import { completeReservationForTable, findActiveReservationForTable, mapReservationRow } from "@/src/lib/reservation-actions";
 import { resolveStaffActor } from "@/src/lib/staff-actor";
 import { mapOrderItemRow, type SupabaseOrderItemRow } from "@/src/lib/supabase-data";
@@ -163,111 +157,18 @@ async function syncTableOrdersFromDb(tableId: string) {
     .eq("id", tableId);
 }
 
-async function logAggregatedItemsActivity(
-  tableId: string,
-  items: OrderItem[],
-  action: "sent_to_kitchen" | "save_no_print",
-  staff: { staffId?: string; staffName?: string },
-  tableLabel?: string,
-) {
-  const actor = staff.staffName?.trim() || "Staff";
-  for (const item of aggregateOrderItems(items)) {
-    const label = item.quantity > 1 ? `${item.quantity}× ${item.name}` : item.name;
-    const { error } = await logTableActivity({
-      tableId,
-      tableLabel,
-      orderItemId: item.id,
-      itemName: label,
-      action,
-      staffId: staff.staffId,
-      staffName: actor,
-    });
-    if (error) {
-      console.warn("[TableActivityLog] Failed to write entry:", error.message);
-    }
-  }
-}
-
-async function logCancelledItemsActivity(
-  tableId: string,
-  cancelledRows: Array<{ id: string; name: string }>,
-  staff: { staffId?: string; staffName?: string },
-  tableLabel?: string,
-  reason = "Removed from order",
-) {
-  const actor = staff.staffName?.trim();
-  if (!actor || cancelledRows.length === 0) return;
-
-  const byName = new Map<string, { ids: string[]; count: number }>();
-  for (const row of cancelledRows) {
-    const entry = byName.get(row.name) ?? { ids: [], count: 0 };
-    entry.ids.push(row.id);
-    entry.count += 1;
-    byName.set(row.name, entry);
-  }
-
-  for (const [name, { ids, count }] of byName) {
-    const label = count > 1 ? `${count}× ${name}` : name;
-    const { error } = await logTableActivity({
-      tableId,
-      tableLabel,
-      orderItemId: ids[0],
-      itemName: label,
-      action: "cancel_item",
-      staffId: staff.staffId,
-      staffName: actor,
-      meta: { reason, quantity: count, unitIds: ids },
-    });
-    if (error) {
-      console.warn("[TableActivityLog] Failed to write cancel entry:", error.message);
-    }
-  }
-}
-
-async function insertOrderRowsWithLogs(
+async function insertOrderRows(
   tableId: string,
   orders: OrderItem[],
   staffId?: string,
   staffName?: string,
-  tableLabel?: string,
 ) {
   const actor = await resolveStaffActor({ staffId, staffName });
   const orderRows = buildOrderRows(tableId, orders, actor.staffId);
   if (orderRows.length === 0) return { error: null as Error | null };
 
-  const { data, error } = await supabase.from("order_items").insert(orderRows).select("id");
-  if (error) return { error };
-
-  for (let index = 0; index < (data ?? []).length; index += 1) {
-    const row = data![index];
-    const kitchenStatus = orderRows[index]?.kitchen_status ?? "pending";
-    const logStatus =
-      kitchenStatus === "served" || kitchenStatus === "ready" ? kitchenStatus : "preparing";
-    await logOrderStatusChange(row.id, logStatus, actor.staffName);
-  }
-
-  const sentItems = orders.filter((item) => !(item.skipPrint && item.hideOnKds));
-  const savedItems = orders.filter((item) => item.skipPrint && item.hideOnKds);
-  if (sentItems.length > 0) {
-    await logAggregatedItemsActivity(
-      tableId,
-      sentItems,
-      "sent_to_kitchen",
-      actor,
-      tableLabel,
-    );
-  }
-  if (savedItems.length > 0) {
-    await logAggregatedItemsActivity(
-      tableId,
-      savedItems,
-      "save_no_print",
-      actor,
-      tableLabel,
-    );
-  }
-
-  return { error: null as Error | null };
+  const { error } = await supabase.from("order_items").insert(orderRows);
+  return { error };
 }
 
 function buildOrderRows(tableId: string, orders: OrderItem[], staffId?: string) {
@@ -317,12 +218,11 @@ export async function occupyTable(
 
   if (tableError) return { data: null, error: tableError };
 
-  const { error: itemsError } = await insertOrderRowsWithLogs(
+  const { error: itemsError } = await insertOrderRows(
     tableId,
     orders,
     staffId,
     staffName,
-    tableLabel,
   );
   if (itemsError) return { data: null, error: itemsError };
 
@@ -347,14 +247,11 @@ export async function appendOrdersToTable(
   if (fetchError) return { data: null, error: fetchError };
   if (!table) return { data: null, error: new Error("Table not found") };
 
-  const label = tableLabel ?? String((table as { label?: string }).label ?? "");
-
-  const { error: itemsError } = await insertOrderRowsWithLogs(
+  const { error: itemsError } = await insertOrderRows(
     tableId,
     newOrders,
     staffId,
     staffName,
-    label,
   );
   if (itemsError) return { data: null, error: itemsError };
 
@@ -383,10 +280,6 @@ export async function updateTableOrders(
   },
 ) {
   const activeOrders = orders.filter((item) => item.quantity > 0);
-  const staff = await resolveStaffActor({
-    staffId: options?.staffId,
-    staffName: options?.staffName,
-  });
 
   const { data: existingRows, error: fetchItemsError } = await supabase
     .from("order_items")
@@ -421,22 +314,6 @@ export async function updateTableOrders(
         })
         .in("id", openIds);
       if (cancelError) return { data: null, error: cancelError };
-
-      const cancelledRows = (existingRows ?? [])
-        .filter(
-          (row) =>
-            openIds.includes(row.id) &&
-            !row.is_cancelled &&
-            row.kitchen_status !== "cancelled" &&
-            row.kitchen_status !== "archived",
-        )
-        .map((row) => ({ id: row.id, name: String(row.name) }));
-      await logCancelledItemsActivity(
-        tableId,
-        cancelledRows,
-        staff,
-        options?.tableLabel,
-      );
     }
 
     await syncTableOrdersFromDb(tableId);
@@ -466,22 +343,6 @@ export async function updateTableOrders(
       .eq("is_cancelled", false)
       .neq("kitchen_status", "archived");
     if (cancelError) return { data: null, error: cancelError };
-
-    const cancelledRows = (existingRows ?? [])
-      .filter(
-        (row) =>
-          idsToCancel.includes(row.id) &&
-          !row.is_cancelled &&
-          row.kitchen_status !== "cancelled" &&
-          row.kitchen_status !== "archived",
-      )
-      .map((row) => ({ id: row.id, name: String(row.name) }));
-    await logCancelledItemsActivity(
-      tableId,
-      cancelledRows,
-      staff,
-      options?.tableLabel,
-    );
   }
 
   for (const unit of desiredUnits) {
@@ -491,77 +352,17 @@ export async function updateTableOrders(
       .update(orderItemRowUpdate(unit))
       .eq("id", unit.id);
     if (updateError) return { data: null, error: updateError };
-
-    const prev = (existingRows ?? []).find((row) => row.id === unit.id);
-    if (prev) {
-      const prevNotes = `${prev.notes ?? ""}|${prev.notes_translated ?? ""}`;
-      const nextNotes = `${unit.notes ?? ""}|${unit.notesTranslated ?? ""}`;
-      if (prevNotes !== nextNotes) {
-        const { error: logError } = await logTableActivity({
-          tableId,
-          tableLabel: options?.tableLabel,
-          orderItemId: unit.id,
-          itemName: unit.name,
-          action: "add_note",
-          staffId: staff.staffId,
-          staffName: staff.staffName,
-        });
-        if (logError) {
-          console.warn("[TableActivityLog] Failed to write note entry:", logError.message);
-        }
-      }
-    }
   }
 
   const newUnits = desiredUnits.filter((unit) => !unit.id);
   if (newUnits.length > 0) {
-    const { error: itemsError } = await insertOrderRowsWithLogs(
+    const { error: itemsError } = await insertOrderRows(
       tableId,
       newUnits,
-      staff.staffId,
-      staff.staffName,
-      options?.tableLabel,
+      options?.staffId,
+      options?.staffName,
     );
     if (itemsError) return { data: null, error: itemsError };
-  }
-
-  if (options?.printOrders?.length) {
-    await logAggregatedItemsActivity(
-      tableId,
-      options.printOrders,
-      "sent_to_kitchen",
-      staff,
-      options.tableLabel,
-    );
-  }
-
-  if (options?.silent) {
-    const existingAgg = aggregateOrderItems(
-      (existingRows ?? []).map((row) => mapOrderItemRow(row as SupabaseOrderItemRow)),
-    );
-    const changedSilent: OrderItem[] = [];
-    for (const order of activeOrders) {
-      if (!order.id) continue;
-      const prev = existingAgg.find((entry) => entry.id === order.id);
-      if (!prev) continue;
-      if (
-        prev.quantity !== order.quantity ||
-        prev.price !== order.price ||
-        (prev.notes ?? "") !== (order.notes ?? "") ||
-        (prev.notesTranslated ?? "") !== (order.notesTranslated ?? "")
-      ) {
-        changedSilent.push(order);
-      }
-    }
-    if (changedSilent.length > 0) {
-      await logAggregatedItemsActivity(
-        tableId,
-        changedSilent,
-        "save_no_print",
-        staff,
-        options.tableLabel,
-      );
-    }
   }
 
   await syncTableOrdersFromDb(tableId);
@@ -673,63 +474,6 @@ export async function checkoutTable(
           grandTotal: Number(payment.grandTotal.toFixed(2)),
         };
 
-  const paidItemIds = orders.map((item) => item.id).filter((id): id is string => Boolean(id));
-
-  const { data: tableMeta } = await supabase
-    .from("tables")
-    .select("occupied_at")
-    .eq("id", tableId)
-    .maybeSingle();
-
-  await logTableActivity({
-    tableId,
-    tableLabel,
-    action: "checkout",
-    staffId: staff.staffId,
-    staffName: staff.staffName,
-    meta: {
-      paymentMethod: payment.paymentMethod,
-      amount: payment.amountDueNow,
-    },
-  });
-
-  const since = tableMeta?.occupied_at ? new Date(tableMeta.occupied_at) : undefined;
-  const { data: tableActivityLog } = await fetchTableActivityLogs(tableId, since);
-  let activityLog = tableActivityLogsToSnapshot(tableActivityLog);
-
-  if (activityLog.length === 0) {
-    if (paidItemIds.length > 0) {
-      const { data: logs } = await fetchOrderLogsForItems(paidItemIds);
-      activityLog = logs.map((entry) => ({
-        id: entry.id,
-        orderId: entry.orderId,
-        itemName: "itemName" in entry ? entry.itemName : undefined,
-        action: entry.action,
-        staffName: entry.staffName,
-        meta: "meta" in entry ? entry.meta : undefined,
-        createdAt: entry.createdAt.toISOString(),
-      }));
-    } else {
-      const { data: tableRows } = await supabase
-        .from("order_items")
-        .select("id")
-        .eq("table_id", tableId);
-      const tableIds = (tableRows ?? []).map((row) => row.id);
-      if (tableIds.length > 0) {
-        const { data: logs } = await fetchOrderLogsForItems(tableIds);
-        activityLog = logs.map((entry) => ({
-          id: entry.id,
-          orderId: entry.orderId,
-          itemName: "itemName" in entry ? entry.itemName : undefined,
-          action: entry.action,
-          staffName: entry.staffName,
-          meta: "meta" in entry ? entry.meta : undefined,
-          createdAt: entry.createdAt.toISOString(),
-        }));
-      }
-    }
-  }
-
   const { data: activeReservationRow } = await findActiveReservationForTable(tableId);
   const activeReservation = activeReservationRow ? mapReservationRow(activeReservationRow) : null;
 
@@ -759,7 +503,6 @@ export async function checkoutTable(
     party_size: activeReservation?.partySize ?? null,
     visit_source: activeReservation?.source ?? null,
     service_channel: inferServiceChannel(tableLabel),
-    activity_log: activityLog,
   });
 
   if (saleError) return { data: null, error: saleError };
@@ -855,11 +598,6 @@ export async function updateOrderItemStatus(
   const { error } = await supabase.from("order_items").update(patch).eq("id", itemId);
 
   if (error) return { error };
-
-  const { error: logError } = await logOrderStatusChange(itemId, normalized, staffName);
-  if (logError) {
-    console.warn("[OrderLog] Failed to write order_logs entry:", logError.message);
-  }
 
   return { error: null };
 }
@@ -1046,10 +784,7 @@ export async function autoServeExpiredReadyItems(station?: Station) {
   return { servedIds, error: null };
 }
 
-export async function markItemsLate(itemIds: string[], staffName: string) {
-  for (const itemId of itemIds) {
-    await logOrderStatusChange(itemId, "late", staffName);
-  }
+export async function markItemsLate(_itemIds: string[], _staffName: string) {
   return { error: null };
 }
 
@@ -1062,20 +797,8 @@ export async function cancelOrderItems(
 ) {
   if (itemIds.length === 0) return { error: null };
 
-  const staff = await resolveStaffActor({
-    staffId: options?.staffId,
-    staffName,
-  });
-
-  const { data: rowsToCancel, error: fetchError } = await supabase
-    .from("order_items")
-    .select("id, name")
-    .in("id", itemIds);
-  if (fetchError) return { error: fetchError };
-
   const cancelledAt = new Date().toISOString();
   for (const itemId of itemIds) {
-    await logOrderStatusChange(itemId, `cancelled: ${reason}`, staff.staffName);
     const { error } = await supabase
       .from("order_items")
       .update({
@@ -1089,14 +812,6 @@ export async function cancelOrderItems(
     if (error) return { error };
   }
 
-  await logCancelledItemsActivity(
-    tableId,
-    (rowsToCancel ?? []).map((row) => ({ id: row.id, name: String(row.name) })),
-    staff,
-    options?.tableLabel,
-    reason,
-  );
-
   await syncTableOrdersFromDb(tableId);
   return { error: null };
 }
@@ -1107,7 +822,6 @@ export async function acknowledgeCancelledItems(itemIds: string[], staffName: st
   const tableIds = new Set<string>();
 
   for (const itemId of itemIds) {
-    await logOrderStatusChange(itemId, "cancel_acknowledged", staffName);
     const { data, error } = await supabase
       .from("order_items")
       .update({

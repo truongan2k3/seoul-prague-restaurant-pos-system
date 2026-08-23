@@ -478,17 +478,22 @@ export function subscribeToOrderItemChanges(onChange: () => void) {
   );
 }
 
-export async function fetchStaffNameForOrderAction(orderId: string, action: string) {
+export async function fetchStaffNameForOrderAction(orderId: string) {
   const { data } = await supabase
-    .from("order_logs")
-    .select("staff_name")
-    .eq("order_id", orderId)
-    .eq("action", action)
-    .order("created_at", { ascending: false })
-    .limit(1)
+    .from("order_items")
+    .select("staff_id")
+    .eq("id", orderId)
     .maybeSingle();
 
-  return data?.staff_name ?? null;
+  if (!data?.staff_id) return null;
+
+  const { data: staffRow } = await supabase
+    .from("staff")
+    .select("name")
+    .eq("id", data.staff_id)
+    .maybeSingle();
+
+  return staffRow?.name ?? null;
 }
 
 export function subscribeToOrderItemUpdates(

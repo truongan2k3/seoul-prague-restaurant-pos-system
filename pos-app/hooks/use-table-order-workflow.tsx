@@ -368,6 +368,7 @@ export function useTableOrderWorkflow({
             tip: 0,
             grandTotal: subtotal,
             amountDueNow: subtotal,
+            staffInitiated: true,
           }),
         );
       }

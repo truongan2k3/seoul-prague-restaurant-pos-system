@@ -30,7 +30,7 @@ export interface CfdCheckoutPayload {
   amountGiven?: number;
   /** Change to return when amountGiven exceeds the charge. */
   changeDue?: number;
-  /** Staff picked items on POS — show checkout even during thank-you. */
+  /** Staff opened/updated checkout on POS — always interrupt thank-you / idle. */
   staffInitiated?: boolean;
 }
 
@@ -153,7 +153,7 @@ export async function sendCfdEvent<E extends CfdEventName>(
 
 export function subscribeCfdEvents(handlers: {
   onStartCheckout: (payload: CfdCheckoutPayload) => void;
-  onPaymentSuccess: () => void;
+  onPaymentSuccess: (payload?: CfdEventPayload["PAYMENT_SUCCESS"]) => void;
   onCancelCheckout: () => void;
 }): () => void {
   const channel = supabase.channel(CFD_CHANNEL, {
@@ -166,8 +166,12 @@ export function subscribeCfdEvents(handlers: {
         handlers.onStartCheckout(payload as CfdCheckoutPayload);
       }
     })
-    .on("broadcast", { event: "PAYMENT_SUCCESS" }, () => {
-      handlers.onPaymentSuccess();
+    .on("broadcast", { event: "PAYMENT_SUCCESS" }, ({ payload }) => {
+      handlers.onPaymentSuccess(
+        payload && typeof payload === "object"
+          ? (payload as CfdEventPayload["PAYMENT_SUCCESS"])
+          : undefined,
+      );
     })
     .on("broadcast", { event: "CANCEL_CHECKOUT" }, () => {
       handlers.onCancelCheckout();

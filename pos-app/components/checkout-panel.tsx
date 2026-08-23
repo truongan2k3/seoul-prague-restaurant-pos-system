@@ -379,7 +379,7 @@ export function CheckoutPanel({
           paymentMethod === "cash" && usingCashGiven && !usingRoundUp && !insufficientPayment
             ? changeDueAmount
             : undefined,
-        staffInitiated: splitMode === "items",
+        staffInitiated: true,
       }),
     );
   }, [

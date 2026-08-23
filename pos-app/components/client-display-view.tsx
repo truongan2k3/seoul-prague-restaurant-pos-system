@@ -384,7 +384,9 @@ export function ClientDisplayView() {
   const [checkout, setCheckout] = useState<CfdCheckoutPayload | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(THANK_YOU_SECONDS);
   const clientStateRef = useRef(clientState);
+  const checkoutRef = useRef(checkout);
   clientStateRef.current = clientState;
+  checkoutRef.current = checkout;
 
   const slideshow = useMemo(() => resolveCfdSlideshow(settings), [settings]);
   const reviewQrImageUrl = settings.cfdReviewQrImageUrl.trim();
@@ -392,13 +394,21 @@ export function ClientDisplayView() {
   useEffect(() => {
     return subscribeCfdEvents({
       onStartCheckout: (payload) => {
-        if (clientStateRef.current === "thankyou" && !payload.staffInitiated) {
-          return;
-        }
+        // Staff opened checkout for a table — always interrupt thank-you / idle.
         setCheckout(payload);
         setClientState("checkout");
       },
-      onPaymentSuccess: () => {
+      onPaymentSuccess: (payload) => {
+        // Don't let a previous table's payment wipe a newer checkout already on screen.
+        const showing = checkoutRef.current;
+        if (
+          clientStateRef.current === "checkout" &&
+          showing?.tableNumber &&
+          payload?.tableNumber &&
+          showing.tableNumber !== payload.tableNumber
+        ) {
+          return;
+        }
         setClientState("thankyou");
         setSecondsLeft(THANK_YOU_SECONDS);
       },

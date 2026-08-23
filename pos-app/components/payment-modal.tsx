@@ -82,6 +82,7 @@ export function PaymentModal({
         tip: 0,
         grandTotal: subtotal,
         amountDueNow: subtotal,
+        staffInitiated: true,
       }),
     );
   }, [open, table.label, orders, menuItems]);

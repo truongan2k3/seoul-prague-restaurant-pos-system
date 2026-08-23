@@ -477,6 +477,24 @@ export async function checkoutTable(
   const { data: activeReservationRow } = await findActiveReservationForTable(tableId);
   const activeReservation = activeReservationRow ? mapReservationRow(activeReservationRow) : null;
 
+  const { data: tableRow } = await supabase
+    .from("tables")
+    .select("occupied_at")
+    .eq("id", tableId)
+    .maybeSingle();
+
+  let seatedAt = tableRow?.occupied_at ?? null;
+  if (!seatedAt) {
+    const { data: earliestItem } = await supabase
+      .from("order_items")
+      .select("created_at")
+      .eq("table_id", tableId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    seatedAt = earliestItem?.created_at ?? activeReservation?.checkedInAt?.toISOString() ?? null;
+  }
+
   const { error: saleError } = await supabase.from("sales").insert({
     table_id: tableId,
     table_label: tableLabel,
@@ -503,6 +521,7 @@ export async function checkoutTable(
     party_size: activeReservation?.partySize ?? null,
     visit_source: activeReservation?.source ?? null,
     service_channel: inferServiceChannel(tableLabel),
+    seated_at: seatedAt,
   });
 
   if (saleError) return { data: null, error: saleError };

@@ -15,6 +15,7 @@ import { formatCzk } from "@/lib/currency";
 import { generateOrderNumber } from "@/lib/receipt-calculations";
 import { paymentFilterClass } from "@/lib/theme-classes";
 import type { MenuItem, OrderItem, PaymentMethod, SaleRecord } from "@/lib/types";
+import { formatHistoryDateTime, resolveGuestSeatedAt } from "@/lib/sale-history";
 import { deleteSaleRecords, updateSaleRecord } from "@/src/lib/sales-actions";
 
 type EditScope = "payment" | "full";
@@ -68,7 +69,7 @@ export function OrderHistoryModal({
   const resolvedInitialScope: EditScope | false =
     initialEditScope ?? (initialEditMode ? "payment" : false);
 
-  const { translate, currentStaffUser, logAction } = useApp();
+  const { translate, currentStaffUser, logAction, language } = useApp();
   const { printReceipt } = useReceiptPrint();
   const { pushNotification } = useNotifications();
   const { requestPin } = usePinGate();
@@ -125,6 +126,8 @@ export function OrderHistoryModal({
       : undefined
     : sale.changeDue;
 
+  const guestSeatedAt = resolveGuestSeatedAt(sale);
+
   const handleReprint = () => {
     printReceipt({
       tableLabel: sale.tableLabel,
@@ -174,6 +177,7 @@ export function OrderHistoryModal({
     };
     onUpdated(updated);
     setEditScope(false);
+    onClose();
 
     const changes: string[] = [];
     if (sale.tip !== editTip) changes.push(`tip ${sale.tip}→${editTip}`);
@@ -222,6 +226,14 @@ export function OrderHistoryModal({
               {translate("orderId")}: {generateOrderNumber(sale.closedAt)} · {translate("table")}{" "}
               {sale.tableLabel}
             </p>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600 dark:text-gray-300">
+              <span>
+                {translate("historyGuestArrived")}: {formatHistoryDateTime(guestSeatedAt, language)}
+              </span>
+              <span>
+                {translate("historyGuestCheckout")}: {formatHistoryDateTime(sale.closedAt, language)}
+              </span>
+            </div>
             {(sale.guestName || sale.visitSource) && (
               <p className="mt-1 text-sm text-blue-700 dark:text-blue-300">
                 {translate("guestInfo")}: {sale.guestName}

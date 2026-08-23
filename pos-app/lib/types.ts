@@ -489,6 +489,8 @@ export interface SaleRecord {
   items: OrderItem[];
   activityLog?: OrderLogEntry[];
   closedAt: Date;
+  /** When guests were seated — snapshot of tables.occupied_at at checkout. */
+  seatedAt?: Date;
   reservationId?: string;
   guestName?: string;
   guestPhone?: string;

@@ -20,6 +20,7 @@ import {
   type HistoryPaymentFilter,
   type SummaryPeriod,
 } from "@/lib/summary-analytics";
+import { formatHistoryDateTime, resolveGuestSeatedAt } from "@/lib/sale-history";
 import { filterButtonClass, paymentFilterClass } from "@/lib/theme-classes";
 import { POS_EGRESS } from "@/lib/egress-config";
 import type { MenuItem, SaleRecord } from "@/lib/types";
@@ -422,7 +423,8 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                     <th className="px-4 py-3 font-semibold text-right">{translate("totalExclTip")}</th>
                     <th className="px-4 py-3 font-semibold text-right">{translate("tips")}</th>
                     <th className="px-4 py-3 font-semibold text-right">{translate("grandTotal")}</th>
-                    <th className="px-4 py-3 font-semibold">{translate("date")}</th>
+                    <th className="px-4 py-3 font-semibold">{translate("historyGuestArrived")}</th>
+                    <th className="px-4 py-3 font-semibold">{translate("historyGuestCheckout")}</th>
                     <th className="px-4 py-3 font-semibold text-right">Actions</th>
                   </tr>
                 </thead>
@@ -489,10 +491,10 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                           {formatCzk(sale.grandTotal)}
                         </td>
                         <td className="px-4 py-3 tabular-nums text-gray-600 dark:text-gray-300">
-                          {sale.closedAt.toLocaleString(
-                            language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB",
-                            { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" },
-                          )}
+                          {formatHistoryDateTime(resolveGuestSeatedAt(sale), language)}
+                        </td>
+                        <td className="px-4 py-3 tabular-nums text-gray-600 dark:text-gray-300">
+                          {formatHistoryDateTime(sale.closedAt, language)}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-2">
@@ -545,7 +547,6 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
           onClose={closeModal}
           onUpdated={(updated) => {
             setSales((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
-            setSelectedSale(updated);
             onSaleUpdated?.(updated);
           }}
           onDeleted={(deletedId) => {

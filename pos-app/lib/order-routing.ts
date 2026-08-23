@@ -1,4 +1,4 @@
-import type { Station } from "@/lib/types";
+import type { MenuItem, OrderItem, Station } from "@/lib/types";
 
 const BAR_CATEGORY_PREFIX = "drinks";
 
@@ -31,4 +31,18 @@ export function deriveItemType(category: string): "food" | "drink" {
     return "drink";
   }
   return "food";
+}
+
+export function isDrinkOrderItem(
+  item: Pick<OrderItem, "itemType" | "station" | "menuItemId">,
+  menuItems: Pick<MenuItem, "id" | "itemType" | "station">[] = [],
+): boolean {
+  if (item.itemType === "drink") return true;
+  if (item.itemType === "food") return false;
+  if (item.station === "bar") return true;
+  if (item.menuItemId) {
+    const menu = menuItems.find((entry) => entry.id === item.menuItemId);
+    if (menu?.itemType === "drink" || menu?.station === "bar") return true;
+  }
+  return false;
 }

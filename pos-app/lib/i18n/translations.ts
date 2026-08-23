@@ -1336,7 +1336,7 @@ const cs: Record<TranslationKey, string> = {
   staffQuickSwitchCurrent: "aktivní",
   settingsAdminSecurity: "Passcode manažera",
   settingsAdminSecurityHint:
-    "Jeden passcode pro citlivé akce personálu (storno, úprava ceny, mazání historie atd.). Pouze admin prompt nevidí.",
+    "Passcode pro citlivé akce. Mazání vždy vyžaduje tento passcode (i admin). Výchozí je 8888.",
   settingsAdminDeletionPassword: "Passcode manažera",
   settingsManagerPasscodeHint: "Výchozí passcode je 8888, dokud ho zde nezměníte. Vyžadován při citlivém mazání.",
   backToOrder: "Zpět k objednávce",
@@ -2179,7 +2179,7 @@ const zh: Record<TranslationKey, string> = {
   staffQuickSwitchCurrent: "当前",
   settingsAdminSecurity: "经理通行码",
   settingsAdminSecurityHint:
-    "员工敏感操作（作废、改价、删除历史等）的统一通行码。仅管理员无需输入。",
+    "敏感操作通行码。删除操作始终需要输入（含管理员）。默认 8888。",
   settingsAdminDeletionPassword: "经理通行码",
   settingsManagerPasscodeHint: "默认通行码为 8888，可在此修改。敏感删除操作需要输入。",
   backToOrder: "返回订单",

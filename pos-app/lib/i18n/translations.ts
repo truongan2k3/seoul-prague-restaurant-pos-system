@@ -41,9 +41,9 @@ const en = {
   storageSortAlphabetical: "A–Z",
   storageSortDragHint: "Use Menu items and Categories tabs to drag-reorder when custom order is selected.",
   storageDisplayMediaHint:
-    "Idle slideshow on /client. Prefer small images (≤2 MB) over video. Video ≤12 MB. Large CFD media is the main Storage (cached) egress cost.",
+    "Idle slideshow on /client. Max 100 MB per file. Media is cached locally on the display — looping does not re-download from Storage.",
   storageDisplayMediaUpload: "Upload media",
-  storageDisplayMediaFormats: "Images ≤2 MB · Video ≤12 MB — MP4, WebM, GIF, PNG, JPG, WebP",
+  storageDisplayMediaFormats: "Max 100 MB — MP4, WebM, GIF, PNG, JPG, WebP",
   storageDisplayMediaEmpty: "No display media yet.",
   storageDisplayMediaLegacyHint: "A legacy single video is still active. Upload slides below to replace it.",
   storageDisplayMediaVideo: "Video",
@@ -676,7 +676,7 @@ const en = {
     "Idle slideshow on /client, checkout totals, and review QR after payment.",
   settingsCfdAdVideo: "Idle slideshow",
   settingsCfdAdVideoHint:
-    "Plays on /client when idle. Keep files small (image ≤2 MB, video ≤12 MB) — CFD media drives cached Storage egress.",
+    "Plays on /client when idle. Max 100 MB per file. The display downloads each file once, then loops locally without extra Storage egress.",
   settingsCfdNoVideo: "No video uploaded — idle screen shows welcome message.",
   settingsCfdUploadVideo: "Upload video",
   settingsCfdRemoveVideo: "Remove video",

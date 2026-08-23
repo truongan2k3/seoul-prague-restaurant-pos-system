@@ -673,16 +673,11 @@ async function uploadCfdMediaFile(file: File, prefix: string, allowedExtensions:
     };
   }
 
-  const isVideo = extension === "mp4" || extension === "webm";
-  const maxBytes = isVideo ? 12 * 1024 * 1024 : 2 * 1024 * 1024;
+  const maxBytes = 100 * 1024 * 1024;
   if (file.size > maxBytes) {
     return {
       data: null,
-      error: new Error(
-        isVideo
-          ? "Video must be ≤ 12 MB (compress or use a short clip to limit Storage egress)."
-          : "Image/GIF must be ≤ 2 MB (compress before upload).",
-      ),
+      error: new Error("File must be ≤ 100 MB."),
     };
   }
 

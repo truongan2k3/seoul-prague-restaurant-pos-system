@@ -16,6 +16,7 @@ import { formatCzk } from "@/lib/checkout-calculations";
 import { t, type TranslationKey } from "@/lib/i18n/translations";
 import type { CfdSlideshowItem, LanguageCode } from "@/lib/types";
 import { useSettings } from "@/contexts/settings-context";
+import { useBlobUrl, useBlobUrlCache } from "@/hooks/use-blob-url-cache";
 
 const THANK_YOU_SECONDS = 20;
 const CFD_LANGUAGE_KEY = "cfd-language";
@@ -213,6 +214,8 @@ function ThankYouView({
   translate: (key: TranslationKey) => string;
 }) {
   const hasQr = reviewQrImageUrl.trim().length > 0;
+  const qrBlobSrc = useBlobUrl(reviewQrImageUrl);
+  const qrSrc = qrBlobSrc || reviewQrImageUrl;
   const countdownKey = hasAdVideo ? "cfdVideoIn" : "cfdReturningIn";
   const countdownText = translate(countdownKey).replace("{seconds}", String(secondsLeft));
 
@@ -228,7 +231,7 @@ function ThankYouView({
           <div className="mt-8 rounded-2xl bg-white p-4 shadow-lg">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={reviewQrImageUrl}
+              src={qrSrc}
               alt={translate("cfdScanReview")}
               width={220}
               height={220}
@@ -248,29 +251,13 @@ function CfdSlideshowPlayer({ items }: { items: CfdSlideshowItem[] }) {
   const item = items[Math.max(0, index % Math.max(items.length, 1))];
   const mediaClass = "max-h-full max-w-full object-contain";
   const singleItem = items.length <= 1;
+  const blobUrls = useBlobUrlCache(items.map((entry) => entry.url));
+  const resolveSrc = useCallback((url: string) => blobUrls[url] ?? "", [blobUrls]);
   // Stable list identity for timers (urls only) — avoid remount/refetch storms.
   const urlsKey = items.map((entry) => entry.url).join("|");
 
   useEffect(() => {
     setIndex(0);
-  }, [urlsKey]);
-
-  // Warm browser HTTP cache once so slide changes don't re-hit Storage CDN.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    for (const entry of items) {
-      if (entry.type === "video") {
-        const video = document.createElement("video");
-        video.preload = "auto";
-        video.muted = true;
-        video.src = entry.url;
-        video.load();
-        continue;
-      }
-      const img = new Image();
-      img.decoding = "async";
-      img.src = entry.url;
-    }
   }, [urlsKey]);
 
   const goNext = useCallback(() => {
@@ -310,18 +297,28 @@ function CfdSlideshowPlayer({ items }: { items: CfdSlideshowItem[] }) {
     return null;
   }
 
+  const currentSrc = resolveSrc(item.url);
+  const waitingForMedia = !currentSrc;
+
   return (
     <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-zinc-950 px-4 py-4 sm:px-6 sm:py-6">
       <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-zinc-800 bg-black">
+        {waitingForMedia && (
+          <p className="absolute inset-0 z-20 flex items-center justify-center text-sm text-zinc-500">
+            Loading…
+          </p>
+        )}
         {items.map((entry, entryIndex) => {
           const active = entryIndex === index % items.length;
           const hiddenClass = active ? "relative z-10 opacity-100" : "pointer-events-none absolute inset-0 opacity-0";
+          const src = resolveSrc(entry.url);
+          if (!src) return null;
           if (entry.type === "video") {
             return (
               <video
                 key={entry.url}
                 data-cfd-slide-video
-                src={entry.url}
+                src={src}
                 muted
                 playsInline
                 loop={singleItem}
@@ -335,7 +332,7 @@ function CfdSlideshowPlayer({ items }: { items: CfdSlideshowItem[] }) {
             // eslint-disable-next-line @next/next/no-img-element
             <img
               key={entry.url}
-              src={entry.url}
+              src={src}
               alt="Promotional display"
               decoding="async"
               loading={entryIndex === 0 ? "eager" : "lazy"}

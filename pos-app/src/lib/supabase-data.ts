@@ -46,7 +46,7 @@ export const CATEGORY_COLUMNS = "id, name, type, display_order, created_at";
 export const INVENTORY_COLUMNS = "id, name, category, quantity, unit, sold_out";
 
 export const SALES_COLUMNS =
-  "id, table_label, staff_name, subtotal, discount_amount, tip, grand_total, payment_method, amount_given, change_due, split_mode, split_count, items, activity_log, closed_at, seated_at, reservation_id, guest_name, guest_phone, party_size, visit_source, service_channel";
+  "id, table_label, staff_name, subtotal, discount_amount, tip, grand_total, payment_method, amount_given, change_due, split_mode, split_count, items, activity_log, closed_at, seated_at, deleted_at, reservation_id, guest_name, guest_phone, party_size, visit_source, service_channel";
 
 export interface SupabaseTableRow {
   id: string;
@@ -441,6 +441,7 @@ export function mapSalesResponse(
     activity_log?: OrderLogEntry[] | null;
     closed_at: string;
     seated_at?: string | null;
+    deleted_at?: string | null;
     reservation_id?: string | null;
     guest_name?: string | null;
     guest_phone?: string | null;
@@ -486,6 +487,7 @@ export function mapSalesResponse(
     })),
     closedAt: new Date(s.closed_at),
     seatedAt: s.seated_at ? new Date(s.seated_at) : undefined,
+    deletedAt: s.deleted_at ? new Date(s.deleted_at) : undefined,
     reservationId: s.reservation_id ?? undefined,
     guestName: s.guest_name ?? undefined,
     guestPhone: s.guest_phone ?? undefined,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 import { Eye, Pencil, Trash2 } from "lucide-react";
 import { LiveClock } from "@/components/live-clock";
 import { OrderHistoryModal } from "@/components/order-history-modal";
@@ -140,14 +140,16 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
         }`;
 
   const allFilteredSelected =
-    filteredSales.length > 0 && filteredSales.every((sale) => selectedIds.has(sale.id));
+    filteredSales.filter((sale) => !sale.deletedAt).length > 0 &&
+    filteredSales.filter((sale) => !sale.deletedAt).every((sale) => selectedIds.has(sale.id));
 
   const toggleSelectAll = () => {
+    const activeIds = filteredSales.filter((sale) => !sale.deletedAt).map((sale) => sale.id);
     if (allFilteredSelected) {
       setSelectedIds(new Set());
       return;
     }
-    setSelectedIds(new Set(filteredSales.map((sale) => sale.id)));
+    setSelectedIds(new Set(activeIds));
   };
 
   const toggleSelect = (id: string) => {
@@ -159,19 +161,32 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
     });
   };
 
-  const handleDeleteResult = (deletedIds: string[] | undefined, detail: string) => {
-    if (!deletedIds || deletedIds.length === 0) {
+  const handleDeleteResult = (
+    deletedRows: { id: string; deleted_at?: string | null }[] | undefined,
+    detail: string,
+  ) => {
+    if (!deletedRows || deletedRows.length === 0) {
       pushNotification({ message: translate("historyDeleteFailed") });
       return;
     }
-    const idSet = new Set(deletedIds);
-    setSales((prev) => prev.filter((sale) => !idSet.has(sale.id)));
+    const deletedAtById = new Map(
+      deletedRows.map((row) => [
+        row.id,
+        row.deleted_at ? new Date(row.deleted_at) : new Date(),
+      ]),
+    );
+    setSales((prev) =>
+      prev.map((sale) => {
+        const deletedAt = deletedAtById.get(sale.id);
+        return deletedAt ? { ...sale, deletedAt } : sale;
+      }),
+    );
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      deletedIds.forEach((id) => next.delete(id));
+      deletedRows.forEach((row) => next.delete(row.id));
       return next;
     });
-    if (selectedSale && idSet.has(selectedSale.id)) {
+    if (selectedSale && deletedAtById.has(selectedSale.id)) {
       setSelectedSale(null);
       setOpenEditScope(false);
     }
@@ -179,7 +194,13 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
     pushNotification({ message: translate("historyDeleteSuccess") });
   };
 
-  const runDelete = async (action: () => Promise<{ data: { id: string }[] | null; error: { message: string } | null }>, detail: string) => {
+  const runDelete = async (
+    action: () => Promise<{
+      data: { id: string; deleted_at?: string | null }[] | null;
+      error: { message: string } | null;
+    }>,
+    detail: string,
+  ) => {
     if (deleting) return;
     setDeleting(true);
     const { data, error: deleteError } = await action();
@@ -188,7 +209,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
       pushNotification({ message: translate("historyDeleteFailed") });
       return;
     }
-    handleDeleteResult(data?.map((row) => row.id), detail);
+    handleDeleteResult(data ?? undefined, detail);
   };
 
   const confirmDeleteSelected = () => {
@@ -431,19 +452,34 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                 <tbody>
                   {filteredSales.map((sale) => {
                     const orderId = generateOrderNumber(sale.closedAt);
+                    const isDeleted = Boolean(sale.deletedAt);
+                    const colCount = canEdit ? 12 : 11;
                     return (
-                      <tr
-                        key={sale.id}
-                        className="border-b border-gray-100 last:border-b-0 dark:border-gray-700/60"
-                      >
+                      <Fragment key={sale.id}>
+                        {isDeleted && (
+                          <tr className="bg-red-600 text-white">
+                            <td colSpan={colCount} className="px-4 py-2 text-xs font-bold uppercase tracking-wide">
+                              − {translate("historyDeletedBanner")} · {translate("table")}{" "}
+                              {sale.tableLabel} · {orderId} · −{formatCzk(sale.grandTotal)}
+                            </td>
+                          </tr>
+                        )}
+                        <tr
+                          className={`border-b border-gray-100 last:border-b-0 dark:border-gray-700/60 ${
+                            isDeleted
+                              ? "bg-red-50/80 text-red-800 line-through decoration-red-400 dark:bg-red-950/30 dark:text-red-200"
+                              : ""
+                          }`}
+                        >
                         {canEdit && (
                           <td className="px-4 py-3">
                             <input
                               type="checkbox"
                               checked={selectedIds.has(sale.id)}
+                              disabled={isDeleted}
                               onChange={() => toggleSelect(sale.id)}
                               aria-label={`${translate("selectAll")} ${orderId}`}
-                              className="h-4 w-4 rounded border-gray-300"
+                              className="h-4 w-4 rounded border-gray-300 disabled:opacity-40"
                             />
                           </td>
                         )}
@@ -488,7 +524,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                           {sale.tip > 0 ? formatCzk(sale.tip) : "—"}
                         </td>
                         <td className="px-4 py-3 text-right font-semibold tabular-nums">
-                          {formatCzk(sale.grandTotal)}
+                          {isDeleted ? `−${formatCzk(sale.grandTotal)}` : formatCzk(sale.grandTotal)}
                         </td>
                         <td className="px-4 py-3 tabular-nums text-gray-600 dark:text-gray-300">
                           {formatHistoryDateTime(resolveGuestSeatedAt(sale), language)}
@@ -506,7 +542,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                               <Eye className="h-3.5 w-3.5" />
                               {translate("historyViewBill")}
                             </button>
-                            {canEdit && (
+                            {canEdit && !isDeleted && (
                               <>
                                 <button
                                   type="button"
@@ -529,7 +565,8 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                             )}
                           </div>
                         </td>
-                      </tr>
+                        </tr>
+                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -549,8 +586,12 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
             setSales((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
             onSaleUpdated?.(updated);
           }}
-          onDeleted={(deletedId) => {
-            setSales((prev) => prev.filter((row) => row.id !== deletedId));
+          onDeleted={(deletedId, deletedAt) => {
+            setSales((prev) =>
+              prev.map((row) =>
+                row.id === deletedId ? { ...row, deletedAt: deletedAt ?? new Date() } : row,
+              ),
+            );
             setSelectedIds((prev) => {
               const next = new Set(prev);
               next.delete(deletedId);

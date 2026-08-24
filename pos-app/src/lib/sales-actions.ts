@@ -14,21 +14,42 @@ function localMonthRange(yearMonth: string): { start: string; end: string } {
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
+/** Soft-delete (void) sales — keeps rows for History audit trail. */
 export async function deleteSaleRecords(ids: string[]) {
   if (ids.length === 0) {
-    return { data: [] as { id: string }[], error: null };
+    return { data: [] as { id: string; deleted_at: string }[], error: null };
   }
-  return supabase.from("sales").delete().in("id", ids).select("id");
+  const deletedAt = new Date().toISOString();
+  return supabase
+    .from("sales")
+    .update({ deleted_at: deletedAt })
+    .in("id", ids)
+    .is("deleted_at", null)
+    .select("id, deleted_at");
 }
 
 export async function deleteSalesByDate(dateStr: string) {
   const { start, end } = localDayRange(dateStr);
-  return supabase.from("sales").delete().gte("closed_at", start).lte("closed_at", end).select("id");
+  const deletedAt = new Date().toISOString();
+  return supabase
+    .from("sales")
+    .update({ deleted_at: deletedAt })
+    .gte("closed_at", start)
+    .lte("closed_at", end)
+    .is("deleted_at", null)
+    .select("id, deleted_at");
 }
 
 export async function deleteSalesByMonth(yearMonth: string) {
   const { start, end } = localMonthRange(yearMonth);
-  return supabase.from("sales").delete().gte("closed_at", start).lte("closed_at", end).select("id");
+  const deletedAt = new Date().toISOString();
+  return supabase
+    .from("sales")
+    .update({ deleted_at: deletedAt })
+    .gte("closed_at", start)
+    .lte("closed_at", end)
+    .is("deleted_at", null)
+    .select("id, deleted_at");
 }
 
 export async function updateSaleRecord(
@@ -69,5 +90,5 @@ export async function updateSaleRecord(
     payload.card_brand = null;
   }
 
-  return supabase.from("sales").update(payload).eq("id", saleId);
+  return supabase.from("sales").update(payload).eq("id", saleId).is("deleted_at", null);
 }

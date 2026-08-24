@@ -498,6 +498,8 @@ export interface SaleRecord {
   visitSource?: VisitSource;
   /** Dine-in (Jídelna) vs takeaway (S sebou) for tax summary. */
   serviceChannel?: ServiceChannel;
+  /** Soft-delete / void timestamp — row stays visible in History. */
+  deletedAt?: Date;
 }
 
 export interface InventoryItem {

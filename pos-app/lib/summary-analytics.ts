@@ -28,24 +28,33 @@ export function saleNetTotal(sale: SaleRecord): number {
   return Math.max(0, sale.grandTotal - sale.tip);
 }
 
+export function isActiveSale(sale: SaleRecord): boolean {
+  return !sale.deletedAt;
+}
+
+export function activeSalesOnly(sales: SaleRecord[]): SaleRecord[] {
+  return sales.filter(isActiveSale);
+}
+
 export function computeRevenueStats(sales: SaleRecord[]): RevenueStats {
+  const active = activeSalesOnly(sales);
   return {
-    revenue: sales.reduce((sum, sale) => sum + saleNetTotal(sale), 0),
-    grandTotal: sales.reduce((sum, sale) => sum + sale.grandTotal, 0),
-    cash: sales
+    revenue: active.reduce((sum, sale) => sum + saleNetTotal(sale), 0),
+    grandTotal: active.reduce((sum, sale) => sum + sale.grandTotal, 0),
+    cash: active
       .filter((sale) => sale.paymentMethod === "cash")
       .reduce((sum, sale) => sum + saleNetTotal(sale), 0),
-    card: sales
+    card: active
       .filter((sale) => sale.paymentMethod === "card")
       .reduce((sum, sale) => sum + saleNetTotal(sale), 0),
-    tips: sales.reduce((sum, sale) => sum + sale.tip, 0),
-    cashTips: sales
+    tips: active.reduce((sum, sale) => sum + sale.tip, 0),
+    cashTips: active
       .filter((sale) => sale.paymentMethod === "cash")
       .reduce((sum, sale) => sum + sale.tip, 0),
-    cardTips: sales
+    cardTips: active
       .filter((sale) => sale.paymentMethod === "card")
       .reduce((sum, sale) => sum + sale.tip, 0),
-    orderCount: sales.length,
+    orderCount: active.length,
   };
 }
 
@@ -142,6 +151,7 @@ function aggregateTopSellers(
   const counts = new Map<string, TopSellerRow>();
 
   for (const sale of sales) {
+    if (!isActiveSale(sale)) continue;
     for (const item of sale.items) {
       const meta = saleItemMeta(item, menuItems, language);
       if (!predicate(meta)) continue;

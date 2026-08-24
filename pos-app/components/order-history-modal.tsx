@@ -51,7 +51,7 @@ interface OrderHistoryModalProps {
   menuItems: MenuItem[];
   onClose: () => void;
   onUpdated: (sale: SaleRecord) => void;
-  onDeleted?: (saleId: string) => void;
+  onDeleted?: (saleId: string, deletedAt?: Date) => void;
   /** @deprecated use initialEditScope */
   initialEditMode?: boolean;
   initialEditScope?: EditScope | false;
@@ -84,7 +84,7 @@ export function OrderHistoryModal({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const canEdit = canManageStaff(currentStaffUser?.role);
+  const canEdit = canManageStaff(currentStaffUser?.role) && !sale.deletedAt;
   const editMode = editScope !== false;
   const paymentOnlyEdit = editScope === "payment";
 
@@ -204,7 +204,8 @@ export function OrderHistoryModal({
       }
       logAction("delete_sale", `Deleted sale ${generateOrderNumber(sale.closedAt)} · ${sale.tableLabel}`);
       pushNotification({ message: translate("historyDeleteSuccess") });
-      onDeleted?.(sale.id);
+      const deletedAt = data[0]?.deleted_at ? new Date(data[0].deleted_at) : new Date();
+      onDeleted?.(sale.id, deletedAt);
     }, { force: true });
   };
 
@@ -234,6 +235,11 @@ export function OrderHistoryModal({
                 {translate("historyGuestCheckout")}: {formatHistoryDateTime(sale.closedAt, language)}
               </span>
             </div>
+            {sale.deletedAt && (
+              <p className="mt-2 inline-flex rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white">
+                − {translate("historyDeletedBanner")} · {formatHistoryDateTime(sale.deletedAt, language)}
+              </p>
+            )}
             {(sale.guestName || sale.visitSource) && (
               <p className="mt-1 text-sm text-blue-700 dark:text-blue-300">
                 {translate("guestInfo")}: {sale.guestName}

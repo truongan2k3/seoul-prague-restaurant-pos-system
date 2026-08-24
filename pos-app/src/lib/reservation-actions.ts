@@ -3,6 +3,7 @@ import type {
   ReservationStatus,
   VisitSource,
 } from "@/lib/types";
+import { generateBookingCode, generateManageToken } from "@/lib/reservation-codes";
 import {
   buildTimeSlotsForDate,
   getWeekdayKey,
@@ -45,6 +46,8 @@ export async function fetchReservations(since?: Date) {
 
 export async function createReservation(input: CreateReservationInput) {
   const status = input.status ?? (input.source === "walk_in" ? "checked_in" : "pending");
+  const source = input.source ?? "reservation";
+  const withGuestCodes = source === "reservation";
 
   return supabase
     .from("reservations")
@@ -57,10 +60,12 @@ export async function createReservation(input: CreateReservationInput) {
       notes: input.notes ?? null,
       staff_id: input.staffId ?? null,
       staff_name: input.staffName ?? null,
-      source: input.source ?? "reservation",
+      source,
       table_id: input.tableId ?? null,
       status,
       checked_in_at: status === "checked_in" ? nowIso() : null,
+      booking_code: withGuestCodes ? generateBookingCode() : null,
+      manage_token: withGuestCodes ? generateManageToken() : null,
       updated_at: nowIso(),
     })
     .select("*, tables(label)")
@@ -349,6 +354,8 @@ export function mapReservationRow(
     completed_at: string | null;
     created_at: string;
     updated_at: string;
+    booking_code?: string | null;
+    manage_token?: string | null;
     tables?: { label: string } | { label: string }[] | null;
   },
 ): ReservationRecord {
@@ -373,6 +380,7 @@ export function mapReservationRow(
     completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
+    bookingCode: row.booking_code ?? undefined,
   };
 }
 

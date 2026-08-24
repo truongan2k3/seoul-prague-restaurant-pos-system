@@ -27,7 +27,6 @@ import {
   assignReservationTable,
   cancelReservation,
   checkInReservationWithTable,
-  confirmReservation,
   createReservation,
   createWalkIn,
   fetchReservations,
@@ -36,6 +35,30 @@ import {
   markReservationNoShow,
   subscribeToReservationChanges,
 } from "@/src/lib/reservation-actions";
+
+async function confirmReservationWithEmail(reservationId: string) {
+  const response = await fetch("/api/reservations/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: reservationId }),
+  });
+  const payload = (await response.json().catch(() => ({}))) as { error?: string };
+  if (!response.ok) {
+    return { error: new Error(payload.error || "Failed to confirm reservation") };
+  }
+  return { error: null };
+}
+
+async function cancelReservationWithEmail(reservationId: string) {
+  const result = await cancelReservation(reservationId);
+  if (result.error) return result;
+  void fetch("/api/reservations/notify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: reservationId, type: "cancelled" }),
+  }).catch(() => undefined);
+  return result;
+}
 
 const PERIOD_OPTIONS: ReservationPeriod[] = ["today", "week", "month"];
 
@@ -388,6 +411,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                       <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
                         {formatDateTime(row.reservedAt)} · {row.partySize} {translate("partySize").toLowerCase()}
                         {row.guestPhone ? ` · ${row.guestPhone}` : ""}
+                        {row.bookingCode ? ` · ${row.bookingCode}` : ""}
                       </p>
                       {row.tableLabel && (
                         <p className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-emerald-700 dark:text-emerald-300">
@@ -405,7 +429,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                         <button
                           type="button"
                           disabled={busyId === row.id}
-                          onClick={() => void runAction(row.id, () => confirmReservation(row.id))}
+                          onClick={() => void runAction(row.id, () => confirmReservationWithEmail(row.id))}
                           className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white"
                         >
                           {translate("confirmReservation")}
@@ -451,7 +475,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                         <button
                           type="button"
                           disabled={busyId === row.id}
-                          onClick={() => void runAction(row.id, () => cancelReservation(row.id))}
+                          onClick={() => void runAction(row.id, () => cancelReservationWithEmail(row.id))}
                           className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white"
                         >
                           {translate("cancelReservation")}

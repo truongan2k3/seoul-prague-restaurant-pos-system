@@ -471,6 +471,8 @@ export interface ReservationRecord {
   completedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  /** Short public reference (e.g. SP-A7K2). */
+  bookingCode?: string;
 }
 
 export interface SaleRecord {

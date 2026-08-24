@@ -9,10 +9,8 @@ const supabaseUrl = normalizeSupabaseUrl(
 );
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local",
-  );
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+/** Placeholder allows `next build` without local env; runtime calls still need real credentials. */
+export const supabase = createClient(
+  supabaseUrl || "https://placeholder.supabase.co",
+  supabaseAnonKey || "public-anon-key",
+);

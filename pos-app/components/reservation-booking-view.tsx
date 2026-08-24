@@ -13,10 +13,7 @@ import {
 } from "@/lib/reservation-slots";
 import type { AppSettings } from "@/lib/types";
 import { DEFAULT_APP_SETTINGS, fetchAppSettings } from "@/src/lib/settings-actions";
-import {
-  createOnlineReservation,
-  fetchReservationsForDate,
-} from "@/src/lib/reservation-actions";
+import { fetchReservationsForDate } from "@/src/lib/reservation-actions";
 
 const RESTAURANT_NAME = "SEOUL PRAGUE Korean BBQ";
 const ADDRESS = "Václavské nám. 819/43, 110 00 Praha";
@@ -40,6 +37,9 @@ export function ReservationBookingView() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [successBookingCode, setSuccessBookingCode] = useState<string | null>(null);
+  const [successManageUrl, setSuccessManageUrl] = useState<string | null>(null);
+  const [successEmailSent, setSuccessEmailSent] = useState(false);
 
   const minDate = useMemo(() => todayIsoDate(), []);
 
@@ -132,6 +132,10 @@ export function ReservationBookingView() {
       setError("Please enter your name.");
       return;
     }
+    if (!email.trim()) {
+      setError("Please enter your email — we send confirmation and a manage link there.");
+      return;
+    }
     if (!phone.trim() || phone.trim() === "+420") {
       setError("Please enter your phone number.");
       return;
@@ -142,24 +146,43 @@ export function ReservationBookingView() {
     }
 
     setSubmitting(true);
-    const { error: submitError } = await createOnlineReservation({
-      guestName: guestName.trim(),
-      email: email.trim() || undefined,
-      phone: phone.trim(),
-      guestCount,
-      date,
-      time,
-      notes: notes.trim() || undefined,
-    });
-    setSubmitting(false);
+    try {
+      const response = await fetch("/api/reservations/book", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          guestName: guestName.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
+          guestCount,
+          date,
+          time,
+          notes: notes.trim() || undefined,
+        }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        reservation?: {
+          bookingCode: string;
+          manageUrl: string;
+          emailSent: boolean;
+        };
+      };
+      if (!response.ok || !payload.reservation) {
+        setError(payload.error || "Failed to submit reservation.");
+        return;
+      }
 
-    if (submitError) {
-      setError(submitError.message);
-      return;
+      setSuccessBookingCode(payload.reservation.bookingCode);
+      setSuccessManageUrl(payload.reservation.manageUrl);
+      setSuccessEmailSent(payload.reservation.emailSent);
+      resetForm();
+      setShowSuccess(true);
+    } catch {
+      setError("Failed to submit reservation. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
-
-    resetForm();
-    setShowSuccess(true);
   };
 
   return (
@@ -245,13 +268,16 @@ export function ReservationBookingView() {
 
               <div className="grid gap-5 sm:grid-cols-2">
                 <label className="block text-sm">
-                  <span className="font-medium text-zinc-200">Email Address</span>
+                  <span className="font-medium text-zinc-200">
+                    Email Address <span className="text-red-400">*</span>
+                  </span>
                   <input
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30"
                     placeholder="you@example.com"
+                    required
                   />
                 </label>
                 <label className="block text-sm">
@@ -364,6 +390,23 @@ export function ReservationBookingView() {
             Thank you! Your reservation request has been submitted. Our team will confirm your
             booking shortly.
           </p>
+          {successBookingCode && (
+            <p className="rounded-xl bg-zinc-100 px-4 py-3 text-sm font-semibold text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100">
+              Booking code: {successBookingCode}
+            </p>
+          )}
+          {successEmailSent ? (
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              We emailed you a confirmation request and a link to change or cancel anytime.
+            </p>
+          ) : successManageUrl ? (
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Save this link to manage your booking:{" "}
+              <a href={successManageUrl} className="font-medium text-red-600 underline">
+                Manage reservation
+              </a>
+            </p>
+          ) : null}
           <button
             type="button"
             onClick={() => setShowSuccess(false)}

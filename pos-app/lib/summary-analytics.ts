@@ -1,5 +1,5 @@
 import { menuItemDisplayName, resolveMenuItemForOrder } from "@/lib/menu-display";
-import type { LanguageCode, MenuItem, OrderItem, SaleRecord } from "@/lib/types";
+import type { LanguageCode, MenuItem, OrderItem, PaymentMethod, SaleRecord } from "@/lib/types";
 
 export type SummaryPeriod = "today" | "yesterday" | "week" | "month" | "custom";
 
@@ -49,10 +49,10 @@ export function computeRevenueStats(sales: SaleRecord[]): RevenueStats {
       .reduce((sum, sale) => sum + saleNetTotal(sale), 0),
     tips: active.reduce((sum, sale) => sum + sale.tip, 0),
     cashTips: active
-      .filter((sale) => sale.paymentMethod === "cash")
+      .filter((sale) => resolveTipPaymentMethod(sale) === "cash")
       .reduce((sum, sale) => sum + sale.tip, 0),
     cardTips: active
-      .filter((sale) => sale.paymentMethod === "card")
+      .filter((sale) => resolveTipPaymentMethod(sale) === "card")
       .reduce((sum, sale) => sum + sale.tip, 0),
     orderCount: active.length,
   };
@@ -85,7 +85,10 @@ export function endOfDay(date: Date): Date {
   return next;
 }
 
-export function getPeriodRange(period: SummaryPeriod, customDate?: string): DateRange {
+export function getPeriodRange(
+  period: SummaryPeriod,
+  customRange?: { from?: string; to?: string },
+): DateRange {
   const now = new Date();
 
   if (period === "today") {
@@ -112,8 +115,13 @@ export function getPeriodRange(period: SummaryPeriod, customDate?: string): Date
     return { start, end: endOfDay(now) };
   }
 
-  const picked = customDate ? new Date(`${customDate}T12:00:00`) : now;
-  return { start: startOfDay(picked), end: endOfDay(picked) };
+  const fromRaw = customRange?.from?.trim();
+  const toRaw = customRange?.to?.trim() || fromRaw;
+  const fromDate = fromRaw ? new Date(`${fromRaw}T12:00:00`) : now;
+  const toDate = toRaw ? new Date(`${toRaw}T12:00:00`) : fromDate;
+  const earlier = fromDate.getTime() <= toDate.getTime() ? fromDate : toDate;
+  const later = fromDate.getTime() <= toDate.getTime() ? toDate : fromDate;
+  return { start: startOfDay(earlier), end: endOfDay(later) };
 }
 
 export function filterSalesInRange(sales: SaleRecord[], range: DateRange): SaleRecord[] {
@@ -231,13 +239,17 @@ export function toDateInputValue(date: Date): string {
 
 export type HistoryPaymentFilter = "all" | "cash" | "card";
 
+export function resolveTipPaymentMethod(sale: Pick<SaleRecord, "paymentMethod" | "tipPaymentMethod">): PaymentMethod {
+  return sale.tipPaymentMethod ?? sale.paymentMethod;
+}
+
 export function filterHistorySales(
   sales: SaleRecord[],
   period: SummaryPeriod,
   payment: HistoryPaymentFilter,
-  customDate?: string,
+  customRange?: { from?: string; to?: string },
 ): SaleRecord[] {
-  const range = getPeriodRange(period, customDate);
+  const range = getPeriodRange(period, customRange);
   let result = filterSalesInRange(sales, range);
   if (payment !== "all") {
     result = result.filter((sale) => sale.paymentMethod === payment);

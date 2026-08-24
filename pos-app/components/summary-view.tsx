@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, Minus, Printer } from "lucide-react";
 import { LiveClock } from "@/components/live-clock";
+import { DateRangeInputs } from "@/components/date-range-inputs";
 import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
 import { formatPrice } from "@/lib/i18n/translations";
@@ -33,7 +34,7 @@ const PERIOD_LABEL_KEYS = {
   yesterday: "summaryYesterday",
   week: "summaryWeek",
   month: "summaryMonth",
-  custom: "summaryPickDate",
+  custom: "summaryPickRange",
 } as const;
 
 const GROUP_OPTIONS: TopSellerGroup[] = ["all", "food", "drink", "category"];
@@ -142,15 +143,20 @@ export function SummaryView({
   const { translate, language } = useApp();
   const { settings } = useSettings();
   const [period, setPeriod] = useState<SummaryPeriod>("today");
-  const [customDate, setCustomDate] = useState(() => toDateInputValue(new Date()));
+  const [customFrom, setCustomFrom] = useState(() => toDateInputValue(new Date()));
+  const [customTo, setCustomTo] = useState(() => toDateInputValue(new Date()));
   const [sellerGroup, setSellerGroup] = useState<TopSellerGroup>("all");
   const [taxPrinting, setTaxPrinting] = useState(false);
 
   const todayRange = useMemo(() => getPeriodRange("today"), []);
   const yesterdayRange = useMemo(() => getPeriodRange("yesterday"), []);
   const activeRange = useMemo(
-    () => getPeriodRange(period, period === "custom" ? customDate : undefined),
-    [period, customDate],
+    () =>
+      getPeriodRange(
+        period,
+        period === "custom" ? { from: customFrom, to: customTo } : undefined,
+      ),
+    [period, customFrom, customTo],
   );
 
   const filteredSales = useMemo(
@@ -210,7 +216,7 @@ export function SummaryView({
 
   const periodLabel =
     period === "custom"
-      ? formatSummaryDate(new Date(`${customDate}T12:00:00`), language)
+      ? `${formatSummaryDate(activeRange.start, language)} – ${formatSummaryDate(activeRange.end, language)}`
       : `${formatSummaryDate(activeRange.start, language)}${
           period === "week" || period === "month"
             ? ` – ${formatSummaryDate(activeRange.end, language)}`
@@ -252,14 +258,12 @@ export function SummaryView({
               ))}
             </div>
             {period === "custom" && (
-              <div className="mt-3">
-                <input
-                  type="date"
-                  value={customDate}
-                  onChange={(event) => setCustomDate(event.target.value)}
-                  className="pos-input max-w-xs"
-                />
-              </div>
+              <DateRangeInputs
+                from={customFrom}
+                to={customTo}
+                onFromChange={setCustomFrom}
+                onToChange={setCustomTo}
+              />
             )}
           </section>
 

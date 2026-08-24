@@ -16,6 +16,7 @@ import { generateOrderNumber } from "@/lib/receipt-calculations";
 import { paymentFilterClass } from "@/lib/theme-classes";
 import type { MenuItem, OrderItem, PaymentMethod, SaleRecord } from "@/lib/types";
 import { formatHistoryDateTime, resolveGuestSeatedAt } from "@/lib/sale-history";
+import { resolveTipPaymentMethod } from "@/lib/summary-analytics";
 import { deleteSaleRecords, updateSaleRecord } from "@/src/lib/sales-actions";
 
 type EditScope = "payment" | "full";
@@ -77,6 +78,9 @@ export function OrderHistoryModal({
   const [editItems, setEditItems] = useState<OrderItem[]>(sale.items);
   const [editDiscount, setEditDiscount] = useState(sale.discountAmount);
   const [editTip, setEditTip] = useState(sale.tip);
+  const [editTipPaymentMethod, setEditTipPaymentMethod] = useState<PaymentMethod>(
+    resolveTipPaymentMethod(sale),
+  );
   const [editPaymentMethod, setEditPaymentMethod] = useState<PaymentMethod>(sale.paymentMethod);
   const [editAmountGiven, setEditAmountGiven] = useState(
     sale.amountGiven != null ? String(sale.amountGiven) : "",
@@ -92,6 +96,7 @@ export function OrderHistoryModal({
     setEditItems(sale.items);
     setEditDiscount(sale.discountAmount);
     setEditTip(sale.tip);
+    setEditTipPaymentMethod(resolveTipPaymentMethod(sale));
     setEditPaymentMethod(sale.paymentMethod);
     setEditAmountGiven(sale.amountGiven != null ? String(sale.amountGiven) : "");
     setSaveError(null);
@@ -153,6 +158,7 @@ export function OrderHistoryModal({
       subtotal: editSubtotal,
       discountAmount: editDiscount,
       tip: editTip,
+      tipPaymentMethod: editTipPaymentMethod,
       grandTotal: editGrandTotal,
       paymentMethod: editPaymentMethod,
       amountGiven: cashFields.amountGiven,
@@ -170,6 +176,7 @@ export function OrderHistoryModal({
       subtotal: editSubtotal,
       discountAmount: editDiscount,
       tip: editTip,
+      tipPaymentMethod: editTipPaymentMethod,
       grandTotal: editGrandTotal,
       paymentMethod: editPaymentMethod,
       amountGiven: cashFields.amountGiven ?? undefined,
@@ -181,6 +188,9 @@ export function OrderHistoryModal({
 
     const changes: string[] = [];
     if (sale.tip !== editTip) changes.push(`tip ${sale.tip}→${editTip}`);
+    if (resolveTipPaymentMethod(sale) !== editTipPaymentMethod) {
+      changes.push(`tipPay ${resolveTipPaymentMethod(sale)}→${editTipPaymentMethod}`);
+    }
     if (sale.paymentMethod !== editPaymentMethod) {
       changes.push(`${sale.paymentMethod}→${editPaymentMethod}`);
     }
@@ -273,7 +283,19 @@ export function OrderHistoryModal({
                     key={item.id ?? `${item.name}-${index}`}
                     className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-700"
                   >
-                    <span className="text-sm">{item.name}</span>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm">{item.name}</span>
+                      {(item.notes?.trim() || item.notesTranslated?.trim()) && (
+                        <p className="mt-1 text-xs italic text-orange-700 dark:text-orange-300">
+                          {item.notesTranslated?.trim() || item.notes?.trim()}
+                          {item.notesTranslated?.trim() &&
+                          item.notes?.trim() &&
+                          item.notesTranslated.trim() !== item.notes.trim()
+                            ? ` · ${item.notes.trim()}`
+                            : ""}
+                        </p>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <label className="sr-only">Quantity</label>
                       <input
@@ -302,14 +324,26 @@ export function OrderHistoryModal({
                 {sale.items.map((item, index) => (
                   <li
                     key={item.id ?? `${item.name}-${index}`}
-                    className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm dark:bg-gray-800/60"
+                    className="rounded-lg bg-gray-50 px-3 py-2 text-sm dark:bg-gray-800/60"
                   >
-                    <span>
-                      {item.quantity}x {item.name}
-                    </span>
-                    <span className="font-medium tabular-nums">
-                      {formatCzk(item.price * item.quantity)}
-                    </span>
+                    <div className="flex items-center justify-between gap-3">
+                      <span>
+                        {item.quantity}x {item.name}
+                      </span>
+                      <span className="font-medium tabular-nums">
+                        {formatCzk(item.price * item.quantity)}
+                      </span>
+                    </div>
+                    {(item.notes?.trim() || item.notesTranslated?.trim()) && (
+                      <p className="mt-1 text-xs italic text-orange-700 dark:text-orange-300">
+                        {item.notesTranslated?.trim() || item.notes?.trim()}
+                        {item.notesTranslated?.trim() &&
+                        item.notes?.trim() &&
+                        item.notesTranslated.trim() !== item.notes.trim()
+                          ? ` · ${item.notes.trim()}`
+                          : ""}
+                      </p>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -376,6 +410,27 @@ export function OrderHistoryModal({
                     inputClassName="w-full rounded border border-gray-200 px-2 py-1 text-right text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                   />
                 </label>
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">{translate("tipPaymentMethod")}</span>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {translate("tipPaymentMethodHint")}
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    {(["cash", "card"] as const).map((method) => (
+                      <button
+                        key={method}
+                        type="button"
+                        onClick={() => setEditTipPaymentMethod(method)}
+                        className={`min-h-[40px] flex-1 rounded-lg px-3 text-sm font-semibold capitalize ${paymentFilterClass(
+                          editTipPaymentMethod === method,
+                          method,
+                        )}`}
+                      >
+                        {translate(method)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
@@ -414,7 +469,20 @@ export function OrderHistoryModal({
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-500 dark:text-gray-400">{translate("tip")}</dt>
-                <dd className="tabular-nums">{formatCzk(editMode ? editTip : sale.tip)}</dd>
+                <dd className="tabular-nums">
+                  {formatCzk(editMode ? editTip : sale.tip)}
+                  {(editMode ? editTip : sale.tip) > 0 && (
+                    <span className="ml-2 text-xs font-medium uppercase text-gray-500 dark:text-gray-400">
+                      (
+                      {translate(
+                        editMode
+                          ? editTipPaymentMethod
+                          : resolveTipPaymentMethod(sale),
+                      )}
+                      )
+                    </span>
+                  )}
+                </dd>
               </div>
               <div className="flex justify-between border-t border-gray-200 pt-2 text-base font-semibold dark:border-gray-700">
                 <dt>{translate("grandTotal")}</dt>

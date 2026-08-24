@@ -59,6 +59,7 @@ export async function updateSaleRecord(
     subtotal: number;
     discountAmount: number;
     tip: number;
+    tipPaymentMethod?: PaymentMethod;
     grandTotal: number;
     paymentMethod: PaymentMethod;
     amountGiven?: number | null;
@@ -70,6 +71,7 @@ export async function updateSaleRecord(
     subtotal: Number(updates.subtotal.toFixed(2)),
     discount_amount: Number(updates.discountAmount.toFixed(2)),
     tip: Number(updates.tip.toFixed(2)),
+    tip_payment_method: updates.tipPaymentMethod ?? updates.paymentMethod,
     grand_total: Number(updates.grandTotal.toFixed(2)),
     payment_method: updates.paymentMethod,
   };

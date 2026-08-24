@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 import { Eye, Pencil, Trash2 } from "lucide-react";
 import { LiveClock } from "@/components/live-clock";
+import { DateRangeInputs } from "@/components/date-range-inputs";
 import { OrderHistoryModal } from "@/components/order-history-modal";
 import { usePinGate } from "@/contexts/pin-gate-context";
 import { useApp } from "@/contexts/app-context";
@@ -43,7 +44,7 @@ const PERIOD_LABEL_KEYS = {
   yesterday: "summaryYesterday",
   week: "summaryWeek",
   month: "summaryMonth",
-  custom: "summaryPickDate",
+  custom: "summaryPickRange",
 } as const;
 
 const PAYMENT_OPTIONS: HistoryPaymentFilter[] = ["all", "cash", "card"];
@@ -78,7 +79,8 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<SummaryPeriod>("today");
-  const [customDate, setCustomDate] = useState(() => toDateInputValue(new Date()));
+  const [customFrom, setCustomFrom] = useState(() => toDateInputValue(new Date()));
+  const [customTo, setCustomTo] = useState(() => toDateInputValue(new Date()));
   const [paymentFilter, setPaymentFilter] = useState<HistoryPaymentFilter>("all");
   const [selectedSale, setSelectedSale] = useState<SaleRecord | null>(null);
   const [openEditScope, setOpenEditScope] = useState<"payment" | "full" | false>(false);
@@ -110,8 +112,14 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   }, [loadSales]);
 
   const filteredSales = useMemo(
-    () => filterHistorySales(sales, period, paymentFilter, period === "custom" ? customDate : undefined),
-    [sales, period, paymentFilter, customDate],
+    () =>
+      filterHistorySales(
+        sales,
+        period,
+        paymentFilter,
+        period === "custom" ? { from: customFrom, to: customTo } : undefined,
+      ),
+    [sales, period, paymentFilter, customFrom, customTo],
   );
 
   const filteredIds = useMemo(() => new Set(filteredSales.map((sale) => sale.id)), [filteredSales]);
@@ -126,13 +134,17 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   const stats = useMemo(() => computeRevenueStats(filteredSales), [filteredSales]);
 
   const activeRange = useMemo(
-    () => getPeriodRange(period, period === "custom" ? customDate : undefined),
-    [period, customDate],
+    () =>
+      getPeriodRange(
+        period,
+        period === "custom" ? { from: customFrom, to: customTo } : undefined,
+      ),
+    [period, customFrom, customTo],
   );
 
   const periodLabel =
     period === "custom"
-      ? formatSummaryDate(new Date(`${customDate}T12:00:00`), language)
+      ? `${formatSummaryDate(activeRange.start, language)} – ${formatSummaryDate(activeRange.end, language)}`
       : `${formatSummaryDate(activeRange.start, language)}${
           period === "week" || period === "month"
             ? ` – ${formatSummaryDate(activeRange.end, language)}`
@@ -296,14 +308,12 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
               ))}
             </div>
             {period === "custom" && (
-              <div className="mt-3">
-                <input
-                  type="date"
-                  value={customDate}
-                  onChange={(event) => setCustomDate(event.target.value)}
-                  className="pos-input max-w-xs"
-                />
-              </div>
+              <DateRangeInputs
+                from={customFrom}
+                to={customTo}
+                onFromChange={setCustomFrom}
+                onToChange={setCustomTo}
+              />
             )}
           </section>
 

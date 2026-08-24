@@ -46,7 +46,7 @@ export const CATEGORY_COLUMNS = "id, name, type, display_order, created_at";
 export const INVENTORY_COLUMNS = "id, name, category, quantity, unit, sold_out";
 
 export const SALES_COLUMNS =
-  "id, table_label, staff_name, subtotal, discount_amount, tip, grand_total, payment_method, amount_given, change_due, split_mode, split_count, items, activity_log, closed_at, seated_at, deleted_at, reservation_id, guest_name, guest_phone, party_size, visit_source, service_channel";
+  "id, table_label, staff_name, subtotal, discount_amount, tip, tip_payment_method, grand_total, payment_method, amount_given, change_due, split_mode, split_count, items, activity_log, closed_at, seated_at, deleted_at, reservation_id, guest_name, guest_phone, party_size, visit_source, service_channel";
 
 export interface SupabaseTableRow {
   id: string;
@@ -431,6 +431,7 @@ export function mapSalesResponse(
     subtotal: number;
     discount_amount?: number | null;
     tip: number;
+    tip_payment_method?: "cash" | "card" | null;
     grand_total?: number | null;
     payment_method: "cash" | "card";
     amount_given?: number | null;
@@ -457,6 +458,9 @@ export function mapSalesResponse(
     subtotal: Number(s.subtotal),
     discountAmount: Number(s.discount_amount ?? 0),
     tip: Number(s.tip),
+    tipPaymentMethod: s.tip_payment_method === "cash" || s.tip_payment_method === "card"
+      ? s.tip_payment_method
+      : undefined,
     grandTotal: Number(s.grand_total ?? s.subtotal + Number(s.tip) - Number(s.discount_amount ?? 0)),
     paymentMethod: s.payment_method,
     amountGiven: s.amount_given != null ? Number(s.amount_given) : undefined,

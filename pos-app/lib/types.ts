@@ -480,6 +480,8 @@ export interface SaleRecord {
   subtotal: number;
   discountAmount: number;
   tip: number;
+  /** How the tip was collected — may differ from bill payment (e.g. card bill + cash tip). */
+  tipPaymentMethod?: PaymentMethod;
   grandTotal: number;
   paymentMethod: PaymentMethod;
   amountGiven?: number;

@@ -798,11 +798,13 @@ export function NewOrderModal({
     setSubmittedNoteLineId(line.lineId);
     setSubmittedNoteDraft(line.notes ?? "");
     setSubmittedNoteDraftTranslated(line.notesTranslated ?? "");
-    setSubmittedNotePresetIds(line.modifiers?.specialRequestIds ?? []);
+    const presetIds = line.modifiers?.specialRequestIds ?? [];
+    setSubmittedNotePresetIds(presetIds);
     const storedNote = line.notes?.trim() ?? "";
     const storedTranslated = line.notesTranslated?.trim() ?? "";
     setSubmittedNoteTranslateEnabled(
-      Boolean(storedTranslated && storedTranslated !== storedNote),
+      presetIds.length > 0 ||
+        Boolean(storedTranslated && storedTranslated !== storedNote),
     );
   };
 
@@ -1047,10 +1049,12 @@ export function NewOrderModal({
     setNoteLineId(line.lineId);
     setNoteDraft(line.note);
     setNoteDraftTranslated(line.noteTranslated ?? "");
-    setNotePresetIds(line.specialRequestIds ?? []);
+    const presetIds = line.specialRequestIds ?? [];
+    setNotePresetIds(presetIds);
     setNoteTranslating(false);
     setNoteTranslateEnabled(
-      Boolean(line.noteTranslated?.trim() && line.noteTranslated.trim() !== line.note.trim()),
+      presetIds.length > 0 ||
+        Boolean(line.noteTranslated?.trim() && line.noteTranslated.trim() !== line.note.trim()),
     );
     setNotePrintOnReceipt(line.isPrintedNote);
   };
@@ -2070,9 +2074,10 @@ export function NewOrderModal({
                         <button
                           key={preset.id}
                           type="button"
-                          onClick={() =>
-                            setNotePresetIds((prev) => togglePresetId(prev, preset.id))
-                          }
+                          onClick={() => {
+                            if (!active) setNoteTranslateEnabled(true);
+                            setNotePresetIds((prev) => togglePresetId(prev, preset.id));
+                          }}
                           className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                             active
                               ? "bg-emerald-600 text-white"
@@ -2193,9 +2198,12 @@ export function NewOrderModal({
                         <button
                           key={preset.id}
                           type="button"
-                          onClick={() =>
-                            setSubmittedNotePresetIds((prev) => togglePresetId(prev, preset.id))
-                          }
+                          onClick={() => {
+                            if (!active) setSubmittedNoteTranslateEnabled(true);
+                            setSubmittedNotePresetIds((prev) =>
+                              togglePresetId(prev, preset.id),
+                            );
+                          }}
                           className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                             active
                               ? "bg-emerald-600 text-white"

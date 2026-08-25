@@ -1361,6 +1361,28 @@ export function SettingsView({
                   className="pos-input mt-1"
                 />
               </label>
+              <label className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">
+                  {translate("settingsMapResTickerSeconds")}
+                </span>
+                <input
+                  type="number"
+                  min={2}
+                  max={30}
+                  step={1}
+                  value={draft.mapReservationTickerSeconds}
+                  onChange={(event) =>
+                    updateDraft(
+                      "mapReservationTickerSeconds",
+                      Math.min(30, Math.max(2, Number(event.target.value) || 6)),
+                    )
+                  }
+                  className="pos-input mt-1"
+                />
+                <span className="mt-1 block text-[11px] text-gray-400 dark:text-gray-500">
+                  {translate("settingsMapResTickerSecondsHint")}
+                </span>
+              </label>
             </div>
 
             <h3 className="mt-6 text-sm font-semibold text-gray-900 dark:text-gray-100">

@@ -114,6 +114,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   reservationMaxGuestsPerSlot: 20,
   reservationTableHoldingTime: 90,
   reservationOperatingHours: DEFAULT_RESERVATION_OPERATING_HOURS,
+  mapReservationTickerSeconds: 6,
   receiptFontSize: "normal",
   receiptFontWeight: "normal",
   receiptFontFamily: "courier",
@@ -184,6 +185,7 @@ type SettingsRow = {
   reservation_max_guests_per_slot?: number | null;
   reservation_table_holding_time?: number | null;
   reservation_operating_hours?: ReservationOperatingHours | null;
+  map_reservation_ticker_seconds?: number | null;
   receipt_font_size?: string | null;
   receipt_font_weight?: string | null;
   receipt_font_family?: string | null;
@@ -396,6 +398,8 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     reservationTableHoldingTime:
       row.reservation_table_holding_time ?? DEFAULT_APP_SETTINGS.reservationTableHoldingTime,
     reservationOperatingHours: parseOperatingHours(row.reservation_operating_hours),
+    mapReservationTickerSeconds:
+      row.map_reservation_ticker_seconds ?? DEFAULT_APP_SETTINGS.mapReservationTickerSeconds,
     receiptFontSize: parseReceiptFontSize(row.receipt_font_size),
     receiptFontWeight: parseReceiptFontWeight(row.receipt_font_weight),
     receiptFontFamily: parseReceiptFontFamily(row.receipt_font_family),
@@ -531,6 +535,9 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   }
   if (partial.reservationOperatingHours !== undefined) {
     payload.reservation_operating_hours = partial.reservationOperatingHours;
+  }
+  if (partial.mapReservationTickerSeconds !== undefined) {
+    payload.map_reservation_ticker_seconds = partial.mapReservationTickerSeconds;
   }
   if (partial.receiptFontSize !== undefined) payload.receipt_font_size = partial.receiptFontSize;
   if (partial.receiptFontWeight !== undefined) payload.receipt_font_weight = partial.receiptFontWeight;
@@ -791,6 +798,7 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "reservationMaxGuestsPerSlot"
     | "reservationTableHoldingTime"
     | "reservationOperatingHours"
+    | "mapReservationTickerSeconds"
     | "receiptFontSize"
     | "receiptFontWeight"
     | "receiptFontFamily"
@@ -850,6 +858,7 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     reservationMaxGuestsPerSlot: settings.reservationMaxGuestsPerSlot,
     reservationTableHoldingTime: settings.reservationTableHoldingTime,
     reservationOperatingHours: settings.reservationOperatingHours,
+    mapReservationTickerSeconds: settings.mapReservationTickerSeconds,
     receiptFontSize: settings.receiptFontSize,
     receiptFontWeight: settings.receiptFontWeight,
     receiptFontFamily: settings.receiptFontFamily,

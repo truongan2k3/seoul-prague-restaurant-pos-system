@@ -36,6 +36,7 @@ ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS menu_item_layout text DEFAU
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS reservation_time_step int DEFAULT 30;
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS reservation_max_guests_per_slot int DEFAULT 20;
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS reservation_table_holding_time int DEFAULT 90;
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS map_reservation_ticker_seconds int DEFAULT 6;
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS reservation_operating_hours jsonb DEFAULT '{
   "monday": {"enabled": true, "open": "11:00", "close": "22:00"},
   "tuesday": {"enabled": true, "open": "11:00", "close": "22:00"},

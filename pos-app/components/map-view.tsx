@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LiveClock } from "@/components/live-clock";
+import { MapReservationTicker } from "@/components/map-reservation-ticker";
 import { NotificationBell } from "@/components/notification-bell";
 import { TableCard } from "@/components/table-card";
 import { TableEditModal } from "@/components/table-edit-modal";
@@ -171,7 +172,8 @@ export function MapView({
         </div>
       )}
 
-      <div className="flex-1 overflow-auto p-3 sm:p-4 md:p-6">
+      <div className="flex min-h-0 flex-1 flex-col xl:flex-row">
+        <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-4 md:p-6">
         {/* Responsive grid — mobile, tablet, smaller desktops */}
         <div className="xl:hidden">
           {editMode && (
@@ -245,6 +247,9 @@ export function MapView({
             );
           })}
         </div>
+        </div>
+
+        <MapReservationTicker />
       </div>
 
       <TableEditModal

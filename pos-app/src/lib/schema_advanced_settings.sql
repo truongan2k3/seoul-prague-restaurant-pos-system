@@ -8,6 +8,7 @@ ALTER TABLE settings ADD COLUMN IF NOT EXISTS eur_exchange_rate NUMERIC DEFAULT 
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS reservation_time_step INT DEFAULT 30;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS reservation_max_guests_per_slot INT DEFAULT 20;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS reservation_table_holding_time INT DEFAULT 90;
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS map_reservation_ticker_seconds INT DEFAULT 6;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS reservation_operating_hours JSONB DEFAULT '{
   "monday": {"enabled": true, "open": "11:00", "close": "22:00"},
   "tuesday": {"enabled": true, "open": "11:00", "close": "22:00"},

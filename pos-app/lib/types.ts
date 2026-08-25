@@ -199,6 +199,8 @@ export interface AppSettings {
   reservationMaxGuestsPerSlot: number;
   reservationTableHoldingTime: number;
   reservationOperatingHours: ReservationOperatingHours;
+  /** Seconds each today's reservation stays on the floor-map vertical ticker. */
+  mapReservationTickerSeconds: number;
   receiptFontSize: ReceiptFontSize;
   receiptFontWeight: ReceiptFontWeight;
   receiptFontFamily: ReceiptFontFamily;

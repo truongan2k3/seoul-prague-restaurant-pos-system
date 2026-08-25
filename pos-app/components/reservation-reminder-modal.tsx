@@ -7,11 +7,14 @@ import type { ReservationRecord } from "@/lib/types";
 
 interface ReservationReminderModalProps {
   reservation: ReservationRecord | null;
+  /** Which lead window triggered this popup (15 or 30). */
+  leadMinutes?: number;
   onAcknowledge: () => void;
 }
 
 export function ReservationReminderModal({
   reservation,
+  leadMinutes,
   onAcknowledge,
 }: ReservationReminderModalProps) {
   const { translate, language } = useApp();
@@ -19,6 +22,7 @@ export function ReservationReminderModal({
   const minutesLeft = reservation
     ? minutesUntilReservation(reservation.reservedAt)
     : 0;
+  const hintMinutes = leadMinutes ?? minutesLeft;
 
   const locale = language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB";
   const timeLabel = reservation
@@ -50,7 +54,7 @@ export function ReservationReminderModal({
       {reservation && (
         <div className="space-y-4">
           <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
-            {translate("resReminderHint").replace("{minutes}", String(minutesLeft))}
+            {translate("resReminderHint").replace("{minutes}", String(hintMinutes))}
           </p>
 
           <dl className="space-y-3 text-sm">

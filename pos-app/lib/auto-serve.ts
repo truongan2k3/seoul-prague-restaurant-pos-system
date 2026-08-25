@@ -13,6 +13,7 @@ export const DEFAULT_SOUND_CONFIGS: SoundConfigs = {
   mainNewOrder: "/sounds/new_order.mp3",
   itemReady: "/sounds/bell.mp3",
   paymentSuccess: "/sounds/success.mp3",
+  reservationReminder: "/sounds/chime.mp3",
 };
 
 export const SOUND_FILE_OPTIONS = [
@@ -157,6 +158,12 @@ export function parseSoundConfigs(value: unknown): SoundConfigs {
         : typeof row.paymentSuccess === "string"
           ? row.paymentSuccess
           : DEFAULT_SOUND_CONFIGS.paymentSuccess,
+    reservationReminder:
+      typeof row.reservation_reminder === "string"
+        ? row.reservation_reminder
+        : typeof row.reservationReminder === "string"
+          ? row.reservationReminder
+          : DEFAULT_SOUND_CONFIGS.reservationReminder,
   };
 }
 
@@ -167,5 +174,6 @@ export function soundConfigsToDb(configs: SoundConfigs) {
     main_new_order: configs.mainNewOrder,
     item_ready: configs.itemReady,
     payment_success: configs.paymentSuccess,
+    reservation_reminder: configs.reservationReminder,
   };
 }

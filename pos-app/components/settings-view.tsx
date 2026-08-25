@@ -1386,6 +1386,38 @@ export function SettingsView({
             </div>
 
             <h3 className="mt-6 text-sm font-semibold text-gray-900 dark:text-gray-100">
+              {translate("settingsResReminderLeads")}
+            </h3>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {translate("settingsResReminderLeadsHint")}
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              {(
+                [
+                  { value: "15" as const, labelKey: "settingsResReminder15" as const },
+                  { value: "30" as const, labelKey: "settingsResReminder30" as const },
+                  { value: "both" as const, labelKey: "settingsResReminderBoth" as const },
+                ] as const
+              ).map((option) => {
+                const selected = draft.reservationReminderMode === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => updateDraft("reservationReminderMode", option.value)}
+                    className={`rounded-xl border px-3 py-3 text-left text-sm font-semibold transition ${
+                      selected
+                        ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-100"
+                        : "border-gray-200 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+                    }`}
+                  >
+                    {translate(option.labelKey)}
+                  </button>
+                );
+              })}
+            </div>
+
+            <h3 className="mt-6 text-sm font-semibold text-gray-900 dark:text-gray-100">
               {translate("settingsOperatingHours")}
             </h3>
             <div className="mt-3 space-y-2">
@@ -1484,6 +1516,11 @@ export function SettingsView({
                     key: "paymentSuccess" as const,
                     label: translate("soundPaymentSuccess"),
                     testVariant: "ready" as const,
+                  },
+                  {
+                    key: "reservationReminder" as const,
+                    label: translate("soundReservationReminder"),
+                    testVariant: "newOrder" as const,
                   },
                 ] as const
               ).map((row) => {

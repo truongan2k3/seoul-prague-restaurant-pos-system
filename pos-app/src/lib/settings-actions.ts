@@ -11,6 +11,7 @@ import type {
   SoundConfigs,
 } from "@/lib/types";
 import { DEFAULT_SOUND_CONFIGS, parseSoundConfigs, soundConfigsToDb } from "@/lib/auto-serve";
+import { parseReservationReminderMode } from "@/lib/reservation-reminder";
 import { DEFAULT_RESERVATION_OPERATING_HOURS } from "@/lib/reservation-slots";
 import {
   clampMarqueeDurationSeconds,
@@ -115,6 +116,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   reservationTableHoldingTime: 90,
   reservationOperatingHours: DEFAULT_RESERVATION_OPERATING_HOURS,
   mapReservationTickerSeconds: 6,
+  reservationReminderMode: "30",
   receiptFontSize: "normal",
   receiptFontWeight: "normal",
   receiptFontFamily: "courier",
@@ -186,6 +188,7 @@ type SettingsRow = {
   reservation_table_holding_time?: number | null;
   reservation_operating_hours?: ReservationOperatingHours | null;
   map_reservation_ticker_seconds?: number | null;
+  reservation_reminder_mode?: string | null;
   receipt_font_size?: string | null;
   receipt_font_weight?: string | null;
   receipt_font_family?: string | null;
@@ -400,6 +403,9 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     reservationOperatingHours: parseOperatingHours(row.reservation_operating_hours),
     mapReservationTickerSeconds:
       row.map_reservation_ticker_seconds ?? DEFAULT_APP_SETTINGS.mapReservationTickerSeconds,
+    reservationReminderMode: parseReservationReminderMode(
+      row.reservation_reminder_mode ?? DEFAULT_APP_SETTINGS.reservationReminderMode,
+    ),
     receiptFontSize: parseReceiptFontSize(row.receipt_font_size),
     receiptFontWeight: parseReceiptFontWeight(row.receipt_font_weight),
     receiptFontFamily: parseReceiptFontFamily(row.receipt_font_family),
@@ -538,6 +544,9 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   }
   if (partial.mapReservationTickerSeconds !== undefined) {
     payload.map_reservation_ticker_seconds = partial.mapReservationTickerSeconds;
+  }
+  if (partial.reservationReminderMode !== undefined) {
+    payload.reservation_reminder_mode = partial.reservationReminderMode;
   }
   if (partial.receiptFontSize !== undefined) payload.receipt_font_size = partial.receiptFontSize;
   if (partial.receiptFontWeight !== undefined) payload.receipt_font_weight = partial.receiptFontWeight;
@@ -799,6 +808,7 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "reservationTableHoldingTime"
     | "reservationOperatingHours"
     | "mapReservationTickerSeconds"
+    | "reservationReminderMode"
     | "receiptFontSize"
     | "receiptFontWeight"
     | "receiptFontFamily"
@@ -859,6 +869,7 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     reservationTableHoldingTime: settings.reservationTableHoldingTime,
     reservationOperatingHours: settings.reservationOperatingHours,
     mapReservationTickerSeconds: settings.mapReservationTickerSeconds,
+    reservationReminderMode: settings.reservationReminderMode,
     receiptFontSize: settings.receiptFontSize,
     receiptFontWeight: settings.receiptFontWeight,
     receiptFontFamily: settings.receiptFontFamily,

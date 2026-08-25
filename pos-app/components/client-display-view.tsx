@@ -12,6 +12,7 @@ import {
   type CfdCheckoutPayload,
   type CfdClientState,
 } from "@/lib/cfd-display";
+import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
 import {
   cfdSlideshowItemDuration,
   resolveCfdSlideshow,
@@ -453,6 +454,16 @@ export function ClientDisplayView() {
       },
     });
 
+    // Durable fallback without polling — only when POS writes cfd_display_state.
+    const unsubState = subscribeToPostgresRowChanges(
+      "cfd-display-state",
+      { event: "*", schema: "public", table: "cfd_display_state" },
+      () => {
+        void syncFromStore();
+      },
+      { debounceMs: 400 },
+    );
+
     const onVisible = () => {
       if (document.visibilityState === "visible") {
         void syncFromStore();
@@ -460,15 +471,10 @@ export function ClientDisplayView() {
     };
     document.addEventListener("visibilitychange", onVisible);
 
-    // Safety net when broadcast is dropped — catch up within a couple seconds.
-    const poll = window.setInterval(() => {
-      void syncFromStore();
-    }, 2500);
-
     return () => {
       unsubscribe();
+      unsubState();
       document.removeEventListener("visibilitychange", onVisible);
-      window.clearInterval(poll);
     };
   }, []);
 

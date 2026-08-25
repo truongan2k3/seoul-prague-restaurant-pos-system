@@ -115,6 +115,8 @@ export interface SoundConfigs {
   /** Main POS when an item is marked ready. */
   itemReady: string;
   paymentSuccess: string;
+  /** Floor prep popup before a reservation arrives. */
+  reservationReminder: string;
 }
 
 /** Languages printed on kitchen tickets (large primary + optional secondary). */
@@ -201,6 +203,8 @@ export interface AppSettings {
   reservationOperatingHours: ReservationOperatingHours;
   /** Seconds each today's reservation stays on the floor-map vertical ticker. */
   mapReservationTickerSeconds: number;
+  /** Prep popup lead time: 15 min, 30 min, or both. */
+  reservationReminderMode: "15" | "30" | "both";
   receiptFontSize: ReceiptFontSize;
   receiptFontWeight: ReceiptFontWeight;
   receiptFontFamily: ReceiptFontFamily;

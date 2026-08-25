@@ -172,7 +172,7 @@ export function MapView({
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col xl:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col">
         <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-4 md:p-6">
         {/* Responsive grid — mobile, tablet, smaller desktops */}
         <div className="xl:hidden">

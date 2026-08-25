@@ -103,81 +103,56 @@ export function MapReservationTicker() {
   }, [intervalMs, rows.length]);
 
   const current = rows[index] ?? null;
-
   const emptyLabel = useMemo(() => translate("mapResTickerEmpty"), [translate]);
 
   return (
-    <aside className="flex w-full shrink-0 flex-col border-t border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 xl:w-72 xl:border-l xl:border-t-0">
-      <div className="flex items-center gap-2 border-b border-gray-100 px-3 py-2.5 dark:border-gray-800">
-        <CalendarClock className="h-4 w-4 text-red-500" />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-            {translate("mapResTickerTitle")}
-          </p>
-          <p className="text-[11px] text-gray-400 dark:text-gray-500">
-            {rows.length > 0
-              ? translate("mapResTickerCount").replace("{count}", String(rows.length))
-              : emptyLabel}
-          </p>
-        </div>
+    <aside className="flex h-11 shrink-0 items-center gap-2 border-t border-gray-200 bg-white px-3 dark:border-gray-800 dark:bg-gray-900 sm:h-12 sm:gap-3 sm:px-4">
+      <div className="flex shrink-0 items-center gap-1.5 text-gray-500 dark:text-gray-400">
+        <CalendarClock className="h-3.5 w-3.5 text-red-500" />
+        <span className="hidden text-[11px] font-semibold uppercase tracking-wide sm:inline">
+          {translate("mapResTickerTitle")}
+        </span>
+        {rows.length > 0 && (
+          <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+            {index + 1}/{rows.length}
+          </span>
+        )}
       </div>
 
-      <div className="relative flex min-h-[88px] flex-1 items-center overflow-hidden px-3 py-3 xl:min-h-[120px]">
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
         {!current ? (
-          <p className="text-sm text-gray-400 dark:text-gray-500">{emptyLabel}</p>
+          <p className="truncate text-xs text-gray-400 dark:text-gray-500">{emptyLabel}</p>
         ) : (
           <div
             key={current.id + String(index)}
-            className={`w-full transition-all duration-300 ease-out ${
-              visible ? "translate-y-0 opacity-100" : "-translate-y-3 opacity-0"
+            className={`flex min-w-0 items-center gap-2 transition-all duration-300 ease-out sm:gap-3 ${
+              visible ? "translate-x-0 opacity-100" : "translate-x-4 opacity-0"
             }`}
           >
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-lg font-bold tabular-nums text-gray-900 dark:text-gray-100">
-                {formatTime(current.reservedAt, language)}
-              </span>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${statusTone(current.status)}`}
-              >
-                {translate(reservationStatusLabelKey(current.status))}
-              </span>
-            </div>
-            <p className="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
+            <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-gray-900 dark:text-gray-100">
+              {formatTime(current.reservedAt, language)}
+            </span>
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${statusTone(current.status)}`}
+            >
+              {translate(reservationStatusLabelKey(current.status))}
+            </span>
+            <span className="min-w-0 truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
               {current.guestName}
               <span className="font-normal text-gray-500 dark:text-gray-400">
                 {" "}
-                · {current.partySize} {translate("partySize").toLowerCase()}
+                · {current.partySize}
               </span>
-            </p>
-            <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
+            </span>
+            <span className="hidden min-w-0 truncate text-xs text-gray-500 sm:inline dark:text-gray-400">
               {current.tableLabel
                 ? `${translate("table")} ${current.tableLabel}`
                 : translate("mapResTickerNoTable")}
               {current.bookingCode ? ` · ${current.bookingCode}` : ""}
-            </p>
+            </span>
           </div>
         )}
       </div>
-
-      {rows.length > 1 && (
-        <div className="flex items-center justify-between gap-2 px-3 pb-2.5 text-[11px] text-gray-400 dark:text-gray-500">
-          <span>
-            {index + 1}/{rows.length}
-          </span>
-          <div className="flex max-w-[70%] flex-wrap justify-end gap-1">
-            {rows.length <= 12
-              ? rows.map((row, i) => (
-                  <span
-                    key={row.id}
-                    className={`h-1.5 w-1.5 rounded-full transition ${
-                      i === index ? "bg-red-500" : "bg-gray-200 dark:bg-gray-700"
-                    }`}
-                  />
-                ))
-              : null}
-          </div>
-        </div>
-      )}
     </aside>
   );
 }

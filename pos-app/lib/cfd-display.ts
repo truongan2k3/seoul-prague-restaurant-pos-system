@@ -40,10 +40,27 @@ export interface CfdEventPayload {
   CANCEL_CHECKOUT: Record<string, never>;
 }
 
+export interface CfdPersistedSnapshot {
+  state: CfdClientState;
+  checkout: CfdCheckoutPayload | null;
+  thankYouTable: string | null;
+  updatedAt: string;
+}
+
 const GOOGLE_REVIEW_URL =
   "https://www.google.com/maps/search/?api=1&query=Seoul+Prague+Restaurant";
 
 export const DEFAULT_CFD_REVIEW_URL = GOOGLE_REVIEW_URL;
+
+const SUBSCRIBE_TIMEOUT_MS = 5_000;
+const RECONNECT_DELAY_MS = 1_500;
+const SEND_RETRIES = 2;
+
+let channelSeq = 0;
+function uniqueCfdChannelName(): string {
+  channelSeq += 1;
+  return `${CFD_CHANNEL}-tx-${channelSeq}`;
+}
 
 export function isCfdGifMedia(url: string) {
   return /\.gif(\?|#|$)/i.test(url.trim());
@@ -111,22 +128,38 @@ export function buildCfdCheckoutPayload(
 let broadcasterChannel: RealtimeChannel | null = null;
 let broadcasterReady: Promise<RealtimeChannel> | null = null;
 
+function resetBroadcaster() {
+  const current = broadcasterChannel;
+  broadcasterChannel = null;
+  broadcasterReady = null;
+  if (current) {
+    void supabase.removeChannel(current);
+  }
+}
+
 function ensureBroadcasterChannel(): Promise<RealtimeChannel> {
   if (broadcasterReady) return broadcasterReady;
 
   broadcasterReady = new Promise((resolve, reject) => {
-    broadcasterChannel = supabase.channel(CFD_CHANNEL, {
+    const channel = supabase.channel(uniqueCfdChannelName(), {
       config: { broadcast: { self: false } },
     });
+    broadcasterChannel = channel;
 
-    broadcasterChannel.subscribe((status, err) => {
+    const timeout = setTimeout(() => {
+      resetBroadcaster();
+      reject(new Error("CFD broadcaster subscribe timeout"));
+    }, SUBSCRIBE_TIMEOUT_MS);
+
+    channel.subscribe((status, err) => {
       if (status === "SUBSCRIBED") {
-        resolve(broadcasterChannel!);
+        clearTimeout(timeout);
+        resolve(channel);
         return;
       }
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        broadcasterReady = null;
-        broadcasterChannel = null;
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        clearTimeout(timeout);
+        resetBroadcaster();
         reject(err ?? new Error(`CFD channel ${status}`));
       }
     });
@@ -135,50 +168,230 @@ function ensureBroadcasterChannel(): Promise<RealtimeChannel> {
   return broadcasterReady;
 }
 
+async function persistCfdSnapshot(snapshot: {
+  state: CfdClientState;
+  checkout: CfdCheckoutPayload | null;
+  thankYouTable?: string | null;
+}): Promise<void> {
+  try {
+    const { error } = await supabase.from("cfd_display_state").upsert({
+      id: 1,
+      client_state: snapshot.state,
+      checkout_payload: snapshot.checkout,
+      thank_you_table: snapshot.thankYouTable ?? snapshot.checkout?.tableNumber ?? null,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) {
+      console.warn("[CFD] Persist state failed:", error.message);
+    }
+  } catch (error) {
+    console.warn("[CFD] Persist state failed:", error);
+  }
+}
+
+export async function fetchCfdDisplaySnapshot(): Promise<CfdPersistedSnapshot | null> {
+  try {
+    const { data, error } = await supabase
+      .from("cfd_display_state")
+      .select("client_state, checkout_payload, thank_you_table, updated_at")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (error || !data) return null;
+
+    const state = data.client_state as CfdClientState;
+    if (state !== "idle" && state !== "checkout" && state !== "thankyou") {
+      return null;
+    }
+
+    return {
+      state,
+      checkout:
+        data.checkout_payload && typeof data.checkout_payload === "object"
+          ? (data.checkout_payload as CfdCheckoutPayload)
+          : null,
+      thankYouTable: data.thank_you_table ?? null,
+      updatedAt: data.updated_at ?? new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** CFD local thank-you timer ended — clear store only if still on thank-you. */
+export async function releaseCfdThankYouState(): Promise<void> {
+  try {
+    const snapshot = await fetchCfdDisplaySnapshot();
+    if (!snapshot || snapshot.state !== "thankyou") return;
+    await persistCfdSnapshot({
+      state: "idle",
+      checkout: null,
+      thankYouTable: null,
+    });
+  } catch {
+    // ignore
+  }
+}
+
+async function broadcastOnce<E extends CfdEventName>(
+  event: E,
+  payload: CfdEventPayload[E],
+): Promise<boolean> {
+  const channel = await ensureBroadcasterChannel();
+  const result = await channel.send({
+    type: "broadcast",
+    event,
+    payload,
+  });
+
+  if (result === "ok") return true;
+
+  // Channel likely stale — force recreate and let caller retry.
+  resetBroadcaster();
+  throw new Error(`CFD broadcast result: ${String(result)}`);
+}
+
 export async function sendCfdEvent<E extends CfdEventName>(
   event: E,
   payload: CfdEventPayload[E],
 ): Promise<void> {
-  try {
-    const channel = await ensureBroadcasterChannel();
-    await channel.send({
-      type: "broadcast",
-      event,
-      payload,
+  if (event === "START_CHECKOUT") {
+    await persistCfdSnapshot({
+      state: "checkout",
+      checkout: payload as CfdCheckoutPayload,
     });
-  } catch (error) {
-    console.warn("[CFD] Broadcast failed:", error);
+  } else if (event === "PAYMENT_SUCCESS") {
+    const tableNumber = (payload as CfdEventPayload["PAYMENT_SUCCESS"]).tableNumber;
+    await persistCfdSnapshot({
+      state: "thankyou",
+      checkout: null,
+      thankYouTable: tableNumber ?? null,
+    });
+  } else if (event === "CANCEL_CHECKOUT") {
+    await persistCfdSnapshot({
+      state: "idle",
+      checkout: null,
+      thankYouTable: null,
+    });
   }
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= SEND_RETRIES; attempt += 1) {
+    try {
+      const ok = await broadcastOnce(event, payload);
+      if (ok) return;
+    } catch (error) {
+      lastError = error;
+      resetBroadcaster();
+    }
+  }
+
+  console.warn("[CFD] Broadcast failed after retries:", lastError);
 }
 
 export function subscribeCfdEvents(handlers: {
   onStartCheckout: (payload: CfdCheckoutPayload) => void;
   onPaymentSuccess: (payload?: CfdEventPayload["PAYMENT_SUCCESS"]) => void;
   onCancelCheckout: () => void;
+  onResubscribed?: () => void;
 }): () => void {
-  const channel = supabase.channel(CFD_CHANNEL, {
-    config: { broadcast: { self: false } },
-  });
+  let disposed = false;
+  let channel: RealtimeChannel | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-  channel
-    .on("broadcast", { event: "START_CHECKOUT" }, ({ payload }) => {
-      if (payload && typeof payload === "object") {
-        handlers.onStartCheckout(payload as CfdCheckoutPayload);
-      }
-    })
-    .on("broadcast", { event: "PAYMENT_SUCCESS" }, ({ payload }) => {
-      handlers.onPaymentSuccess(
-        payload && typeof payload === "object"
-          ? (payload as CfdEventPayload["PAYMENT_SUCCESS"])
-          : undefined,
-      );
-    })
-    .on("broadcast", { event: "CANCEL_CHECKOUT" }, () => {
-      handlers.onCancelCheckout();
-    })
-    .subscribe();
+  const teardown = () => {
+    if (!channel) return;
+    const current = channel;
+    channel = null;
+    void supabase.removeChannel(current);
+  };
+
+  const connect = () => {
+    if (disposed) return;
+    teardown();
+
+    channel = supabase.channel(`${CFD_CHANNEL}-rx-${++channelSeq}`, {
+      config: { broadcast: { self: false } },
+    });
+
+    channel
+      .on("broadcast", { event: "START_CHECKOUT" }, ({ payload }) => {
+        if (payload && typeof payload === "object") {
+          handlers.onStartCheckout(payload as CfdCheckoutPayload);
+        }
+      })
+      .on("broadcast", { event: "PAYMENT_SUCCESS" }, ({ payload }) => {
+        handlers.onPaymentSuccess(
+          payload && typeof payload === "object"
+            ? (payload as CfdEventPayload["PAYMENT_SUCCESS"])
+            : undefined,
+        );
+      })
+      .on("broadcast", { event: "CANCEL_CHECKOUT" }, () => {
+        handlers.onCancelCheckout();
+      })
+      .subscribe((status) => {
+        if (disposed) return;
+        if (status === "SUBSCRIBED") {
+          handlers.onResubscribed?.();
+          return;
+        }
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          teardown();
+          if (reconnectTimer) clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
+        }
+      });
+  };
+
+  connect();
 
   return () => {
-    void supabase.removeChannel(channel);
+    disposed = true;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    teardown();
   };
+}
+
+/** Apply DB snapshot onto the same handlers used by live broadcast. */
+export function applyCfdSnapshot(
+  snapshot: CfdPersistedSnapshot,
+  handlers: {
+    onStartCheckout: (payload: CfdCheckoutPayload) => void;
+    onPaymentSuccess: (payload?: CfdEventPayload["PAYMENT_SUCCESS"]) => void;
+    onCancelCheckout: () => void;
+  },
+  options?: { thankYouMaxAgeMs?: number },
+): void {
+  if (snapshot.state === "checkout" && snapshot.checkout) {
+    handlers.onStartCheckout({ ...snapshot.checkout, staffInitiated: true });
+    return;
+  }
+  if (snapshot.state === "thankyou") {
+    const maxAge = options?.thankYouMaxAgeMs ?? 25_000;
+    const ageMs = Date.now() - new Date(snapshot.updatedAt).getTime();
+    if (Number.isFinite(ageMs) && ageMs > maxAge) {
+      handlers.onCancelCheckout();
+      return;
+    }
+    handlers.onPaymentSuccess({
+      tableNumber: snapshot.thankYouTable ?? snapshot.checkout?.tableNumber,
+    });
+    return;
+  }
+  handlers.onCancelCheckout();
+}
+
+export function checkoutPayloadFingerprint(payload: CfdCheckoutPayload | null): string {
+  if (!payload) return "";
+  return [
+    payload.tableNumber,
+    payload.amountDueNow,
+    payload.tip,
+    payload.discount,
+    payload.total,
+    payload.amountGiven ?? "",
+    payload.changeDue ?? "",
+    payload.items.map((item) => `${item.name}:${item.quantity}:${item.lineTotal}`).join("|"),
+  ].join("::");
 }

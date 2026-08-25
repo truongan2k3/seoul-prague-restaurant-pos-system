@@ -4,6 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { LanguageSelector } from "@/components/language-selector";
 import {
+  applyCfdSnapshot,
+  checkoutPayloadFingerprint,
+  fetchCfdDisplaySnapshot,
+  releaseCfdThankYouState,
   subscribeCfdEvents,
   type CfdCheckoutPayload,
   type CfdClientState,
@@ -392,13 +396,13 @@ export function ClientDisplayView() {
   const reviewQrImageUrl = settings.cfdReviewQrImageUrl.trim();
 
   useEffect(() => {
-    return subscribeCfdEvents({
-      onStartCheckout: (payload) => {
+    const handlers = {
+      onStartCheckout: (payload: CfdCheckoutPayload) => {
         // Staff opened checkout for a table — always interrupt thank-you / idle.
         setCheckout(payload);
         setClientState("checkout");
       },
-      onPaymentSuccess: (payload) => {
+      onPaymentSuccess: (payload?: { tableNumber?: string }) => {
         // Don't let a previous table's payment wipe a newer checkout already on screen.
         const showing = checkoutRef.current;
         if (
@@ -416,7 +420,56 @@ export function ClientDisplayView() {
         setCheckout(null);
         setClientState("idle");
       },
+    };
+
+    const syncFromStore = async () => {
+      const snapshot = await fetchCfdDisplaySnapshot();
+      if (!snapshot) return;
+
+      if (snapshot.state === "checkout" && snapshot.checkout) {
+        const nextFp = checkoutPayloadFingerprint(snapshot.checkout);
+        const curFp = checkoutPayloadFingerprint(checkoutRef.current);
+        if (
+          clientStateRef.current === "checkout" &&
+          nextFp === curFp
+        ) {
+          return;
+        }
+      } else if (snapshot.state === "thankyou" && clientStateRef.current === "thankyou") {
+        return;
+      } else if (snapshot.state === "idle" && clientStateRef.current === "idle") {
+        return;
+      }
+
+      applyCfdSnapshot(snapshot, handlers);
+    };
+
+    void syncFromStore();
+
+    const unsubscribe = subscribeCfdEvents({
+      ...handlers,
+      onResubscribed: () => {
+        void syncFromStore();
+      },
     });
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void syncFromStore();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    // Safety net when broadcast is dropped — catch up within a couple seconds.
+    const poll = window.setInterval(() => {
+      void syncFromStore();
+    }, 2500);
+
+    return () => {
+      unsubscribe();
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(poll);
+    };
   }, []);
 
   useEffect(() => {
@@ -428,6 +481,7 @@ export function ClientDisplayView() {
         if (prev <= 1) {
           setClientState("idle");
           setCheckout(null);
+          void releaseCfdThankYouState();
           return THANK_YOU_SECONDS;
         }
         return prev - 1;

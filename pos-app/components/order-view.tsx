@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { ElapsedTimer, LiveClock } from "@/components/live-clock";
+import { MapReservationTicker } from "@/components/map-reservation-ticker";
 import { NotificationBell } from "@/components/notification-bell";
 import { OrderItemChecklist } from "@/components/order-item-checklist";
 import { useApp } from "@/contexts/app-context";
@@ -271,6 +272,8 @@ export function OrderView({
           </div>
         )}
       </div>
+
+      <MapReservationTicker />
     </div>
   );
 }

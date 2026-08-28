@@ -362,11 +362,13 @@ export async function findActiveReservationForTable(tableId: string) {
     .maybeSingle();
 }
 
-export async function completeReservationForTable(tableId: string) {
-  const { data } = await findActiveReservationForTable(tableId);
-  if (!data) return { data: null, error: null };
+export async function completeReservationForTable(tableId: string, reservationId?: string | null) {
+  const id =
+    reservationId ??
+    (await findActiveReservationForTable(tableId)).data?.id;
+  if (!id) return { data: null, error: null };
 
-  return updateReservationStatus(data.id, "completed", {
+  return updateReservationStatus(id, "completed", {
     completedAt: new Date(),
   });
 }

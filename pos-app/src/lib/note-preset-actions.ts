@@ -29,10 +29,9 @@ function mapRow(row: {
 }
 
 export async function fetchNotePresets() {
-  await ensureStorageCatalogSynced();
   return supabase
     .from("note_presets")
-    .select("*")
+    .select("id, label_en, label_cz, label_zh, display_order, active")
     .eq("active", true)
     .order("display_order")
     .order("label_en");

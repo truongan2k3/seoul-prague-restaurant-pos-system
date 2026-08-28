@@ -79,10 +79,9 @@ export function MapView({
           table.id === dragState.tableId ? { ...table, posX: pos.x, posY: pos.y } : table,
         ),
       );
-      onRefresh();
     }
     setDragState(null);
-  }, [dragState, positions, setTables, onRefresh]);
+  }, [dragState, positions, setTables]);
 
   useEffect(() => {
     if (!dragState) return;

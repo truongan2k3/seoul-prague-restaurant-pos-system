@@ -4,15 +4,19 @@ import {
   type CheckoutPaymentRecord,
 } from "@/lib/checkout-calculations";
 import {
-  autoServeActor,
   isReadyForAutoServe,
   resolveKitchenStatus,
 } from "@/lib/auto-serve";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
 import type { OrderItem, Station } from "@/lib/types";
+import { resolveStaffActorLocal } from "@/lib/staff-actor-client";
 import { completeReservationForTable, findActiveReservationForTable, mapReservationRow } from "@/src/lib/reservation-actions";
-import { resolveStaffActor } from "@/src/lib/staff-actor";
-import { mapOrderItemRow, type SupabaseOrderItemRow } from "@/src/lib/supabase-data";
+import {
+  mapOrderItemRow,
+  ORDER_ITEM_COLUMNS,
+  TABLE_WITH_ORDERS_COLUMNS,
+  type SupabaseOrderItemRow,
+} from "@/src/lib/supabase-data";
 import { supabase } from "@/src/lib/supabase";
 import { inferServiceChannel } from "@/lib/tax-summary";
 
@@ -115,7 +119,7 @@ function isKitchenStillOpen(
 async function syncTableOrdersFromDb(tableId: string) {
   const { data: rows } = await supabase
     .from("order_items")
-    .select("*")
+    .select(ORDER_ITEM_COLUMNS)
     .eq("table_id", tableId)
     .order("created_at", { ascending: true });
 
@@ -163,11 +167,36 @@ async function insertOrderRows(
   staffId?: string,
   staffName?: string,
 ) {
-  const actor = await resolveStaffActor({ staffId, staffName });
+  const actor = resolveStaffActorLocal({ staffId, staffName });
   const orderRows = buildOrderRows(tableId, orders, actor.staffId);
   if (orderRows.length === 0) return { error: null as Error | null };
 
   const { error } = await supabase.from("order_items").insert(orderRows);
+  return { error };
+}
+
+function fetchTableWithOrders(tableId: string) {
+  return supabase.from("tables").select(TABLE_WITH_ORDERS_COLUMNS).eq("id", tableId).single();
+}
+
+async function updateOrderItemsStatusBatch(itemIds: string[], status: OrderItem["status"]) {
+  if (itemIds.length === 0) return { error: null as Error | null };
+
+  const normalized = normalizeOrderItemStatus(status);
+  const kitchenStatus = kitchenStatusFromOrderStatus(normalized);
+  const patch: Record<string, string | null> = {
+    status: normalized,
+    kitchen_status: kitchenStatus,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (kitchenStatus === "ready") {
+    patch.ready_at = new Date().toISOString();
+  } else if (kitchenStatus === "pending") {
+    patch.ready_at = null;
+  }
+
+  const { error } = await supabase.from("order_items").update(patch).in("id", itemIds);
   return { error };
 }
 
@@ -228,7 +257,7 @@ export async function occupyTable(
 
   await syncTableOrdersFromDb(tableId);
 
-  return supabase.from("tables").select("*").eq("id", tableId).single();
+  return fetchTableWithOrders(tableId);
 }
 
 export async function appendOrdersToTable(
@@ -265,7 +294,7 @@ export async function appendOrdersToTable(
 
   await syncTableOrdersFromDb(tableId);
 
-  return supabase.from("tables").select("*").eq("id", tableId).single();
+  return fetchTableWithOrders(tableId);
 }
 
 export async function updateTableOrders(
@@ -283,7 +312,7 @@ export async function updateTableOrders(
 
   const { data: existingRows, error: fetchItemsError } = await supabase
     .from("order_items")
-    .select("*")
+    .select(ORDER_ITEM_COLUMNS)
     .eq("table_id", tableId)
     .order("created_at", { ascending: true });
 
@@ -317,7 +346,7 @@ export async function updateTableOrders(
     }
 
     await syncTableOrdersFromDb(tableId);
-    return supabase.from("tables").select("*").eq("id", tableId).single();
+    return fetchTableWithOrders(tableId);
   }
 
   const desiredUnits = activeOrders.flatMap(expandOrderToUnits);
@@ -345,12 +374,14 @@ export async function updateTableOrders(
     if (cancelError) return { data: null, error: cancelError };
   }
 
-  for (const unit of desiredUnits) {
-    if (!unit.id) continue;
-    const { error: updateError } = await supabase
-      .from("order_items")
-      .update(orderItemRowUpdate(unit))
-      .eq("id", unit.id);
+  const unitsToUpdate = desiredUnits.filter((unit) => unit.id);
+  if (unitsToUpdate.length > 0) {
+    const updateResults = await Promise.all(
+      unitsToUpdate.map((unit) =>
+        supabase.from("order_items").update(orderItemRowUpdate(unit)).eq("id", unit.id!),
+      ),
+    );
+    const updateError = updateResults.find((result) => result.error)?.error;
     if (updateError) return { data: null, error: updateError };
   }
 
@@ -367,7 +398,7 @@ export async function updateTableOrders(
 
   await syncTableOrdersFromDb(tableId);
 
-  return supabase.from("tables").select("*").eq("id", tableId).single();
+  return fetchTableWithOrders(tableId);
 }
 
 export async function clearTable(tableId: string) {
@@ -426,7 +457,7 @@ async function settlePaidTable(tableId: string) {
         fulfillment_status: "in_progress",
       })
       .eq("id", tableId)
-      .select("*")
+      .select(TABLE_WITH_ORDERS_COLUMNS)
       .single();
   }
 
@@ -453,7 +484,7 @@ export async function checkoutTable(
     closeTable?: boolean;
   },
 ) {
-  const staff = await resolveStaffActor({ staffId, staffName });
+  const staff = resolveStaffActorLocal({ staffId, staffName });
   const ratio = equalSplitShareRatio(payment.splitMode, payment.splitCount);
 
   const shareAmounts =
@@ -474,14 +505,11 @@ export async function checkoutTable(
           grandTotal: Number(payment.grandTotal.toFixed(2)),
         };
 
-  const { data: activeReservationRow } = await findActiveReservationForTable(tableId);
+  const [{ data: activeReservationRow }, { data: tableRow }] = await Promise.all([
+    findActiveReservationForTable(tableId),
+    supabase.from("tables").select("occupied_at").eq("id", tableId).maybeSingle(),
+  ]);
   const activeReservation = activeReservationRow ? mapReservationRow(activeReservationRow) : null;
-
-  const { data: tableRow } = await supabase
-    .from("tables")
-    .select("occupied_at")
-    .eq("id", tableId)
-    .maybeSingle();
 
   let seatedAt = tableRow?.occupied_at ?? null;
   if (!seatedAt) {
@@ -527,7 +555,7 @@ export async function checkoutTable(
   if (saleError) return { data: null, error: saleError };
 
   if (options?.closeTable !== false) {
-    await completeReservationForTable(tableId);
+    await completeReservationForTable(tableId, activeReservation?.id);
   }
 
   // Partial item-split: unpaid lines remain on the bill.
@@ -662,10 +690,8 @@ export async function markItemsReady(
   staffName: string,
   tableId?: string,
 ) {
-  for (const itemId of itemIds) {
-    const { error } = await updateOrderItemStatus(itemId, "ready", staffName);
-    if (error) return { error };
-  }
+  const { error } = await updateOrderItemsStatusBatch(itemIds, "ready");
+  if (error) return { error };
 
   if (tableId) {
     await syncTableOrdersFromDb(tableId);
@@ -680,10 +706,8 @@ export async function markItemsPreparing(
   staffName: string,
   tableId?: string,
 ) {
-  for (const itemId of itemIds) {
-    const { error } = await updateOrderItemStatus(itemId, "preparing", staffName);
-    if (error) return { error };
-  }
+  const { error } = await updateOrderItemsStatusBatch(itemIds, "preparing");
+  if (error) return { error };
 
   if (tableId) {
     await syncTableOrdersFromDb(tableId);
@@ -744,10 +768,8 @@ export async function markItemsServed(
   staffName: string,
   tableId?: string,
 ) {
-  for (const itemId of itemIds) {
-    const { error } = await updateOrderItemStatus(itemId, "served", staffName);
-    if (error) return { error };
-  }
+  const { error } = await updateOrderItemsStatusBatch(itemIds, "served");
+  if (error) return { error };
 
   if (tableId) {
     await syncTableOrdersFromDb(tableId);
@@ -784,14 +806,21 @@ export async function autoServeExpiredReadyItems(station?: Station) {
 
   if (expired.length === 0) return { servedIds: [] as string[], error: null };
 
-  const actor = autoServeActor(station);
-  const tableIds = new Set<string>();
-  const servedIds: string[] = [];
+  const servedIds = expired.map((row) => row.id);
+  const servedAt = new Date().toISOString();
+  const { error: serveError } = await supabase
+    .from("order_items")
+    .update({
+      status: "served",
+      kitchen_status: "served",
+      updated_at: servedAt,
+    })
+    .in("id", servedIds);
 
+  if (serveError) return { servedIds: [], error: serveError };
+
+  const tableIds = new Set<string>();
   for (const row of expired) {
-    const { error: serveError } = await updateOrderItemStatus(row.id, "served", actor);
-    if (serveError) return { servedIds, error: serveError };
-    servedIds.push(row.id);
     if (row.table_id) tableIds.add(row.table_id);
   }
 
@@ -817,19 +846,18 @@ export async function cancelOrderItems(
   if (itemIds.length === 0) return { error: null };
 
   const cancelledAt = new Date().toISOString();
-  for (const itemId of itemIds) {
-    const { error } = await supabase
-      .from("order_items")
-      .update({
-        is_cancelled: true,
-        cancel_reason: reason,
-        cancelled_at: cancelledAt,
-        kitchen_status: "cancelled",
-        updated_at: cancelledAt,
-      })
-      .eq("id", itemId);
-    if (error) return { error };
-  }
+  const { error } = await supabase
+    .from("order_items")
+    .update({
+      is_cancelled: true,
+      cancel_reason: reason,
+      cancelled_at: cancelledAt,
+      kitchen_status: "cancelled",
+      updated_at: cancelledAt,
+    })
+    .in("id", itemIds);
+
+  if (error) return { error };
 
   await syncTableOrdersFromDb(tableId);
   return { error: null };
@@ -838,22 +866,18 @@ export async function cancelOrderItems(
 /** Kitchen acknowledges a cancelled line — hide permanently from KDS/Bar. */
 export async function acknowledgeCancelledItems(itemIds: string[], staffName: string) {
   const updatedAt = new Date().toISOString();
-  const tableIds = new Set<string>();
+  const { data, error } = await supabase
+    .from("order_items")
+    .update({
+      kitchen_status: "archived",
+      updated_at: updatedAt,
+    })
+    .in("id", itemIds)
+    .select("table_id");
 
-  for (const itemId of itemIds) {
-    const { data, error } = await supabase
-      .from("order_items")
-      .update({
-        kitchen_status: "archived",
-        updated_at: updatedAt,
-      })
-      .eq("id", itemId)
-      .select("table_id")
-      .single();
-    if (error) return { error };
-    if (data?.table_id) tableIds.add(data.table_id);
-  }
+  if (error) return { error };
 
+  const tableIds = new Set((data ?? []).map((row) => row.table_id).filter(Boolean) as string[]);
   for (const tableId of tableIds) {
     await syncTableOrdersFromDb(tableId);
     await markTableFulfillmentIfAllServed(tableId);

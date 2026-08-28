@@ -41,6 +41,7 @@ interface UseTableOrderWorkflowOptions {
   categories: MenuCategoryRecord[];
   orderItems: OrderItem[];
   onRefresh: () => void;
+  onRefreshFloor?: () => void;
 }
 
 export function useTableOrderWorkflow({
@@ -50,7 +51,9 @@ export function useTableOrderWorkflow({
   categories,
   orderItems,
   onRefresh,
+  onRefreshFloor,
 }: UseTableOrderWorkflowOptions) {
+  const refreshAfterAction = onRefreshFloor ?? onRefresh;
   const { staff, logAction } = useApp();
   const { settings } = useSettings();
   const { printReceipt, printKitchenOrder } = useReceiptPrint();
@@ -131,7 +134,7 @@ export function useTableOrderWorkflow({
       setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
       // Stay on the table screen after send so staff can checkout or add more.
       setModal({ type: "new-order", tableId: modal.tableId, mode: "append" });
-      onRefresh();
+      refreshAfterAction();
     } finally {
       actionLockRef.current = false;
       setIsSaving(false);
@@ -185,7 +188,7 @@ export function useTableOrderWorkflow({
       const updatedTable = mapTableRow(data);
       setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
       setModal({ type: "new-order", tableId: modal.tableId, mode: "append" });
-      onRefresh();
+      refreshAfterAction();
     } finally {
       actionLockRef.current = false;
       setIsSaving(false);
@@ -242,36 +245,34 @@ export function useTableOrderWorkflow({
         console.warn("[KitchenPrint] Failed:", printError);
       });
     }
-    onRefresh();
+    refreshAfterAction();
   };
 
-  const handleProceedToCheckout = async (orders: OrderItem[], explicitTableId?: string) => {
+  const handleProceedToCheckout = (orders: OrderItem[], explicitTableId?: string) => {
     const tableId = explicitTableId ?? modal?.tableId ?? selectedTable?.id;
     if (!tableId || orders.length === 0) return;
 
     const table = tables.find((t) => t.id === tableId);
     if (!table || table.paymentStatus === "paid") return;
 
-    setIsSaving(true);
     setActionError(null);
-    const { data, error } = await updateTableOrders(tableId, orders, {
+    setModal({ type: "checkout", tableId, orders });
+
+    void updateTableOrders(tableId, orders, {
       staffId: staff?.id,
       staffName: staff?.name,
       tableLabel: table.label,
+    }).then(({ data, error }) => {
+      if (error) {
+        setActionError(error.message);
+        return;
+      }
+      if (data) {
+        const updatedTable = mapTableRow(data);
+        setTables((prev) => prev.map((t) => (t.id === tableId ? updatedTable : t)));
+      }
+      refreshAfterAction();
     });
-    setIsSaving(false);
-
-    if (error) {
-      setActionError(error.message);
-      return;
-    }
-
-    if (data) {
-      const updatedTable = mapTableRow(data);
-      setTables((prev) => prev.map((t) => (t.id === tableId ? updatedTable : t)));
-    }
-
-    setModal({ type: "checkout", tableId, orders });
   };
 
   const handleForceCloseTable = async () => {
@@ -290,7 +291,7 @@ export function useTableOrderWorkflow({
       setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
     }
     setModal(null);
-    onRefresh();
+    refreshAfterAction();
   };
 
   const handleCheckout = async (payload: CheckoutSubmitPayload) => {
@@ -372,7 +373,7 @@ export function useTableOrderWorkflow({
           }),
         );
       }
-      onRefresh();
+      refreshAfterAction();
       return;
     }
 
@@ -419,7 +420,7 @@ export function useTableOrderWorkflow({
       setModal({ type: "new-order", tableId: modal.tableId, mode: "append" });
     }
 
-    onRefresh();
+    refreshAfterAction();
   };
 
   const finishChangeTable = (fromId: string, toId: string, action: "transfer" | "merge") => {
@@ -432,7 +433,7 @@ export function useTableOrderWorkflow({
     } else {
       setModal(null);
     }
-    onRefresh();
+    refreshAfterAction();
   };
 
   const handleTransferTable = async (toId: string) => {
@@ -522,7 +523,7 @@ export function useTableOrderWorkflow({
           onSaveExistingOrders={(orders, options) =>
             handleSaveOrders(orders, selectedTable.id, options)
           }
-          onRefreshExistingOrders={onRefresh}
+          onRefreshExistingOrders={refreshAfterAction}
           isSaving={isSaving}
         />
       )}

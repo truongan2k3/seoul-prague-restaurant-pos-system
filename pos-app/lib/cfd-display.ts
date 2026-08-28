@@ -251,28 +251,48 @@ async function broadcastOnce<E extends CfdEventName>(
   throw new Error(`CFD broadcast result: ${String(result)}`);
 }
 
+let checkoutPersistTimer: ReturnType<typeof setTimeout> | null = null;
+let lastCheckoutPersistKey: string | null = null;
+
+function scheduleCheckoutPersist(payload: CfdCheckoutPayload) {
+  const key = JSON.stringify(payload);
+  if (key === lastCheckoutPersistKey) return;
+  if (checkoutPersistTimer) clearTimeout(checkoutPersistTimer);
+  checkoutPersistTimer = setTimeout(() => {
+    checkoutPersistTimer = null;
+    lastCheckoutPersistKey = key;
+    void persistCfdSnapshot({
+      state: "checkout",
+      checkout: payload,
+    });
+  }, 450);
+}
+
 export async function sendCfdEvent<E extends CfdEventName>(
   event: E,
   payload: CfdEventPayload[E],
 ): Promise<void> {
   if (event === "START_CHECKOUT") {
-    await persistCfdSnapshot({
-      state: "checkout",
-      checkout: payload as CfdCheckoutPayload,
-    });
-  } else if (event === "PAYMENT_SUCCESS") {
-    const tableNumber = (payload as CfdEventPayload["PAYMENT_SUCCESS"]).tableNumber;
-    await persistCfdSnapshot({
-      state: "thankyou",
-      checkout: null,
-      thankYouTable: tableNumber ?? null,
-    });
-  } else if (event === "CANCEL_CHECKOUT") {
-    await persistCfdSnapshot({
-      state: "idle",
-      checkout: null,
-      thankYouTable: null,
-    });
+    scheduleCheckoutPersist(payload as CfdCheckoutPayload);
+  } else {
+    if (checkoutPersistTimer) {
+      clearTimeout(checkoutPersistTimer);
+      checkoutPersistTimer = null;
+    }
+    if (event === "PAYMENT_SUCCESS") {
+      const tableNumber = (payload as CfdEventPayload["PAYMENT_SUCCESS"]).tableNumber;
+      await persistCfdSnapshot({
+        state: "thankyou",
+        checkout: null,
+        thankYouTable: tableNumber ?? null,
+      });
+    } else if (event === "CANCEL_CHECKOUT") {
+      await persistCfdSnapshot({
+        state: "idle",
+        checkout: null,
+        thankYouTable: null,
+      });
+    }
   }
 
   let lastError: unknown;

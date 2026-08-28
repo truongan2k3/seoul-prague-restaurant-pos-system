@@ -503,6 +503,7 @@ export function DashboardShell() {
     categories,
     orderItems,
     onRefresh: refreshPosData,
+    onRefreshFloor: refreshFloorData,
   });
 
   useSessionHealth({

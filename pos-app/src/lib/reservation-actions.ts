@@ -1,8 +1,10 @@
 import type {
   ReservationRecord,
   ReservationStatus,
+  TableStatus,
   VisitSource,
 } from "@/lib/types";
+import type { ReservationSnapshot, TableSnapshot } from "@/lib/reservation-undo";
 import { generateBookingCode, generateManageToken } from "@/lib/reservation-codes";
 import {
   buildTimeSlotsForDate,
@@ -113,7 +115,78 @@ export async function checkInReservation(reservationId: string, tableId?: string
   });
 }
 
-export async function checkInReservationWithTable(reservationId: string, tableId: string) {
+export async function fetchReservationSnapshot(
+  reservationId: string,
+): Promise<ReservationSnapshot | null> {
+  const { data, error } = await supabase
+    .from("reservations")
+    .select("id, status, table_id, checked_in_at, completed_at")
+    .eq("id", reservationId)
+    .single();
+
+  if (error || !data) return null;
+
+  return {
+    id: data.id,
+    status: data.status as ReservationStatus,
+    tableId: data.table_id ?? null,
+    checkedInAt: data.checked_in_at ?? null,
+    completedAt: data.completed_at ?? null,
+  };
+}
+
+export async function fetchTableSnapshot(tableId: string): Promise<TableSnapshot | null> {
+  const { data, error } = await supabase
+    .from("tables")
+    .select("id, status, occupied_at")
+    .eq("id", tableId)
+    .single();
+
+  if (error || !data) return null;
+
+  return {
+    id: data.id,
+    status: data.status as TableStatus,
+    occupiedAt: data.occupied_at ?? null,
+  };
+}
+
+export async function restoreReservationSnapshot(snapshot: ReservationSnapshot) {
+  return supabase
+    .from("reservations")
+    .update({
+      status: snapshot.status,
+      table_id: snapshot.tableId,
+      checked_in_at: snapshot.checkedInAt,
+      completed_at: snapshot.completedAt,
+      updated_at: nowIso(),
+    })
+    .eq("id", snapshot.id)
+    .select("*, tables(label)")
+    .single();
+}
+
+export async function restoreTableSnapshot(snapshot: TableSnapshot) {
+  const payload: Record<string, unknown> = {
+    status: snapshot.status,
+    occupied_at: snapshot.occupiedAt,
+    updated_at: nowIso(),
+  };
+
+  if (snapshot.status === "empty") {
+    payload.orders = null;
+    payload.payment_status = "unpaid";
+    payload.fulfillment_status = "in_progress";
+  }
+
+  return supabase.from("tables").update(payload).eq("id", snapshot.id);
+}
+
+export async function checkInReservationWithTable(
+  reservationId: string,
+  tableId: string,
+  options?: { allowOccupied?: boolean },
+) {
   const { data: table, error: tableFetchError } = await supabase
     .from("tables")
     .select("status")
@@ -121,21 +194,25 @@ export async function checkInReservationWithTable(reservationId: string, tableId
     .single();
 
   if (tableFetchError) return { data: null, error: tableFetchError };
-  if (table?.status !== "empty") {
+
+  const isEmpty = table?.status === "empty";
+  if (!isEmpty && !options?.allowOccupied) {
     return { data: null, error: new Error("Table is not available") };
   }
 
-  const occupiedAt = new Date().toISOString();
-  const { error: tableError } = await supabase
-    .from("tables")
-    .update({
-      status: "waiting",
-      occupied_at: occupiedAt,
-      orders: [],
-    })
-    .eq("id", tableId);
+  if (isEmpty) {
+    const occupiedAt = new Date().toISOString();
+    const { error: tableError } = await supabase
+      .from("tables")
+      .update({
+        status: "waiting",
+        occupied_at: occupiedAt,
+        orders: [],
+      })
+      .eq("id", tableId);
 
-  if (tableError) return { data: null, error: tableError };
+    if (tableError) return { data: null, error: tableError };
+  }
 
   return checkInReservation(reservationId, tableId);
 }
@@ -241,7 +318,23 @@ export async function createOnlineReservation(input: {
   });
 }
 
-export async function assignReservationTable(reservationId: string, tableId: string) {
+export async function assignReservationTable(
+  reservationId: string,
+  tableId: string,
+  options?: { allowOccupied?: boolean },
+) {
+  const { data: table, error: tableFetchError } = await supabase
+    .from("tables")
+    .select("status")
+    .eq("id", tableId)
+    .single();
+
+  if (tableFetchError) return { data: null, error: tableFetchError };
+
+  if (table?.status !== "empty" && !options?.allowOccupied) {
+    return { data: null, error: new Error("Table is not available") };
+  }
+
   const { data: existing } = await supabase
     .from("reservations")
     .select("status")

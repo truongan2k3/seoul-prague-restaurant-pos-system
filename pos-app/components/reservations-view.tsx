@@ -22,17 +22,27 @@ import {
   type ReservationStatusFilter,
 } from "@/lib/reservation-analytics";
 import { filterButtonClass } from "@/lib/theme-classes";
+import {
+  RESERVATION_UNDO_MS,
+  type ReservationUndoEntry,
+} from "@/lib/reservation-undo";
 import type { ReservationRecord, RestaurantTable } from "@/lib/types";
+import { ReservationTableSelect, isOccupiedTable } from "@/components/reservation-table-select";
+import { ReservationUndoBar } from "@/components/reservation-undo-bar";
 import {
   assignReservationTable,
   cancelReservation,
   checkInReservationWithTable,
   createReservation,
   createWalkIn,
+  fetchReservationSnapshot,
   fetchReservations,
+  fetchTableSnapshot,
   mapReservationsResponse,
   markLateReservations,
   markReservationNoShow,
+  restoreReservationSnapshot,
+  restoreTableSnapshot,
   subscribeToReservationChanges,
 } from "@/src/lib/reservation-actions";
 
@@ -113,6 +123,8 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const [walkInTableId, setWalkInTableId] = useState("");
   const [assignTableId, setAssignTableId] = useState("");
   const [checkInTableId, setCheckInTableId] = useState("");
+  const [undoEntry, setUndoEntry] = useState<ReservationUndoEntry | null>(null);
+  const [undoBusy, setUndoBusy] = useState(false);
 
   const loadReservations = useCallback(async () => {
     setLoading(true);
@@ -193,6 +205,48 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     [tables],
   );
 
+  const assignOccupied = assignTableId ? isOccupiedTable(tables, assignTableId) : false;
+  const checkInOccupied = checkInTableId ? isOccupiedTable(tables, checkInTableId) : false;
+
+  const queueUndo = useCallback(
+    (entry: Omit<ReservationUndoEntry, "expiresAt">) => {
+      setUndoEntry({
+        ...entry,
+        expiresAt: Date.now() + RESERVATION_UNDO_MS,
+      });
+    },
+    [],
+  );
+
+  const handleUndo = async (entry: ReservationUndoEntry) => {
+    setUndoBusy(true);
+    setError(null);
+
+    const { error: reservationError } = await restoreReservationSnapshot(entry.reservation);
+    if (reservationError) {
+      setUndoBusy(false);
+      setError(translate("resUndoFailed"));
+      setUndoEntry(null);
+      return;
+    }
+
+    if (entry.table) {
+      const { error: tableError } = await restoreTableSnapshot(entry.table);
+      if (tableError) {
+        setUndoBusy(false);
+        setError(translate("resUndoFailed"));
+        setUndoEntry(null);
+        return;
+      }
+      onRefreshTables?.();
+    }
+
+    setUndoBusy(false);
+    setUndoEntry(null);
+    pushNotification({ message: translate("resUndoSuccess"), playSound: false });
+    void loadReservations();
+  };
+
   const runAction = async (id: string, action: () => Promise<{ error: unknown | null }>) => {
     setBusyId(id);
     const { error: actionError } = await action();
@@ -257,27 +311,92 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
   const handleAssign = async () => {
     if (!assignTarget || !assignTableId) return;
-    await runAction(assignTarget.id, () => assignReservationTable(assignTarget.id, assignTableId));
+
+    const snapshot = await fetchReservationSnapshot(assignTarget.id);
+    if (!snapshot) {
+      setError(translate("resUndoFailed"));
+      return;
+    }
+
+    setBusyId(assignTarget.id);
+    const { error: assignError } = await assignReservationTable(assignTarget.id, assignTableId, {
+      allowOccupied: assignOccupied,
+    });
+    setBusyId(null);
+
+    if (assignError) {
+      setError(assignError instanceof Error ? assignError.message : String(assignError));
+      return;
+    }
+
+    queueUndo({
+      id: `${assignTarget.id}-assign-${Date.now()}`,
+      action: "assign",
+      reservation: snapshot,
+    });
     setAssignTarget(null);
     setAssignTableId("");
+    void loadReservations();
   };
 
   const handleCheckIn = async () => {
     if (!checkInTarget || !checkInTableId) return;
+
+    const snapshot = await fetchReservationSnapshot(checkInTarget.id);
+    if (!snapshot) {
+      setError(translate("resUndoFailed"));
+      return;
+    }
+
+    const tableSnapshot = checkInOccupied ? undefined : (await fetchTableSnapshot(checkInTableId)) ?? undefined;
+
     setBusyId(checkInTarget.id);
     const { error: checkInError } = await checkInReservationWithTable(
       checkInTarget.id,
       checkInTableId,
+      { allowOccupied: checkInOccupied },
     );
     setBusyId(null);
+
     if (checkInError) {
       setError(checkInError instanceof Error ? checkInError.message : String(checkInError));
       return;
     }
+
+    queueUndo({
+      id: `${checkInTarget.id}-checkin-${Date.now()}`,
+      action: "check_in",
+      reservation: snapshot,
+      table: tableSnapshot,
+    });
     setCheckInTarget(null);
     setCheckInTableId("");
     void loadReservations();
     onRefreshTables?.();
+  };
+
+  const handleCancelReservation = async (row: ReservationRecord) => {
+    const snapshot = await fetchReservationSnapshot(row.id);
+    if (!snapshot) {
+      setError(translate("resUndoFailed"));
+      return;
+    }
+
+    setBusyId(row.id);
+    const { error: cancelError } = await cancelReservationWithEmail(row.id);
+    setBusyId(null);
+
+    if (cancelError) {
+      setError(cancelError instanceof Error ? cancelError.message : String(cancelError));
+      return;
+    }
+
+    queueUndo({
+      id: `${row.id}-cancel-${Date.now()}`,
+      action: "cancel",
+      reservation: snapshot,
+    });
+    void loadReservations();
   };
 
   const formatDateTime = (date: Date) =>
@@ -475,7 +594,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                         <button
                           type="button"
                           disabled={busyId === row.id}
-                          onClick={() => void runAction(row.id, () => cancelReservationWithEmail(row.id))}
+                          onClick={() => void handleCancelReservation(row)}
                           className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white"
                         >
                           {translate("cancelReservation")}
@@ -564,12 +683,16 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           <p className="text-sm text-gray-600 dark:text-gray-300">
             {assignTarget?.guestName} · {assignTarget?.partySize} {translate("partySize").toLowerCase()}
           </p>
-          <select value={assignTableId} onChange={(e) => setAssignTableId(e.target.value)} className="pos-input">
-            <option value="">{translate("selectEmptyTable")}</option>
-            {emptyTables.map((table) => (
-              <option key={table.id} value={table.id}>{translate("table")} {table.label}</option>
-            ))}
-          </select>
+          <ReservationTableSelect
+            tables={tables}
+            value={assignTableId}
+            onChange={setAssignTableId}
+          />
+          {assignOccupied ? (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+              {translate("tableOccupiedWarning")}
+            </p>
+          ) : null}
           <button type="button" disabled={!assignTableId || busyId === assignTarget?.id} onClick={() => void handleAssign()} className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white disabled:opacity-50">
             {translate("assignTable")}
           </button>
@@ -590,13 +713,18 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           </p>
           <label className="block text-sm">
             <span className="text-gray-500">{translate("selectTable")}</span>
-            <select value={checkInTableId} onChange={(e) => setCheckInTableId(e.target.value)} className="pos-input mt-1">
-              <option value="">{translate("selectEmptyTable")}</option>
-              {emptyTables.map((table) => (
-                <option key={table.id} value={table.id}>{translate("table")} {table.label}</option>
-              ))}
-            </select>
+            <ReservationTableSelect
+              tables={tables}
+              value={checkInTableId}
+              onChange={setCheckInTableId}
+              className="pos-input mt-1"
+            />
           </label>
+          {checkInOccupied ? (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+              {translate("tableOccupiedWarning")}
+            </p>
+          ) : null}
           <button
             type="button"
             disabled={!checkInTableId || busyId === checkInTarget?.id}
@@ -607,6 +735,13 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           </button>
         </div>
       </Modal>
+
+      <ReservationUndoBar
+        entry={undoEntry}
+        busy={undoBusy}
+        onUndo={(entry) => void handleUndo(entry)}
+        onExpire={() => setUndoEntry(null)}
+      />
     </div>
   );
 }

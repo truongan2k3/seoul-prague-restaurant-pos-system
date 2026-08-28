@@ -1,6 +1,5 @@
 import type { MenuOptionChoice, OptionGroupLibraryEntry } from "@/lib/types";
 import { supabase } from "@/src/lib/supabase";
-import { ensureStorageCatalogSynced } from "@/src/lib/sync-storage-catalog";
 
 export type OptionGroupLibraryInput = {
   nameEn: string;
@@ -64,7 +63,6 @@ export function mapOptionGroupLibraryResponse(
 }
 
 export async function fetchOptionGroupLibrary(activeOnly = false) {
-  await ensureStorageCatalogSynced();
   let query = supabase
     .from("option_group_library")
     .select("*")

@@ -23,6 +23,7 @@ import { useTableOrderWorkflow } from "@/hooks/use-table-order-workflow";
 import { useSessionHealth } from "@/hooks/use-session-health";
 import { useApp } from "@/contexts/app-context";
 import { AUTO_SERVE_POLL_MS } from "@/lib/auto-serve";
+import { type TranslationKey } from "@/lib/i18n/translations";
 import { canAccessNavTabForMember, firstAccessibleNavTab } from "@/lib/staff-roles";
 import {
   fetchActiveOrderItems,
@@ -46,12 +47,106 @@ import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
 import { autoServeExpiredReadyItems } from "@/src/lib/table-actions";
 import type { InventoryItem, MenuCategoryRecord, MenuItem, RestaurantTable, SaleRecord, OrderItem, NavId } from "@/lib/types";
 
-function LoadingShell() {
+type PosLoadStepId = "tables" | "menu" | "categories" | "orders";
+type PosLoadStepStatus = "pending" | "loading" | "done" | "error";
+
+type PosLoadStep = {
+  id: PosLoadStepId;
+  status: PosLoadStepStatus;
+  ms?: number;
+};
+
+const POS_LOAD_STEP_ORDER: PosLoadStepId[] = ["tables", "menu", "categories", "orders"];
+
+const POS_LOAD_STEP_LABELS: Record<PosLoadStepId, TranslationKey> = {
+  tables: "posLoadingTables",
+  menu: "posLoadingMenu",
+  categories: "posLoadingCategories",
+  orders: "posLoadingOrders",
+};
+
+function initialPosLoadSteps(): PosLoadStep[] {
+  return POS_LOAD_STEP_ORDER.map((id) => ({ id, status: "pending" }));
+}
+
+function PosLoadStepIcon({ status }: { status: PosLoadStepStatus }) {
+  if (status === "done") {
+    return (
+      <span className="flex h-4 w-4 items-center justify-center text-emerald-600 dark:text-emerald-400" aria-hidden>
+        ✓
+      </span>
+    );
+  }
+  if (status === "error") {
+    return (
+      <span className="flex h-4 w-4 items-center justify-center text-red-600 dark:text-red-400" aria-hidden>
+        ✕
+      </span>
+    );
+  }
+  if (status === "loading") {
+    return (
+      <span
+        className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700 dark:border-zinc-600 dark:border-t-zinc-200"
+        aria-hidden
+      />
+    );
+  }
+  return <span className="inline-block h-3.5 w-3.5 rounded-full border border-zinc-300 dark:border-zinc-600" aria-hidden />;
+}
+
+function LoadingShell({ steps }: { steps: PosLoadStep[] }) {
+  const { translate } = useApp();
+  const activeSteps = steps.filter((step) => step.status === "loading");
+
   return (
-    <div className="flex h-full items-center justify-center">
-      <div className="text-center">
+    <div className="flex h-full items-center justify-center p-6">
+      <div className="w-full max-w-sm text-center">
         <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900 dark:border-zinc-600 dark:border-t-zinc-100" />
-        <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">Loading POS...</p>
+        <p className="mt-4 text-sm font-medium text-zinc-800 dark:text-zinc-200">{translate("posLoadingTitle")}</p>
+        {activeSteps.length > 0 ? (
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            {activeSteps.map((step) => translate(POS_LOAD_STEP_LABELS[step.id])).join(" · ")}
+          </p>
+        ) : null}
+        <ul className="mt-5 space-y-2 rounded-xl border border-zinc-200 bg-white/80 px-4 py-3 text-left text-sm dark:border-zinc-700 dark:bg-zinc-900/80">
+          {steps.map((step) => {
+            const label = translate(POS_LOAD_STEP_LABELS[step.id]);
+            const timing =
+              step.status === "done" && step.ms != null
+                ? translate("posLoadingMs").replace("{ms}", String(step.ms))
+                : step.status === "pending"
+                  ? translate("posLoadingPending")
+                  : null;
+
+            return (
+              <li
+                key={step.id}
+                className={`flex items-center justify-between gap-3 ${
+                  step.status === "loading"
+                    ? "font-medium text-zinc-900 dark:text-zinc-100"
+                    : "text-zinc-600 dark:text-zinc-400"
+                }`}
+              >
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <PosLoadStepIcon status={step.status} />
+                  <span className="truncate">{label}</span>
+                </span>
+                {timing ? (
+                  <span
+                    className={`shrink-0 font-mono text-xs tabular-nums ${
+                      step.status === "done" && (step.ms ?? 0) >= 2000
+                        ? "text-amber-700 dark:text-amber-300"
+                        : ""
+                    }`}
+                  >
+                    {timing}
+                  </span>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
       </div>
     </div>
   );
@@ -76,6 +171,7 @@ export function DashboardShell() {
   const [salesLoaded, setSalesLoaded] = useState(false);
   const [inventoryLoaded, setInventoryLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadSteps, setLoadSteps] = useState<PosLoadStep[]>(initialPosLoadSteps);
   const [error, setError] = useState<string | null>(null);
 
   const realtimeOpts = { debounceMs: POS_EGRESS.REALTIME_DEBOUNCE_MS };
@@ -130,20 +226,53 @@ export function DashboardShell() {
   }, [refreshFloorData, reloadMenu, reloadCategories]);
 
   useEffect(() => {
+    const patchLoadStep = (id: PosLoadStepId, patch: Partial<PosLoadStep>) => {
+      setLoadSteps((prev) => prev.map((step) => (step.id === id ? { ...step, ...patch } : step)));
+    };
+
+    const trackLoadStep = async <T,>(id: PosLoadStepId, run: () => Promise<T>): Promise<T> => {
+      const startedAt = performance.now();
+      patchLoadStep(id, { status: "loading" });
+      const result = await run();
+      patchLoadStep(id, { status: "done", ms: Math.round(performance.now() - startedAt) });
+      return result;
+    };
+
     async function init() {
       setLoading(true);
+      setLoadSteps(initialPosLoadSteps());
+      setError(null);
+
       const [t, m, c, o] = await Promise.all([
-        fetchTableSummaries(),
-        loadMenuItemsResolved(),
-        fetchCategories(),
-        fetchActiveOrderItems(),
+        trackLoadStep("tables", fetchTableSummaries),
+        trackLoadStep("menu", loadMenuItemsResolved),
+        trackLoadStep("categories", fetchCategories),
+        trackLoadStep("orders", fetchActiveOrderItems),
       ]);
-      if (t.error) { setError(t.error.message); setLoading(false); return; }
-      if (m.error) { setError(m.error.message); setLoading(false); return; }
+
+      if (t.error) {
+        patchLoadStep("tables", { status: "error" });
+        setError(t.error.message);
+        setLoading(false);
+        return;
+      }
+      if (m.error) {
+        patchLoadStep("menu", { status: "error" });
+        setError(m.error.message);
+        setLoading(false);
+        return;
+      }
+
       setTables(mapTablesResponse(t.data));
       if (m.data) setMenuItems(m.data);
-      if (!c.error) setCategories(mapCategoriesResponse(c.data));
-      if (!o.error) {
+      if (c.error) {
+        patchLoadStep("categories", { status: "error" });
+      } else {
+        setCategories(mapCategoriesResponse(c.data));
+      }
+      if (o.error) {
+        patchLoadStep("orders", { status: "error" });
+      } else {
         setOrderItems((o.data as SupabaseOrderItemRow[] | null)?.map(mapOrderItemRow) ?? []);
       }
       setLoading(false);
@@ -239,7 +368,7 @@ export function DashboardShell() {
     });
   }, [loading, error, refreshPosData, salesLoaded, inventoryLoaded, reloadSales, reloadInventory]);
 
-  if (loading) return <LoadingShell />;
+  if (loading) return <LoadingShell steps={loadSteps} />;
   if (error) {
     return (
       <div className="flex h-full items-center justify-center p-6">

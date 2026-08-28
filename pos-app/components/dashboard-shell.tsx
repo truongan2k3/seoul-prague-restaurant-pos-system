@@ -18,7 +18,8 @@ import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { ChangelogPopupGate } from "@/components/changelog-popup-gate";
 import { ReservationReminderListener } from "@/components/reservation-reminder-listener";
 import { POS_EGRESS } from "@/lib/egress-config";
-import { clearPosInitCache, readPosInitCache, writePosInitCache } from "@/lib/pos-init-cache";
+import { clearPosInitCache, patchPosInitCacheMenu, readPosInitCache, readPosInitCacheStale, writePosInitCache } from "@/lib/pos-init-cache";
+import { withTimeout } from "@/lib/fetch-timeout";
 import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
 import { useTableOrderWorkflow } from "@/hooks/use-table-order-workflow";
 import { useSessionHealth } from "@/hooks/use-session-health";
@@ -32,6 +33,7 @@ import {
   fetchInventory,
   fetchSales,
   fetchTableSummaries,
+  loadMenuItemsForFloor,
   loadMenuItemsResolved,
   mapCategoriesResponse,
   mapInventoryResponse,
@@ -328,6 +330,28 @@ export function DashboardShell() {
       return true;
     };
 
+    async function loadMenuForBoot() {
+      try {
+        return await withTimeout(loadMenuItemsForFloor(), 12_000);
+      } catch {
+        const stale = readPosInitCacheStale();
+        if (stale?.menuItems.length) {
+          return { data: stale.menuItems, error: null };
+        }
+        return {
+          data: null as MenuItem[] | null,
+          error: new Error("Menu load timed out"),
+        };
+      }
+    }
+
+    async function hydrateFullMenuInBackground() {
+      const full = await loadMenuItemsResolved();
+      if (cancelled || full.error || !full.data) return;
+      setMenuItems(full.data);
+      patchPosInitCacheMenu(full.data);
+    }
+
     async function refreshCatalogInBackground() {
       const [t, m, c] = await Promise.all([
         fetchTableSummaries(),
@@ -371,7 +395,7 @@ export function DashboardShell() {
 
       const [t, m, c, o] = await Promise.all([
         trackLoadStep("tables", fetchTableSummaries),
-        trackLoadStep("menu", loadMenuItemsResolved),
+        trackLoadStep("menu", loadMenuForBoot),
         trackLoadStep("categories", fetchCategories),
         trackLoadStep("orders", fetchActiveOrderItems),
       ]);
@@ -398,6 +422,7 @@ export function DashboardShell() {
         setOrderItems((o.data as SupabaseOrderItemRow[] | null)?.map(mapOrderItemRow) ?? []);
       }
       setLoading(false);
+      void hydrateFullMenuInBackground();
     }
 
     void init();

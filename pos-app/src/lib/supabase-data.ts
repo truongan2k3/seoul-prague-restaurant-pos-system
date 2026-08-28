@@ -41,6 +41,10 @@ export const ORDER_ITEM_COLUMNS =
 export const MENU_ITEM_COLUMNS =
   "id, name, name_en, name_cz, name_zh, price, category, category_id, station, item_type, tax_group, sold_out, is_available, sort_order, display_order, image_url, description, description_en, description_cz, description_zh, customization_config, bill_only";
 
+/** Lighter menu payload for POS boot — skips heavy customization JSON. */
+export const MENU_ITEM_FLOOR_COLUMNS =
+  "id, name, name_en, name_cz, name_zh, price, category, category_id, station, item_type, tax_group, sold_out, is_available, sort_order, display_order, image_url, bill_only";
+
 export const CATEGORY_COLUMNS = "id, name, type, display_order, created_at";
 
 export const INVENTORY_COLUMNS = "id, name, category, quantity, unit, sold_out";
@@ -290,6 +294,22 @@ export async function fetchMenuItems() {
     .order("name_en", { ascending: true });
 }
 
+export async function fetchMenuItemsFloor() {
+  const ordered = await supabase
+    .from("menu_items")
+    .select(MENU_ITEM_FLOOR_COLUMNS)
+    .order("display_order", { ascending: true })
+    .order("name_en", { ascending: true });
+
+  if (!ordered.error) return ordered;
+
+  return supabase
+    .from("menu_items")
+    .select(MENU_ITEM_FLOOR_COLUMNS)
+    .order("sort_order", { ascending: true })
+    .order("name_en", { ascending: true });
+}
+
 export async function fetchCategories() {
   const result = await supabase
     .from("categories")
@@ -332,6 +352,17 @@ export function mapMenuItemsResponse(
     .map(mapMenuItemRow)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.nameEn.localeCompare(b.nameEn));
   return applyOptionGroupLibraryToItems(items, library);
+}
+
+/** Fast POS boot — menu names/prices without customization JSON or option library. */
+export async function loadMenuItemsForFloor() {
+  const menuRes = await fetchMenuItemsFloor();
+  if (menuRes.error) return { data: null as MenuItem[] | null, error: menuRes.error };
+
+  return {
+    data: mapMenuItemsResponse(menuRes.data, []),
+    error: null,
+  };
 }
 
 /** Fetch menu items with option-group library resolved into customizationConfig. */

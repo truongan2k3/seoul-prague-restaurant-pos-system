@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Printer, Trash2, X } from "lucide-react";
+import { AlertTriangle, Printer, Trash2, X } from "lucide-react";
 import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { usePinGate } from "@/contexts/pin-gate-context";
 import { NumericInputField } from "@/components/numeric-input-field";
@@ -12,6 +12,10 @@ import { canManageStaff } from "@/lib/staff-roles";
 import { sumLines } from "@/lib/checkout-calculations";
 import type { CheckoutPaymentRecord } from "@/lib/checkout-calculations";
 import { formatCzk } from "@/lib/currency";
+import {
+  formatCancelActivityLine,
+  saleHasCancelActivity,
+} from "@/lib/order-activity";
 import { generateOrderNumber } from "@/lib/receipt-calculations";
 import { paymentFilterClass } from "@/lib/theme-classes";
 import type { MenuItem, OrderItem, PaymentMethod, SaleRecord } from "@/lib/types";
@@ -349,6 +353,36 @@ export function OrderHistoryModal({
               </ul>
             )}
           </section>
+
+          {saleHasCancelActivity(sale) && (
+            <section className="rounded-xl border border-amber-300 bg-amber-50/80 p-4 dark:border-amber-800 dark:bg-amber-950/30">
+              <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                {translate("historyCancelLogTitle")}
+              </h3>
+              <ul className="mt-3 space-y-2">
+                {(sale.activityLog ?? [])
+                  .filter((entry) =>
+                    ["cancel_item", "qty_reduced", "removed_from_order"].includes(entry.action),
+                  )
+                  .map((entry) => (
+                    <li
+                      key={entry.id}
+                      className="rounded-lg bg-white/70 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-100"
+                    >
+                      <p className="font-medium">{formatCancelActivityLine(entry)}</p>
+                      <p className="mt-0.5 text-xs text-amber-800/80 dark:text-amber-200/80">
+                        {entry.staffName}
+                        {" · "}
+                        {formatHistoryDateTime(entry.createdAt, language)}
+                        {" · "}
+                        {translate("logCancelItem")}
+                      </p>
+                    </li>
+                  ))}
+              </ul>
+            </section>
+          )}
 
           <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
             {editMode ? (

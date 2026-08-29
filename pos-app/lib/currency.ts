@@ -5,17 +5,18 @@ export const DEFAULT_USD_RATE = 23;
 
 /** Czech koruna display: `1 234,50 Kč` or `1 234 Kč` when rounded to integers. */
 export function formatCzk(amount: number, roundToInteger = false): string {
+  const NBSP = "\u00A0";
   const value = roundToInteger ? Math.round(amount) : amount;
   if (roundToInteger) {
     const intPart = String(Math.round(value));
-    const withSpaces = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-    return `${withSpaces} Kč`;
+    const withSpaces = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, NBSP);
+    return `${withSpaces}${NBSP}Kč`;
   }
 
   const fixed = value.toFixed(2);
   const [intPart, decPart] = fixed.split(".");
-  const withSpaces = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-  return `${withSpaces},${decPart} Kč`;
+  const withSpaces = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, NBSP);
+  return `${withSpaces},${decPart}${NBSP}Kč`;
 }
 
 export function czkToEur(amountCzk: number, rate = DEFAULT_EUR_RATE): number {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
-import { Eye, Pencil, Trash2 } from "lucide-react";
+import { AlertTriangle, Eye, Pencil, Trash2 } from "lucide-react";
 import { LiveClock } from "@/components/live-clock";
 import { DateRangeInputs } from "@/components/date-range-inputs";
 import { OrderHistoryModal } from "@/components/order-history-modal";
@@ -9,6 +9,7 @@ import { usePinGate } from "@/contexts/pin-gate-context";
 import { useApp } from "@/contexts/app-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { formatCzk } from "@/lib/currency";
+import { saleHasCancelActivity } from "@/lib/order-activity";
 import { generateOrderNumber } from "@/lib/receipt-calculations";
 import { canManageStaff } from "@/lib/staff-roles";
 import {
@@ -494,9 +495,20 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                           </td>
                         )}
                         <td className="px-4 py-3">
-                          <span className="inline-flex min-w-[3rem] items-center justify-center rounded-lg bg-gray-900 px-2.5 py-1 text-base font-bold text-white dark:bg-gray-100 dark:text-gray-900">
-                            {sale.tableLabel}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="inline-flex min-w-[3rem] max-w-[8rem] shrink-0 items-center justify-center whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1 text-base font-bold text-white dark:bg-gray-100 dark:text-gray-900">
+                              {sale.tableLabel}
+                            </span>
+                            {saleHasCancelActivity(sale) && (
+                              <span
+                                title={translate("historyCancelAlert")}
+                                className="inline-flex shrink-0 text-amber-500"
+                                aria-label={translate("historyCancelAlert")}
+                              >
+                                <AlertTriangle className="h-5 w-5" strokeWidth={2.5} />
+                              </span>
+                            )}
+                          </div>
                           {sale.guestName && (
                             <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
                               {sale.guestName}
@@ -504,7 +516,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                             </p>
                           )}
                         </td>
-                        <td className="px-4 py-3 font-mono text-xs tabular-nums text-gray-700 dark:text-gray-300">
+                        <td className="px-4 py-3 font-mono text-xs whitespace-nowrap tabular-nums text-gray-700 dark:text-gray-300">
                           {orderId}
                         </td>
                         <td className="max-w-[220px] px-4 py-3">
@@ -527,19 +539,19 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                             {translate(sale.paymentMethod)}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-right tabular-nums text-gray-700 dark:text-gray-300">
+                        <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums text-gray-700 dark:text-gray-300">
                           {formatCzk(saleNetTotal(sale))}
                         </td>
-                        <td className="px-4 py-3 text-right tabular-nums text-gray-600 dark:text-gray-400">
+                        <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums text-gray-600 dark:text-gray-400">
                           {sale.tip > 0 ? formatCzk(sale.tip) : "—"}
                         </td>
-                        <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                        <td className="px-4 py-3 text-right font-semibold whitespace-nowrap tabular-nums">
                           {isDeleted ? `−${formatCzk(sale.grandTotal)}` : formatCzk(sale.grandTotal)}
                         </td>
-                        <td className="px-4 py-3 tabular-nums text-gray-600 dark:text-gray-300">
+                        <td className="px-4 py-3 whitespace-nowrap tabular-nums text-gray-600 dark:text-gray-300">
                           {formatHistoryDateTime(resolveGuestSeatedAt(sale), language)}
                         </td>
-                        <td className="px-4 py-3 tabular-nums text-gray-600 dark:text-gray-300">
+                        <td className="px-4 py-3 whitespace-nowrap tabular-nums text-gray-600 dark:text-gray-300">
                           {formatHistoryDateTime(sale.closedAt, language)}
                         </td>
                         <td className="px-4 py-3">

@@ -6,8 +6,9 @@ import {
   isReadyForAutoServe,
   resolveKitchenStatus,
 } from "@/lib/auto-serve";
+import type { CancelActivityAction } from "@/lib/order-activity";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
-import type { OrderItem, Station } from "@/lib/types";
+import type { OrderItem, OrderLogEntry, Station } from "@/lib/types";
 import { resolveStaffActorLocal } from "@/lib/staff-actor-client";
 import { completeReservationForTable, findActiveReservationForTable, mapReservationRow } from "@/src/lib/reservation-actions";
 import {
@@ -18,6 +19,112 @@ import {
 } from "@/src/lib/supabase-data";
 import { supabase } from "@/src/lib/supabase";
 import { inferServiceChannel } from "@/lib/tax-summary";
+
+type ActivityItemRow = {
+  id: string;
+  name: string | null;
+  kitchen_status: string | null;
+  status: string | null;
+  quantity: number | null;
+  price: number | null;
+};
+
+async function logCancelledOrderItems(input: {
+  tableId: string;
+  tableLabel?: string;
+  staffId?: string;
+  staffName: string;
+  reason: string;
+  action: CancelActivityAction;
+  rows: ActivityItemRow[];
+}) {
+  if (input.rows.length === 0) return;
+
+  const grouped = new Map<
+    string,
+    { itemName: string; quantity: number; previousStatus: string; orderItemId?: string }
+  >();
+
+  for (const row of input.rows) {
+    const previousStatus = resolveKitchenStatus({
+      status: row.status as OrderItem["status"] | undefined,
+      kitchenStatus: row.kitchen_status as OrderItem["kitchenStatus"] | undefined,
+    });
+    const itemName = (row.name ?? "Item").trim() || "Item";
+    const key = `${itemName}\0${previousStatus}\0${input.reason}`;
+    const existing = grouped.get(key);
+    const qty = Math.max(1, Number(row.quantity) || 1);
+    if (existing) {
+      existing.quantity += qty;
+    } else {
+      grouped.set(key, {
+        itemName,
+        quantity: qty,
+        previousStatus,
+        orderItemId: row.id,
+      });
+    }
+  }
+
+  const payload = [...grouped.values()].map((entry) => ({
+    table_id: input.tableId,
+    table_label: input.tableLabel ?? null,
+    order_item_id: entry.orderItemId ?? null,
+    item_name: entry.itemName,
+    action: input.action,
+    staff_id: input.staffId ?? null,
+    staff_name: input.staffName,
+    meta: {
+      quantity: entry.quantity,
+      reason: input.reason,
+      previousStatus: entry.previousStatus,
+    },
+  }));
+
+  const { error } = await supabase.from("table_activity_logs").insert(payload);
+  if (error) {
+    console.warn("[ActivityLog] Failed to insert cancel logs:", error.message);
+  }
+}
+
+async function fetchTableCancelActivityLog(
+  tableId: string,
+  since?: string | null,
+): Promise<OrderLogEntry[]> {
+  let query = supabase
+    .from("table_activity_logs")
+    .select("id, order_item_id, item_name, action, staff_name, meta, created_at")
+    .eq("table_id", tableId)
+    .in("action", ["cancel_item", "qty_reduced", "removed_from_order"])
+    .order("created_at", { ascending: true });
+
+  if (since) {
+    query = query.gte("created_at", since);
+  }
+
+  const { data, error } = await query;
+  if (error || !data) {
+    if (error) console.warn("[ActivityLog] Failed to fetch:", error.message);
+    return [];
+  }
+
+  return data.map((row) => ({
+    id: row.id,
+    orderId: row.order_item_id ?? "",
+    itemName: row.item_name ?? undefined,
+    action: row.action,
+    staffName: row.staff_name ?? "Staff",
+    meta: (row.meta as Record<string, unknown> | null) ?? undefined,
+    createdAt: new Date(row.created_at),
+  }));
+}
+
+async function clearTableActivityLogs(tableId: string) {
+  const { error } = await supabase.from("table_activity_logs").delete().eq("table_id", tableId);
+  if (error) {
+    console.warn("[ActivityLog] Failed to clear:", error.message);
+  }
+}
 
 function aggregateOrderItems(items: OrderItem[]): OrderItem[] {
   const merged: OrderItem[] = [];
@@ -330,6 +437,7 @@ export async function updateTableOrders(
       .map((row) => row.id);
 
     if (openIds.length > 0) {
+      const cancelRows = (existingRows ?? []).filter((row) => openIds.includes(row.id));
       const cancelledAt = new Date().toISOString();
       const { error: cancelError } = await supabase
         .from("order_items")
@@ -342,6 +450,27 @@ export async function updateTableOrders(
         })
         .in("id", openIds);
       if (cancelError) return { data: null, error: cancelError };
+
+      const staff = resolveStaffActorLocal({
+        staffId: options?.staffId,
+        staffName: options?.staffName,
+      });
+      await logCancelledOrderItems({
+        tableId,
+        tableLabel: options?.tableLabel,
+        staffId: staff.staffId,
+        staffName: staff.staffName,
+        reason: "Removed from order",
+        action: "removed_from_order",
+        rows: cancelRows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          kitchen_status: row.kitchen_status,
+          status: row.status,
+          quantity: row.quantity,
+          price: row.price,
+        })),
+      });
     }
 
     await syncTableOrdersFromDb(tableId);
@@ -357,6 +486,13 @@ export async function updateTableOrders(
   // Soft-delete lines removed from the cart (keep row for KDS red cancel alert).
   const idsToCancel = [...existingIds].filter((id) => !desiredIds.has(id));
   if (idsToCancel.length > 0) {
+    const { data: cancelRows } = await supabase
+      .from("order_items")
+      .select("id, name, kitchen_status, status, quantity, price")
+      .in("id", idsToCancel)
+      .eq("is_cancelled", false)
+      .neq("kitchen_status", "archived");
+
     const cancelledAt = new Date().toISOString();
     const { error: cancelError } = await supabase
       .from("order_items")
@@ -371,6 +507,20 @@ export async function updateTableOrders(
       .eq("is_cancelled", false)
       .neq("kitchen_status", "archived");
     if (cancelError) return { data: null, error: cancelError };
+
+    const staff = resolveStaffActorLocal({
+      staffId: options?.staffId,
+      staffName: options?.staffName,
+    });
+    await logCancelledOrderItems({
+      tableId,
+      tableLabel: options?.tableLabel,
+      staffId: staff.staffId,
+      staffName: staff.staffName,
+      reason: "Removed from order",
+      action: "qty_reduced",
+      rows: (cancelRows ?? []) as ActivityItemRow[],
+    });
   }
 
   const unitsToUpdate = desiredUnits.filter((unit) => unit.id);
@@ -409,6 +559,7 @@ export async function clearTable(tableId: string) {
     .eq("kitchen_status", "cancelled");
 
   await supabase.from("order_items").delete().eq("table_id", tableId);
+  await clearTableActivityLogs(tableId);
 
   return supabase
     .from("tables")
@@ -520,6 +671,8 @@ export async function checkoutTable(
     seatedAt = earliestItem?.created_at ?? activeReservation?.checkedInAt?.toISOString() ?? null;
   }
 
+  const activityLog = await fetchTableCancelActivityLog(tableId, seatedAt);
+
   const { error: saleError } = await supabase.from("sales").insert({
     table_id: tableId,
     table_label: tableLabel,
@@ -540,6 +693,15 @@ export async function checkoutTable(
     split_mode: payment.splitMode,
     split_count: payment.splitCount,
     items: orders,
+    activity_log: activityLog.map((entry) => ({
+      id: entry.id,
+      orderId: entry.orderId,
+      itemName: entry.itemName,
+      action: entry.action,
+      staffName: entry.staffName,
+      meta: entry.meta ?? {},
+      createdAt: entry.createdAt.toISOString(),
+    })),
     reservation_id: activeReservation?.id ?? null,
     guest_name: activeReservation?.guestName ?? null,
     guest_phone: activeReservation?.guestPhone ?? null,
@@ -842,6 +1004,11 @@ export async function cancelOrderItems(
 ) {
   if (itemIds.length === 0) return { error: null };
 
+  const { data: cancelRows } = await supabase
+    .from("order_items")
+    .select("id, name, kitchen_status, status, quantity, price")
+    .in("id", itemIds);
+
   const cancelledAt = new Date().toISOString();
   const { error } = await supabase
     .from("order_items")
@@ -855,6 +1022,16 @@ export async function cancelOrderItems(
     .in("id", itemIds);
 
   if (error) return { error };
+
+  await logCancelledOrderItems({
+    tableId,
+    tableLabel: options?.tableLabel,
+    staffId: options?.staffId,
+    staffName,
+    reason,
+    action: "cancel_item",
+    rows: (cancelRows ?? []) as ActivityItemRow[],
+  });
 
   await syncTableOrdersFromDb(tableId);
   return { error: null };

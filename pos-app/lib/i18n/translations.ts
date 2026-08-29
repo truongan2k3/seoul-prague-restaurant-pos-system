@@ -574,7 +574,7 @@ const en = {
     "Each printer is sent jobs by IP via the print bridge. Turn on Old printer mode only for legacy bar/receipt IPs; leave off for modern kitchen ticket printers.",
   settingsPrinterLegacyBitmap: "Old printer mode (bitmap via bridge)",
   settingsPrinterLegacyBitmapHint:
-    "When enabled for this IP, receipts are rasterized to ESC/POS images (fixes garbled Czech/Chinese on old Star/Epson). When off, bridge sends native text (faster, for modern printers). Kitchen/bar tickets always use bitmap for Chinese item names.",
+    "When enabled for this IP, receipts are rasterized to ESC/POS images (fixes garbled Czech/Chinese on old Star/Epson). When off, bridge sends native Font B text sized for the receipt layout (42 columns). Kitchen/bar tickets always use bitmap for Chinese item names.",
   settingsPrinterAdd: "Add printer",
   settingsPrinterRemove: "Remove",
   settingsPrinterName: "Name",

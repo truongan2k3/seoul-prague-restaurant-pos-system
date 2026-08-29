@@ -448,7 +448,6 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                       </th>
                     )}
                     <th className="px-4 py-3 font-semibold">{translate("table")}</th>
-                    <th className="px-4 py-3 font-semibold">{translate("orderId")}</th>
                     <th className="px-4 py-3 font-semibold">{translate("historyItems")}</th>
                     <th className="px-4 py-3 font-semibold">{translate("staff")}</th>
                     <th className="px-4 py-3 font-semibold">{translate("payment")}</th>
@@ -458,6 +457,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                     <th className="px-4 py-3 font-semibold">{translate("historyGuestArrived")}</th>
                     <th className="px-4 py-3 font-semibold">{translate("historyGuestCheckout")}</th>
                     <th className="px-4 py-3 font-semibold text-right">Actions</th>
+                    <th className="px-4 py-3 font-semibold">{translate("orderId")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -496,7 +496,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                         )}
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5">
-                            <span className="inline-flex min-w-[3rem] max-w-[8rem] shrink-0 items-center justify-center whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1 text-base font-bold text-white dark:bg-gray-100 dark:text-gray-900">
+                            <span className="inline-flex w-max shrink-0 items-center justify-center whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1 text-base font-bold leading-none text-white dark:bg-gray-100 dark:text-gray-900">
                               {sale.tableLabel}
                             </span>
                             {saleHasCancelActivity(sale) && (
@@ -515,9 +515,6 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                               {sale.visitSource === "walk_in" ? " · Walk-in" : sale.visitSource === "reservation" ? " · Booking" : ""}
                             </p>
                           )}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-xs whitespace-nowrap tabular-nums text-gray-700 dark:text-gray-300">
-                          {orderId}
                         </td>
                         <td className="max-w-[220px] px-4 py-3">
                           <p className="truncate font-medium text-gray-900 dark:text-gray-100">
@@ -586,6 +583,9 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                               </>
                             )}
                           </div>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs whitespace-nowrap tabular-nums text-gray-500 dark:text-gray-400">
+                          {orderId}
                         </td>
                         </tr>
                       </Fragment>

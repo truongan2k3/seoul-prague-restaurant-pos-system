@@ -21,7 +21,7 @@ import { receiptBitmapTypographyFromSettings } from "@/lib/receipt-bitmap-typogr
 import type { AppSettings } from "@/lib/types";
 import { ReceiptBodyContent, type ReceiptTemplate } from "@/src/components/ReceiptPrint";
 import { padReceiptLine, receiptItemEscPosLines, receiptMetaEscPosLines, RECEIPT_LINE_WIDTH } from "@/lib/receipt-line-format";
-import { DEFAULT_RECEIPT_PAPER_WIDTH_MM, receiptRasterWidthDots } from "@/lib/receipt-raster";
+import { DEFAULT_RECEIPT_PAPER_WIDTH_MM, receiptRasterWidthDots, RECEIPT_CUT_BOTTOM_BLANK_DOTS, RECEIPT_CUT_BOTTOM_FEED_LINES } from "@/lib/receipt-raster";
 import { receiptShouldUseBitmap } from "@/lib/print-dispatch";
 
 const PRINT_IFRAME_ID = "receipt-print-iframe";
@@ -367,6 +367,7 @@ export async function printReceiptData(
       const textBytes = buildEscPosFromTextLines(buildReceiptEscPosLines(data, template), true, {
         compactFont: true,
         readableReceipt: false,
+        bottomFeedLines: RECEIPT_CUT_BOTTOM_FEED_LINES,
       });
       let bitmapBytes: Uint8Array | null = null;
 
@@ -396,8 +397,10 @@ export async function printReceiptData(
               bitmapPngs.length > 0
                 ? await buildEscPosFromPngs(bitmapPngs, {
                     feedBetweenDots: 0,
-                    bottomBlankRasterDots: 16,
-                    bottomFeedLines: 2,
+                    // Receipt only: enough blank + feed so the cutter clears the footer.
+                    // Kitchen/bar keep their own clip-bottom settings.
+                    bottomBlankRasterDots: RECEIPT_CUT_BOTTOM_BLANK_DOTS,
+                    bottomFeedLines: RECEIPT_CUT_BOTTOM_FEED_LINES,
                     rasterWidthDots,
                   })
                 : textBytes;

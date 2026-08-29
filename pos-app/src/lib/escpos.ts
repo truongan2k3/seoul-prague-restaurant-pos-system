@@ -153,7 +153,7 @@ export async function buildEscPosFromPngs(
   const rasterWidth = options?.rasterWidthDots ?? 576;
   const parts: Uint8Array[] = [escInit(), escAlign("left")];
   if (options?.topBlankRasterDots && options.topBlankRasterDots > 0) {
-    parts.push(escBlankRaster(options.topBlankRasterDots));
+    parts.push(escBlankRaster(options.topBlankRasterDots, rasterWidth));
   } else if (options?.topFeedDots && options.topFeedDots > 0) {
     parts.push(escFeedDots(options.topFeedDots));
   } else if (options?.topFeedLines && options.topFeedLines > 0) {
@@ -173,7 +173,7 @@ export async function buildEscPosFromPngs(
     }
   }
   if (options?.bottomBlankRasterDots && options.bottomBlankRasterDots > 0) {
-    parts.push(escBlankRaster(options.bottomBlankRasterDots));
+    parts.push(escBlankRaster(options.bottomBlankRasterDots, rasterWidth));
   }
   parts.push(escFeed(options?.bottomFeedLines ?? 6), escCut());
   return concatBytes(parts);
@@ -204,7 +204,7 @@ export function escCharSizeDoubleHeight(): Uint8Array {
 export function buildEscPosFromTextLines(
   lines: string[],
   useCp1250 = true,
-  options?: { compactFont?: boolean; readableReceipt?: boolean },
+  options?: { compactFont?: boolean; readableReceipt?: boolean; bottomFeedLines?: number },
 ): Uint8Array {
   const parts: Uint8Array[] = [escInit(), escAlign("left")];
   if (options?.readableReceipt) {
@@ -219,7 +219,7 @@ export function buildEscPosFromTextLines(
   for (const line of lines) {
     parts.push(writeLine(line));
   }
-  parts.push(escFeed(1), escCut());
+  parts.push(escFeed(options?.bottomFeedLines ?? 1), escCut());
   return concatBytes(parts);
 }
 

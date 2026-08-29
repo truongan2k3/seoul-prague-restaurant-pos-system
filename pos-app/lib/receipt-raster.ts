@@ -8,6 +8,15 @@ export const DEFAULT_RECEIPT_PAPER_WIDTH_MM = 80;
 export const RECEIPT_80MM_RASTER_DOTS = 576;
 
 /**
+ * Receipt-only blank ahead of the cutter (print head → blade gap).
+ * ~9 mm @ 203 dpi — kitchen/bar use their own clip-bottom setting.
+ */
+export const RECEIPT_CUT_BOTTOM_BLANK_DOTS = 72;
+
+/** Extra ESC/POS line feeds after the blank raster, before cut (receipt only). */
+export const RECEIPT_CUT_BOTTOM_FEED_LINES = 8;
+
+/**
  * ESC/POS raster line width in dots (multiple of 8). Receipt printing only.
  */
 export function receiptRasterWidthDots(paperWidthMm = DEFAULT_RECEIPT_PAPER_WIDTH_MM): number {

@@ -12,6 +12,7 @@ import {
   type CfdCheckoutPayload,
 } from "@/lib/cfd-display";
 import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
+import { fetchEqualSplitProgress } from "@/src/lib/sales-actions";
 
 interface PaymentModalProps {
   open: boolean;
@@ -40,11 +41,33 @@ export function PaymentModal({
 
   const lines = useMemo(() => expandCheckoutLines(orders), [orders]);
   const [checkoutSessionKey, setCheckoutSessionKey] = useState(0);
+  const [equalProgress, setEqualProgress] = useState({ paymentsMade: 0, splitCount: 0 });
+  const [progressReady, setProgressReady] = useState(false);
   const wasOpenRef = useRef(false);
 
   useEffect(() => {
-    if (open) setCheckoutSessionKey((key) => key + 1);
-  }, [open, table.id]);
+    if (!open) {
+      setProgressReady(false);
+      setEqualProgress({ paymentsMade: 0, splitCount: 0 });
+      return;
+    }
+
+    let cancelled = false;
+    setProgressReady(false);
+    void fetchEqualSplitProgress(table.id, table.occupiedAt).then((result) => {
+      if (cancelled) return;
+      setEqualProgress({
+        paymentsMade: result.paymentsMade,
+        splitCount: result.splitCount,
+      });
+      setCheckoutSessionKey((key) => key + 1);
+      setProgressReady(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, table.id, table.occupiedAt]);
 
   const handleCancelCfd = useCallback(() => {
     void sendCfdEvent("CANCEL_CHECKOUT", {});
@@ -65,7 +88,7 @@ export function PaymentModal({
   }, []);
 
   useEffect(() => {
-    if (!open) {
+    if (!open || !progressReady) {
       wasOpenRef.current = false;
       return;
     }
@@ -73,19 +96,34 @@ export function PaymentModal({
     wasOpenRef.current = true;
     if (!justOpened) return;
 
-    const subtotal = orders.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    // Initial CFD: if resuming equal split, show one person's share; else full bill.
+    const fullSubtotal = orders.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const resuming =
+      equalProgress.paymentsMade > 0 &&
+      equalProgress.splitCount > equalProgress.paymentsMade;
+    const shareCount = resuming ? equalProgress.splitCount : 1;
+    const amount = shareCount > 1 ? fullSubtotal / shareCount : fullSubtotal;
+
     void sendCfdEvent(
       "START_CHECKOUT",
       buildCfdCheckoutPayload(table.label, orders, menuItems, {
-        subtotal,
+        subtotal: amount,
         discount: 0,
         tip: 0,
-        grandTotal: subtotal,
-        amountDueNow: subtotal,
+        grandTotal: amount,
+        amountDueNow: amount,
         staffInitiated: true,
       }),
     );
-  }, [open, table.label, orders, menuItems]);
+  }, [
+    open,
+    progressReady,
+    table.label,
+    orders,
+    menuItems,
+    equalProgress.paymentsMade,
+    equalProgress.splitCount,
+  ]);
 
   const title = `${translate("payment")} — ${translate("table")} ${table.label}`;
 
@@ -131,18 +169,26 @@ export function PaymentModal({
         </p>
       )}
 
-      <CheckoutPanel
-        className="min-h-0 flex-1"
-        lines={lines}
-        orderSummary={orders}
-        menuItems={menuItems}
-        tableLabel={table.label}
-        isSaving={isSaving}
-        onCheckout={onConfirm}
-        onCfdUpdate={broadcastCheckoutUpdate}
-        confirmLabel={translate("confirmPrintReceipt")}
-        sessionResetKey={checkoutSessionKey}
-      />
+      {progressReady ? (
+        <CheckoutPanel
+          className="min-h-0 flex-1"
+          lines={lines}
+          orderSummary={orders}
+          menuItems={menuItems}
+          tableLabel={table.label}
+          isSaving={isSaving}
+          onCheckout={onConfirm}
+          onCfdUpdate={broadcastCheckoutUpdate}
+          confirmLabel={translate("confirmPrintReceipt")}
+          sessionResetKey={checkoutSessionKey}
+          initialEqualPaymentsMade={equalProgress.paymentsMade}
+          initialEqualSplitCount={equalProgress.splitCount}
+        />
+      ) : (
+        <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-gray-500">
+          …
+        </div>
+      )}
       </ModalPanel>
     </ModalOverlay>
   );

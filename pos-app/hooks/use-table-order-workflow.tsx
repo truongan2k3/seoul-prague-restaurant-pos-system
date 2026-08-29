@@ -15,7 +15,7 @@ import {
 import { ordersFromLines } from "@/lib/checkout-calculations";
 import { finalizeBillOnlyOrder } from "@/lib/menu-item-dispatch";
 import { filterItemsForBoard } from "@/lib/order-board";
-import { sendCfdEvent, buildCfdCheckoutPayload } from "@/lib/cfd-display";
+import { sendCfdEvent } from "@/lib/cfd-display";
 import type { MenuCategoryRecord, MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
 import {
   appendOrdersToTable,
@@ -359,19 +359,10 @@ export function useTableOrderWorkflow({
 
       setModal({ type: "checkout", tableId: modal.tableId, orders: nextOrders });
 
-      if (payload.payment.splitMode !== "items") {
-        const subtotal = nextOrders.reduce((sum, item) => sum + item.price * item.quantity, 0);
-        void sendCfdEvent(
-          "START_CHECKOUT",
-          buildCfdCheckoutPayload(selectedTable.label, nextOrders, menuItems, {
-            subtotal,
-            discount: 0,
-            tip: 0,
-            grandTotal: subtotal,
-            amountDueNow: subtotal,
-            staffInitiated: true,
-          }),
-        );
+      // Equal-split CFD is driven by CheckoutPanel (per-person share).
+      // Item-split keeps existing orders until picker updates CFD.
+      if (payload.payment.splitMode === "items") {
+        // CheckoutPanel will broadcast once items are selected.
       }
       refreshAfterAction();
       return;

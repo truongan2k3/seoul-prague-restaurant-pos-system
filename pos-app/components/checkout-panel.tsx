@@ -49,6 +49,9 @@ interface CheckoutPanelProps {
   confirmLabel?: string;
   className?: string;
   sessionResetKey?: number;
+  /** Restore in-progress equal-split after reopening payment. */
+  initialEqualPaymentsMade?: number;
+  initialEqualSplitCount?: number;
 }
 
 function SummaryRow({
@@ -95,6 +98,8 @@ export function CheckoutPanel({
   confirmLabel,
   className = "",
   sessionResetKey = 0,
+  initialEqualPaymentsMade = 0,
+  initialEqualSplitCount = 0,
 }: CheckoutPanelProps) {
   const { translate } = useApp();
   const { settings } = useSettings();
@@ -177,14 +182,32 @@ export function CheckoutPanel({
     resetPaymentAdjustments();
     setPaymentMethod("card");
     setCashGiven("");
+    setLocalError(null);
+
+    const resumeEqual =
+      initialEqualPaymentsMade > 0 &&
+      initialEqualSplitCount > initialEqualPaymentsMade;
+    if (resumeEqual) {
+      setSplitCountInput(String(initialEqualSplitCount));
+      setSplitMode("equal");
+      setSplitPhase("checkout");
+      setPanelView("split");
+      setEqualPaymentsMade(initialEqualPaymentsMade);
+      splitSessionRef.current = {
+        active: true,
+        mode: "equal",
+        count: initialEqualSplitCount,
+      };
+      return;
+    }
+
     setSplitCountInput("2");
     setSplitMode("total");
     setSplitPhase("checkout");
     setPanelView("main");
-    setLocalError(null);
     setEqualPaymentsMade(0);
     splitSessionRef.current = { active: false, mode: "total", count: 2 };
-  }, [resetPaymentAdjustments]);
+  }, [resetPaymentAdjustments, initialEqualPaymentsMade, initialEqualSplitCount]);
 
   useEffect(() => {
     resetCheckoutForm();
@@ -225,6 +248,7 @@ export function CheckoutPanel({
   );
 
   const handleSplitModeChange = (mode: "equal" | "items") => {
+    if (equalPaymentsMade > 0) return;
     setSplitMode(mode);
     if (mode === "equal") {
       setSelectedLineIds(lines.map((line) => line.lineId));
@@ -236,6 +260,8 @@ export function CheckoutPanel({
   };
 
   const exitSplitToMain = () => {
+    // Don't abandon an in-progress equal split back to full-bill pay.
+    if (equalPaymentsMade > 0 && splitMode === "equal") return;
     setPanelView("main");
     setSplitMode("total");
     setSplitPhase("checkout");
@@ -294,13 +320,7 @@ export function CheckoutPanel({
   const totals = useMemo(() => {
     if (usingRoundUp) {
       const perPersonTotal = roundUpNum!;
-      if (splitMode === "equal" && splitCount > 1) {
-        return {
-          ...baseTotals,
-          grandTotal: perPersonTotal * splitCount,
-          amountDueNow: perPersonTotal,
-        };
-      }
+      // Round-up is the amount THIS person pays (already a share in equal split).
       return {
         ...baseTotals,
         grandTotal: perPersonTotal,
@@ -340,7 +360,8 @@ export function CheckoutPanel({
   const keepAsTipAmount = keepChangeAsTip ? rawChangeDue : 0;
   const changeDueAmount = keepChangeAsTip ? 0 : rawChangeDue;
   const totalTipWithKeep = totalTip + keepAsTipAmount;
-  const payTotal = totals.grandTotal + keepAsTipAmount;
+  // Always charge the amount due now (per person when equal-splitting).
+  const payTotal = chargeTotal + keepAsTipAmount;
   const insufficientPayment =
     paymentMethod === "cash" &&
     ((usingCashGiven && cashGivenNum < chargeTotal) ||
@@ -363,7 +384,11 @@ export function CheckoutPanel({
     if (splitMode === "items" && selectedLineIds.length === 0) return;
 
     const displayOrders =
-      splitMode === "items" ? ordersFromLines(totals.payableLines) : orderSummary;
+      splitMode === "items"
+        ? ordersFromLines(totals.payableLines)
+        : splitMode === "equal" && splitCount > 1
+          ? scaleOrdersForEqualSplit(orderSummary, splitCount)
+          : orderSummary;
     onCfdUpdate(
       buildCfdCheckoutPayload(tableLabel, displayOrders, menuItems, {
         subtotal: totals.subtotal,
@@ -388,6 +413,7 @@ export function CheckoutPanel({
     orderSummary,
     menuItems,
     splitMode,
+    splitCount,
     selectedLineIds,
     totals.payableLines,
     totals.subtotal,
@@ -404,7 +430,6 @@ export function CheckoutPanel({
     usingRoundUp,
     insufficientPayment,
     cashGivenNum,
-    changeDueAmount,
   ]);
 
   const remainingBillLines = useMemo(
@@ -720,6 +745,7 @@ export function CheckoutPanel({
       <NumericInputField
         value={splitCountInput}
         onChange={(raw) => {
+          if (equalPaymentsMade > 0) return;
           const digits = raw.replace(/\D/g, "");
           if (digits === "") {
             setSplitCountInput("");

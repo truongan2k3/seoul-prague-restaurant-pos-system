@@ -1,6 +1,5 @@
 import {
   buildEqualSplitShareAmounts,
-  equalSplitShareRatio,
   type CheckoutPaymentRecord,
 } from "@/lib/checkout-calculations";
 import {
@@ -485,8 +484,6 @@ export async function checkoutTable(
   },
 ) {
   const staff = resolveStaffActorLocal({ staffId, staffName });
-  const ratio = equalSplitShareRatio(payment.splitMode, payment.splitCount);
-
   const shareAmounts =
     payment.splitMode === "equal" && payment.splitCount > 1
       ? buildEqualSplitShareAmounts({
@@ -498,9 +495,9 @@ export async function checkoutTable(
           splitCount: payment.splitCount,
         })
       : {
-          subtotal: Number((payment.subtotal * ratio).toFixed(2)),
-          discountAmount: Number((payment.discountAmount * ratio).toFixed(2)),
-          tip: Number((payment.tip * ratio).toFixed(2)),
+          subtotal: Number(payment.subtotal.toFixed(2)),
+          discountAmount: Number(payment.discountAmount.toFixed(2)),
+          tip: Number(payment.tip.toFixed(2)),
           amountDueNow: Number(payment.amountDueNow.toFixed(2)),
           grandTotal: Number(payment.grandTotal.toFixed(2)),
         };

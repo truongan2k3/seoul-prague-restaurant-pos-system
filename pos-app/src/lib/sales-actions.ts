@@ -1,4 +1,5 @@
 import type { OrderItem, PaymentMethod } from "@/lib/types";
+import { resolveEqualSplitProgress } from "@/lib/checkout-calculations";
 import { supabase } from "@/src/lib/supabase";
 
 function localDayRange(dateStr: string): { start: string; end: string } {
@@ -93,4 +94,37 @@ export async function updateSaleRecord(
   }
 
   return supabase.from("sales").update(payload).eq("id", saleId).is("deleted_at", null);
+}
+
+/** Count in-progress equal-split payments for a table visit (since occupied). */
+export async function fetchEqualSplitProgress(
+  tableId: string,
+  occupiedAt?: Date | null,
+) {
+  let query = supabase
+    .from("sales")
+    .select("id, split_count, closed_at, seated_at")
+    .eq("table_id", tableId)
+    .eq("split_mode", "equal")
+    .is("deleted_at", null)
+    .order("closed_at", { ascending: false })
+    .limit(30);
+
+  if (occupiedAt) {
+    const since = new Date(occupiedAt.getTime() - 60_000);
+    query = query.gte("closed_at", since.toISOString());
+  }
+
+  const { data, error } = await query;
+  if (error) return { paymentsMade: 0, splitCount: 0, error };
+
+  const progress = resolveEqualSplitProgress(
+    (data ?? []).map((row) => ({
+      splitMode: "equal" as const,
+      splitCount: row.split_count,
+      closedAt: row.closed_at,
+    })),
+    occupiedAt,
+  );
+  return { ...progress, error: null };
 }

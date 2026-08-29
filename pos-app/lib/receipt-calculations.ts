@@ -209,14 +209,10 @@ export function buildReceiptData(input: {
   const menuById = new Map(input.menuItems.map((m) => [m.id, m]));
   const items = buildReceiptLines(input.orders, menuById);
 
-  const ratio =
-    input.payment.splitMode === "equal" && input.payment.splitCount > 1
-      ? 1 / input.payment.splitCount
-      : 1;
-
-  const subtotal = input.payment.subtotal * ratio;
-  const discountAmount = input.payment.discountAmount * ratio;
-  const tip = input.payment.tip * ratio;
+  // Payment payload is already one person's share for equal split (orders are scaled too).
+  const subtotal = input.payment.subtotal;
+  const discountAmount = input.payment.discountAmount;
+  const tip = input.payment.tip;
   const grandTotal = input.payment.grandTotal;
 
   const discountLabel =

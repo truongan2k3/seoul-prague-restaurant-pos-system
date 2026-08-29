@@ -70,15 +70,14 @@ export function buildCheckoutTotals(input: {
       ? input.allLines.filter((line) => input.selectedLineIds!.includes(line.lineId))
       : input.lines;
 
-  const subtotal = sumLines(payableLines);
+  const fullSubtotal = sumLines(payableLines);
+  const isEqualSplit = input.splitMode === "equal" && input.splitCount > 1;
+  // Equal split: tip/discount apply to THIS person's share only (not the full bill).
+  const subtotal = isEqualSplit ? fullSubtotal / input.splitCount : fullSubtotal;
   const discountAmount = calcDiscountAmount(subtotal, input.discountType, input.discountValue);
   const afterDiscount = Math.max(0, subtotal - discountAmount);
   const grandTotal = afterDiscount + input.tip;
-
-  let amountDueNow = grandTotal;
-  if (input.splitMode === "equal" && input.splitCount > 1) {
-    amountDueNow = grandTotal / input.splitCount;
-  }
+  const amountDueNow = grandTotal;
 
   const round = (value: number) =>
     input.enablePriceRounding ? Math.round(value) : value;
@@ -90,6 +89,8 @@ export function buildCheckoutTotals(input: {
     afterDiscount: round(afterDiscount),
     grandTotal: round(grandTotal),
     amountDueNow: round(amountDueNow),
+    /** Full bill before equal split (same as subtotal when not equal-splitting). */
+    fullSubtotal: round(fullSubtotal),
   };
 }
 
@@ -173,7 +174,11 @@ export function equalSplitShareRatio(splitMode: SplitMode, splitCount: number) {
   return splitMode === "equal" && splitCount > 1 ? 1 / splitCount : 1;
 }
 
-/** Per-person amounts for equal split; reconciles rounding into tip. */
+/**
+ * Per-person amounts for equal split.
+ * Payment payload is already one person's share (tip/discount included);
+ * this only normalizes rounding.
+ */
 export function buildEqualSplitShareAmounts(input: {
   subtotal: number;
   discountAmount: number;
@@ -182,18 +187,58 @@ export function buildEqualSplitShareAmounts(input: {
   grandTotal: number;
   splitCount: number;
 }) {
-  const ratio = 1 / input.splitCount;
-  const subtotal = Number((input.subtotal * ratio).toFixed(2));
-  const discountAmount = Number((input.discountAmount * ratio).toFixed(2));
+  const subtotal = Number(input.subtotal.toFixed(2));
+  const discountAmount = Number(input.discountAmount.toFixed(2));
   const grandTotal = Number(input.grandTotal.toFixed(2));
-  const tip = Number((grandTotal - subtotal + discountAmount).toFixed(2));
+  const tip = Number(input.tip.toFixed(2));
   return {
     subtotal,
     discountAmount,
     tip,
-    amountDueNow: input.amountDueNow,
+    amountDueNow: Number(input.amountDueNow.toFixed(2)),
     grandTotal,
   };
+}
+
+/** Resume an in-progress equal-split from prior sales for this table visit. */
+export function resolveEqualSplitProgress(sales: Array<{
+  splitMode?: string | null;
+  splitCount?: number | null;
+  closedAt?: Date | string | null;
+}>, occupiedAt?: Date | null) {
+  const sinceMs = occupiedAt ? occupiedAt.getTime() - 60_000 : 0;
+  const equalSales = sales.filter((sale) => {
+    if (sale.splitMode !== "equal") return false;
+    const count = Number(sale.splitCount) || 0;
+    if (count < 2) return false;
+    if (!sinceMs) return true;
+    const closed = sale.closedAt ? new Date(sale.closedAt).getTime() : 0;
+    return closed >= sinceMs;
+  });
+
+  if (equalSales.length === 0) {
+    return { paymentsMade: 0, splitCount: 0 };
+  }
+
+  // Newest first
+  equalSales.sort((a, b) => {
+    const aTime = a.closedAt ? new Date(a.closedAt).getTime() : 0;
+    const bTime = b.closedAt ? new Date(b.closedAt).getTime() : 0;
+    return bTime - aTime;
+  });
+
+  const splitCount = Math.max(2, Number(equalSales[0]?.splitCount) || 0);
+  let paymentsMade = 0;
+  for (const sale of equalSales) {
+    if (Number(sale.splitCount) !== splitCount) break;
+    paymentsMade += 1;
+  }
+
+  if (paymentsMade >= splitCount) {
+    return { paymentsMade: 0, splitCount: 0 };
+  }
+
+  return { paymentsMade, splitCount };
 }
 
 export function remainingLines(

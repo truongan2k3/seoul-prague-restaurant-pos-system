@@ -5,6 +5,8 @@ export { formatCzk };
 
 export type DiscountType = "percent" | "fixed";
 export type SplitMode = "total" | "equal" | "items";
+/** Where tip/discount apply during equal split. */
+export type EqualAdjustScope = "person" | "bill";
 
 export interface CheckoutLine extends OrderItem {
   lineId: string;
@@ -64,6 +66,8 @@ export function buildCheckoutTotals(input: {
   selectedLineIds?: string[];
   allLines?: CheckoutLine[];
   enablePriceRounding?: boolean;
+  /** Equal split only: tip/discount on one person vs full bill then divide. */
+  equalAdjustScope?: EqualAdjustScope;
 }) {
   const payableLines =
     input.splitMode === "items" && input.allLines && input.selectedLineIds
@@ -72,15 +76,39 @@ export function buildCheckoutTotals(input: {
 
   const fullSubtotal = sumLines(payableLines);
   const isEqualSplit = input.splitMode === "equal" && input.splitCount > 1;
-  // Equal split: tip/discount apply to THIS person's share only (not the full bill).
+  const scope = input.equalAdjustScope ?? "person";
+  const round = (value: number) =>
+    input.enablePriceRounding ? Math.round(value) : value;
+
+  if (isEqualSplit && scope === "bill") {
+    // Tip/discount on the full bill, then split equally.
+    const discountAmountFull = calcDiscountAmount(
+      fullSubtotal,
+      input.discountType,
+      input.discountValue,
+    );
+    const afterDiscountFull = Math.max(0, fullSubtotal - discountAmountFull);
+    const billGrandTotal = afterDiscountFull + input.tip;
+    const amountDueNow = billGrandTotal / input.splitCount;
+    return {
+      payableLines,
+      subtotal: round(fullSubtotal / input.splitCount),
+      discountAmount: round(discountAmountFull / input.splitCount),
+      afterDiscount: round(afterDiscountFull / input.splitCount),
+      grandTotal: round(amountDueNow),
+      amountDueNow: round(amountDueNow),
+      fullSubtotal: round(fullSubtotal),
+      /** Full-bill after discount (before split) — use for tip % in bill scope. */
+      tipBase: round(afterDiscountFull),
+    };
+  }
+
+  // Default / equal+person: tip/discount on the (share or full) subtotal directly.
   const subtotal = isEqualSplit ? fullSubtotal / input.splitCount : fullSubtotal;
   const discountAmount = calcDiscountAmount(subtotal, input.discountType, input.discountValue);
   const afterDiscount = Math.max(0, subtotal - discountAmount);
   const grandTotal = afterDiscount + input.tip;
   const amountDueNow = grandTotal;
-
-  const round = (value: number) =>
-    input.enablePriceRounding ? Math.round(value) : value;
 
   return {
     payableLines,
@@ -89,8 +117,8 @@ export function buildCheckoutTotals(input: {
     afterDiscount: round(afterDiscount),
     grandTotal: round(grandTotal),
     amountDueNow: round(amountDueNow),
-    /** Full bill before equal split (same as subtotal when not equal-splitting). */
     fullSubtotal: round(fullSubtotal),
+    tipBase: round(afterDiscount),
   };
 }
 

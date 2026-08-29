@@ -24,6 +24,7 @@ import {
   type CheckoutLine,
   type CheckoutSubmitPayload,
   type DiscountType,
+  type EqualAdjustScope,
   type SplitMode,
 } from "@/lib/checkout-calculations";
 import { formatEurFromCzk } from "@/lib/currency";
@@ -31,6 +32,11 @@ import { formatPosPrice, priceDisplayOptionsFromSettings } from "@/lib/price-dis
 import { buildReceiptLines } from "@/lib/receipt-calculations";
 import { buildCfdCheckoutPayload, type CfdCheckoutPayload } from "@/lib/cfd-display";
 import { playPaymentSuccessSound } from "@/lib/notification-sound";
+import {
+  clearEqualSplitSession,
+  loadEqualSplitSession,
+  persistEqualSplitSession,
+} from "@/lib/equal-split-session";
 import type { MenuItem, OrderItem, PaymentMethod } from "@/lib/types";
 import { filterButtonClass } from "@/lib/theme-classes";
 
@@ -43,6 +49,7 @@ interface CheckoutPanelProps {
   orderSummary: OrderItem[];
   menuItems: MenuItem[];
   tableLabel?: string;
+  tableId?: string;
   isSaving?: boolean;
   onCheckout: (payload: CheckoutSubmitPayload) => void | Promise<void>;
   onCfdUpdate?: (payload: CfdCheckoutPayload) => void;
@@ -92,6 +99,7 @@ export function CheckoutPanel({
   orderSummary,
   menuItems,
   tableLabel,
+  tableId,
   isSaving = false,
   onCheckout,
   onCfdUpdate,
@@ -140,6 +148,7 @@ export function CheckoutPanel({
   const [cashGiven, setCashGiven] = useState("");
   const [roundUpTotal, setRoundUpTotal] = useState("");
   const [splitMode, setSplitMode] = useState<SplitMode>("total");
+  const [equalAdjustScope, setEqualAdjustScope] = useState<EqualAdjustScope>("person");
   const [splitCountInput, setSplitCountInput] = useState("2");
   const [calculatorOpen, setCalculatorOpen] = useState(false);
   const splitCount = useMemo(() => {
@@ -176,6 +185,13 @@ export function CheckoutPanel({
     setRoundUpTotal("");
   }, []);
 
+  const clearCashOnly = useCallback(() => {
+    setCashGiven("");
+    setKeepChangeAsTip(false);
+    setRoundUpTotal("");
+    setAdjustmentMode(null);
+  }, []);
+
   const resetCheckoutForm = useCallback(() => {
     const currentLines = linesRef.current;
     setSelectedLineIds(currentLines.map((line) => line.lineId));
@@ -183,31 +199,53 @@ export function CheckoutPanel({
     setPaymentMethod("card");
     setCashGiven("");
     setLocalError(null);
+    setEqualAdjustScope("person");
 
+    const stored = loadEqualSplitSession(tableId);
     const resumeEqual =
-      initialEqualPaymentsMade > 0 &&
-      initialEqualSplitCount > initialEqualPaymentsMade;
+      (initialEqualPaymentsMade > 0 &&
+        initialEqualSplitCount > initialEqualPaymentsMade) ||
+      (stored != null &&
+        stored.paymentsMade > 0 &&
+        stored.splitCount > stored.paymentsMade);
+
     if (resumeEqual) {
-      setSplitCountInput(String(initialEqualSplitCount));
+      const paymentsMade = Math.max(initialEqualPaymentsMade, stored?.paymentsMade ?? 0);
+      const count = Math.max(initialEqualSplitCount, stored?.splitCount ?? 0);
+      setSplitCountInput(String(count));
       setSplitMode("equal");
       setSplitPhase("checkout");
       setPanelView("split");
-      setEqualPaymentsMade(initialEqualPaymentsMade);
-      splitSessionRef.current = {
-        active: true,
-        mode: "equal",
-        count: initialEqualSplitCount,
-      };
+      setEqualPaymentsMade(paymentsMade);
+      splitSessionRef.current = { active: true, mode: "equal", count };
+
+      if (stored && stored.splitCount === count) {
+        setEqualAdjustScope(stored.equalAdjustScope);
+        if (stored.equalAdjustScope === "bill") {
+          setDiscountType(stored.discountType);
+          setDiscountValue(stored.discountValue);
+          setDiscountPreset(stored.discountPreset);
+          setTipMode(stored.tipMode);
+          setTipPreset(stored.tipPreset);
+          setCustomTip(stored.customTip);
+        }
+      }
       return;
     }
 
+    clearEqualSplitSession(tableId);
     setSplitCountInput("2");
     setSplitMode("total");
     setSplitPhase("checkout");
     setPanelView("main");
     setEqualPaymentsMade(0);
     splitSessionRef.current = { active: false, mode: "total", count: 2 };
-  }, [resetPaymentAdjustments, initialEqualPaymentsMade, initialEqualSplitCount]);
+  }, [
+    resetPaymentAdjustments,
+    initialEqualPaymentsMade,
+    initialEqualSplitCount,
+    tableId,
+  ]);
 
   useEffect(() => {
     resetCheckoutForm();
@@ -288,6 +326,7 @@ export function CheckoutPanel({
         selectedLineIds,
         allLines: lines,
         enablePriceRounding: settings.enablePriceRounding,
+        equalAdjustScope,
       }),
     [
       lines,
@@ -297,6 +336,7 @@ export function CheckoutPanel({
       splitCount,
       selectedLineIds,
       settings.enablePriceRounding,
+      equalAdjustScope,
     ],
   );
 
@@ -308,19 +348,23 @@ export function CheckoutPanel({
   const usingCashGiven = cashGivenNum !== null;
   const usingRoundUp = roundUpNum !== null;
 
+  const isEqualSplit = splitMode === "equal" && splitCount > 1;
+  const tipPercentBase = baseTotals.tipBase;
+
   const manualTip =
     tipMode === "preset" && tipPreset !== null
-      ? calcTipFromPercent(baseTotals.afterDiscount, tipPreset)
+      ? calcTipFromPercent(tipPercentBase, tipPreset)
       : customTip;
 
   const billAmount = baseTotals.amountDueNow;
   const roundUpTip = usingRoundUp ? Math.max(0, roundUpNum - billAmount) : 0;
+  // Bill scope: tip amount is on the full bill (buildCheckoutTotals will divide).
+  // Person scope: tip is already for one person.
   const tipAmount = usingRoundUp ? roundUpTip : Math.max(0, manualTip);
 
   const totals = useMemo(() => {
     if (usingRoundUp) {
       const perPersonTotal = roundUpNum!;
-      // Round-up is the amount THIS person pays (already a share in equal split).
       return {
         ...baseTotals,
         grandTotal: perPersonTotal,
@@ -338,6 +382,7 @@ export function CheckoutPanel({
       selectedLineIds,
       allLines: lines,
       enablePriceRounding: settings.enablePriceRounding,
+      equalAdjustScope,
     });
   }, [
     usingRoundUp,
@@ -351,6 +396,7 @@ export function CheckoutPanel({
     splitCount,
     selectedLineIds,
     settings.enablePriceRounding,
+    equalAdjustScope,
   ]);
 
   const chargeTotal = totals.amountDueNow;
@@ -359,7 +405,11 @@ export function CheckoutPanel({
     usingCashGiven && !usingRoundUp ? Math.max(0, cashGivenNum - chargeTotal) : 0;
   const keepAsTipAmount = keepChangeAsTip ? rawChangeDue : 0;
   const changeDueAmount = keepChangeAsTip ? 0 : rawChangeDue;
-  const totalTipWithKeep = totalTip + keepAsTipAmount;
+  const personTipShare =
+    isEqualSplit && equalAdjustScope === "bill" && !usingRoundUp
+      ? tipAmount / splitCount
+      : totalTip;
+  const totalTipWithKeep = personTipShare + keepAsTipAmount;
   // Always charge the amount due now (per person when equal-splitting).
   const payTotal = chargeTotal + keepAsTipAmount;
   const insufficientPayment =
@@ -535,13 +585,15 @@ export function CheckoutPanel({
       : mergedOrders;
     const remaining = splitMode === "items" ? remainingLines(lines, selectedLineIds) : undefined;
 
+    const shareTip = totalTipWithKeep;
+
     const payment = {
       paymentMethod: method,
       subtotal: totals.subtotal,
       discountType,
       discountValue,
       discountAmount: totals.discountAmount,
-      tip: totalTipWithKeep,
+      tip: shareTip,
       grandTotal: chargeTotal + keepAsTipAmount,
       amountDueNow: chargeTotal,
       amountGiven:
@@ -592,14 +644,32 @@ export function CheckoutPanel({
       setSplitCountInput(String(count));
       setPanelView("split");
       setSplitPhase(mode === "items" ? "pick-items" : "checkout");
-      setCashGiven("");
-      resetPaymentAdjustments();
+      clearCashOnly();
+
       if (mode === "equal") {
-        setEqualPaymentsMade((count) => count + 1);
-      }
-      if (mode === "items") {
+        const nextMade = equalPaymentsMade + 1;
+        setEqualPaymentsMade(nextMade);
+        // Keep bill-scoped tip/discount for every guest; reset only per-person mode.
+        if (equalAdjustScope === "person") {
+          resetPaymentAdjustments();
+        }
+        persistEqualSplitSession(tableId, {
+          splitCount: count,
+          paymentsMade: nextMade,
+          equalAdjustScope,
+          discountType,
+          discountValue,
+          discountPreset,
+          tipMode,
+          tipPreset,
+          customTip: equalAdjustScope === "person" ? 0 : customTip,
+        });
+      } else {
+        resetPaymentAdjustments();
         setSelectedLineIds([]);
       }
+    } else if (payload.closeTable) {
+      clearEqualSplitSession(tableId);
     }
   };
 
@@ -740,34 +810,55 @@ export function CheckoutPanel({
   );
 
   const equalSplitControls = splitMode === "equal" && (
-    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm dark:border-gray-700 dark:bg-gray-900/40 sm:text-base">
-      <label className="font-medium text-gray-600 dark:text-gray-300">{translate("splitCount")}</label>
-      <NumericInputField
-        value={splitCountInput}
-        onChange={(raw) => {
-          if (equalPaymentsMade > 0) return;
-          const digits = raw.replace(/\D/g, "");
-          if (digits === "") {
-            setSplitCountInput("");
-            return;
-          }
-          const parsed = Number(digits);
-          setSplitCountInput(String(Math.min(20, parsed)));
-        }}
-        allowDecimal={false}
-        inputClassName="w-20 rounded-lg border border-gray-200 px-3 py-2 text-base text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-        {...numericFieldProps}
-      />
-      <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-        {translate("perPerson")}: {displayPrice(baseTotals.amountDueNow)}
-      </span>
-      {splitCount > 1 && (
-        <span className="font-semibold text-blue-700 dark:text-blue-300">
-          {translate("splitPaymentProgress")
-            .replace("{current}", String(equalPaymentsMade + 1))
-            .replace("{total}", String(splitCount))}
+    <div className="space-y-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm dark:border-gray-700 dark:bg-gray-900/40 sm:text-base">
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="font-medium text-gray-600 dark:text-gray-300">{translate("splitCount")}</label>
+        <NumericInputField
+          value={splitCountInput}
+          onChange={(raw) => {
+            if (equalPaymentsMade > 0) return;
+            const digits = raw.replace(/\D/g, "");
+            if (digits === "") {
+              setSplitCountInput("");
+              return;
+            }
+            const parsed = Number(digits);
+            setSplitCountInput(String(Math.min(20, parsed)));
+          }}
+          allowDecimal={false}
+          inputClassName="w-20 rounded-lg border border-gray-200 px-3 py-2 text-base text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+          {...numericFieldProps}
+        />
+        <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+          {translate("perPerson")}: {displayPrice(totals.amountDueNow)}
         </span>
-      )}
+        {splitCount > 1 && (
+          <span className="font-semibold text-blue-700 dark:text-blue-300">
+            {translate("splitPaymentProgress")
+              .replace("{current}", String(equalPaymentsMade + 1))
+              .replace("{total}", String(splitCount))}
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {(
+          [
+            ["person", translate("equalAdjustScopePerson")],
+            ["bill", translate("equalAdjustScopeBill")],
+          ] as const
+        ).map(([scope, label]) => (
+          <button
+            key={scope}
+            type="button"
+            disabled={equalPaymentsMade > 0}
+            onClick={() => setEqualAdjustScope(scope)}
+            className={`min-h-[44px] rounded-xl px-3 py-2 text-left text-sm font-semibold disabled:opacity-60 ${filterButtonClass(equalAdjustScope === scope)}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{translate("equalAdjustScopeHint")}</p>
     </div>
   );
 

@@ -176,6 +176,7 @@ export function PaymentModal({
           orderSummary={orders}
           menuItems={menuItems}
           tableLabel={table.label}
+          tableId={table.id}
           isSaving={isSaving}
           onCheckout={onConfirm}
           onCfdUpdate={broadcastCheckoutUpdate}

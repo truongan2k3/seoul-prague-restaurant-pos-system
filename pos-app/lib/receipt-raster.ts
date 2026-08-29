@@ -9,13 +9,15 @@ export const RECEIPT_80MM_RASTER_DOTS = 576;
 
 /**
  * Receipt-only blank ahead of the cutter (print head → blade gap).
- * ~6 mm @ 203 dpi — enough to clear the blade without a long blank tail.
- * Kitchen/bar use their own clip-bottom setting.
+ * ~6 mm @ 203 dpi — kitchen/bar use their own clip-bottom setting.
  */
 export const RECEIPT_CUT_BOTTOM_BLANK_DOTS = 48;
 
-/** Extra ESC/POS line feeds after the blank raster, before cut (receipt only). */
-export const RECEIPT_CUT_BOTTOM_FEED_LINES = 2;
+/**
+ * Extra ESC/POS line feeds after the blank raster, before cut (receipt only).
+ * Keep a ~1-line gap under the footer so the blade does not hug the last text.
+ */
+export const RECEIPT_CUT_BOTTOM_FEED_LINES = 3;
 
 /**
  * ESC/POS raster line width in dots (multiple of 8). Receipt printing only.

@@ -1,6 +1,7 @@
 import type { ReceiptBrandingVisibility } from "@/lib/receipt-branding";
 import type { MenuCategory } from "@/lib/menu-categories";
 import type { KitchenPrintLayout } from "@/lib/kitchen-print-layout";
+import type { ReceiptSectionSizes } from "@/lib/receipt-section-sizes";
 import type { KitchenFulfillmentMode } from "@/lib/kitchen-fulfillment-mode";
 import type { TaxGroup } from "@/lib/receipt-config";
 import type { ServiceChannel } from "@/lib/tax-summary";
@@ -208,6 +209,8 @@ export interface AppSettings {
   receiptFontSize: ReceiptFontSize;
   receiptFontWeight: ReceiptFontWeight;
   receiptFontFamily: ReceiptFontFamily;
+  /** Per-section size scales for customer receipts (header/items/CELKEM/…). */
+  receiptSectionSizes: ReceiptSectionSizes;
   /** Rasterize receipt text to PNG before print (fixes old thermal / ESC/POS font issues). */
   receiptPrintBitmap: boolean;
   adminDeletionPassword: string;

@@ -15,7 +15,10 @@ interface ReceiptPreviewModalProps {
   open: boolean;
   data: ReceiptData | null;
   template?: ReceiptTemplate;
-  font?: Pick<AppSettings, "receiptFontFamily" | "receiptFontSize" | "receiptFontWeight">;
+  font?: Pick<
+    AppSettings,
+    "receiptFontFamily" | "receiptFontSize" | "receiptFontWeight" | "receiptSectionSizes"
+  >;
   onClose: () => void;
   onPrint: () => void;
 }
@@ -37,6 +40,7 @@ export function ReceiptPreviewModal({
       receiptFontFamily: settings.receiptFontFamily,
       receiptFontSize: settings.receiptFontSize,
       receiptFontWeight: settings.receiptFontWeight,
+      receiptSectionSizes: settings.receiptSectionSizes,
     },
   );
   const thermalStyle = receiptTypographyCssVars(typography);

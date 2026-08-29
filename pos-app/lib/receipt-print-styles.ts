@@ -1,4 +1,8 @@
 import type { AppSettings, ReceiptFontFamily, ReceiptFontSize, ReceiptFontWeight } from "@/lib/types";
+import {
+  type ReceiptSectionSizes,
+  scaleReceiptPx,
+} from "@/lib/receipt-section-sizes";
 
 export interface ReceiptFontOption {
   id: ReceiptFontFamily;
@@ -55,14 +59,49 @@ export interface ReceiptTypography {
   titlePx: number;
   indexPx: number;
   celkemPx: number;
+  /** Mezisoučet / tip / payment rows (HTML + bitmap). */
+  totalsPx: number;
+  /** Footer thank-you / hours lines. */
+  footerPx: number;
   bodyWeight: number;
   itemWeight: number;
   lineHeight: number;
 }
 
+/** Apply per-section scales on top of a resolved typography preset. */
+export function applyReceiptSectionSizes(
+  typography: ReceiptTypography,
+  sections: ReceiptSectionSizes,
+): ReceiptTypography {
+  return {
+    ...typography,
+    titlePx: scaleReceiptPx(typography.titlePx, sections.header),
+    indexPx: scaleReceiptPx(typography.indexPx, sections.header),
+    metaPx: scaleReceiptPx(typography.metaPx, sections.meta),
+    itemPx: scaleReceiptPx(typography.itemPx, sections.items),
+    bodyPx: scaleReceiptPx(typography.bodyPx, sections.totals),
+    totalsPx: scaleReceiptPx(typography.totalsPx, sections.totals),
+    celkemPx: scaleReceiptPx(typography.celkemPx, sections.celkem),
+    tablePx: scaleReceiptPx(typography.tablePx, sections.vat),
+    footerPx: scaleReceiptPx(typography.footerPx, sections.footer),
+  };
+}
+
 const SIZE_SCALE: Record<
   ReceiptFontSize,
-  Pick<ReceiptTypography, "bodyPx" | "itemPx" | "metaPx" | "tablePx" | "titlePx" | "indexPx" | "celkemPx" | "lineHeight">
+  Pick<
+    ReceiptTypography,
+    | "bodyPx"
+    | "itemPx"
+    | "metaPx"
+    | "tablePx"
+    | "titlePx"
+    | "indexPx"
+    | "celkemPx"
+    | "totalsPx"
+    | "footerPx"
+    | "lineHeight"
+  >
 > = {
   normal: {
     bodyPx: 10,
@@ -71,7 +110,9 @@ const SIZE_SCALE: Record<
     tablePx: 9,
     titlePx: 13,
     indexPx: 14,
-    celkemPx: 12,
+    celkemPx: 14,
+    totalsPx: 10,
+    footerPx: 9,
     lineHeight: 1.2,
   },
   medium: {
@@ -81,7 +122,9 @@ const SIZE_SCALE: Record<
     tablePx: 10,
     titlePx: 14,
     indexPx: 16,
-    celkemPx: 13,
+    celkemPx: 15,
+    totalsPx: 11,
+    footerPx: 10,
     lineHeight: 1.25,
   },
   large: {
@@ -91,7 +134,9 @@ const SIZE_SCALE: Record<
     tablePx: 11,
     titlePx: 15,
     indexPx: 18,
-    celkemPx: 14,
+    celkemPx: 17,
+    totalsPx: 12,
+    footerPx: 11,
     lineHeight: 1.25,
   },
 };
@@ -167,15 +212,18 @@ export function receiptFontStack(family: ReceiptFontFamily): string {
 }
 
 export function receiptTypographyFromSettings(
-  settings: Pick<AppSettings, "receiptFontSize" | "receiptFontWeight" | "receiptFontFamily">,
+  settings: Pick<AppSettings, "receiptFontSize" | "receiptFontWeight" | "receiptFontFamily"> &
+    Partial<Pick<AppSettings, "receiptSectionSizes">>,
 ): ReceiptTypography {
   const size = SIZE_SCALE[settings.receiptFontSize] ?? SIZE_SCALE.medium;
   const weight = WEIGHT_SCALE[settings.receiptFontWeight] ?? WEIGHT_SCALE.bold;
-  return {
+  const base: ReceiptTypography = {
     fontFamily: receiptFontStack(settings.receiptFontFamily),
     ...size,
     ...weight,
   };
+  if (!settings.receiptSectionSizes) return base;
+  return applyReceiptSectionSizes(base, settings.receiptSectionSizes);
 }
 
 export function receiptTypographyCssVars(
@@ -190,6 +238,8 @@ export function receiptTypographyCssVars(
     "--receipt-title-size": `${typography.titlePx}px`,
     "--receipt-index-size": `${typography.indexPx}px`,
     "--receipt-celkem-size": `${typography.celkemPx}px`,
+    "--receipt-totals-size": `${typography.totalsPx}px`,
+    "--receipt-footer-size": `${typography.footerPx}px`,
     "--receipt-body-weight": typography.bodyWeight,
     "--receipt-item-weight": typography.itemWeight,
     "--receipt-line-height": typography.lineHeight,
@@ -410,12 +460,14 @@ export function buildThermalPrintCss(
     justify-content: space-between;
     gap: 3mm;
     margin-bottom: 2px;
-    font-size: var(--receipt-body-size, ${typography.bodyPx}px);
+    font-size: var(--receipt-totals-size, ${typography.totalsPx}px);
   }
   .receipt-czech .receipt-celkem-row {
     font-size: var(--receipt-celkem-size, ${typography.celkemPx}px);
     font-weight: ${typography.itemWeight};
     margin: 4px 0;
+    padding-top: 4px;
+    border-top: 2px solid #000;
   }
   .receipt-czech .receipt-payment-line { text-transform: lowercase; }
   .receipt-czech .receipt-vat-grid {
@@ -429,7 +481,7 @@ export function buildThermalPrintCss(
   .receipt-czech .receipt-footer-czech {
     text-align: center;
     margin-top: 6px;
-    font-size: var(--receipt-meta-size, ${typography.metaPx}px);
+    font-size: var(--receipt-footer-size, ${typography.footerPx}px);
   }
 `;
 }

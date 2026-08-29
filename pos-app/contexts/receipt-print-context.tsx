@@ -36,7 +36,7 @@ interface PrintReceiptInput {
 
 type ReceiptPreviewOptions = {
   template?: ReceiptTemplate;
-  font?: Pick<AppSettings, "receiptFontFamily" | "receiptFontSize" | "receiptFontWeight">;
+  font?: Pick<AppSettings, "receiptFontFamily" | "receiptFontSize" | "receiptFontWeight" | "receiptSectionSizes">;
 };
 
 interface ReceiptPrintContextValue {
@@ -97,6 +97,7 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
         receiptFontSize: settings.receiptFontSize,
         receiptFontWeight: settings.receiptFontWeight,
         receiptFontFamily: settings.receiptFontFamily,
+        receiptSectionSizes: settings.receiptSectionSizes,
         receiptPrintBitmap: settings.receiptPrintBitmap,
         silentPrintEnabled: settings.silentPrintEnabled,
         printBridgeUrl: settings.printBridgeUrl,
@@ -111,6 +112,7 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
       settings.receiptFontSize,
       settings.receiptFontWeight,
       settings.receiptFontFamily,
+      settings.receiptSectionSizes,
       settings.receiptPrintBitmap,
       settings.silentPrintEnabled,
       settings.printBridgeUrl,
@@ -144,6 +146,7 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
         receiptFontSize: settings.receiptFontSize,
         receiptFontWeight: settings.receiptFontWeight,
         receiptFontFamily: settings.receiptFontFamily,
+        receiptSectionSizes: settings.receiptSectionSizes,
         receiptPrintBitmap: settings.receiptPrintBitmap,
         silentPrintEnabled: settings.silentPrintEnabled,
         printBridgeUrl: settings.printBridgeUrl,
@@ -158,6 +161,7 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
       settings.receiptFontSize,
       settings.receiptFontWeight,
       settings.receiptFontFamily,
+      settings.receiptSectionSizes,
       settings.receiptPrintBitmap,
       settings.silentPrintEnabled,
       settings.printBridgeUrl,
@@ -176,6 +180,7 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
       receiptFontSize: settings.receiptFontSize,
       receiptFontWeight: settings.receiptFontWeight,
       receiptFontFamily: settings.receiptFontFamily,
+      receiptSectionSizes: settings.receiptSectionSizes,
       receiptPrintBitmap: settings.receiptPrintBitmap,
       silentPrintEnabled: settings.silentPrintEnabled,
       printBridgeUrl: settings.printBridgeUrl,
@@ -189,6 +194,7 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
     settings.receiptFontSize,
     settings.receiptFontWeight,
     settings.receiptFontFamily,
+    settings.receiptSectionSizes,
     settings.receiptPrintBitmap,
     settings.silentPrintEnabled,
     settings.printBridgeUrl,
@@ -242,6 +248,7 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
         receiptFontSize: settings.receiptFontSize,
         receiptFontWeight: settings.receiptFontWeight,
         receiptFontFamily: settings.receiptFontFamily,
+        receiptSectionSizes: settings.receiptSectionSizes,
         receiptPrintBitmap: settings.receiptPrintBitmap,
         silentPrintEnabled: settings.silentPrintEnabled,
         printBridgeUrl: settings.printBridgeUrl,
@@ -256,6 +263,7 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
     settings.receiptFontSize,
     settings.receiptFontWeight,
     settings.receiptFontFamily,
+    settings.receiptSectionSizes,
     settings.receiptPrintBitmap,
     settings.silentPrintEnabled,
     settings.printBridgeUrl,

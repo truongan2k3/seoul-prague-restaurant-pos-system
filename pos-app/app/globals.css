@@ -464,8 +464,7 @@ input[type="search"] {
 
 .receipt-thermal .receipt-meta-row,
 .receipt-thermal .receipt-bill-id,
-.receipt-thermal .receipt-payment-line,
-.receipt-thermal .receipt-footer-czech {
+.receipt-thermal .receipt-payment-line {
   font-size: var(--receipt-meta-size);
   font-weight: var(--receipt-body-weight);
 }
@@ -493,12 +492,20 @@ input[type="search"] {
 .receipt-thermal .receipt-total-row,
 .receipt-thermal .receipt-total-value {
   font-weight: var(--receipt-item-weight);
+  font-size: var(--receipt-totals-size, var(--receipt-body-size));
 }
 
 .receipt-thermal .receipt-celkem-row {
   font-size: var(--receipt-celkem-size);
   font-weight: var(--receipt-item-weight);
   border-top: 2px solid #000;
+  padding-top: 4px;
+  margin-top: 4px;
+}
+
+.receipt-thermal .receipt-footer-czech {
+  font-size: var(--receipt-footer-size, var(--receipt-meta-size));
+  font-weight: var(--receipt-body-weight);
 }
 
 .receipt-thermal .receipt-vat-grid {

@@ -18,6 +18,8 @@ import { KitchenPrintLayoutEditor } from "@/components/kitchen-print-layout-edit
 import { KitchenTicketSpacingPreview } from "@/components/kitchen-ticket-spacing-preview";
 import { ReceiptBrandingEditor } from "@/components/receipt-branding-editor";
 import { ReceiptPrintPreview } from "@/components/receipt-print-preview";
+import { ReceiptSectionSizesEditor } from "@/components/receipt-section-sizes-editor";
+import { DEFAULT_RECEIPT_SECTION_SIZES } from "@/lib/receipt-section-sizes";
 import { LiveClock } from "@/components/live-clock";
 import { MenuCustomizationManager } from "@/components/menu-customization-manager";
 import { useApp } from "@/contexts/app-context";
@@ -1029,6 +1031,12 @@ export function SettingsView({
               </label>
             </div>
 
+            <ReceiptSectionSizesEditor
+              value={draft.receiptSectionSizes ?? DEFAULT_RECEIPT_SECTION_SIZES}
+              onChange={(next) => updateDraft("receiptSectionSizes", next)}
+              translate={translate}
+            />
+
             <h3 className="mt-6 text-sm font-semibold text-gray-900 dark:text-gray-100">
               {translate("settingsBranding")}
             </h3>
@@ -1113,6 +1121,7 @@ export function SettingsView({
                       receiptFontFamily: draft.receiptFontFamily,
                       receiptFontSize: draft.receiptFontSize,
                       receiptFontWeight: draft.receiptFontWeight,
+                      receiptSectionSizes: draft.receiptSectionSizes,
                     },
                   },
                 );

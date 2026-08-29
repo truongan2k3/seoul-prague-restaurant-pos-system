@@ -27,6 +27,10 @@ import {
   parseReceiptFontWeight,
 } from "@/lib/receipt-print-styles";
 import {
+  DEFAULT_RECEIPT_SECTION_SIZES,
+  parseReceiptSectionSizes,
+} from "@/lib/receipt-section-sizes";
+import {
   clampKitchenClipTopMm,
   clampKitchenClipBottomMm,
   clampKitchenItemGapPx,
@@ -120,6 +124,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   receiptFontSize: "normal",
   receiptFontWeight: "normal",
   receiptFontFamily: "courier",
+  receiptSectionSizes: { ...DEFAULT_RECEIPT_SECTION_SIZES },
   receiptPrintBitmap: false,
   adminDeletionPassword: "8888",
   cfdAdVideoUrl: "",
@@ -192,6 +197,7 @@ type SettingsRow = {
   receipt_font_size?: string | null;
   receipt_font_weight?: string | null;
   receipt_font_family?: string | null;
+  receipt_section_sizes?: unknown;
   receipt_print_bitmap?: boolean | null;
   admin_deletion_password?: string | null;
   cfd_ad_video_url?: string | null;
@@ -409,6 +415,7 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     receiptFontSize: parseReceiptFontSize(row.receipt_font_size),
     receiptFontWeight: parseReceiptFontWeight(row.receipt_font_weight),
     receiptFontFamily: parseReceiptFontFamily(row.receipt_font_family),
+    receiptSectionSizes: parseReceiptSectionSizes(row.receipt_section_sizes),
     receiptPrintBitmap: row.receipt_print_bitmap ?? DEFAULT_APP_SETTINGS.receiptPrintBitmap,
     adminDeletionPassword: row.admin_deletion_password ?? DEFAULT_APP_SETTINGS.adminDeletionPassword,
     cfdAdVideoUrl: row.cfd_ad_video_url ?? DEFAULT_APP_SETTINGS.cfdAdVideoUrl,
@@ -551,6 +558,9 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   if (partial.receiptFontSize !== undefined) payload.receipt_font_size = partial.receiptFontSize;
   if (partial.receiptFontWeight !== undefined) payload.receipt_font_weight = partial.receiptFontWeight;
   if (partial.receiptFontFamily !== undefined) payload.receipt_font_family = partial.receiptFontFamily;
+  if (partial.receiptSectionSizes !== undefined) {
+    payload.receipt_section_sizes = parseReceiptSectionSizes(partial.receiptSectionSizes);
+  }
   if (partial.receiptPrintBitmap !== undefined) payload.receipt_print_bitmap = partial.receiptPrintBitmap;
   if (partial.adminDeletionPassword !== undefined) {
     payload.admin_deletion_password = partial.adminDeletionPassword;
@@ -812,6 +822,7 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "receiptFontSize"
     | "receiptFontWeight"
     | "receiptFontFamily"
+    | "receiptSectionSizes"
     | "receiptPrintBitmap"
     | "adminDeletionPassword"
     | "marqueeConfigs"
@@ -873,6 +884,7 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     receiptFontSize: settings.receiptFontSize,
     receiptFontWeight: settings.receiptFontWeight,
     receiptFontFamily: settings.receiptFontFamily,
+    receiptSectionSizes: settings.receiptSectionSizes,
     receiptPrintBitmap: settings.receiptPrintBitmap,
     adminDeletionPassword: settings.adminDeletionPassword,
     marqueeConfigs: resolveMarqueeConfigs(settings),

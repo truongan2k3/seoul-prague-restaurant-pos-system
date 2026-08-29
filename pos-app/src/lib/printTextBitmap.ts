@@ -428,6 +428,51 @@ export function blankPngDataUrl(widthPx: number, heightPx: number, dpr = 2): str
   return canvas.toDataURL("image/png");
 }
 
+/** Full-width solid or dashed rule — matches CSS receipt preview separators. */
+export function ruleToPngDataUrl(options: {
+  maxWidthPx: number;
+  horizontalPad?: BitmapHorizontalPad;
+  thickness?: number;
+  style?: "solid" | "dashed";
+  paddingY?: number;
+  dpr?: number;
+}): string {
+  const dpr = options.dpr ?? 1;
+  const thickness = Math.max(1, options.thickness ?? 2);
+  const paddingY = options.paddingY ?? 4;
+  const pad = resolveBitmapHorizontalPad(options.horizontalPad);
+  const contentHeight = thickness + paddingY * 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(options.maxWidthPx * dpr);
+  canvas.height = Math.ceil(contentHeight * dpr);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, options.maxWidthPx, contentHeight);
+  ctx.fillStyle = "#000000";
+
+  const x0 = pad.left;
+  const x1 = options.maxWidthPx - pad.right;
+  const y = paddingY;
+  if (x1 <= x0) return canvas.toDataURL("image/png");
+
+  if (options.style === "dashed") {
+    const dash = 6;
+    const gap = 4;
+    let x = x0;
+    while (x < x1) {
+      const w = Math.min(dash, x1 - x);
+      ctx.fillRect(x, y, w, thickness);
+      x += dash + gap;
+    }
+  } else {
+    ctx.fillRect(x0, y, x1 - x0, thickness);
+  }
+
+  return canvas.toDataURL("image/png");
+}
+
 export function bitmapImgHtml(
   dataUrl: string,
   alt: string,

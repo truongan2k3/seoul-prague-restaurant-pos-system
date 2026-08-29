@@ -1,4 +1,5 @@
 import {
+  applyReceiptSectionSizes,
   receiptFontStack,
   receiptTypographyFromSettings,
   type ReceiptTypography,
@@ -13,7 +14,16 @@ const RECEIPT_BITMAP_SIZE_SCALE: Record<
   AppSettings["receiptFontSize"],
   Pick<
     ReceiptTypography,
-    "bodyPx" | "itemPx" | "metaPx" | "tablePx" | "titlePx" | "indexPx" | "celkemPx" | "lineHeight"
+    | "bodyPx"
+    | "itemPx"
+    | "metaPx"
+    | "tablePx"
+    | "titlePx"
+    | "indexPx"
+    | "celkemPx"
+    | "totalsPx"
+    | "footerPx"
+    | "lineHeight"
   >
 > = {
   normal: {
@@ -23,7 +33,9 @@ const RECEIPT_BITMAP_SIZE_SCALE: Record<
     tablePx: 20,
     titlePx: 24,
     indexPx: 24,
-    celkemPx: 22,
+    celkemPx: 28,
+    totalsPx: 20,
+    footerPx: 20,
     lineHeight: 1.12,
   },
   medium: {
@@ -33,7 +45,9 @@ const RECEIPT_BITMAP_SIZE_SCALE: Record<
     tablePx: 22,
     titlePx: 26,
     indexPx: 26,
-    celkemPx: 24,
+    celkemPx: 30,
+    totalsPx: 22,
+    footerPx: 22,
     lineHeight: 1.12,
   },
   large: {
@@ -43,19 +57,26 @@ const RECEIPT_BITMAP_SIZE_SCALE: Record<
     tablePx: 24,
     titlePx: 28,
     indexPx: 28,
-    celkemPx: 26,
+    celkemPx: 32,
+    totalsPx: 24,
+    footerPx: 24,
     lineHeight: 1.12,
   },
 };
 
 /** Typography for legacy bitmap receipt printing only. */
 export function receiptBitmapTypographyFromSettings(
-  settings: Pick<AppSettings, "receiptFontSize" | "receiptFontWeight" | "receiptFontFamily">,
+  settings: Pick<AppSettings, "receiptFontSize" | "receiptFontWeight" | "receiptFontFamily"> &
+    Partial<Pick<AppSettings, "receiptSectionSizes">>,
 ): ReceiptTypography {
-  const base = receiptTypographyFromSettings(settings);
+  const base = receiptTypographyFromSettings({
+    receiptFontSize: settings.receiptFontSize,
+    receiptFontWeight: settings.receiptFontWeight,
+    receiptFontFamily: settings.receiptFontFamily,
+  });
   const size =
     RECEIPT_BITMAP_SIZE_SCALE[settings.receiptFontSize] ?? RECEIPT_BITMAP_SIZE_SCALE.medium;
-  return {
+  const withBitmapSizes: ReceiptTypography = {
     ...base,
     fontFamily: receiptFontStack(
       settings.receiptFontFamily === "courier" || settings.receiptFontFamily === "consolas"
@@ -64,4 +85,6 @@ export function receiptBitmapTypographyFromSettings(
     ),
     ...size,
   };
+  if (!settings.receiptSectionSizes) return withBitmapSizes;
+  return applyReceiptSectionSizes(withBitmapSizes, settings.receiptSectionSizes);
 }

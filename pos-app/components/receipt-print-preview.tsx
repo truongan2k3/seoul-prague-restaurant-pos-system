@@ -8,6 +8,7 @@ import {
   receiptTypographyCssVars,
   receiptTypographyFromSettings,
 } from "@/lib/receipt-print-styles";
+import type { ReceiptSectionSizes } from "@/lib/receipt-section-sizes";
 import type { ReceiptFontFamily, ReceiptFontSize, ReceiptFontWeight } from "@/lib/types";
 import {
   draftToReceiptTemplate,
@@ -20,6 +21,7 @@ interface ReceiptPrintPreviewProps {
     receiptFontFamily: ReceiptFontFamily;
     receiptFontSize: ReceiptFontSize;
     receiptFontWeight: ReceiptFontWeight;
+    receiptSectionSizes: ReceiptSectionSizes;
   };
   translate: (key: TranslationKey) => string;
   onOpenFullPreview?: () => void;
@@ -40,8 +42,14 @@ export function ReceiptPrintPreview({
         receiptFontFamily: draft.receiptFontFamily,
         receiptFontSize: draft.receiptFontSize,
         receiptFontWeight: draft.receiptFontWeight,
+        receiptSectionSizes: draft.receiptSectionSizes,
       }),
-    [draft.receiptFontFamily, draft.receiptFontSize, draft.receiptFontWeight],
+    [
+      draft.receiptFontFamily,
+      draft.receiptFontSize,
+      draft.receiptFontWeight,
+      draft.receiptSectionSizes,
+    ],
   );
 
   const previewData = useMemo(() => {

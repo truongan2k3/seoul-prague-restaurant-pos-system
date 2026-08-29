@@ -21,6 +21,7 @@ import {
   ensureCjkPrintFont,
   RECEIPT_BITMAP_DPR,
   RECEIPT_BITMAP_HORIZONTAL_PAD,
+  ruleToPngDataUrl,
   textToPngDataUrl,
   textToPngItemRowDataUrl,
   textToPngSplitRowDataUrl,
@@ -30,7 +31,6 @@ import {
 } from "@/src/lib/printTextBitmap";
 
 /** Raster width set per print job from paper width (1 dot ≈ 1 canvas px). */
-const DIVIDER = "--------------------------------";
 
 function resolveTemplate(data: ReceiptData, template?: ReceiptTemplate): ReceiptTemplate {
   if (template) {
@@ -92,6 +92,7 @@ export async function buildBitmapReceiptHtml(
   fontWeight: ReceiptFontWeight,
   fontSize?: AppSettings["receiptFontSize"],
   paperWidthMm = DEFAULT_RECEIPT_PAPER_WIDTH_MM,
+  sectionSizes?: AppSettings["receiptSectionSizes"],
 ): Promise<{ html: string; pngs: string[] }> {
   await ensureCjkPrintFont();
 
@@ -103,6 +104,7 @@ export async function buildBitmapReceiptHtml(
           receiptFontSize: fontSize,
           receiptFontWeight: fontWeight,
           receiptFontFamily: fontFamily,
+          receiptSectionSizes: sectionSizes,
         })
       : typographyInput;
 
@@ -178,6 +180,34 @@ export async function buildBitmapReceiptHtml(
     );
   };
 
+  const pushDashedRule = () => {
+    emit(
+      ruleToPngDataUrl({
+        maxWidthPx: fullWidthPx,
+        horizontalPad: RECEIPT_BITMAP_HORIZONTAL_PAD,
+        thickness: 2,
+        style: "dashed",
+        paddingY: 4,
+        dpr: RECEIPT_BITMAP_DPR,
+      }),
+      "---",
+    );
+  };
+
+  const pushSolidRule = () => {
+    emit(
+      ruleToPngDataUrl({
+        maxWidthPx: fullWidthPx,
+        horizontalPad: RECEIPT_BITMAP_HORIZONTAL_PAD,
+        thickness: 2,
+        style: "solid",
+        paddingY: 4,
+        dpr: RECEIPT_BITMAP_DPR,
+      }),
+      "===",
+    );
+  };
+
   pushLine(`Č.: ${data.orderNumber}`, {
     size: typography.metaPx,
     weight: weights.secondary,
@@ -232,12 +262,7 @@ export async function buildBitmapReceiptHtml(
     weights.secondary,
   );
 
-  pushLine(DIVIDER, {
-    size: typography.metaPx,
-    weight: weights.secondary,
-    align: "center",
-    wrap: false,
-  });
+  pushDashedRule();
 
   if (data.provisional) {
     pushLine("ÚČTENKA PŘEDBĚŽNÁ / PROVISIONAL BILL", {
@@ -255,12 +280,7 @@ export async function buildBitmapReceiptHtml(
     pushItem(item.name.trim(), amount, typography.itemPx, weights.primary);
   }
 
-  pushLine(DIVIDER, {
-    size: typography.metaPx,
-    weight: weights.secondary,
-    align: "center",
-    wrap: false,
-  });
+  pushDashedRule();
 
   const showSubtotal =
     data.discountAmount > 0 ||
@@ -268,21 +288,23 @@ export async function buildBitmapReceiptHtml(
     Math.abs(data.subtotal - data.grandTotal) > 0.009;
 
   if (showSubtotal) {
-    pushSplit("Mezisoučet:", formatReceiptAmount(data.subtotal), typography.metaPx, weights.secondary);
+    pushSplit("Mezisoučet:", formatReceiptAmount(data.subtotal), typography.totalsPx, weights.secondary);
   }
   if (data.discountAmount > 0) {
     pushSplit(
       data.discountLabel ?? "Sleva:",
       formatReceiptAmount(data.discountAmount),
-      typography.metaPx,
+      typography.totalsPx,
       weights.secondary,
     );
   }
   if (data.tip > 0) {
-    pushSplit("Spropitné:", formatReceiptAmount(data.tip), typography.metaPx, weights.secondary);
+    pushSplit("Spropitné:", formatReceiptAmount(data.tip), typography.totalsPx, weights.secondary);
   }
 
-  pushSplit("CELKEM", formatReceiptAmount(data.grandTotal), typography.itemPx, weights.primary);
+  // Match settings preview: solid rule above CELKEM + larger total row.
+  pushSolidRule();
+  pushSplit("CELKEM", formatReceiptAmount(data.grandTotal), typography.celkemPx, weights.primary);
 
   if (data.showEur && data.eurRate) {
     pushLine(`≈ ${formatEurFromCzk(data.grandTotal, data.eurRate)}`, {
@@ -296,27 +318,22 @@ export async function buildBitmapReceiptHtml(
   pushSplit(
     data.provisional ? "NEZAPLACENO / UNPAID" : paymentMethodLabel(data.paymentMethod),
     formatReceiptAmount(data.grandTotal),
-    typography.metaPx,
+    typography.totalsPx,
     weights.secondary,
   );
 
   if (!data.provisional && data.paymentMethod === "cash" && data.amountGiven != null) {
-    pushSplit("Přijato:", formatReceiptAmount(data.amountGiven), typography.metaPx, weights.secondary);
+    pushSplit("Přijato:", formatReceiptAmount(data.amountGiven), typography.totalsPx, weights.secondary);
     pushSplit(
       "Vráceno:",
       formatReceiptAmount(data.changeDue ?? 0),
-      typography.metaPx,
+      typography.totalsPx,
       weights.primary,
     );
   }
 
   if (!data.provisional && data.paymentMethod === "card" && data.cardLast4) {
-    pushLine(DIVIDER, {
-      size: typography.metaPx,
-      weight: weights.secondary,
-      align: "center",
-      wrap: false,
-    });
+    pushDashedRule();
     pushLine("PLATBA KARTOU / CARD PAYMENT", {
       size: typography.metaPx,
       weight: weights.primary,
@@ -341,12 +358,7 @@ export async function buildBitmapReceiptHtml(
     });
   }
 
-  pushLine(DIVIDER, {
-    size: typography.metaPx,
-    weight: weights.secondary,
-    align: "center",
-    wrap: false,
-  });
+  pushDashedRule();
 
   pushThreeCol("", "DPH", "Základ", typography.tablePx, weights.primary);
   for (const row of data.taxGroups) {
@@ -362,7 +374,7 @@ export async function buildBitmapReceiptHtml(
   if (vis.showFooter) {
     for (const line of biz.footerLines) {
       pushLine(line, {
-        size: typography.metaPx,
+        size: typography.footerPx,
         weight: weights.secondary,
         align: "center",
       });

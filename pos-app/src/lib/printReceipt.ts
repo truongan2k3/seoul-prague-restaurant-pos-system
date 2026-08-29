@@ -30,7 +30,7 @@ export type ReceiptPrintFontSettings = Pick<
   AppSettings,
   "receiptFontSize" | "receiptFontWeight" | "receiptFontFamily"
 > &
-  Partial<Pick<AppSettings, "receiptPrintBitmap">> &
+  Partial<Pick<AppSettings, "receiptPrintBitmap" | "receiptSectionSizes">> &
   Partial<
     Pick<
       AppSettings,
@@ -342,6 +342,7 @@ export async function printReceiptData(
       fontSettings?.receiptFontWeight ?? "normal",
       fontSettings?.receiptFontSize,
       paperWidthMm,
+      fontSettings?.receiptSectionSizes,
     );
     receiptHtmlContent = bitmap.html;
     bitmapPngs = bitmap.pngs;
@@ -389,6 +390,7 @@ export async function printReceiptData(
                 fontSettings?.receiptFontWeight ?? "normal",
                 fontSettings?.receiptFontSize,
                 paperWidthMm,
+                fontSettings?.receiptSectionSizes,
               );
               bitmapPngs = bitmap.pngs;
               receiptHtmlContent = bitmap.html;

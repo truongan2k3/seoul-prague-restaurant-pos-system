@@ -362,8 +362,11 @@ export async function printReceiptData(
         browserPrintFallback: fontSettings.browserPrintFallback ?? true,
         printers: fontSettings.printers ?? [],
       };
+      // Font B + normal size matches RECEIPT_LINE_WIDTH (42). Font A / double-height
+      // is wider and clips on 58mm (and many 80mm) thermal printers.
       const textBytes = buildEscPosFromTextLines(buildReceiptEscPosLines(data, template), true, {
-        readableReceipt: true,
+        compactFont: true,
+        readableReceipt: false,
       });
       let bitmapBytes: Uint8Array | null = null;
 

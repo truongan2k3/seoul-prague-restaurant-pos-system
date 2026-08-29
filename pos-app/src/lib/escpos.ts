@@ -191,11 +191,16 @@ export function escCharSizeNormal(): Uint8Array {
   return new Uint8Array([0x1d, 0x21, 0x00]);
 }
 
-/** Double height — readable receipt text without breaking column width. */
+/** Double height only — still uses Font A glyph width (~32 cpl @ 58mm). */
 export function escCharSizeDoubleHeight(): Uint8Array {
   return new Uint8Array([0x1d, 0x21, 0x10]);
 }
 
+/**
+ * Build ESC/POS text. Default: Font B + normal size (~42 cpl @ 58mm), matching
+ * RECEIPT_LINE_WIDTH. Avoid readableReceipt (Font A + double-height) unless the
+ * line layout uses a narrower width — Font A overflows and clips on the right.
+ */
 export function buildEscPosFromTextLines(
   lines: string[],
   useCp1250 = true,

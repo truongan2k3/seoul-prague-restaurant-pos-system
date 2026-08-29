@@ -239,6 +239,15 @@ export async function buildBitmapReceiptHtml(
     wrap: false,
   });
 
+  if (data.provisional) {
+    pushLine("ÚČTENKA PŘEDBĚŽNÁ / PROVISIONAL BILL", {
+      size: typography.metaPx,
+      weight: weights.primary,
+      align: "center",
+      wrap: false,
+    });
+  }
+
   pushSplit("Položka", "Částka", typography.metaPx, weights.primary);
 
   for (const item of data.items) {
@@ -285,13 +294,13 @@ export async function buildBitmapReceiptHtml(
   }
 
   pushSplit(
-    paymentMethodLabel(data.paymentMethod),
+    data.provisional ? "NEZAPLACENO / UNPAID" : paymentMethodLabel(data.paymentMethod),
     formatReceiptAmount(data.grandTotal),
     typography.metaPx,
     weights.secondary,
   );
 
-  if (data.paymentMethod === "cash" && data.amountGiven != null) {
+  if (!data.provisional && data.paymentMethod === "cash" && data.amountGiven != null) {
     pushSplit("Přijato:", formatReceiptAmount(data.amountGiven), typography.metaPx, weights.secondary);
     pushSplit(
       "Vráceno:",
@@ -301,7 +310,7 @@ export async function buildBitmapReceiptHtml(
     );
   }
 
-  if (data.paymentMethod === "card" && data.cardLast4) {
+  if (!data.provisional && data.paymentMethod === "card" && data.cardLast4) {
     pushLine(DIVIDER, {
       size: typography.metaPx,
       weight: weights.secondary,

@@ -12,6 +12,7 @@ import {
   PercentPresetButtons,
 } from "@/components/percent-preset-buttons";
 import { useApp } from "@/contexts/app-context";
+import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { useSettings } from "@/contexts/settings-context";
 import {
   buildCheckoutTotals,
@@ -109,7 +110,8 @@ export function CheckoutPanel({
   initialEqualPaymentsMade = 0,
   initialEqualSplitCount = 0,
 }: CheckoutPanelProps) {
-  const { translate } = useApp();
+  const { translate, staff } = useApp();
+  const { printProvisionalBill } = useReceiptPrint();
   const { settings } = useSettings();
   const priceOptions = useMemo(
     () => priceDisplayOptionsFromSettings(settings),
@@ -1115,10 +1117,58 @@ export function CheckoutPanel({
     </div>
   );
 
+  const handlePrintProvisionalBill = () => {
+    if (!tableLabel || orderSummary.length === 0) return;
+
+    // Guest bill = full table bill. Keep tip only when it applies to the whole bill.
+    const provisionalTip =
+      splitMode === "equal" && equalAdjustScope === "person" ? 0 : tipAmount;
+    const provisionalTotals = buildCheckoutTotals({
+      lines: orderSummary,
+      discountType,
+      discountValue,
+      tip: provisionalTip,
+      splitMode: "total",
+      splitCount: 1,
+      enablePriceRounding: settings.enablePriceRounding,
+    });
+
+    printProvisionalBill({
+      tableLabel,
+      staffName: staff?.name,
+      orders: orderSummary,
+      menuItems,
+      payment: {
+        paymentMethod: "cash",
+        subtotal: provisionalTotals.subtotal,
+        discountType,
+        discountValue,
+        discountAmount: provisionalTotals.discountAmount,
+        tip: provisionalTip,
+        grandTotal: provisionalTotals.grandTotal,
+        amountDueNow: provisionalTotals.grandTotal,
+        splitMode: "total",
+        splitCount: 1,
+      },
+    });
+  };
+
   const splitItemsSelected = splitMode !== "items" || selectedLineIds.length > 0;
 
   const mainPaymentFooter = (
     <div className="shrink-0 space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700">
+      <button
+        type="button"
+        disabled={isSaving || orderSummary.length === 0}
+        onClick={handlePrintProvisionalBill}
+        className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm font-semibold text-gray-800 shadow-sm disabled:opacity-40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:text-base"
+      >
+        <Printer className="h-4 w-4 shrink-0" />
+        {translate("printProvisionalBill")}
+      </button>
+      <p className="-mt-1 text-xs text-gray-500 dark:text-gray-400">
+        {translate("printProvisionalBillHint")}
+      </p>
       <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
         <Printer className="h-4 w-4 shrink-0 text-gray-500" />
         {translate("checkoutPrintReceipt")}

@@ -138,7 +138,7 @@ function formatCardMask(last4: string): string {
 }
 
 function CardPaymentReceiptSection({ data }: { data: ReceiptData }) {
-  if (data.paymentMethod !== "card" || !data.cardLast4) return null;
+  if (data.provisional || data.paymentMethod !== "card" || !data.cardLast4) return null;
 
   return (
     <>
@@ -208,6 +208,12 @@ export function ReceiptBodyContent({
 
       <p className="receipt-dash">{DASH_LINE}</p>
 
+      {data.provisional ? (
+        <p className="receipt-center receipt-card-payment-title">
+          ÚČTENKA PŘEDBĚŽNÁ / PROVISIONAL BILL
+        </p>
+      ) : null}
+
       <section className="receipt-items-czech">
         <div className="receipt-items-head">
           <span className="receipt-items-head-left">Položka</span>
@@ -254,10 +260,12 @@ export function ReceiptBodyContent({
           </p>
         )}
         <div className="receipt-total-row receipt-payment-row">
-          <span className="receipt-payment-line">{paymentMethodLabel(data.paymentMethod)}</span>
+          <span className="receipt-payment-line">
+            {data.provisional ? "NEZAPLACENO / UNPAID" : paymentMethodLabel(data.paymentMethod)}
+          </span>
           <span className="receipt-total-value">{formatReceiptAmount(data.grandTotal)}</span>
         </div>
-        {data.paymentMethod === "cash" && data.amountGiven != null && (
+        {!data.provisional && data.paymentMethod === "cash" && data.amountGiven != null && (
           <>
             <div className="receipt-total-row">
               <span>Přijato:</span>

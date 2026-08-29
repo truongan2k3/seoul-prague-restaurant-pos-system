@@ -245,6 +245,9 @@ export function buildReceiptEscPosLines(
   );
 
   lines.push("--------------------------------");
+  if (data.provisional) {
+    lines.push("ÚČTENKA PŘEDBĚŽNÁ / PROVISIONAL BILL");
+  }
   lines.push(padLine("Položka", "Částka"));
 
   for (const item of data.items) {
@@ -278,10 +281,13 @@ export function buildReceiptEscPosLines(
     lines.push(`≈ ${formatEurFromCzk(data.grandTotal, data.eurRate)}`);
   }
   lines.push(
-    padLine(paymentMethodLabel(data.paymentMethod), formatReceiptAmount(data.grandTotal)),
+    padLine(
+      data.provisional ? "NEZAPLACENO / UNPAID" : paymentMethodLabel(data.paymentMethod),
+      formatReceiptAmount(data.grandTotal),
+    ),
   );
 
-  if (data.paymentMethod === "cash" && data.amountGiven != null) {
+  if (!data.provisional && data.paymentMethod === "cash" && data.amountGiven != null) {
     lines.push(padLine("Přijato:", formatReceiptAmount(data.amountGiven)));
     lines.push(padLine("Vráceno:", formatReceiptAmount(data.changeDue ?? 0)));
   }

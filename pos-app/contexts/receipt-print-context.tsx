@@ -41,6 +41,9 @@ type ReceiptPreviewOptions = {
 
 interface ReceiptPrintContextValue {
   printReceipt: (input: PrintReceiptInput) => void;
+  printProvisionalBill: (input: Omit<PrintReceiptInput, "payment"> & {
+    payment: CheckoutPaymentRecord;
+  }) => void;
   printTestReceipt: () => void;
   openTestReceiptPreview: () => void;
   openReceiptPreview: (data: ReceiptData, options?: ReceiptPreviewOptions) => void;
@@ -87,6 +90,53 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
         showUsd: receiptShowUsd,
         eurRate: settings.eurExchangeRate,
         usdRate,
+        business,
+      });
+      setReceiptData(data);
+      void printReceiptData(data, template, {
+        receiptFontSize: settings.receiptFontSize,
+        receiptFontWeight: settings.receiptFontWeight,
+        receiptFontFamily: settings.receiptFontFamily,
+        receiptPrintBitmap: settings.receiptPrintBitmap,
+        silentPrintEnabled: settings.silentPrintEnabled,
+        printBridgeUrl: settings.printBridgeUrl,
+        browserPrintFallback: settings.browserPrintFallback,
+        printers: settings.printers,
+        paperWidthMm: DEFAULT_RECEIPT_PAPER_WIDTH_MM,
+      });
+    },
+    [
+      settings.showEurCurrency,
+      settings.eurExchangeRate,
+      settings.receiptFontSize,
+      settings.receiptFontWeight,
+      settings.receiptFontFamily,
+      settings.receiptPrintBitmap,
+      settings.silentPrintEnabled,
+      settings.printBridgeUrl,
+      settings.browserPrintFallback,
+      settings.printers,
+      receiptShowUsd,
+      usdRate,
+      business,
+      template,
+    ],
+  );
+
+  const printProvisionalBill = useCallback(
+    (input: PrintReceiptInput) => {
+      const data = buildReceiptData({
+        tableLabel: input.tableLabel,
+        staffName: input.staffName,
+        orders: input.orders,
+        payment: input.payment,
+        menuItems: input.menuItems,
+        closedAt: input.closedAt,
+        showEur: settings.showEurCurrency,
+        showUsd: receiptShowUsd,
+        eurRate: settings.eurExchangeRate,
+        usdRate,
+        provisional: true,
         business,
       });
       setReceiptData(data);
@@ -217,6 +267,7 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
     <ReceiptPrintContext.Provider
       value={{
         printReceipt,
+        printProvisionalBill,
         printTestReceipt,
         openTestReceiptPreview,
         openReceiptPreview,

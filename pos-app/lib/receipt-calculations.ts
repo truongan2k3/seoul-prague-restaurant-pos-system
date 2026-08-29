@@ -44,6 +44,8 @@ export interface ReceiptData {
   showUsd?: boolean;
   eurRate?: number;
   usdRate?: number;
+  /** Guest check / temporary bill — not a final paid receipt. */
+  provisional?: boolean;
   business?: {
     brandName: string;
     brandAddress: string;
@@ -203,6 +205,7 @@ export function buildReceiptData(input: {
   showUsd?: boolean;
   eurRate?: number;
   usdRate?: number;
+  provisional?: boolean;
   business?: ReceiptData["business"];
 }): ReceiptData {
   const closedAt = input.closedAt ?? new Date();
@@ -241,17 +244,18 @@ export function buildReceiptData(input: {
     tip,
     grandTotal,
     paymentMethod: input.payment.paymentMethod,
-    amountGiven: input.payment.amountGiven,
-    changeDue: input.payment.changeDue,
-    cardAuthCode: input.payment.cardAuthCode,
-    cardLast4: input.payment.cardLast4,
-    cardBrand: input.payment.cardBrand,
+    amountGiven: input.provisional ? undefined : input.payment.amountGiven,
+    changeDue: input.provisional ? undefined : input.payment.changeDue,
+    cardAuthCode: input.provisional ? undefined : input.payment.cardAuthCode,
+    cardLast4: input.provisional ? undefined : input.payment.cardLast4,
+    cardBrand: input.provisional ? undefined : input.payment.cardBrand,
     closedAt,
     taxGroups,
     showEur: input.showEur,
     showUsd: input.showUsd,
     eurRate: input.eurRate,
     usdRate: input.usdRate,
+    provisional: input.provisional,
     business: input.business,
   };
 }

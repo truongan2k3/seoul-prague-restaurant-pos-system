@@ -9,7 +9,7 @@ import { usePinGate } from "@/contexts/pin-gate-context";
 import { useApp } from "@/contexts/app-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { formatCzk } from "@/lib/currency";
-import { saleHasCancelActivity } from "@/lib/order-activity";
+import { saleHasHistoryAlert } from "@/lib/order-activity";
 import { generateOrderNumber } from "@/lib/receipt-calculations";
 import { canManageStaff } from "@/lib/staff-roles";
 import {
@@ -84,13 +84,14 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   const [customTo, setCustomTo] = useState(() => toDateInputValue(new Date()));
   const [paymentFilter, setPaymentFilter] = useState<HistoryPaymentFilter>("all");
   const [selectedSale, setSelectedSale] = useState<SaleRecord | null>(null);
-  const [openEditScope, setOpenEditScope] = useState<"payment" | "full" | false>(false);
+  const [openEditTip, setOpenEditTip] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteDate, setDeleteDate] = useState(() => toDateInputValue(new Date()));
   const [deleteMonth, setDeleteMonth] = useState(() => toMonthInputValue());
   const [deleting, setDeleting] = useState(false);
 
-  const canEdit = canManageStaff(currentStaffUser?.role);
+  const canEditTip = Boolean(currentStaffUser);
+  const canManageHistory = canManageStaff(currentStaffUser?.role);
 
   const loadSales = useCallback(async () => {
     setLoading(true);
@@ -201,7 +202,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
     });
     if (selectedSale && deletedAtById.has(selectedSale.id)) {
       setSelectedSale(null);
-      setOpenEditScope(false);
+      setOpenEditTip(false);
     }
     logAction("delete_sale", detail);
     pushNotification({ message: translate("historyDeleteSuccess") });
@@ -259,14 +260,14 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
     );
   };
 
-  const openSale = (sale: SaleRecord, editScope: "payment" | "full" | false = false) => {
+  const openSale = (sale: SaleRecord, editTip = false) => {
     setSelectedSale(sale);
-    setOpenEditScope(editScope);
+    setOpenEditTip(editTip);
   };
 
   const closeModal = () => {
     setSelectedSale(null);
-    setOpenEditScope(false);
+    setOpenEditTip(false);
   };
 
   return (
@@ -368,7 +369,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
             </div>
           </section>
 
-          {canEdit && filteredSales.length > 0 && (
+          {canManageHistory && filteredSales.length > 0 && (
             <section className="rounded-xl border border-red-200 bg-red-50/50 p-4 dark:border-red-900/50 dark:bg-red-950/20">
               <div className="flex flex-wrap items-end gap-3">
                 <button
@@ -436,7 +437,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
               <table className="w-full min-w-[1120px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
-                    {canEdit && (
+                    {canManageHistory && (
                       <th className="px-4 py-3 font-semibold">
                         <input
                           type="checkbox"
@@ -464,7 +465,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                   {filteredSales.map((sale) => {
                     const orderId = generateOrderNumber(sale.closedAt);
                     const isDeleted = Boolean(sale.deletedAt);
-                    const colCount = canEdit ? 12 : 11;
+                    const colCount = canManageHistory ? 12 : 11;
                     return (
                       <Fragment key={sale.id}>
                         {isDeleted && (
@@ -482,7 +483,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                               : ""
                           }`}
                         >
-                        {canEdit && (
+                        {canManageHistory && (
                           <td className="px-4 py-3">
                             <input
                               type="checkbox"
@@ -499,11 +500,11 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                             <span className="inline-flex w-max shrink-0 items-center justify-center whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1 text-base font-bold leading-none text-white dark:bg-gray-100 dark:text-gray-900">
                               {sale.tableLabel}
                             </span>
-                            {saleHasCancelActivity(sale) && (
+                            {saleHasHistoryAlert(sale) && (
                               <span
-                                title={translate("historyCancelAlert")}
+                                title={translate("historyActivityAlert")}
                                 className="inline-flex shrink-0 text-amber-500"
-                                aria-label={translate("historyCancelAlert")}
+                                aria-label={translate("historyActivityAlert")}
                               >
                                 <AlertTriangle className="h-5 w-5" strokeWidth={2.5} />
                               </span>
@@ -561,26 +562,26 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                               <Eye className="h-3.5 w-3.5" />
                               {translate("historyViewBill")}
                             </button>
-                            {canEdit && !isDeleted && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => openSale(sale, "payment")}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-800 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200"
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                  {translate("editTipAndPayment")}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={deleting}
-                                  onClick={() => confirmDeleteOne(sale)}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                  {translate("deleteOrder")}
-                                </button>
-                              </>
+                            {canEditTip && !isDeleted && (
+                              <button
+                                type="button"
+                                onClick={() => openSale(sale, true)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-800 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                                {translate("editTip")}
+                              </button>
+                            )}
+                            {canManageHistory && !isDeleted && (
+                              <button
+                                type="button"
+                                disabled={deleting}
+                                onClick={() => confirmDeleteOne(sale)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                {translate("deleteOrder")}
+                              </button>
                             )}
                           </div>
                         </td>
@@ -602,7 +603,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
         <OrderHistoryModal
           sale={selectedSale}
           menuItems={menuItems}
-          initialEditScope={openEditScope}
+          initialEditTip={openEditTip}
           onClose={closeModal}
           onUpdated={(updated) => {
             setSales((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));

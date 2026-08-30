@@ -40,6 +40,7 @@ import { buildTestReceiptData } from "@/lib/receipt-calculations";
 import { RECEIPT_FONT_OPTIONS } from "@/lib/receipt-print-styles";
 import { draftToReceiptTemplate } from "@/src/components/ReceiptPrint";
 import { MarqueeSettingsEditor } from "@/components/marquee-settings-editor";
+import { ManagerPasscodeChangeForm } from "@/components/manager-passcode-change-form";
 import type { TranslationKey } from "@/lib/i18n/translations";
 import { pingPrintBridge } from "@/src/lib/print-bridge-client";
 import type { NetworkPrinter, PrinterRole, ReceiptFontFamily, WeekdayKey } from "@/lib/types";
@@ -100,7 +101,7 @@ export function SettingsView({
     setSoundMainNewOrderEnabled,
     currentStaffUser,
   } = useApp();
-  const { settings, saving, error: settingsError, saveSettingsPageDraft, uploadEventAlertSound, uploadCfdReviewQrImage, saveSettings } =
+  const { settings, saving, error: settingsError, saveSettingsPageDraft, uploadEventAlertSound, uploadCfdReviewQrImage, saveSettings, refreshSettings } =
     useSettings();
   const { business, updateBranding } = useAuth();
   const { pushNotification } = useNotifications();
@@ -1818,19 +1819,8 @@ export function SettingsView({
               {translate("settingsAdminSecurityHint")}
             </p>
 
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <label className="block text-sm sm:col-span-2">
-                <span className="text-amber-900 dark:text-amber-200">
-                  {translate("settingsAdminDeletionPassword")}
-                </span>
-                <input
-                  type="password"
-                  value={draft.adminDeletionPassword}
-                  onChange={(event) => updateDraft("adminDeletionPassword", event.target.value)}
-                  className="pos-input mt-1"
-                  autoComplete="new-password"
-                />
-              </label>
+            <div className="mt-4">
+              <ManagerPasscodeChangeForm onSuccess={() => void refreshSettings()} />
             </div>
 
             <p className="mt-4 text-xs text-amber-800 dark:text-amber-400">

@@ -28,7 +28,6 @@ import { useNotifications } from "@/contexts/notification-context";
 import { navButtonClass } from "@/lib/theme-classes";
 import { canAccessNavTabForMember } from "@/lib/staff-roles";
 import type { NavId } from "@/lib/types";
-import { updateStaffSelfProfile, type StaffSelfProfileInput } from "@/src/lib/staff-actions";
 
 const SIDEBAR_COLLAPSED_KEY = "pos-sidebar-collapsed";
 
@@ -70,7 +69,6 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [selfProfileOpen, setSelfProfileOpen] = useState(false);
   const [quickSwitchOpen, setQuickSwitchOpen] = useState(false);
-  const [selfProfileSaving, setSelfProfileSaving] = useState(false);
 
   useEffect(() => {
     setCollapsed(readCollapsedPreference());
@@ -98,23 +96,6 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const openSelfProfile = () => {
     if (!currentStaffUser) return;
     setSelfProfileOpen(true);
-  };
-
-  const handleSaveSelfProfile = async (input: StaffSelfProfileInput) => {
-    if (!currentStaffUser) return;
-    setSelfProfileSaving(true);
-    const { data, error } = await updateStaffSelfProfile(currentStaffUser.id, currentStaffUser, input);
-    setSelfProfileSaving(false);
-    if (error) {
-      pushNotification({ message: error.message, playSound: false });
-      throw error;
-    }
-    await refreshStaffList();
-    if (data) {
-      setStaff(data);
-    }
-    setSelfProfileOpen(false);
-    pushNotification({ message: translate("settingsSavedSuccess"), playSound: false });
   };
 
   const handleTabChange = (tab: NavId) => {
@@ -331,8 +312,6 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         open={selfProfileOpen}
         member={currentStaffUser}
         onClose={() => setSelfProfileOpen(false)}
-        onSave={handleSaveSelfProfile}
-        isSaving={selfProfileSaving}
       />
 
       <StaffQuickSwitchModal open={quickSwitchOpen} onClose={() => setQuickSwitchOpen(false)} />

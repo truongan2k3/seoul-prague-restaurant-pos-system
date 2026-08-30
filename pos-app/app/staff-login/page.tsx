@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LanguageSelector } from "@/components/language-selector";
+import { StaffAdminPasscodeModal } from "@/components/staff-admin-passcode-modal";
 import { useApp } from "@/contexts/app-context";
 import { useAuth } from "@/contexts/auth-context";
 import type { StaffMember } from "@/lib/types";
@@ -41,6 +42,8 @@ function StaffLoginForm() {
   const [loadingRoster, setLoadingRoster] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [adminPasscodeTarget, setAdminPasscodeTarget] = useState<StaffMember | null>(null);
+  const [passcodeError, setPasscodeError] = useState(false);
 
   const loadRoster = useCallback(async () => {
     setLoadingRoster(true);
@@ -82,18 +85,44 @@ function StaffLoginForm() {
     void loadRoster();
   }, [authLoading, session, router, nextPath, loadRoster]);
 
-  const handleSelect = async (member: StaffMember) => {
+  const completeSelect = async (member: StaffMember, managerPasscode?: string) => {
     setSubmittingId(member.id);
     setError(null);
-    const result = await selectStaffAction(member.id);
+    setPasscodeError(false);
+    const result = await selectStaffAction(member.id, managerPasscode);
     setSubmittingId(null);
 
     if (result.ok) {
+      setAdminPasscodeTarget(null);
       router.replace(nextPath);
       router.refresh();
       return;
     }
+
+    if (
+      result.error === "invalidManagerPasscode" ||
+      result.error === "managerPasscodeRequired"
+    ) {
+      setPasscodeError(true);
+      return;
+    }
+
+    setAdminPasscodeTarget(null);
     setError(translate("staffLoginInvalid"));
+  };
+
+  const handleSelect = async (member: StaffMember) => {
+    if (member.role === "admin") {
+      setPasscodeError(false);
+      setAdminPasscodeTarget(member);
+      return;
+    }
+    await completeSelect(member);
+  };
+
+  const handleAdminPasscodeConfirm = async (passcode: string) => {
+    if (!adminPasscodeTarget) return;
+    await completeSelect(adminPasscodeTarget, passcode);
   };
 
   if (authLoading || !session) {
@@ -186,6 +215,18 @@ function StaffLoginForm() {
       >
         {translate("staffLoginSwitchBusiness")}
       </button>
+
+      <StaffAdminPasscodeModal
+        open={adminPasscodeTarget != null}
+        staffName={adminPasscodeTarget?.name ?? "Admin"}
+        submitting={submittingId != null}
+        error={passcodeError}
+        onConfirm={(passcode) => void handleAdminPasscodeConfirm(passcode)}
+        onCancel={() => {
+          setAdminPasscodeTarget(null);
+          setPasscodeError(false);
+        }}
+      />
     </>
   );
 }

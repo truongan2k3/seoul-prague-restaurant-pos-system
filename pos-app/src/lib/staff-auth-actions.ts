@@ -1,6 +1,7 @@
 "use server";
 
 import { ALL_NAV_TABS, normalizeStaffRole } from "@/lib/staff-roles";
+import { verifyManagerPasscodeForBusiness } from "@/src/lib/manager-passcode-actions";
 import type { StaffMember } from "@/lib/types";
 import { readAuthSession } from "@/src/lib/auth/session";
 import {
@@ -254,8 +255,8 @@ export async function resolveStaffLoginSessionAction(): Promise<StaffSessionPayl
   return staffSession;
 }
 
-/** Select a staff member for this device — no password required. */
-export async function selectStaffAction(staffId: string) {
+/** Select a staff member for this device — admin requires manager passcode. */
+export async function selectStaffAction(staffId: string, managerPasscode?: string) {
   const businessSession = await requireBusinessSession();
   if (!businessSession) {
     return { ok: false as const, error: "businessSessionRequired" };
@@ -284,6 +285,18 @@ export async function selectStaffAction(staffId: string) {
   const row = data as StaffRow;
   if (!row.active) {
     return { ok: false as const, error: "invalidCredentials" };
+  }
+
+  const role = normalizeStaffRole(row.role);
+  if (role === "admin") {
+    const pass = managerPasscode?.trim() ?? "";
+    if (!pass) {
+      return { ok: false as const, error: "managerPasscodeRequired" };
+    }
+    const valid = await verifyManagerPasscodeForBusiness(businessSession.businessId, pass);
+    if (!valid) {
+      return { ok: false as const, error: "invalidManagerPasscode" };
+    }
   }
 
   const session = toStaffSession(row, businessSession.businessId);
@@ -329,8 +342,8 @@ export async function staffLogoutAction() {
   return { ok: true as const };
 }
 
-export async function switchStaffAction(staffId: string, _password?: string) {
-  return selectStaffAction(staffId);
+export async function switchStaffAction(staffId: string, managerPasscode?: string) {
+  return selectStaffAction(staffId, managerPasscode);
 }
 
 /** @deprecated Staff passwords removed. */

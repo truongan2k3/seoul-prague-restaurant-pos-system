@@ -26,6 +26,7 @@ import {
   RESERVATION_UNDO_MS,
   type ReservationUndoEntry,
 } from "@/lib/reservation-undo";
+import { pickEventTypeLabel } from "@/lib/reservation-guest-form";
 import type { ReservationRecord, RestaurantTable } from "@/lib/types";
 import { ReservationTableSelect, isOccupiedTable } from "@/components/reservation-table-select";
 import { ReservationUndoBar } from "@/components/reservation-undo-bar";
@@ -538,6 +539,17 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           {translate("table")} {row.tableLabel}
                         </p>
                       )}
+                      {row.eventType ? (
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                          {pickEventTypeLabel(
+                            settings.reservationEventTypes.find((option) => option.id === row.eventType) ?? {
+                              id: row.eventType,
+                              labels: { en: row.eventType, vi: row.eventType, de: row.eventType, ko: row.eventType },
+                            },
+                            "en",
+                          )}
+                        </p>
+                      ) : null}
                       {row.notes && (
                         <p className="mt-1 text-sm italic text-gray-500">{row.notes}</p>
                       )}

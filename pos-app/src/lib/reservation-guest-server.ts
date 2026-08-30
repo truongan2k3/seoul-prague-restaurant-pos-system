@@ -6,6 +6,13 @@ import {
   type SlotCapacityRow,
 } from "@/lib/reservation-slots";
 import { generateBookingCode, generateManageToken } from "@/lib/reservation-codes";
+import {
+  parseReservationEventTypes,
+  parseReservationGuestTexts,
+  parseReservationRequiredFields,
+  type GuestReservationLang,
+} from "@/lib/reservation-guest-form";
+import { guestReservationCopy, parseGuestReservationLang } from "@/lib/i18n/guest-reservation";
 import type { AppSettings, ReservationOperatingHours, ReservationStatus } from "@/lib/types";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 
@@ -17,6 +24,9 @@ export interface OnlineBookInput {
   date: string;
   time: string;
   notes?: string;
+  eventType?: string;
+  gdprConsent?: boolean;
+  lang?: GuestReservationLang;
 }
 
 export interface GuestReservationPublic {
@@ -30,21 +40,26 @@ export interface GuestReservationPublic {
   reservedAt: string;
   status: ReservationStatus;
   notes: string | null;
+  eventType: string | null;
 }
 
 const MANAGEABLE_STATUSES: ReservationStatus[] = ["pending", "confirmed", "late"];
 
-type ReservationSettings = Pick<
+type ReservationGuestSettings = Pick<
   AppSettings,
   | "reservationTimeStep"
   | "reservationMaxGuestsPerSlot"
   | "reservationOperatingHours"
+  | "reservationRequiredFields"
+  | "reservationEventTypes"
 >;
 
-const DEFAULT_RESERVATION_SETTINGS: ReservationSettings = {
+const DEFAULT_RESERVATION_SETTINGS: ReservationGuestSettings = {
   reservationTimeStep: 30,
   reservationMaxGuestsPerSlot: 20,
   reservationOperatingHours: DEFAULT_RESERVATION_OPERATING_HOURS,
+  reservationRequiredFields: parseReservationRequiredFields(null),
+  reservationEventTypes: parseReservationEventTypes(null),
 };
 
 function parseOperatingHours(value: unknown): ReservationOperatingHours {
@@ -55,13 +70,13 @@ function parseOperatingHours(value: unknown): ReservationOperatingHours {
   };
 }
 
-async function fetchReservationSettings(): Promise<ReservationSettings> {
+async function fetchReservationGuestSettings(): Promise<ReservationGuestSettings> {
   try {
     const admin = createSupabaseAdmin();
     const { data } = await admin
       .from("settings")
       .select(
-        "reservation_time_step, reservation_max_guests_per_slot, reservation_operating_hours",
+        "reservation_time_step, reservation_max_guests_per_slot, reservation_operating_hours, reservation_required_fields, reservation_event_types",
       )
       .eq("id", 1)
       .maybeSingle();
@@ -75,6 +90,8 @@ async function fetchReservationSettings(): Promise<ReservationSettings> {
         data.reservation_max_guests_per_slot ??
         DEFAULT_RESERVATION_SETTINGS.reservationMaxGuestsPerSlot,
       reservationOperatingHours: parseOperatingHours(data.reservation_operating_hours),
+      reservationRequiredFields: parseReservationRequiredFields(data.reservation_required_fields),
+      reservationEventTypes: parseReservationEventTypes(data.reservation_event_types),
     };
   } catch {
     return DEFAULT_RESERVATION_SETTINGS;
@@ -96,6 +113,7 @@ function mapPublicRow(row: {
   reserved_at: string;
   status: ReservationStatus;
   notes: string | null;
+  event_type?: string | null;
 }): GuestReservationPublic | null {
   if (!row.booking_code || !row.manage_token) return null;
   return {
@@ -109,6 +127,7 @@ function mapPublicRow(row: {
     reservedAt: row.reserved_at,
     status: row.status,
     notes: row.notes,
+    eventType: row.event_type ?? null,
   };
 }
 
@@ -155,7 +174,7 @@ export async function ensureReservationCodes(reservationId: string): Promise<{
 }
 
 async function validateSlotCapacity(params: {
-  settings: ReservationSettings;
+  settings: ReservationGuestSettings;
   date: string;
   time: string;
   guestCount: number;
@@ -219,22 +238,52 @@ async function validateSlotCapacity(params: {
   return { ok: true, guestCount };
 }
 
+function validateGuestInput(
+  input: OnlineBookInput,
+  settings: ReservationGuestSettings,
+): string | null {
+  const lang = parseGuestReservationLang(input.lang);
+  const copy = guestReservationCopy(lang);
+  const required = settings.reservationRequiredFields;
+  const guestName = input.guestName.trim();
+  const email = input.email.trim();
+  const phone = input.phone.trim();
+  const eventType = input.eventType?.trim() ?? "";
+
+  if (required.name && !guestName) return copy.errorName;
+  if (required.email && !email) return copy.errorEmail;
+  if (required.phone && !phone) return copy.errorPhone;
+  if ((required.date || required.time) && (!input.date || !input.time)) {
+    return copy.errorDateTime;
+  }
+  if (
+    required.eventType &&
+    settings.reservationEventTypes.length > 0 &&
+    !eventType
+  ) {
+    return copy.errorEventType;
+  }
+  if (eventType) {
+    const allowed = settings.reservationEventTypes.some((row) => row.id === eventType);
+    if (!allowed) return copy.errorEventType;
+  }
+  if (!input.gdprConsent) return copy.errorGdpr;
+  return null;
+}
+
 export async function createOnlineReservationServer(input: OnlineBookInput): Promise<{
   data: GuestReservationPublic | null;
   error: string | null;
 }> {
-  const guestName = input.guestName.trim();
-  const email = input.email.trim();
-  const phone = input.phone.trim();
+  const settings = await fetchReservationGuestSettings();
+  const validationError = validateGuestInput(input, settings);
+  if (validationError) return { data: null, error: validationError };
 
-  if (!guestName) return { data: null, error: "Please enter your name." };
-  if (!email) return { data: null, error: "Please enter your email." };
-  if (!phone || phone === "+420") return { data: null, error: "Please enter your phone number." };
   if (!input.date || !input.time) {
-    return { data: null, error: "Please select a date and time." };
+    const copy = guestReservationCopy(parseGuestReservationLang(input.lang));
+    return { data: null, error: copy.errorDateTime };
   }
 
-  const settings = await fetchReservationSettings();
   const capacity = await validateSlotCapacity({
     settings,
     date: input.date,
@@ -243,28 +292,36 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
   });
   if (!capacity.ok) return { data: null, error: capacity.error };
 
+  const guestName = input.guestName.trim();
+  const email = input.email.trim();
+  const phone = input.phone.trim();
+  const eventType = input.eventType?.trim() || null;
+
   const bookingCode = generateBookingCode();
   const manageToken = generateManageToken();
   const reservedAt = new Date(`${input.date}T${input.time}:00`);
   const admin = createSupabaseAdmin();
+  const nowIso = new Date().toISOString();
 
   const { data, error } = await admin
     .from("reservations")
     .insert({
       guest_name: guestName,
-      guest_phone: phone,
-      guest_email: email,
+      guest_phone: phone || null,
+      guest_email: email || null,
       party_size: capacity.guestCount,
       reserved_at: reservedAt.toISOString(),
       notes: input.notes?.trim() || null,
+      event_type: eventType,
+      gdpr_consent_at: nowIso,
       source: "reservation",
       status: "pending",
       booking_code: bookingCode,
       manage_token: manageToken,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso,
     })
     .select(
-      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes",
+      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
     )
     .single();
 
@@ -285,7 +342,7 @@ export async function fetchReservationByManageToken(
   const { data, error } = await admin
     .from("reservations")
     .select(
-      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes",
+      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
     )
     .eq("manage_token", manageToken)
     .maybeSingle();
@@ -317,7 +374,7 @@ export async function updateReservationByManageToken(input: {
     };
   }
 
-  const settings = await fetchReservationSettings();
+  const settings = await fetchReservationGuestSettings();
   const capacity = await validateSlotCapacity({
     settings,
     date: input.date,
@@ -340,7 +397,7 @@ export async function updateReservationByManageToken(input: {
     })
     .eq("id", existing.id)
     .select(
-      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes",
+      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
     )
     .single();
 
@@ -373,7 +430,7 @@ export async function cancelReservationByManageToken(
     })
     .eq("id", existing.id)
     .select(
-      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes",
+      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
     )
     .single();
 
@@ -416,7 +473,7 @@ export async function confirmReservationServer(reservationId: string): Promise<{
     })
     .eq("id", reservationId)
     .select(
-      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes",
+      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
     )
     .single();
 
@@ -438,7 +495,7 @@ export async function fetchReservationEmailContext(reservationId: string): Promi
   const { data, error } = await admin
     .from("reservations")
     .select(
-      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes",
+      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
     )
     .eq("id", reservationId)
     .single();
@@ -448,4 +505,19 @@ export async function fetchReservationEmailContext(reservationId: string): Promi
   }
 
   return { data: mapPublicRow(data), error: null };
+}
+
+/** Guest page success popup copy (for API responses if needed). */
+export async function fetchReservationGuestTexts() {
+  try {
+    const admin = createSupabaseAdmin();
+    const { data } = await admin
+      .from("settings")
+      .select("reservation_guest_texts")
+      .eq("id", 1)
+      .maybeSingle();
+    return parseReservationGuestTexts(data?.reservation_guest_texts);
+  } catch {
+    return parseReservationGuestTexts(null);
+  }
 }

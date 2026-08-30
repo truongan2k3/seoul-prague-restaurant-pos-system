@@ -52,6 +52,14 @@ import {
   parseKitchenFulfillmentMode,
   type KitchenFulfillmentMode,
 } from "@/lib/kitchen-fulfillment-mode";
+import {
+  DEFAULT_RESERVATION_EVENT_TYPES,
+  DEFAULT_RESERVATION_GUEST_TEXTS,
+  DEFAULT_RESERVATION_REQUIRED_FIELDS,
+  parseReservationEventTypes,
+  parseReservationGuestTexts,
+  parseReservationRequiredFields,
+} from "@/lib/reservation-guest-form";
 import { supabase } from "@/src/lib/supabase";
 
 export function createDefaultPrinters(host = "192.168.1.200", port = "9100"): NetworkPrinter[] {
@@ -121,6 +129,16 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   reservationOperatingHours: DEFAULT_RESERVATION_OPERATING_HOURS,
   mapReservationTickerSeconds: 6,
   reservationReminderMode: "30",
+  reservationRequiredFields: { ...DEFAULT_RESERVATION_REQUIRED_FIELDS },
+  reservationEventTypes: [...DEFAULT_RESERVATION_EVENT_TYPES],
+  reservationGuestTexts: {
+    emailHint: { ...DEFAULT_RESERVATION_GUEST_TEXTS.emailHint },
+    successTitle: { ...DEFAULT_RESERVATION_GUEST_TEXTS.successTitle },
+    successBody: { ...DEFAULT_RESERVATION_GUEST_TEXTS.successBody },
+    successEmailSent: { ...DEFAULT_RESERVATION_GUEST_TEXTS.successEmailSent },
+    successManageLink: { ...DEFAULT_RESERVATION_GUEST_TEXTS.successManageLink },
+    gdprConsent: { ...DEFAULT_RESERVATION_GUEST_TEXTS.gdprConsent },
+  },
   receiptFontSize: "normal",
   receiptFontWeight: "normal",
   receiptFontFamily: "courier",
@@ -194,6 +212,9 @@ type SettingsRow = {
   reservation_operating_hours?: ReservationOperatingHours | null;
   map_reservation_ticker_seconds?: number | null;
   reservation_reminder_mode?: string | null;
+  reservation_required_fields?: unknown;
+  reservation_event_types?: unknown;
+  reservation_guest_texts?: unknown;
   receipt_font_size?: string | null;
   receipt_font_weight?: string | null;
   receipt_font_family?: string | null;
@@ -412,6 +433,9 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     reservationReminderMode: parseReservationReminderMode(
       row.reservation_reminder_mode ?? DEFAULT_APP_SETTINGS.reservationReminderMode,
     ),
+    reservationRequiredFields: parseReservationRequiredFields(row.reservation_required_fields),
+    reservationEventTypes: parseReservationEventTypes(row.reservation_event_types),
+    reservationGuestTexts: parseReservationGuestTexts(row.reservation_guest_texts),
     receiptFontSize: parseReceiptFontSize(row.receipt_font_size),
     receiptFontWeight: parseReceiptFontWeight(row.receipt_font_weight),
     receiptFontFamily: parseReceiptFontFamily(row.receipt_font_family),
@@ -554,6 +578,15 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   }
   if (partial.reservationReminderMode !== undefined) {
     payload.reservation_reminder_mode = partial.reservationReminderMode;
+  }
+  if (partial.reservationRequiredFields !== undefined) {
+    payload.reservation_required_fields = partial.reservationRequiredFields;
+  }
+  if (partial.reservationEventTypes !== undefined) {
+    payload.reservation_event_types = partial.reservationEventTypes;
+  }
+  if (partial.reservationGuestTexts !== undefined) {
+    payload.reservation_guest_texts = partial.reservationGuestTexts;
   }
   if (partial.receiptFontSize !== undefined) payload.receipt_font_size = partial.receiptFontSize;
   if (partial.receiptFontWeight !== undefined) payload.receipt_font_weight = partial.receiptFontWeight;
@@ -819,6 +852,9 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "reservationOperatingHours"
     | "mapReservationTickerSeconds"
     | "reservationReminderMode"
+    | "reservationRequiredFields"
+    | "reservationEventTypes"
+    | "reservationGuestTexts"
     | "receiptFontSize"
     | "receiptFontWeight"
     | "receiptFontFamily"
@@ -881,6 +917,19 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     reservationOperatingHours: settings.reservationOperatingHours,
     mapReservationTickerSeconds: settings.mapReservationTickerSeconds,
     reservationReminderMode: settings.reservationReminderMode,
+    reservationRequiredFields: { ...settings.reservationRequiredFields },
+    reservationEventTypes: settings.reservationEventTypes.map((row) => ({
+      id: row.id,
+      labels: { ...row.labels },
+    })),
+    reservationGuestTexts: {
+      emailHint: { ...settings.reservationGuestTexts.emailHint },
+      successTitle: { ...settings.reservationGuestTexts.successTitle },
+      successBody: { ...settings.reservationGuestTexts.successBody },
+      successEmailSent: { ...settings.reservationGuestTexts.successEmailSent },
+      successManageLink: { ...settings.reservationGuestTexts.successManageLink },
+      gdprConsent: { ...settings.reservationGuestTexts.gdprConsent },
+    },
     receiptFontSize: settings.receiptFontSize,
     receiptFontWeight: settings.receiptFontWeight,
     receiptFontFamily: settings.receiptFontFamily,

@@ -14,6 +14,9 @@ export async function POST(request: Request) {
     date?: string;
     time?: string;
     notes?: string;
+    eventType?: string;
+    gdprConsent?: boolean;
+    lang?: string;
   };
 
   try {
@@ -30,6 +33,9 @@ export async function POST(request: Request) {
     date: body.date ?? "",
     time: body.time ?? "",
     notes: body.notes,
+    eventType: body.eventType,
+    gdprConsent: body.gdprConsent === true,
+    lang: body.lang === "vi" || body.lang === "de" || body.lang === "ko" ? body.lang : "en",
   });
 
   if (error || !data) {

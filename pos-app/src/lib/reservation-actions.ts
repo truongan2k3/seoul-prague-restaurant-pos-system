@@ -451,6 +451,7 @@ export function mapReservationRow(
     updated_at: string;
     booking_code?: string | null;
     manage_token?: string | null;
+    event_type?: string | null;
     tables?: { label: string } | { label: string }[] | null;
   },
 ): ReservationRecord {
@@ -476,6 +477,7 @@ export function mapReservationRow(
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
     bookingCode: row.booking_code ?? undefined,
+    eventType: row.event_type ?? undefined,
   };
 }
 

@@ -5,6 +5,11 @@ import type { ReceiptSectionSizes } from "@/lib/receipt-section-sizes";
 import type { KitchenFulfillmentMode } from "@/lib/kitchen-fulfillment-mode";
 import type { TaxGroup } from "@/lib/receipt-config";
 import type { ServiceChannel } from "@/lib/tax-summary";
+import type {
+  ReservationEventTypeOption,
+  ReservationGuestTexts,
+  ReservationRequiredFields,
+} from "@/lib/reservation-guest-form";
 
 export type TableStatus = "empty" | "waiting" | "ready";
 export type TableShape = "square" | "round";
@@ -206,6 +211,12 @@ export interface AppSettings {
   mapReservationTickerSeconds: number;
   /** Prep popup lead time: 15 min, 30 min, or both. */
   reservationReminderMode: "15" | "30" | "both";
+  /** Online guest form — which fields are required. */
+  reservationRequiredFields: ReservationRequiredFields;
+  /** Selectable event types on the guest booking page. */
+  reservationEventTypes: ReservationEventTypeOption[];
+  /** Guest page copy (email hint, success popup, GDPR) in en/vi/de/ko. */
+  reservationGuestTexts: ReservationGuestTexts;
   receiptFontSize: ReceiptFontSize;
   receiptFontWeight: ReceiptFontWeight;
   receiptFontFamily: ReceiptFontFamily;
@@ -482,6 +493,8 @@ export interface ReservationRecord {
   updatedAt: Date;
   /** Short public reference (e.g. SP-A7K2). */
   bookingCode?: string;
+  /** Guest-selected occasion (casual, birthday, …). */
+  eventType?: string;
 }
 
 export interface SaleRecord {

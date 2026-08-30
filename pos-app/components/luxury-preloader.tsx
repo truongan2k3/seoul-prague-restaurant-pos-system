@@ -7,7 +7,8 @@ import {
   PRELOADER_SLIDES,
 } from "@/lib/preloader-slides";
 
-const SAFETY_MS = 10_000;
+const INTRO_TOTAL_SECONDS = 3;
+const SAFETY_MS = 4_000;
 
 export function LuxuryPreloader() {
   const [playing, setPlaying] = useState(false);
@@ -70,7 +71,7 @@ export function LuxuryPreloader() {
 
         tl.to(separator, {
           scaleX: 1,
-          duration: 0.8,
+          duration: 0.2,
           ease: "power2.inOut",
         });
 
@@ -78,7 +79,7 @@ export function LuxuryPreloader() {
           tl.call(() => {
             subtitle.textContent = slide.lang;
             title.textContent = slide.title;
-            gsap.set([subtitle, title], { y: 32, opacity: 0 });
+            gsap.set([subtitle, title], { y: 20, opacity: 0 });
           });
 
           tl.to(
@@ -86,39 +87,39 @@ export function LuxuryPreloader() {
             {
               y: 0,
               opacity: 1,
-              duration: 0.55,
-              stagger: 0.09,
+              duration: 0.22,
+              stagger: 0.04,
             },
-            index === 0 ? "-=0.15" : undefined,
+            index === 0 ? "-=0.1" : undefined,
           );
 
           tl.to(
             progress,
             {
               scaleX: (index + 1) / PRELOADER_SLIDES.length,
-              duration: 0.55,
+              duration: 0.22,
               ease: "power2.inOut",
             },
             "<",
           );
 
-          tl.to({}, { duration: 0.38 });
+          tl.to({}, { duration: 0.08 });
 
           if (index < PRELOADER_SLIDES.length - 1) {
             tl.to([subtitle, title], {
-              y: -24,
+              y: -14,
               opacity: 0,
-              duration: 0.42,
-              stagger: 0.06,
+              duration: 0.14,
+              stagger: 0.03,
               ease: "power2.in",
             });
           }
         });
 
         tl.to([subtitle, title], {
-          y: -16,
+          y: -10,
           opacity: 0,
-          duration: 0.35,
+          duration: 0.12,
           ease: "power2.in",
         });
 
@@ -126,11 +127,16 @@ export function LuxuryPreloader() {
           overlay,
           {
             yPercent: -100,
-            duration: 1.15,
+            duration: 0.45,
             ease: "power4.inOut",
           },
-          "+=0.08",
+          "+=0.02",
         );
+
+        const naturalDuration = tl.duration();
+        if (naturalDuration > INTRO_TOTAL_SECONDS) {
+          tl.timeScale(naturalDuration / INTRO_TOTAL_SECONDS);
+        }
       }, overlay);
     }, 0);
 

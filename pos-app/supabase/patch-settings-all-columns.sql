@@ -48,6 +48,14 @@ ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS reservation_operating_hours
   "sunday": {"enabled": true, "open": "11:00", "close": "22:00"}
 }'::jsonb;
 
+-- Guest reservation form (online /reservation page)
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS reservation_required_fields jsonb DEFAULT '{
+  "name": true, "email": true, "phone": true, "guestCount": true,
+  "date": true, "time": true, "notes": false, "eventType": false
+}'::jsonb;
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS reservation_event_types jsonb DEFAULT '[]'::jsonb;
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS reservation_guest_texts jsonb DEFAULT '{}'::jsonb;
+
 -- Receipt font (fixes: receipt_font_family not in schema cache)
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS receipt_font_size text DEFAULT 'medium';
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS receipt_font_weight text DEFAULT 'bold';

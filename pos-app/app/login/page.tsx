@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { useApp } from "@/contexts/app-context";
 import { LanguageSelector } from "@/components/language-selector";
+import { isStationPath } from "@/lib/page-routes";
 
 const AUTH_ERROR_KEYS = {
   invalidCredentials: "authErrorInvalidCredentials",
@@ -27,7 +28,11 @@ function LoginForm() {
 
   useEffect(() => {
     if (!loading && session) {
-      router.replace(`/staff-login?next=${encodeURIComponent(nextPath)}`);
+      if (isStationPath(nextPath)) {
+        router.replace(nextPath);
+      } else {
+        router.replace(`/staff-login?next=${encodeURIComponent(nextPath)}`);
+      }
     }
   }, [loading, session, router, nextPath]);
 
@@ -40,7 +45,11 @@ function LoginForm() {
     setSubmitting(false);
 
     if (result.ok) {
-      router.replace(`/staff-login?next=${encodeURIComponent(nextPath)}`);
+      if (isStationPath(nextPath)) {
+        router.replace(nextPath);
+      } else {
+        router.replace(`/staff-login?next=${encodeURIComponent(nextPath)}`);
+      }
       router.refresh();
       return;
     }

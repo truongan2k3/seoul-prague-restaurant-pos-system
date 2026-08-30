@@ -11,6 +11,8 @@ import { ManagerPasscodeModal } from "@/components/manager-passcode-modal";
 import { FullscreenToggle } from "@/components/fullscreen-toggle";
 import { MobileRefreshGuard } from "@/components/mobile-refresh-guard";
 import { UnsavedWorkProvider } from "@/contexts/unsaved-work-context";
+import { AdminBroadcastListener } from "@/components/admin-broadcast-listener";
+import { PagePresenceTracker } from "@/components/page-presence-tracker";
 
 function PinGateWrapper({ children }: { children: React.ReactNode }) {
   const { settings } = useSettings();
@@ -22,6 +24,8 @@ function PinGateWrapper({ children }: { children: React.ReactNode }) {
     >
       <UnsavedWorkProvider>
         {children}
+        <AdminBroadcastListener />
+        <PagePresenceTracker />
         <MobileRefreshGuard />
         <FullscreenToggle variant="fab" />
       </UnsavedWorkProvider>

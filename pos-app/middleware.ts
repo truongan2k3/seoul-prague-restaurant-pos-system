@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { decodeAuthSession } from "@/src/lib/auth/session-token";
 import { decodeStaffSession, STAFF_COOKIE_NAME } from "@/src/lib/auth/staff-session-token";
+import { isStationPath } from "@/lib/page-routes";
 
-const PUBLIC_PATHS = ["/login", "/register", "/reservation", "/client"];
+const PUBLIC_PATHS = ["/login", "/register", "/reservation"];
 
 function isPublicPath(pathname: string) {
   if (PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`))) {
@@ -22,10 +23,18 @@ function isStaticAsset(pathname: string) {
   );
 }
 
+function isStatusPath(pathname: string) {
+  return pathname === "/status" || pathname.startsWith("/status/");
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (isStaticAsset(pathname) || isPublicPath(pathname)) {
+    return NextResponse.next();
+  }
+
+  if (isStatusPath(pathname)) {
     return NextResponse.next();
   }
 
@@ -46,6 +55,10 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname === "/staff-login") {
+    return NextResponse.next();
+  }
+
+  if (isStationPath(pathname)) {
     return NextResponse.next();
   }
 

@@ -55,9 +55,11 @@ import {
 import {
   DEFAULT_RESERVATION_EVENT_TYPES,
   DEFAULT_RESERVATION_GUEST_TEXTS,
+  DEFAULT_RESERVATION_GUEST_VENUE,
   DEFAULT_RESERVATION_REQUIRED_FIELDS,
   parseReservationEventTypes,
   parseReservationGuestTexts,
+  parseReservationGuestVenue,
   parseReservationRequiredFields,
 } from "@/lib/reservation-guest-form";
 import { supabase } from "@/src/lib/supabase";
@@ -139,6 +141,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     successManageLink: { ...DEFAULT_RESERVATION_GUEST_TEXTS.successManageLink },
     gdprConsent: { ...DEFAULT_RESERVATION_GUEST_TEXTS.gdprConsent },
   },
+  reservationGuestVenue: { ...DEFAULT_RESERVATION_GUEST_VENUE },
   receiptFontSize: "normal",
   receiptFontWeight: "normal",
   receiptFontFamily: "courier",
@@ -215,6 +218,7 @@ type SettingsRow = {
   reservation_required_fields?: unknown;
   reservation_event_types?: unknown;
   reservation_guest_texts?: unknown;
+  reservation_guest_venue?: unknown;
   receipt_font_size?: string | null;
   receipt_font_weight?: string | null;
   receipt_font_family?: string | null;
@@ -436,6 +440,7 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     reservationRequiredFields: parseReservationRequiredFields(row.reservation_required_fields),
     reservationEventTypes: parseReservationEventTypes(row.reservation_event_types),
     reservationGuestTexts: parseReservationGuestTexts(row.reservation_guest_texts),
+    reservationGuestVenue: parseReservationGuestVenue(row.reservation_guest_venue),
     receiptFontSize: parseReceiptFontSize(row.receipt_font_size),
     receiptFontWeight: parseReceiptFontWeight(row.receipt_font_weight),
     receiptFontFamily: parseReceiptFontFamily(row.receipt_font_family),
@@ -587,6 +592,9 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   }
   if (partial.reservationGuestTexts !== undefined) {
     payload.reservation_guest_texts = partial.reservationGuestTexts;
+  }
+  if (partial.reservationGuestVenue !== undefined) {
+    payload.reservation_guest_venue = partial.reservationGuestVenue;
   }
   if (partial.receiptFontSize !== undefined) payload.receipt_font_size = partial.receiptFontSize;
   if (partial.receiptFontWeight !== undefined) payload.receipt_font_weight = partial.receiptFontWeight;
@@ -855,6 +863,7 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "reservationRequiredFields"
     | "reservationEventTypes"
     | "reservationGuestTexts"
+    | "reservationGuestVenue"
     | "receiptFontSize"
     | "receiptFontWeight"
     | "receiptFontFamily"
@@ -930,6 +939,7 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
       successManageLink: { ...settings.reservationGuestTexts.successManageLink },
       gdprConsent: { ...settings.reservationGuestTexts.gdprConsent },
     },
+    reservationGuestVenue: { ...settings.reservationGuestVenue },
     receiptFontSize: settings.receiptFontSize,
     receiptFontWeight: settings.receiptFontWeight,
     receiptFontFamily: settings.receiptFontFamily,

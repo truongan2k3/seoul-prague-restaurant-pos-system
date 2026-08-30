@@ -19,7 +19,15 @@ export function ConnectionStatusBadge() {
   const pathname = usePathname();
   const { status } = useConnectionStatus();
 
-  if (pathname === "/login" || pathname === "/register" || pathname === "/status") return null;
+  if (
+    pathname === "/login" ||
+    pathname === "/register" ||
+    pathname === "/status" ||
+    pathname === "/reservation" ||
+    pathname.startsWith("/reservation/")
+  ) {
+    return null;
+  }
 
   return (
     <div

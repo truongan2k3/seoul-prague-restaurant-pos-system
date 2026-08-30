@@ -152,25 +152,9 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     void loadReservations();
     const unsub = subscribeToReservationChanges({
       onChange: () => void loadReservations(),
-      onInsert: (reservation) => {
-        if (seenReservationIdsRef.current.has(reservation.id)) return;
-        seenReservationIdsRef.current.add(reservation.id);
-        if (reservation.source !== "reservation") return;
-
-        const timeLabel = reservation.reservedAt.toLocaleString(
-          language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB",
-          { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" },
-        );
-
-        pushNotification({
-          id: `reservation-${reservation.id}`,
-          message: `${translate("resNewBookingToast")}: ${reservation.guestName} · ${reservation.partySize} · ${timeLabel}`,
-          playSound: "newOrder",
-        });
-      },
     });
     return unsub;
-  }, [language, loadReservations, pushNotification, translate]);
+  }, [loadReservations]);
 
   useEffect(() => {
     const runLateCheck = () => {

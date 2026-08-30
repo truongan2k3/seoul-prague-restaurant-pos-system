@@ -8,6 +8,7 @@ import type { ServiceChannel } from "@/lib/tax-summary";
 import type {
   ReservationEventTypeOption,
   ReservationGuestTexts,
+  ReservationGuestVenue,
   ReservationRequiredFields,
 } from "@/lib/reservation-guest-form";
 
@@ -217,6 +218,8 @@ export interface AppSettings {
   reservationEventTypes: ReservationEventTypeOption[];
   /** Guest page copy (email hint, success popup, GDPR) in en/vi/de/ko. */
   reservationGuestTexts: ReservationGuestTexts;
+  /** Guest /reservation sidebar — restaurant name, address, phone, email. */
+  reservationGuestVenue: ReservationGuestVenue;
   receiptFontSize: ReceiptFontSize;
   receiptFontWeight: ReceiptFontWeight;
   receiptFontFamily: ReceiptFontFamily;

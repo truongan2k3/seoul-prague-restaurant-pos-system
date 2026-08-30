@@ -1483,6 +1483,81 @@ export function SettingsView({
 
           <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">
+              {translate("settingsResGuestVenue")}
+            </h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {translate("settingsResGuestVenueHint")}
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm sm:col-span-2">
+                <span className="text-gray-500 dark:text-gray-400">
+                  {translate("settingsResGuestRestaurantName")}
+                </span>
+                <input
+                  type="text"
+                  value={draft.reservationGuestVenue.restaurantName}
+                  onChange={(event) =>
+                    updateDraft("reservationGuestVenue", {
+                      ...draft.reservationGuestVenue,
+                      restaurantName: event.target.value,
+                    })
+                  }
+                  className="pos-input mt-1"
+                />
+              </label>
+              <label className="block text-sm sm:col-span-2">
+                <span className="text-gray-500 dark:text-gray-400">
+                  {translate("settingsResGuestAddress")}
+                </span>
+                <input
+                  type="text"
+                  value={draft.reservationGuestVenue.address}
+                  onChange={(event) =>
+                    updateDraft("reservationGuestVenue", {
+                      ...draft.reservationGuestVenue,
+                      address: event.target.value,
+                    })
+                  }
+                  className="pos-input mt-1"
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">
+                  {translate("settingsResGuestPhone")}
+                </span>
+                <input
+                  type="text"
+                  value={draft.reservationGuestVenue.phone}
+                  onChange={(event) =>
+                    updateDraft("reservationGuestVenue", {
+                      ...draft.reservationGuestVenue,
+                      phone: event.target.value,
+                    })
+                  }
+                  className="pos-input mt-1"
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">
+                  {translate("settingsResGuestEmail")}
+                </span>
+                <input
+                  type="email"
+                  value={draft.reservationGuestVenue.email}
+                  onChange={(event) =>
+                    updateDraft("reservationGuestVenue", {
+                      ...draft.reservationGuestVenue,
+                      email: event.target.value,
+                    })
+                  }
+                  className="pos-input mt-1"
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">
               {translate("settingsResGuestForm")}
             </h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">

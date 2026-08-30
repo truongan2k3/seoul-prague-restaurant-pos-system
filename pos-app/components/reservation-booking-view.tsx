@@ -18,21 +18,13 @@ import {
   type GuestReservationLang,
 } from "@/lib/reservation-guest-form";
 import {
-  GUEST_LANG_STORAGE_KEY,
+  GUEST_LANG_SESSION_KEY,
   guestReservationCopy,
   parseGuestReservationLang,
 } from "@/lib/i18n/guest-reservation";
 import type { AppSettings } from "@/lib/types";
 import { DEFAULT_APP_SETTINGS, fetchAppSettings } from "@/src/lib/settings-actions";
 import { fetchReservationsForDate } from "@/src/lib/reservation-actions";
-
-const RESTAURANT_NAME = "SEOUL PRAGUE Korean BBQ";
-const ADDRESS = "Václavské nám. 819/43, 110 00 Praha";
-const MAPS_URL = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ADDRESS)}`;
-const PHONE = "+420 123 456 789";
-const EMAIL = "info@seoulprague.cz";
-const PHONE_HREF = "tel:+420123456789";
-const EMAIL_HREF = "mailto:info@seoulprague.cz";
 
 const GUEST_LANG_LABELS: Record<GuestReservationLang, string> = {
   en: "English",
@@ -73,16 +65,28 @@ export function ReservationBookingView() {
   const eventTypes = appSettings.reservationEventTypes;
   const guestTexts = appSettings.reservationGuestTexts;
   const showEventTypeField = eventTypes.length > 0;
+  const venue = appSettings.reservationGuestVenue;
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.address)}`;
+  const phoneHref = `tel:${venue.phone.replace(/[^\d+]/g, "")}`;
+  const emailHref = `mailto:${venue.email}`;
 
   const minDate = useMemo(() => todayIsoDate(), []);
 
   useEffect(() => {
-    const stored = parseGuestReservationLang(localStorage.getItem(GUEST_LANG_STORAGE_KEY));
-    setLang(stored);
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.removeItem("reservation-guest-lang");
+    } catch {
+      /* ignore */
+    }
+    const stored = sessionStorage.getItem(GUEST_LANG_SESSION_KEY);
+    if (stored) {
+      setLang(parseGuestReservationLang(stored));
+    }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(GUEST_LANG_STORAGE_KEY, lang);
+    sessionStorage.setItem(GUEST_LANG_SESSION_KEY, lang);
   }, [lang]);
 
   useEffect(() => {
@@ -245,13 +249,33 @@ export function ReservationBookingView() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-zinc-950 via-zinc-900 to-zinc-950 text-zinc-100">
+      <header className="sticky top-0 z-40 border-b border-zinc-800/80 bg-zinc-950/95 backdrop-blur-md">
+        <div className="mx-auto flex max-w-6xl items-center justify-end px-4 py-3">
+          <label className="inline-flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm">
+            <Globe className="h-4 w-4 text-red-400" />
+            <select
+              value={lang}
+              onChange={(event) => setLang(parseGuestReservationLang(event.target.value))}
+              className="bg-transparent text-white outline-none"
+              aria-label="Language"
+            >
+              {GUEST_RESERVATION_LANGS.map((code) => (
+                <option key={code} value={code} className="bg-zinc-900">
+                  {GUEST_LANG_LABELS[code]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </header>
+
       <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 px-4 py-6 md:py-10 lg:grid-cols-3">
         <aside className="space-y-4 lg:col-span-1">
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-6 shadow-xl">
             <div className="mb-4 inline-flex rounded-full bg-red-600/20 p-3 text-red-400">
               <UtensilsCrossed className="h-6 w-6" />
             </div>
-            <h1 className="text-2xl font-bold leading-tight text-white">{RESTAURANT_NAME}</h1>
+            <h1 className="text-2xl font-bold leading-tight text-white">{venue.restaurantName}</h1>
             <p className="mt-2 whitespace-pre-line text-sm text-zinc-400">{copy.tagline}</p>
           </div>
 
@@ -260,9 +284,9 @@ export function ReservationBookingView() {
               <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
               <div>
                 <p className="text-sm font-semibold text-white">{copy.location}</p>
-                <p className="mt-1 text-sm text-zinc-300">{ADDRESS}</p>
+                <p className="mt-1 text-sm text-zinc-300">{venue.address}</p>
                 <a
-                  href={MAPS_URL}
+                  href={mapsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-2 inline-block text-sm font-medium text-red-400 hover:text-red-300"
@@ -276,13 +300,13 @@ export function ReservationBookingView() {
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5 shadow-xl">
             <p className="text-sm font-semibold text-white">{copy.contact}</p>
             <div className="mt-3 space-y-2 text-sm">
-              <a href={PHONE_HREF} className="flex items-center gap-2 text-zinc-300 hover:text-white">
+              <a href={phoneHref} className="flex items-center gap-2 text-zinc-300 hover:text-white">
                 <Phone className="h-4 w-4 text-red-400" />
-                {PHONE}
+                {venue.phone}
               </a>
-              <a href={EMAIL_HREF} className="flex items-center gap-2 text-zinc-300 hover:text-white">
+              <a href={emailHref} className="flex items-center gap-2 text-zinc-300 hover:text-white">
                 <Mail className="h-4 w-4 text-red-400" />
-                {EMAIL}
+                {venue.email}
               </a>
             </div>
           </div>
@@ -300,27 +324,9 @@ export function ReservationBookingView() {
 
         <section className="lg:col-span-2">
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/90 p-6 shadow-2xl sm:p-8">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-2xl font-bold text-white sm:text-3xl">{copy.makeReservation}</h2>
-                <p className="mt-2 text-sm text-zinc-400">{copy.reserveSubtitle}</p>
-              </div>
-              <label className="inline-flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm">
-                <Globe className="h-4 w-4 text-red-400" />
-                <select
-                  value={lang}
-                  onChange={(event) =>
-                    setLang(parseGuestReservationLang(event.target.value))
-                  }
-                  className="bg-transparent text-white outline-none"
-                >
-                  {GUEST_RESERVATION_LANGS.map((code) => (
-                    <option key={code} value={code} className="bg-zinc-900">
-                      {GUEST_LANG_LABELS[code]}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            <div>
+              <h2 className="text-2xl font-bold text-white sm:text-3xl">{copy.makeReservation}</h2>
+              <p className="mt-2 text-sm text-zinc-400">{copy.reserveSubtitle}</p>
             </div>
 
             <form onSubmit={(event) => void handleSubmit(event)} className="mt-8 space-y-5">

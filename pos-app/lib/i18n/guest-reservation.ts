@@ -221,7 +221,7 @@ export function guestReservationCopy(lang: GuestReservationLang): GuestReservati
   return GUEST_RESERVATION_COPY[lang] ?? GUEST_RESERVATION_COPY.en;
 }
 
-export const GUEST_LANG_STORAGE_KEY = "reservation-guest-lang";
+export const GUEST_LANG_SESSION_KEY = "reservation-guest-lang";
 
 export function parseGuestReservationLang(value: string | null | undefined): GuestReservationLang {
   if (value === "vi" || value === "de" || value === "ko" || value === "en") return value;

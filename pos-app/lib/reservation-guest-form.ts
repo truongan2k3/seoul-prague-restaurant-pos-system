@@ -34,6 +34,21 @@ export type ReservationGuestFormConfig = {
   requiredFields: ReservationRequiredFields;
   eventTypes: ReservationEventTypeOption[];
   texts: ReservationGuestTexts;
+  venue: ReservationGuestVenue;
+};
+
+export type ReservationGuestVenue = {
+  restaurantName: string;
+  address: string;
+  phone: string;
+  email: string;
+};
+
+export const DEFAULT_RESERVATION_GUEST_VENUE: ReservationGuestVenue = {
+  restaurantName: "SEOUL PRAGUE Korean BBQ",
+  address: "Václavské nám. 819/43, 110 00 Praha",
+  phone: "+420 123 456 789",
+  email: "info@seoulprague.cz",
 };
 
 export const RESERVATION_FORM_FIELD_KEYS: ReservationFormFieldKey[] = [
@@ -220,15 +235,42 @@ export function parseReservationGuestTexts(value: unknown): ReservationGuestText
   };
 }
 
+export function parseReservationGuestVenue(value: unknown): ReservationGuestVenue {
+  if (!value || typeof value !== "object") {
+    return { ...DEFAULT_RESERVATION_GUEST_VENUE };
+  }
+  const row = value as Record<string, unknown>;
+  return {
+    restaurantName:
+      typeof row.restaurantName === "string" && row.restaurantName.trim()
+        ? row.restaurantName.trim()
+        : DEFAULT_RESERVATION_GUEST_VENUE.restaurantName,
+    address:
+      typeof row.address === "string" && row.address.trim()
+        ? row.address.trim()
+        : DEFAULT_RESERVATION_GUEST_VENUE.address,
+    phone:
+      typeof row.phone === "string" && row.phone.trim()
+        ? row.phone.trim()
+        : DEFAULT_RESERVATION_GUEST_VENUE.phone,
+    email:
+      typeof row.email === "string" && row.email.trim()
+        ? row.email.trim()
+        : DEFAULT_RESERVATION_GUEST_VENUE.email,
+  };
+}
+
 export function getGuestFormConfig(settings: {
   reservationRequiredFields: ReservationRequiredFields;
   reservationEventTypes: ReservationEventTypeOption[];
   reservationGuestTexts: ReservationGuestTexts;
+  reservationGuestVenue: ReservationGuestVenue;
 }): ReservationGuestFormConfig {
   return {
     requiredFields: settings.reservationRequiredFields,
     eventTypes: settings.reservationEventTypes,
     texts: settings.reservationGuestTexts,
+    venue: settings.reservationGuestVenue,
   };
 }
 

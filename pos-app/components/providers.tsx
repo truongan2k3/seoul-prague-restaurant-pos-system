@@ -16,6 +16,7 @@ import { AdminRefreshListener } from "@/components/admin-refresh-listener";
 import { ConnectionStatusBadge } from "@/components/connection-status-badge";
 import { PagePresenceTracker } from "@/components/page-presence-tracker";
 import { ConnectionStatusProvider } from "@/contexts/connection-status-context";
+import { LuxuryPreloader } from "@/components/luxury-preloader";
 
 function PinGateWrapper({ children }: { children: React.ReactNode }) {
   const { settings } = useSettings();
@@ -48,6 +49,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <SettingsProvider>
           <NotificationProvider>
             <ReceiptPrintProvider>
+              <LuxuryPreloader />
               <PinGateWrapper>{children}</PinGateWrapper>
             </ReceiptPrintProvider>
           </NotificationProvider>

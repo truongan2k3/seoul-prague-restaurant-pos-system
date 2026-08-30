@@ -1,22 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
 import gsap from "gsap";
 import {
   PRELOADER_SESSION_KEY,
   PRELOADER_SLIDES,
 } from "@/lib/preloader-slides";
 
-/** Guest booking only — avoid blocking POS / KDS / bar staff screens. */
-function isGuestIntroPath(pathname: string): boolean {
-  return pathname === "/reservation" || pathname.startsWith("/reservation/");
-}
-
 const SAFETY_MS = 10_000;
 
 export function LuxuryPreloader() {
-  const pathname = usePathname();
   const [playing, setPlaying] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
   const subtitleRef = useRef<HTMLParagraphElement>(null);
@@ -26,7 +19,6 @@ export function LuxuryPreloader() {
   const finishedRef = useRef(false);
 
   useEffect(() => {
-    if (!isGuestIntroPath(pathname)) return;
     if (sessionStorage.getItem(PRELOADER_SESSION_KEY) === "1") return;
 
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -35,7 +27,7 @@ export function LuxuryPreloader() {
     }
 
     setPlaying(true);
-  }, [pathname]);
+  }, []);
 
   useEffect(() => {
     if (!playing) return;

@@ -219,6 +219,41 @@ export async function ensureStaffRosterCleanup() {
   }
 }
 
+/** Load staff roster for the staff picker — runs cleanup first so Adam/admin always exists. */
+export async function prepareStaffLoginRosterAction(): Promise<{
+  data: StaffMember[];
+  error?: string;
+}> {
+  const businessSession = await requireBusinessSession();
+  if (!businessSession) {
+    return { data: [], error: "unauthorized" };
+  }
+
+  await ensureStaffRosterCleanup();
+  return listStaffAction();
+}
+
+/** Returns active staff session only if the member still exists and is active. */
+export async function resolveStaffLoginSessionAction(): Promise<StaffSessionPayload | null> {
+  const staffSession = await getStaffSessionAction();
+  if (!staffSession) return null;
+
+  const supabase = createSupabaseAdmin();
+  const { data } = await supabase
+    .from("staff")
+    .select("id, active")
+    .eq("id", staffSession.staffId)
+    .eq("business_id", staffSession.businessId)
+    .maybeSingle();
+
+  if (!data || data.active === false) {
+    await clearStaffSession();
+    return null;
+  }
+
+  return staffSession;
+}
+
 /** Select a staff member for this device — no password required. */
 export async function selectStaffAction(staffId: string) {
   const businessSession = await requireBusinessSession();

@@ -1,5 +1,6 @@
 import { supabase } from "@/src/lib/supabase";
 import type { PageTarget } from "@/lib/page-routes";
+import { resolveConnectionStatus, type ConnectionStatus } from "@/lib/connection-status";
 
 export const PAGE_PRESENCE_CHANNEL = "pos_page_presence";
 
@@ -21,12 +22,25 @@ export function isPageOnline(lastSeenAt: string, now = Date.now()) {
   return now - new Date(lastSeenAt).getTime() < ONLINE_THRESHOLD_MS;
 }
 
-export function trackPagePresence(page: PageTarget): () => void {
+export function trackPagePresence(
+  page: PageTarget,
+  onStatusChange?: (status: ConnectionStatus) => void,
+): () => void {
   const channel = supabase.channel(PAGE_PRESENCE_CHANNEL, {
     config: { broadcast: { self: true } },
   });
 
   let intervalId: number | undefined;
+  let realtimeConnected = false;
+
+  const emitStatus = () => {
+    onStatusChange?.(
+      resolveConnectionStatus({
+        networkOnline: typeof navigator !== "undefined" ? navigator.onLine : true,
+        realtimeConnected,
+      }),
+    );
+  };
 
   const sendHeartbeat = () => {
     const payload: PagePresencePayload = {
@@ -41,26 +55,41 @@ export function trackPagePresence(page: PageTarget): () => void {
     });
   };
 
-  void new Promise<void>((resolve, reject) => {
-    const timeout = window.setTimeout(() => reject(new Error("Presence subscribe timeout")), 5000);
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        window.clearTimeout(timeout);
-        sendHeartbeat();
+  const handleOnline = () => emitStatus();
+  const handleOffline = () => {
+    realtimeConnected = false;
+    emitStatus();
+  };
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+  }
+
+  emitStatus();
+
+  channel.subscribe((status) => {
+    if (status === "SUBSCRIBED") {
+      realtimeConnected = true;
+      sendHeartbeat();
+      if (intervalId == null) {
         intervalId = window.setInterval(sendHeartbeat, 15_000);
-        resolve();
       }
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        window.clearTimeout(timeout);
-        reject(new Error(`Presence ${status}`));
-      }
-    });
-  }).catch(() => {
-    // Non-fatal — status dashboard may show offline until reconnect.
+      emitStatus();
+      return;
+    }
+    if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+      realtimeConnected = false;
+      emitStatus();
+    }
   });
 
   return () => {
     if (intervalId != null) window.clearInterval(intervalId);
+    if (typeof window !== "undefined") {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    }
     void supabase.removeChannel(channel);
   };
 }

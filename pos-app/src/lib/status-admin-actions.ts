@@ -115,6 +115,40 @@ export type AdminPopupBroadcastPayload = {
   at: string;
 };
 
+export type AdminRefreshBroadcastPayload = {
+  targets: PageTarget[];
+  at: string;
+};
+
+async function broadcastAdminEvent(event: "admin_popup" | "admin_refresh", payload: unknown) {
+  const supabase = createSupabaseAdmin();
+  const channel = supabase.channel("pos_admin_broadcast", {
+    config: { broadcast: { self: true } },
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("Realtime subscribe timeout")), 5000);
+    channel.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        clearTimeout(timeout);
+        resolve();
+      }
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        clearTimeout(timeout);
+        reject(new Error(`Realtime ${status}`));
+      }
+    });
+  });
+
+  await channel.send({
+    type: "broadcast",
+    event,
+    payload,
+  });
+
+  void supabase.removeChannel(channel);
+}
+
 export async function sendAdminPopupAction(input: {
   title: string;
   message: string;
@@ -140,32 +174,33 @@ export async function sendAdminPopupAction(input: {
     at: new Date().toISOString(),
   };
 
-  const supabase = createSupabaseAdmin();
-  const channel = supabase.channel("pos_admin_broadcast", {
-    config: { broadcast: { self: true } },
-  });
+  try {
+    await broadcastAdminEvent("admin_popup", payload);
+  } catch {
+    return { ok: false as const, error: "broadcastFailed" };
+  }
 
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("Realtime subscribe timeout")), 5000);
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        clearTimeout(timeout);
-        resolve();
-      }
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        clearTimeout(timeout);
-        reject(new Error(`Realtime ${status}`));
-      }
-    });
-  });
+  return { ok: true as const, payload };
+}
 
-  await channel.send({
-    type: "broadcast",
-    event: "admin_popup",
-    payload,
-  });
+export async function sendAdminRefreshAction(input: { targets: PageTarget[] }) {
+  await requireStatusAdmin();
 
-  void supabase.removeChannel(channel);
+  const targets = input.targets.filter((target) => PAGE_TARGETS.includes(target));
+  if (targets.length === 0) {
+    return { ok: false as const, error: "noTargets" };
+  }
+
+  const payload: AdminRefreshBroadcastPayload = {
+    targets,
+    at: new Date().toISOString(),
+  };
+
+  try {
+    await broadcastAdminEvent("admin_refresh", payload);
+  } catch {
+    return { ok: false as const, error: "broadcastFailed" };
+  }
 
   return { ok: true as const, payload };
 }

@@ -12,7 +12,10 @@ import { FullscreenToggle } from "@/components/fullscreen-toggle";
 import { MobileRefreshGuard } from "@/components/mobile-refresh-guard";
 import { UnsavedWorkProvider } from "@/contexts/unsaved-work-context";
 import { AdminBroadcastListener } from "@/components/admin-broadcast-listener";
+import { AdminRefreshListener } from "@/components/admin-refresh-listener";
+import { ConnectionStatusBadge } from "@/components/connection-status-badge";
 import { PagePresenceTracker } from "@/components/page-presence-tracker";
+import { ConnectionStatusProvider } from "@/contexts/connection-status-context";
 
 function PinGateWrapper({ children }: { children: React.ReactNode }) {
   const { settings } = useSettings();
@@ -22,13 +25,17 @@ function PinGateWrapper({ children }: { children: React.ReactNode }) {
       verifyPin={(passcode) => passcode === settings.adminDeletionPassword}
       bypassPin={staffBypassesManagerPasscode(currentStaffUser?.role)}
     >
-      <UnsavedWorkProvider>
-        {children}
-        <AdminBroadcastListener />
-        <PagePresenceTracker />
-        <MobileRefreshGuard />
-        <FullscreenToggle variant="fab" />
-      </UnsavedWorkProvider>
+      <ConnectionStatusProvider>
+        <UnsavedWorkProvider>
+          {children}
+          <AdminBroadcastListener />
+          <AdminRefreshListener />
+          <PagePresenceTracker />
+          <ConnectionStatusBadge />
+          <MobileRefreshGuard />
+          <FullscreenToggle variant="fab" />
+        </UnsavedWorkProvider>
+      </ConnectionStatusProvider>
       <ManagerPasscodeModal />
     </PinGateProvider>
   );

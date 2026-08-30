@@ -6,6 +6,7 @@ import {
   getBusinessOwnerInfoAction,
   getStatusAdminSessionAction,
   sendAdminPopupAction,
+  sendAdminRefreshAction,
   statusAdminLoginAction,
   statusAdminLogoutAction,
 } from "@/src/lib/status-admin-actions";
@@ -35,6 +36,8 @@ export default function StatusAdminPage() {
   const [popupTargets, setPopupTargets] = useState<PageTarget[]>([...PAGE_TARGETS]);
   const [popupFeedback, setPopupFeedback] = useState<string | null>(null);
   const [popupSubmitting, setPopupSubmitting] = useState(false);
+  const [refreshFeedback, setRefreshFeedback] = useState<string | null>(null);
+  const [refreshSubmitting, setRefreshSubmitting] = useState<PageTarget | "all" | null>(null);
 
   const [presenceUpdates, setPresenceUpdates] = useState<Map<PageTarget, PagePresencePayload>>(
     () => new Map(),
@@ -123,6 +126,23 @@ export default function StatusAdminPage() {
     setPopupTargets((prev) =>
       prev.includes(target) ? prev.filter((item) => item !== target) : [...prev, target],
     );
+  };
+
+  const handleRefreshPages = async (targets: PageTarget[]) => {
+    const key: PageTarget | "all" = targets.length === PAGE_TARGETS.length ? "all" : targets[0]!;
+    setRefreshSubmitting(key);
+    setRefreshFeedback(null);
+    const result = await sendAdminRefreshAction({ targets });
+    setRefreshSubmitting(null);
+    if (result.ok) {
+      setRefreshFeedback(
+        targets.length === PAGE_TARGETS.length
+          ? "Đã gửi lệnh tải lại tất cả các trang."
+          : `Đã gửi lệnh tải lại ${PAGE_TARGET_LABELS[targets[0]!]}.`,
+      );
+      return;
+    }
+    setRefreshFeedback("Không thể gửi lệnh tải lại. Trang có thể đang offline.");
   };
 
   const handleSendPopup = async (event: FormEvent) => {
@@ -232,6 +252,20 @@ export default function StatusAdminPage() {
           </button>
         </div>
 
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={refreshSubmitting != null || onlineCount === 0}
+            onClick={() => void handleRefreshPages([...PAGE_TARGETS])}
+            className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+          >
+            {refreshSubmitting === "all" ? "Đang gửi…" : "Tải lại tất cả trang"}
+          </button>
+          {refreshFeedback && (
+            <p className="text-sm text-sky-300">{refreshFeedback}</p>
+          )}
+        </div>
+
         <section className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {presenceStates.map((entry) => (
             <div
@@ -249,6 +283,14 @@ export default function StatusAdminPage() {
               </div>
               <p className="mt-2 text-sm text-zinc-400">{formatLastSeen(entry.lastSeenAt)}</p>
               <p className="mt-1 text-xs text-zinc-500">/{entry.page === "main" ? "" : entry.page}</p>
+              <button
+                type="button"
+                disabled={!entry.online || refreshSubmitting != null}
+                onClick={() => void handleRefreshPages([entry.page])}
+                className="mt-3 w-full rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {refreshSubmitting === entry.page ? "Đang gửi…" : "Tải lại trang này"}
+              </button>
             </div>
           ))}
         </section>

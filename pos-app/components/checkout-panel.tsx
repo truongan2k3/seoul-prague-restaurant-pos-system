@@ -38,6 +38,11 @@ import {
   loadEqualSplitSession,
   persistEqualSplitSession,
 } from "@/lib/equal-split-session";
+import {
+  clearItemSplitSession,
+  loadItemSplitSession,
+  persistItemSplitSession,
+} from "@/lib/item-split-session";
 import type { MenuItem, OrderItem, PaymentMethod } from "@/lib/types";
 import { filterButtonClass } from "@/lib/theme-classes";
 
@@ -203,39 +208,54 @@ export function CheckoutPanel({
     setLocalError(null);
     setEqualAdjustScope("person");
 
-    const stored = loadEqualSplitSession(tableId);
+    const storedEqual = loadEqualSplitSession(tableId);
     const resumeEqual =
       (initialEqualPaymentsMade > 0 &&
         initialEqualSplitCount > initialEqualPaymentsMade) ||
-      (stored != null &&
-        stored.paymentsMade > 0 &&
-        stored.splitCount > stored.paymentsMade);
+      (storedEqual != null &&
+        storedEqual.paymentsMade > 0 &&
+        storedEqual.splitCount > storedEqual.paymentsMade);
 
     if (resumeEqual) {
-      const paymentsMade = Math.max(initialEqualPaymentsMade, stored?.paymentsMade ?? 0);
-      const count = Math.max(initialEqualSplitCount, stored?.splitCount ?? 0);
+      const paymentsMade = Math.max(initialEqualPaymentsMade, storedEqual?.paymentsMade ?? 0);
+      const count = Math.max(initialEqualSplitCount, storedEqual?.splitCount ?? 0);
       setSplitCountInput(String(count));
       setSplitMode("equal");
       setSplitPhase("checkout");
       setPanelView("split");
       setEqualPaymentsMade(paymentsMade);
       splitSessionRef.current = { active: true, mode: "equal", count };
+      clearItemSplitSession(tableId);
 
-      if (stored && stored.splitCount === count) {
-        setEqualAdjustScope(stored.equalAdjustScope);
-        if (stored.equalAdjustScope === "bill") {
-          setDiscountType(stored.discountType);
-          setDiscountValue(stored.discountValue);
-          setDiscountPreset(stored.discountPreset);
-          setTipMode(stored.tipMode);
-          setTipPreset(stored.tipPreset);
-          setCustomTip(stored.customTip);
+      if (storedEqual && storedEqual.splitCount === count) {
+        setEqualAdjustScope(storedEqual.equalAdjustScope);
+        if (storedEqual.equalAdjustScope === "bill") {
+          setDiscountType(storedEqual.discountType);
+          setDiscountValue(storedEqual.discountValue);
+          setDiscountPreset(storedEqual.discountPreset);
+          setTipMode(storedEqual.tipMode);
+          setTipPreset(storedEqual.tipPreset);
+          setCustomTip(storedEqual.customTip);
         }
       }
       return;
     }
 
+    const storedItems = loadItemSplitSession(tableId);
+    if (storedItems?.active) {
+      clearEqualSplitSession(tableId);
+      setSplitCountInput("2");
+      setSplitMode("items");
+      setSplitPhase("pick-items");
+      setPanelView("split");
+      setEqualPaymentsMade(0);
+      setSelectedLineIds([]);
+      splitSessionRef.current = { active: true, mode: "items", count: 2 };
+      return;
+    }
+
     clearEqualSplitSession(tableId);
+    clearItemSplitSession(tableId);
     setSplitCountInput("2");
     setSplitMode("total");
     setSplitPhase("checkout");
@@ -261,8 +281,10 @@ export function CheckoutPanel({
 
   useEffect(() => {
     const session = splitSessionRef.current;
+    const lineIds = lines.map((line) => line.lineId);
+
     if (!session.active || session.mode === "total") {
-      setSelectedLineIds(lines.map((line) => line.lineId));
+      setSelectedLineIds(lineIds);
       return;
     }
 
@@ -271,9 +293,10 @@ export function CheckoutPanel({
     setPanelView("split");
     setSplitPhase(session.mode === "items" ? "pick-items" : "checkout");
     if (session.mode === "items") {
-      setSelectedLineIds([]);
+      // Keep current picks that still exist; drop paid/removed lines only.
+      setSelectedLineIds((prev) => prev.filter((id) => lineIds.includes(id)));
     } else {
-      setSelectedLineIds(lines.map((line) => line.lineId));
+      setSelectedLineIds(lineIds);
     }
     setCashGiven("");
     setRoundUpTotal("");
@@ -291,10 +314,13 @@ export function CheckoutPanel({
     if (equalPaymentsMade > 0) return;
     setSplitMode(mode);
     if (mode === "equal") {
+      clearItemSplitSession(tableId);
       setSelectedLineIds(lines.map((line) => line.lineId));
       setSplitPhase("checkout");
       return;
     }
+    persistItemSplitSession(tableId);
+    clearEqualSplitSession(tableId);
     setSelectedLineIds([]);
     setSplitPhase("pick-items");
   };
@@ -302,19 +328,23 @@ export function CheckoutPanel({
   const exitSplitToMain = () => {
     // Don't abandon an in-progress equal split back to full-bill pay.
     if (equalPaymentsMade > 0 && splitMode === "equal") return;
+    clearItemSplitSession(tableId);
     setPanelView("main");
     setSplitMode("total");
     setSplitPhase("checkout");
     setSelectedLineIds(lines.map((line) => line.lineId));
+    splitSessionRef.current = { active: false, mode: "total", count: splitCount };
   };
 
   useEffect(() => {
     if (splitMode === "items") {
       setSelectedLineIds([]);
     } else {
-      setSelectedLineIds(lines.map((line) => line.lineId));
+      setSelectedLineIds(linesRef.current.map((line) => line.lineId));
     }
-  }, [splitMode, lines]);
+    // Only react to mode changes — refreshing remaining lines must not wipe a mid-pick selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [splitMode]);
 
   const baseTotals = useMemo(
     () =>
@@ -433,30 +463,53 @@ export function CheckoutPanel({
 
   useEffect(() => {
     if (!onCfdUpdate || !tableLabel) return;
-    if (splitMode === "items" && selectedLineIds.length === 0) return;
 
+    // Split-by-items: empty selection → show full bill; with selection → selected + total.
     const displayOrders =
       splitMode === "items"
-        ? ordersFromLines(totals.payableLines)
+        ? selectedLineIds.length === 0
+          ? orderSummary
+          : ordersFromLines(totals.payableLines)
         : splitMode === "equal" && splitCount > 1
           ? scaleOrdersForEqualSplit(orderSummary, splitCount)
           : orderSummary;
+
+    const subtotal =
+      splitMode === "items" && selectedLineIds.length === 0
+        ? orderSummary.reduce((sum, item) => sum + item.price * item.quantity, 0)
+        : totals.subtotal;
+    const discount =
+      splitMode === "items" && selectedLineIds.length === 0 ? 0 : totals.discountAmount;
+    const tip =
+      splitMode === "items" && selectedLineIds.length === 0 ? 0 : totalTipWithKeep;
+    const total =
+      splitMode === "items" && selectedLineIds.length === 0 ? subtotal : payTotal;
+
     onCfdUpdate(
       buildCfdCheckoutPayload(tableLabel, displayOrders, menuItems, {
-        subtotal: totals.subtotal,
-        discount: totals.discountAmount,
-        tip: totalTipWithKeep,
-        grandTotal: payTotal,
-        amountDueNow: payTotal,
+        subtotal,
+        discount,
+        tip,
+        grandTotal: total,
+        amountDueNow: total,
         amountGiven:
-          paymentMethod === "cash" && usingCashGiven && !insufficientPayment
+          paymentMethod === "cash" &&
+          usingCashGiven &&
+          !insufficientPayment &&
+          !(splitMode === "items" && selectedLineIds.length === 0)
             ? cashGivenNum
             : undefined,
         changeDue:
-          paymentMethod === "cash" && usingCashGiven && !usingRoundUp && !insufficientPayment
+          paymentMethod === "cash" &&
+          usingCashGiven &&
+          !usingRoundUp &&
+          !insufficientPayment &&
+          !(splitMode === "items" && selectedLineIds.length === 0)
             ? changeDueAmount
             : undefined,
+        // During active thank-you after a share payment, don't force-interrupt.
         staffInitiated: true,
+        deferIfThankYou: panelView === "split",
       }),
     );
   }, [
@@ -482,6 +535,7 @@ export function CheckoutPanel({
     usingRoundUp,
     insufficientPayment,
     cashGivenNum,
+    panelView,
   ]);
 
   const remainingBillLines = useMemo(
@@ -649,6 +703,7 @@ export function CheckoutPanel({
       clearCashOnly();
 
       if (mode === "equal") {
+        clearItemSplitSession(tableId);
         const nextMade = equalPaymentsMade + 1;
         setEqualPaymentsMade(nextMade);
         // Keep bill-scoped tip/discount for every guest; reset only per-person mode.
@@ -667,11 +722,13 @@ export function CheckoutPanel({
           customTip: equalAdjustScope === "person" ? 0 : customTip,
         });
       } else {
+        persistItemSplitSession(tableId);
         resetPaymentAdjustments();
         setSelectedLineIds([]);
       }
     } else if (payload.closeTable) {
       clearEqualSplitSession(tableId);
+      clearItemSplitSession(tableId);
     }
   };
 
@@ -711,6 +768,9 @@ export function CheckoutPanel({
       setSelectedLineIds([]);
       setSplitPhase("pick-items");
       setPanelView("split");
+      splitSessionRef.current = { active: true, mode: "items", count: splitCount };
+      persistItemSplitSession(tableId);
+      clearEqualSplitSession(tableId);
       return;
     }
   };

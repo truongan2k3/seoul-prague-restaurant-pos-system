@@ -412,9 +412,16 @@ export async function updateTableOrders(
     tableLabel?: string;
     silent?: boolean;
     printOrders?: OrderItem[];
+    /**
+     * When false, removed lines are archived for payment settle / system moves
+     * and do NOT write cancel activity logs (History warning badge).
+     * Default true for real staff cart edits.
+     */
+    logCancels?: boolean;
   },
 ) {
   const activeOrders = orders.filter((item) => item.quantity > 0);
+  const logCancels = options?.logCancels !== false;
 
   const { data: existingRows, error: fetchItemsError } = await supabase
     .from("order_items")
@@ -439,38 +446,50 @@ export async function updateTableOrders(
     if (openIds.length > 0) {
       const cancelRows = (existingRows ?? []).filter((row) => openIds.includes(row.id));
       const cancelledAt = new Date().toISOString();
-      const { error: cancelError } = await supabase
-        .from("order_items")
-        .update({
-          is_cancelled: true,
-          cancel_reason: "Removed from order",
-          cancelled_at: cancelledAt,
-          kitchen_status: "cancelled",
-          updated_at: cancelledAt,
-        })
-        .in("id", openIds);
-      if (cancelError) return { data: null, error: cancelError };
+      if (logCancels) {
+        const { error: cancelError } = await supabase
+          .from("order_items")
+          .update({
+            is_cancelled: true,
+            cancel_reason: "Removed from order",
+            cancelled_at: cancelledAt,
+            kitchen_status: "cancelled",
+            updated_at: cancelledAt,
+          })
+          .in("id", openIds);
+        if (cancelError) return { data: null, error: cancelError };
 
-      const staff = resolveStaffActorLocal({
-        staffId: options?.staffId,
-        staffName: options?.staffName,
-      });
-      await logCancelledOrderItems({
-        tableId,
-        tableLabel: options?.tableLabel,
-        staffId: staff.staffId,
-        staffName: staff.staffName,
-        reason: "Removed from order",
-        action: "removed_from_order",
-        rows: cancelRows.map((row) => ({
-          id: row.id,
-          name: row.name,
-          kitchen_status: row.kitchen_status,
-          status: row.status,
-          quantity: row.quantity,
-          price: row.price,
-        })),
-      });
+        const staff = resolveStaffActorLocal({
+          staffId: options?.staffId,
+          staffName: options?.staffName,
+        });
+        await logCancelledOrderItems({
+          tableId,
+          tableLabel: options?.tableLabel,
+          staffId: staff.staffId,
+          staffName: staff.staffName,
+          reason: "Removed from order",
+          action: "removed_from_order",
+          rows: cancelRows.map((row) => ({
+            id: row.id,
+            name: row.name,
+            kitchen_status: row.kitchen_status,
+            status: row.status,
+            quantity: row.quantity,
+            price: row.price,
+          })),
+        });
+      } else {
+        // Payment settle / system clear — archive quietly (no History cancel badge).
+        const { error: archiveError } = await supabase
+          .from("order_items")
+          .update({
+            kitchen_status: "archived",
+            updated_at: cancelledAt,
+          })
+          .in("id", openIds);
+        if (archiveError) return { data: null, error: archiveError };
+      }
     }
 
     await syncTableOrdersFromDb(tableId);
@@ -483,7 +502,7 @@ export async function updateTableOrders(
     desiredUnits.map((unit) => unit.id).filter((id): id is string => Boolean(id)),
   );
 
-  // Soft-delete lines removed from the cart (keep row for KDS red cancel alert).
+  // Soft-delete / archive lines removed from the cart.
   const idsToCancel = [...existingIds].filter((id) => !desiredIds.has(id));
   if (idsToCancel.length > 0) {
     const { data: cancelRows } = await supabase
@@ -494,33 +513,46 @@ export async function updateTableOrders(
       .neq("kitchen_status", "archived");
 
     const cancelledAt = new Date().toISOString();
-    const { error: cancelError } = await supabase
-      .from("order_items")
-      .update({
-        is_cancelled: true,
-        cancel_reason: "Removed from order",
-        cancelled_at: cancelledAt,
-        kitchen_status: "cancelled",
-        updated_at: cancelledAt,
-      })
-      .in("id", idsToCancel)
-      .eq("is_cancelled", false)
-      .neq("kitchen_status", "archived");
-    if (cancelError) return { data: null, error: cancelError };
+    if (logCancels) {
+      const { error: cancelError } = await supabase
+        .from("order_items")
+        .update({
+          is_cancelled: true,
+          cancel_reason: "Removed from order",
+          cancelled_at: cancelledAt,
+          kitchen_status: "cancelled",
+          updated_at: cancelledAt,
+        })
+        .in("id", idsToCancel)
+        .eq("is_cancelled", false)
+        .neq("kitchen_status", "archived");
+      if (cancelError) return { data: null, error: cancelError };
 
-    const staff = resolveStaffActorLocal({
-      staffId: options?.staffId,
-      staffName: options?.staffName,
-    });
-    await logCancelledOrderItems({
-      tableId,
-      tableLabel: options?.tableLabel,
-      staffId: staff.staffId,
-      staffName: staff.staffName,
-      reason: "Removed from order",
-      action: "qty_reduced",
-      rows: (cancelRows ?? []) as ActivityItemRow[],
-    });
+      const staff = resolveStaffActorLocal({
+        staffId: options?.staffId,
+        staffName: options?.staffName,
+      });
+      await logCancelledOrderItems({
+        tableId,
+        tableLabel: options?.tableLabel,
+        staffId: staff.staffId,
+        staffName: staff.staffName,
+        reason: "Removed from order",
+        action: "qty_reduced",
+        rows: (cancelRows ?? []) as ActivityItemRow[],
+      });
+    } else {
+      const { error: archiveError } = await supabase
+        .from("order_items")
+        .update({
+          kitchen_status: "archived",
+          updated_at: cancelledAt,
+        })
+        .in("id", idsToCancel)
+        .eq("is_cancelled", false)
+        .neq("kitchen_status", "archived");
+      if (archiveError) return { data: null, error: archiveError };
+    }
   }
 
   const unitsToUpdate = desiredUnits.filter((unit) => unit.id);
@@ -717,12 +749,12 @@ export async function checkoutTable(
     await completeReservationForTable(tableId, activeReservation?.id);
   }
 
-  // Partial item-split: unpaid lines remain on the bill.
+  // Partial item-split: unpaid lines remain on the bill (no cancel-log / KDS alert).
   if (options?.remainingOrders !== undefined) {
     if (options.remainingOrders.length === 0) {
       return settlePaidTable(tableId);
     }
-    return updateTableOrders(tableId, options.remainingOrders);
+    return updateTableOrders(tableId, options.remainingOrders, { logCancels: false });
   }
 
   // Equal-split installment — leave table open without marking fully paid.
@@ -779,6 +811,8 @@ export async function mergeTables(sourceIds: string[], targetId: string) {
       .eq("id", targetId);
     await clearTable(sourceId);
   }
+  // Rebuild JSON from live unit rows so IDs stay consistent (avoids false cancel logs later).
+  await syncTableOrdersFromDb(targetId);
   return { error: null as Error | null };
 }
 

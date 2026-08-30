@@ -44,14 +44,30 @@ export function PaymentModal({
   const [equalProgress, setEqualProgress] = useState({ paymentsMade: 0, splitCount: 0 });
   const [progressReady, setProgressReady] = useState(false);
   const wasOpenRef = useRef(false);
+  const visitKey = `${table.id}:${table.occupiedAt?.getTime() ?? 0}`;
+  const visitKeyRef = useRef(visitKey);
 
   useEffect(() => {
     if (!open) {
       setProgressReady(false);
       setEqualProgress({ paymentsMade: 0, splitCount: 0 });
+      wasOpenRef.current = false;
+      visitKeyRef.current = "";
       return;
     }
 
+    const justOpened = !wasOpenRef.current;
+    const visitChanged = visitKeyRef.current !== visitKey;
+    wasOpenRef.current = true;
+
+    // Only remount CheckoutPanel when opening payment or the visit really changes —
+    // not on every floor refresh that allocates a new Date for the same occupiedAt.
+    if (!justOpened && !visitChanged) {
+      setProgressReady(true);
+      return;
+    }
+
+    visitKeyRef.current = visitKey;
     let cancelled = false;
     setProgressReady(false);
     void fetchEqualSplitProgress(table.id, table.occupiedAt).then((result) => {
@@ -67,7 +83,7 @@ export function PaymentModal({
     return () => {
       cancelled = true;
     };
-  }, [open, table.id, table.occupiedAt]);
+  }, [open, table.id, visitKey, table.occupiedAt]);
 
   const handleCancelCfd = useCallback(() => {
     void sendCfdEvent("CANCEL_CHECKOUT", {});
@@ -88,15 +104,10 @@ export function PaymentModal({
   }, []);
 
   useEffect(() => {
-    if (!open || !progressReady) {
-      wasOpenRef.current = false;
-      return;
-    }
-    const justOpened = !wasOpenRef.current;
-    wasOpenRef.current = true;
-    if (!justOpened) return;
+    if (!open || !progressReady) return;
+    if (checkoutSessionKey === 0) return;
 
-    // Initial CFD: if resuming equal split, show one person's share; else full bill.
+    // Initial CFD only when a new checkout session starts (open / new visit).
     const fullSubtotal = orders.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const resuming =
       equalProgress.paymentsMade > 0 &&
@@ -115,15 +126,9 @@ export function PaymentModal({
         staffInitiated: true,
       }),
     );
-  }, [
-    open,
-    progressReady,
-    table.label,
-    orders,
-    menuItems,
-    equalProgress.paymentsMade,
-    equalProgress.splitCount,
-  ]);
+    // Intentionally keyed by session — avoid rebroadcast on every order refresh mid-split.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, progressReady, checkoutSessionKey]);
 
   const title = `${translate("payment")} — ${translate("table")} ${table.label}`;
 

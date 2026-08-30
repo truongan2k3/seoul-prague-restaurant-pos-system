@@ -24,6 +24,8 @@ import { useSettings } from "@/contexts/settings-context";
 import { useBlobUrl, useBlobUrlCache } from "@/hooks/use-blob-url-cache";
 
 const THANK_YOU_SECONDS = 20;
+/** Minimum thank-you time before advancing to the next split guest. */
+const MIN_THANK_YOU_BEFORE_NEXT_SECONDS = 5;
 const CFD_LANGUAGE_KEY = "cfd-language";
 
 function useCfdLanguage() {
@@ -390,18 +392,42 @@ export function ClientDisplayView() {
   const [secondsLeft, setSecondsLeft] = useState(THANK_YOU_SECONDS);
   const clientStateRef = useRef(clientState);
   const checkoutRef = useRef(checkout);
+  const thankYouStartedAtRef = useRef<number | null>(null);
+  const queuedCheckoutRef = useRef<CfdCheckoutPayload | null>(null);
   clientStateRef.current = clientState;
   checkoutRef.current = checkout;
 
   const slideshow = useMemo(() => resolveCfdSlideshow(settings), [settings]);
   const reviewQrImageUrl = settings.cfdReviewQrImageUrl.trim();
 
+  const applyCheckout = useCallback((payload: CfdCheckoutPayload) => {
+    queuedCheckoutRef.current = null;
+    thankYouStartedAtRef.current = null;
+    setCheckout(payload);
+    setClientState("checkout");
+  }, []);
+
+  const queueOrApplyCheckout = useCallback(
+    (payload: CfdCheckoutPayload) => {
+      const onThankYou = clientStateRef.current === "thankyou";
+      if (onThankYou && payload.deferIfThankYou) {
+        const started = thankYouStartedAtRef.current ?? Date.now();
+        thankYouStartedAtRef.current = started;
+        const elapsedSec = (Date.now() - started) / 1000;
+        if (elapsedSec < MIN_THANK_YOU_BEFORE_NEXT_SECONDS) {
+          queuedCheckoutRef.current = payload;
+          return;
+        }
+      }
+      applyCheckout(payload);
+    },
+    [applyCheckout],
+  );
+
   useEffect(() => {
     const handlers = {
       onStartCheckout: (payload: CfdCheckoutPayload) => {
-        // Staff opened checkout for a table — always interrupt thank-you / idle.
-        setCheckout(payload);
-        setClientState("checkout");
+        queueOrApplyCheckout(payload);
       },
       onPaymentSuccess: (payload?: { tableNumber?: string }) => {
         // Don't let a previous table's payment wipe a newer checkout already on screen.
@@ -414,10 +440,14 @@ export function ClientDisplayView() {
         ) {
           return;
         }
+        thankYouStartedAtRef.current = Date.now();
+        queuedCheckoutRef.current = null;
         setClientState("thankyou");
         setSecondsLeft(THANK_YOU_SECONDS);
       },
       onCancelCheckout: () => {
+        queuedCheckoutRef.current = null;
+        thankYouStartedAtRef.current = null;
         setCheckout(null);
         setClientState("idle");
       },
@@ -430,10 +460,11 @@ export function ClientDisplayView() {
       if (snapshot.state === "checkout" && snapshot.checkout) {
         const nextFp = checkoutPayloadFingerprint(snapshot.checkout);
         const curFp = checkoutPayloadFingerprint(checkoutRef.current);
-        if (
-          clientStateRef.current === "checkout" &&
-          nextFp === curFp
-        ) {
+        if (clientStateRef.current === "checkout" && nextFp === curFp) {
+          return;
+        }
+        if (clientStateRef.current === "thankyou" && snapshot.checkout.deferIfThankYou) {
+          queueOrApplyCheckout(snapshot.checkout);
           return;
         }
       } else if (snapshot.state === "thankyou" && clientStateRef.current === "thankyou") {
@@ -442,7 +473,10 @@ export function ClientDisplayView() {
         return;
       }
 
-      applyCfdSnapshot(snapshot, handlers);
+      applyCfdSnapshot(snapshot, {
+        ...handlers,
+        onStartCheckout: (payload) => queueOrApplyCheckout(payload),
+      });
     };
 
     void syncFromStore();
@@ -454,7 +488,6 @@ export function ClientDisplayView() {
       },
     });
 
-    // Durable fallback without polling — only when POS writes cfd_display_state.
     const unsubState = subscribeToPostgresRowChanges(
       "cfd-display-state",
       { event: "*", schema: "public", table: "cfd_display_state" },
@@ -476,15 +509,38 @@ export function ClientDisplayView() {
       unsubState();
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, []);
+  }, [queueOrApplyCheckout]);
 
   useEffect(() => {
     if (clientState !== "thankyou") return;
 
+    if (thankYouStartedAtRef.current == null) {
+      thankYouStartedAtRef.current = Date.now();
+    }
     setSecondsLeft(THANK_YOU_SECONDS);
     const interval = setInterval(() => {
       setSecondsLeft((prev) => {
+        const started = thankYouStartedAtRef.current ?? Date.now();
+        const elapsedSec = (Date.now() - started) / 1000;
+        const queued = queuedCheckoutRef.current;
+
+        if (queued && elapsedSec >= MIN_THANK_YOU_BEFORE_NEXT_SECONDS) {
+          queuedCheckoutRef.current = null;
+          thankYouStartedAtRef.current = null;
+          setCheckout(queued);
+          setClientState("checkout");
+          return THANK_YOU_SECONDS;
+        }
+
         if (prev <= 1) {
+          if (queued) {
+            queuedCheckoutRef.current = null;
+            thankYouStartedAtRef.current = null;
+            setCheckout(queued);
+            setClientState("checkout");
+            return THANK_YOU_SECONDS;
+          }
+          thankYouStartedAtRef.current = null;
           setClientState("idle");
           setCheckout(null);
           void releaseCfdThankYouState();

@@ -30,8 +30,13 @@ export interface CfdCheckoutPayload {
   amountGiven?: number;
   /** Change to return when amountGiven exceeds the charge. */
   changeDue?: number;
-  /** Staff opened/updated checkout on POS — always interrupt thank-you / idle. */
+  /** Staff opened/updated checkout on POS — interrupt idle; thank-you may still queue. */
   staffInitiated?: boolean;
+  /**
+   * When true and CFD is on thank-you, queue this checkout until thank-you
+   * has shown at least the minimum duration (split next-person flow).
+   */
+  deferIfThankYou?: boolean;
 }
 
 export interface CfdEventPayload {
@@ -84,6 +89,7 @@ export function buildCfdCheckoutPayload(
     amountGiven?: number;
     changeDue?: number;
     staffInitiated?: boolean;
+    deferIfThankYou?: boolean;
   },
 ): CfdCheckoutPayload {
   const menuById = new Map(menuItems.map((item) => [item.id, item]));
@@ -122,6 +128,7 @@ export function buildCfdCheckoutPayload(
     amountGiven: totals.amountGiven,
     changeDue: totals.changeDue,
     staffInitiated: totals.staffInitiated,
+    deferIfThankYou: totals.deferIfThankYou,
   };
 }
 

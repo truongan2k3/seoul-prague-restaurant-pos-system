@@ -84,6 +84,48 @@ const en: GuestReservationCopy = {
   errorSubmitRetry: "Failed to submit reservation. Please try again.",
 };
 
+const cs: GuestReservationCopy = {
+  languageLabel: "Čeština",
+  tagline: "Chcete ochutnat autentickou korejskou atmosféru?\nRezervujte si stůl!",
+  bookCta: "Rezervujte si stůl!",
+  location: "Adresa",
+  getDirections: "Navigovat →",
+  contact: "Kontakt",
+  openingHours: "Otevírací doba",
+  makeReservation: "Rezervace stolu",
+  reserveSubtitle: "Rezervace v SEOUL PRAGUE",
+  yourName: "Vaše jméno",
+  emailAddress: "E-mail",
+  phoneNumber: "Telefon",
+  numberOfGuests: "Počet hostů",
+  selectDate: "Datum",
+  selectTime: "Čas",
+  additionalNotes: "Poznámka",
+  eventType: "Typ akce",
+  selectEventType: "Vyberte typ akce",
+  guestSingular: "host",
+  guestPlural: "hostů",
+  namePlaceholder: "Celé jméno",
+  emailPlaceholder: "vy@example.cz",
+  notesPlaceholder: "Alergie, speciální požadavky…",
+  loadingTimes: "Načítání…",
+  noTimesAvailable: "Žádné volné termíny",
+  submitReservation: "Odeslat rezervaci →",
+  submitting: "Odesílání…",
+  close: "Zavřít",
+  bookingCode: "Kód rezervace",
+  manageReservation: "Spravovat rezervaci",
+  gdprRequired: "Před odesláním prosím souhlaste se zpracováním údajů.",
+  errorName: "Zadejte prosím jméno.",
+  errorEmail: "Zadejte prosím e-mail.",
+  errorPhone: "Zadejte prosím telefon.",
+  errorDateTime: "Vyberte prosím datum a čas.",
+  errorEventType: "Vyberte prosím typ akce.",
+  errorGdpr: "Zaškrtněte prosím souhlas pro pokračování.",
+  errorSubmit: "Rezervaci se nepodařilo odeslat.",
+  errorSubmitRetry: "Rezervaci se nepodařilo odeslat. Zkuste to znovu.",
+};
+
 const vi: GuestReservationCopy = {
   languageLabel: "Tiếng Việt",
   tagline: "Muốn thử không khí Hàn Quốc đích thực?\nĐặt bàn ngay!",
@@ -212,6 +254,7 @@ const ko: GuestReservationCopy = {
 
 export const GUEST_RESERVATION_COPY: Record<GuestReservationLang, GuestReservationCopy> = {
   en,
+  cs,
   vi,
   de,
   ko,
@@ -224,6 +267,14 @@ export function guestReservationCopy(lang: GuestReservationLang): GuestReservati
 export const GUEST_LANG_SESSION_KEY = "reservation-guest-lang";
 
 export function parseGuestReservationLang(value: string | null | undefined): GuestReservationLang {
-  if (value === "vi" || value === "de" || value === "ko" || value === "en") return value;
+  if (
+    value === "cs" ||
+    value === "vi" ||
+    value === "de" ||
+    value === "ko" ||
+    value === "en"
+  ) {
+    return value;
+  }
   return "en";
 }

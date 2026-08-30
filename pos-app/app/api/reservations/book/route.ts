@@ -35,7 +35,13 @@ export async function POST(request: Request) {
     notes: body.notes,
     eventType: body.eventType,
     gdprConsent: body.gdprConsent === true,
-    lang: body.lang === "vi" || body.lang === "de" || body.lang === "ko" ? body.lang : "en",
+    lang:
+      body.lang === "cs" ||
+      body.lang === "vi" ||
+      body.lang === "de" ||
+      body.lang === "ko"
+        ? body.lang
+        : "en",
   });
 
   if (error || !data) {

@@ -216,7 +216,7 @@ export interface AppSettings {
   reservationRequiredFields: ReservationRequiredFields;
   /** Selectable event types on the guest booking page. */
   reservationEventTypes: ReservationEventTypeOption[];
-  /** Guest page copy (email hint, success popup, GDPR) in en/vi/de/ko. */
+  /** Guest page copy (email hint, success popup, GDPR) in en/cs/vi/de/ko. */
   reservationGuestTexts: ReservationGuestTexts;
   /** Guest /reservation sidebar — restaurant name, address, phone, email. */
   reservationGuestVenue: ReservationGuestVenue;

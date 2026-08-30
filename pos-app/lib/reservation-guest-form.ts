@@ -1,6 +1,6 @@
-export type GuestReservationLang = "en" | "vi" | "de" | "ko";
+export type GuestReservationLang = "en" | "cs" | "vi" | "de" | "ko";
 
-export const GUEST_RESERVATION_LANGS: GuestReservationLang[] = ["en", "vi", "de", "ko"];
+export const GUEST_RESERVATION_LANGS: GuestReservationLang[] = ["en", "cs", "vi", "de", "ko"];
 
 export type ReservationFormFieldKey =
   | "name"
@@ -63,7 +63,7 @@ export const RESERVATION_FORM_FIELD_KEYS: ReservationFormFieldKey[] = [
 ];
 
 function emptyLocalizedText(): LocalizedGuestText {
-  return { en: "", vi: "", de: "", ko: "" };
+  return { en: "", cs: "", vi: "", de: "", ko: "" };
 }
 
 function parseLocalizedText(value: unknown, fallback: LocalizedGuestText): LocalizedGuestText {
@@ -93,6 +93,7 @@ export const DEFAULT_RESERVATION_EVENT_TYPES: ReservationEventTypeOption[] = [
     id: "casual",
     labels: {
       en: "Casual dining",
+      cs: "Neformální večeře",
       vi: "Ăn uống thông thường",
       de: "Lockeres Essen",
       ko: "일반 식사",
@@ -102,6 +103,7 @@ export const DEFAULT_RESERVATION_EVENT_TYPES: ReservationEventTypeOption[] = [
     id: "birthday",
     labels: {
       en: "Birthday",
+      cs: "Narozeniny",
       vi: "Sinh nhật",
       de: "Geburtstag",
       ko: "생일",
@@ -111,6 +113,7 @@ export const DEFAULT_RESERVATION_EVENT_TYPES: ReservationEventTypeOption[] = [
     id: "anniversary",
     labels: {
       en: "Anniversary",
+      cs: "Výročí",
       vi: "Kỷ niệm",
       de: "Jubiläum",
       ko: "기념일",
@@ -120,6 +123,7 @@ export const DEFAULT_RESERVATION_EVENT_TYPES: ReservationEventTypeOption[] = [
     id: "meeting",
     labels: {
       en: "Meeting",
+      cs: "Schůzka",
       vi: "Họp mặt",
       de: "Meeting",
       ko: "모임",
@@ -130,36 +134,42 @@ export const DEFAULT_RESERVATION_EVENT_TYPES: ReservationEventTypeOption[] = [
 export const DEFAULT_RESERVATION_GUEST_TEXTS: ReservationGuestTexts = {
   emailHint: {
     en: "Enter your email so we can send a confirmation.",
+    cs: "Zadejte e-mail, abychom vám mohli poslat potvrzení.",
     vi: "Nhập email để chúng tôi gửi mail xác nhận.",
     de: "Geben Sie Ihre E-Mail ein, damit wir eine Bestätigung senden können.",
     ko: "확인 메일을 받으실 이메일을 입력해 주세요.",
   },
   successTitle: {
     en: "Reservation Received",
+    cs: "Rezervace přijata",
     vi: "Đã nhận đặt bàn",
     de: "Reservierung erhalten",
     ko: "예약 접수 완료",
   },
   successBody: {
     en: "Thank you! Your reservation request has been submitted. Our team will confirm your booking shortly.",
+    cs: "Děkujeme! Vaše rezervace byla odeslána. Náš tým ji brzy potvrdí.",
     vi: "Cảm ơn bạn! Yêu cầu đặt bàn đã được gửi. Nhân viên sẽ xác nhận sớm.",
     de: "Vielen Dank! Ihre Reservierungsanfrage wurde übermittelt. Unser Team bestätigt Ihre Buchung in Kürze.",
     ko: "감사합니다! 예약 요청이 접수되었습니다. 곧 예약을 확인해 드리겠습니다.",
   },
   successEmailSent: {
     en: "We emailed you a confirmation request and a link to change or cancel anytime.",
+    cs: "Poslali jsme vám e-mail s potvrzením a odkazem pro změnu nebo zrušení kdykoli.",
     vi: "Chúng tôi đã gửi email xác nhận và liên kết để bạn có thể đổi hoặc hủy bất cứ lúc nào.",
     de: "Wir haben Ihnen eine Bestätigungs-E-Mail mit Link zum Ändern oder Stornieren gesendet.",
     ko: "확인 메일과 예약 변경·취소 링크를 보내 드렸습니다.",
   },
   successManageLink: {
     en: "Save this link to manage your booking:",
+    cs: "Uložte si tento odkaz pro správu rezervace:",
     vi: "Lưu liên kết này để quản lý đặt bàn:",
     de: "Speichern Sie diesen Link zur Verwaltung Ihrer Buchung:",
     ko: "예약 관리를 위해 이 링크를 저장해 주세요:",
   },
   gdprConsent: {
     en: "By submitting this reservation, I agree that the restaurant may process the personal data I provide to prepare and manage my table booking.",
+    cs: "Odesláním rezervace souhlasím se zpracováním poskytnutých osobních údajů za účelem přípravy a správy mé rezervace.",
     vi: "Bằng việc gửi đặt bàn, tôi đồng ý cho nhà hàng xử lý dữ liệu cá nhân tôi cung cấp nhằm chuẩn bị và quản lý bàn đặt.",
     de: "Mit dem Absenden stimme ich zu, dass das Restaurant meine personenbezogenen Daten zur Vorbereitung und Verwaltung meiner Reservierung verarbeiten darf.",
     ko: "예약을 제출함으로써, 제공한 개인정보를 예약 준비 및 관리 목적으로 처리하는 것에 동의합니다.",
@@ -193,7 +203,13 @@ function parseEventTypeOption(value: unknown, index: number): ReservationEventTy
       en: id,
     },
   );
-  if (!labels.en.trim() && !labels.vi.trim() && !labels.de.trim() && !labels.ko.trim()) {
+  if (
+    !labels.en.trim() &&
+    !labels.cs.trim() &&
+    !labels.vi.trim() &&
+    !labels.de.trim() &&
+    !labels.ko.trim()
+  ) {
     return null;
   }
   return { id, labels };

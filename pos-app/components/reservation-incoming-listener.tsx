@@ -99,6 +99,7 @@ export function ReservationIncomingListener() {
         id: incoming.eventType,
         labels: {
           en: incoming.eventType,
+          cs: incoming.eventType,
           vi: incoming.eventType,
           de: incoming.eventType,
           ko: incoming.eventType,

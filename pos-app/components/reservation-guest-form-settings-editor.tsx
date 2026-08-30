@@ -24,6 +24,7 @@ type Props = {
 
 const GUEST_LANG_LABELS: Record<GuestReservationLang, string> = {
   en: "English",
+  cs: "Čeština",
   vi: "Tiếng Việt",
   de: "Deutsch",
   ko: "한국어",
@@ -94,6 +95,7 @@ export function ReservationGuestFormSettingsEditor({
         id,
         labels: {
           en: "New event type",
+          cs: "Nový typ akce",
           vi: "Loại sự kiện mới",
           de: "Neuer Anlass",
           ko: "새 행사 유형",

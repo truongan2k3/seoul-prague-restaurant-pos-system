@@ -28,6 +28,7 @@ import { fetchReservationsForDate } from "@/src/lib/reservation-actions";
 
 const GUEST_LANG_LABELS: Record<GuestReservationLang, string> = {
   en: "English",
+  cs: "Čeština",
   vi: "Tiếng Việt",
   de: "Deutsch",
   ko: "한국어",

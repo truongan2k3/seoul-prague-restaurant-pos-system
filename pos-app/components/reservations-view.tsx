@@ -528,7 +528,13 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           {pickEventTypeLabel(
                             settings.reservationEventTypes.find((option) => option.id === row.eventType) ?? {
                               id: row.eventType,
-                              labels: { en: row.eventType, vi: row.eventType, de: row.eventType, ko: row.eventType },
+                              labels: {
+                                en: row.eventType,
+                                cs: row.eventType,
+                                vi: row.eventType,
+                                de: row.eventType,
+                                ko: row.eventType,
+                              },
                             },
                             "en",
                           )}

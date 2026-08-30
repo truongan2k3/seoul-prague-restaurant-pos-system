@@ -13,8 +13,3 @@ export const PRELOADER_SLIDES: PreloaderSlide[] = [
   { lang: "TIẾNG VIỆT", title: "Lẩu Hàn Quốc" },
   { lang: "한국어", title: "비빔밥 · Bibimbap" },
 ];
-
-export const PRELOADER_SESSION_KEY = "seoul-prague-preloader-seen";
-
-/** Custom cubic-bezier matching luxury site exits (intown-style). */
-export const PRELOADER_EXIT_EASE = "cubic-bezier(0.76, 0, 0.24, 1)";

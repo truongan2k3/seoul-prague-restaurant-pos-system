@@ -1,16 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import gsap from "gsap";
-import {
-  PRELOADER_SESSION_KEY,
-  PRELOADER_SLIDES,
-} from "@/lib/preloader-slides";
+import { PRELOADER_SLIDES } from "@/lib/preloader-slides";
 
 const INTRO_TOTAL_SECONDS = 3;
 const SAFETY_MS = 4_000;
 
 export function LuxuryPreloader() {
+  const pathname = usePathname();
   const [playing, setPlaying] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
   const subtitleRef = useRef<HTMLParagraphElement>(null);
@@ -20,15 +19,13 @@ export function LuxuryPreloader() {
   const finishedRef = useRef(false);
 
   useEffect(() => {
-    if (sessionStorage.getItem(PRELOADER_SESSION_KEY) === "1") return;
-
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      sessionStorage.setItem(PRELOADER_SESSION_KEY, "1");
       return;
     }
 
+    finishedRef.current = false;
     setPlaying(true);
-  }, []);
+  }, [pathname]);
 
   useEffect(() => {
     if (!playing) return;
@@ -40,7 +37,6 @@ export function LuxuryPreloader() {
     const finish = () => {
       if (finishedRef.current) return;
       finishedRef.current = true;
-      sessionStorage.setItem(PRELOADER_SESSION_KEY, "1");
       document.body.style.overflow = previousOverflow;
       setPlaying(false);
     };
@@ -62,6 +58,7 @@ export function LuxuryPreloader() {
 
       gsap.set(progress, { scaleX: 0, transformOrigin: "left center" });
       gsap.set(separator, { scaleX: 0, transformOrigin: "center center" });
+      gsap.set(overlay, { yPercent: 0 });
 
       ctx = gsap.context(() => {
         const tl = gsap.timeline({
@@ -146,7 +143,7 @@ export function LuxuryPreloader() {
       ctx?.revert();
       document.body.style.overflow = previousOverflow;
     };
-  }, [playing]);
+  }, [playing, pathname]);
 
   if (!playing) return null;
 

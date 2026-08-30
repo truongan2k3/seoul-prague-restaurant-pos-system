@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { useApp } from "@/contexts/app-context";
 import { useNotifications } from "@/contexts/notification-context";
@@ -61,6 +62,8 @@ function canStartPullToRefresh(scrollable: HTMLElement | null): boolean {
 }
 
 export function MobileRefreshGuard() {
+  const pathname = usePathname();
+  const pullToRefreshEnabled = pathname === "/";
   const { translate } = useApp();
   const { pushNotification } = useNotifications();
   const { hasUnsavedWork, getDirtyEntries } = useUnsavedWork();
@@ -114,7 +117,7 @@ export function MobileRefreshGuard() {
   }, [runSoftRefresh]);
 
   useEffect(() => {
-    if (!isMobileTouchDevice()) return;
+    if (!pullToRefreshEnabled || !isMobileTouchDevice()) return;
 
     const onTouchStart = (event: TouchEvent) => {
       if (event.touches.length !== 1) {
@@ -180,7 +183,7 @@ export function MobileRefreshGuard() {
       document.removeEventListener("touchend", onTouchEnd);
       document.removeEventListener("touchcancel", onTouchEnd);
     };
-  }, [openRefreshDialog]);
+  }, [openRefreshDialog, pullToRefreshEnabled]);
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {

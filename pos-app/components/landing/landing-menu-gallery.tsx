@@ -21,7 +21,14 @@ export function LandingMenuPreview({ content }: { content: WebsiteContent }) {
         <div className="mb-12 flex flex-wrap items-end justify-between gap-6">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Menu</p>
-            <h2 className="landing-serif mt-4 text-3xl text-white lg:text-5xl">Curated selections</h2>
+            <h2 className="landing-serif mt-4 text-3xl text-white lg:text-5xl">
+              {content.menuPdfs.length > 0 ? "Browse our menu" : "Curated selections"}
+            </h2>
+            {content.menuPdfs.length > 0 ? (
+              <p className="mt-3 text-sm text-white/55">
+                Flip through Czech, English, and Chinese menu books.
+              </p>
+            ) : null}
           </div>
           <Link
             href="/landing/menu"
@@ -31,6 +38,17 @@ export function LandingMenuPreview({ content }: { content: WebsiteContent }) {
           </Link>
         </div>
         <div className="space-y-12">
+          {content.menuPdfs.length > 0 ? (
+            <div className="rounded-xl border border-white/10 bg-[#121214] p-6 text-center">
+              <p className="text-white/70">Digital menu books ready — Czech, English & Chinese</p>
+              <Link
+                href="/landing/menu"
+                className="mt-4 inline-block text-sm uppercase tracking-[0.16em] text-[#C9A88B] hover:text-white"
+              >
+                Open menu book →
+              </Link>
+            </div>
+          ) : null}
           {categories.slice(0, 3).map((category) => {
             const categoryItems = items.filter((item) => item.categoryId === category.id).slice(0, 4);
             if (categoryItems.length === 0) return null;

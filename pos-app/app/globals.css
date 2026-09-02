@@ -90,6 +90,18 @@ body {
   color: #fff;
 }
 
+.menu-flipbook {
+  margin: 0 auto;
+}
+
+.menu-book-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
 .pos-mobile-sticky-bar {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }

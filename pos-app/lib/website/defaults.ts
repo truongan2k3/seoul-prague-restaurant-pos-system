@@ -5,9 +5,11 @@ import type {
   WebsiteGalleryItem,
   WebsiteMenuCategory,
   WebsiteMenuItem,
+  WebsiteMenuPdf,
   WebsiteOpeningHour,
   WebsiteSettings,
   WebsiteVideo,
+  MenuPdfLanguage,
 } from "@/lib/website/types";
 
 export const PLACEHOLDER_NOTE =
@@ -139,6 +141,12 @@ export function emptyWebsiteMedia(): WebsiteContent["media"] {
   };
 }
 
+export const MENU_PDF_LANGUAGES: { code: MenuPdfLanguage; label: string }[] = [
+  { code: "cs", label: "Čeština" },
+  { code: "en", label: "English" },
+  { code: "zh", label: "中文" },
+];
+
 export function defaultWebsiteContent(): WebsiteContent {
   return {
     settings: DEFAULT_WEBSITE_SETTINGS,
@@ -146,6 +154,7 @@ export function defaultWebsiteContent(): WebsiteContent {
     amenities: DEFAULT_AMENITIES,
     menuCategories: DEFAULT_MENU_CATEGORIES,
     menuItems: DEFAULT_MENU_ITEMS,
+    menuPdfs: [],
     gallery: DEFAULT_GALLERY,
     videos: DEFAULT_VIDEOS,
   };

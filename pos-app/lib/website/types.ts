@@ -91,6 +91,19 @@ export interface WebsiteMenuItem {
   badge: string;
 }
 
+export type MenuPdfLanguage = "cs" | "en" | "zh";
+
+export interface WebsiteMenuPdf {
+  id: string;
+  language: MenuPdfLanguage;
+  label: string;
+  fileUrl: string;
+  storagePath?: string;
+  pageCount?: number;
+  fileSize?: number;
+  updatedAt?: Date;
+}
+
 export interface WebsiteGalleryItem {
   id: string;
   category: GalleryCategory;
@@ -118,6 +131,7 @@ export interface WebsiteContent {
   amenities: WebsiteAmenity[];
   menuCategories: WebsiteMenuCategory[];
   menuItems: WebsiteMenuItem[];
+  menuPdfs: WebsiteMenuPdf[];
   gallery: WebsiteGalleryItem[];
   videos: WebsiteVideo[];
 }

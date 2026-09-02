@@ -4,6 +4,7 @@ import { canManageStaff, normalizeStaffRole } from "@/lib/staff-roles";
 import { DEFAULT_OPENING_HOURS, DEFAULT_WEBSITE_SETTINGS } from "@/lib/website/defaults";
 import type {
   GalleryCategory,
+  MenuPdfLanguage,
   VideoSlot,
   WebsiteAmenity,
   WebsiteGalleryItem,
@@ -14,6 +15,7 @@ import type {
   WebsiteSettings,
   WebsiteVideo,
 } from "@/lib/website/types";
+import { MENU_PDF_LANGUAGES } from "@/lib/website/defaults";
 import { readAuthSession } from "@/src/lib/auth/session";
 import { readStaffSession } from "@/src/lib/auth/staff-session";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
@@ -23,6 +25,7 @@ import {
   mapCategoryRow,
   mapGalleryRow,
   mapMenuItemRow,
+  mapMenuPdfRow,
   mapSettingsRow,
   mapVideoRow,
   parseOpeningHours,
@@ -400,6 +403,65 @@ export async function deleteWebsiteVideo(id: string) {
   const { error, admin } = await requireWebsiteAdmin();
   if (error || !admin) return { error };
   return { error: (await admin.from("website_videos").delete().eq("id", id)).error };
+}
+
+export async function uploadWebsiteMenuPdf(input: {
+  language: MenuPdfLanguage;
+  fileBase64: string;
+  fileName: string;
+  mimeType: string;
+  pageCount?: number;
+}) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { data: null, error };
+
+  if (input.mimeType !== "application/pdf") {
+    return { data: null, error: new Error("Only PDF files are supported.") };
+  }
+
+  const buffer = Buffer.from(input.fileBase64, "base64");
+  const maxBytes = 25 * 1024 * 1024;
+  if (buffer.length > maxBytes) {
+    return { data: null, error: new Error("PDF must be ≤ 25 MB.") };
+  }
+
+  const label = MENU_PDF_LANGUAGES.find((row) => row.code === input.language)?.label ?? input.language;
+  const path = `menu-pdfs/${input.language}-${Date.now()}.pdf`;
+  const { error: uploadError } = await admin.storage
+    .from("restaurant_media")
+    .upload(path, buffer, {
+      cacheControl: "31536000",
+      upsert: true,
+      contentType: "application/pdf",
+    });
+  if (uploadError) return { data: null, error: uploadError };
+
+  const { data: publicData } = admin.storage.from("restaurant_media").getPublicUrl(path);
+  const { data, error: dbError } = await admin
+    .from("website_menu_pdfs")
+    .upsert(
+      {
+        language: input.language,
+        label,
+        file_url: publicData.publicUrl,
+        storage_path: path,
+        page_count: input.pageCount ?? null,
+        file_size: buffer.length,
+        updated_at: nowIso(),
+      },
+      { onConflict: "language" },
+    )
+    .select("*")
+    .single();
+
+  if (dbError) return { data: null, error: dbError };
+  return { data: mapMenuPdfRow(data as Record<string, unknown>), error: null };
+}
+
+export async function deleteWebsiteMenuPdf(language: MenuPdfLanguage) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { error };
+  return { error: (await admin.from("website_menu_pdfs").delete().eq("language", language)).error };
 }
 
 export async function seedWebsiteDefaultsIfEmpty() {

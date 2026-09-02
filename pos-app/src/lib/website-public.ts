@@ -17,9 +17,11 @@ import type {
   WebsiteMediaSlot,
   WebsiteMenuCategory,
   WebsiteMenuItem,
+  WebsiteMenuPdf,
   WebsiteOpeningHour,
   WebsiteSettings,
   WebsiteVideo,
+  MenuPdfLanguage,
 } from "@/lib/website/types";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 
@@ -130,6 +132,19 @@ function mapMenuItemRow(row: Record<string, unknown>): WebsiteMenuItem {
   };
 }
 
+function mapMenuPdfRow(row: Record<string, unknown>): WebsiteMenuPdf {
+  return {
+    id: row.id as string,
+    language: row.language as MenuPdfLanguage,
+    label: row.label as string,
+    fileUrl: row.file_url as string,
+    storagePath: (row.storage_path as string) || undefined,
+    pageCount: typeof row.page_count === "number" ? row.page_count : undefined,
+    fileSize: typeof row.file_size === "number" ? row.file_size : undefined,
+    updatedAt: row.updated_at ? new Date(row.updated_at as string) : undefined,
+  };
+}
+
 function mapGalleryRow(row: Record<string, unknown>): WebsiteGalleryItem {
   return {
     id: row.id as string,
@@ -167,6 +182,7 @@ export async function fetchWebsiteContent(): Promise<WebsiteContent> {
       amenitiesRes,
       categoriesRes,
       itemsRes,
+      menuPdfsRes,
       galleryRes,
       videosRes,
     ] = await Promise.all([
@@ -175,6 +191,7 @@ export async function fetchWebsiteContent(): Promise<WebsiteContent> {
       admin.from("website_amenities").select("*").order("sort_order"),
       admin.from("website_menu_categories").select("*").order("sort_order"),
       admin.from("website_menu_items").select("*").order("sort_order"),
+      admin.from("website_menu_pdfs").select("*").order("language"),
       admin.from("website_gallery_items").select("*").order("sort_order"),
       admin.from("website_videos").select("*").order("sort_order"),
     ]);
@@ -199,6 +216,9 @@ export async function fetchWebsiteContent(): Promise<WebsiteContent> {
     const menuItems = (itemsRes.data ?? []).map((row) =>
       mapMenuItemRow(row as Record<string, unknown>),
     );
+    const menuPdfs = (menuPdfsRes.error ? [] : (menuPdfsRes.data ?? [])).map((row) =>
+      mapMenuPdfRow(row as Record<string, unknown>),
+    );
     const gallery = (galleryRes.data ?? []).map((row) =>
       mapGalleryRow(row as Record<string, unknown>),
     );
@@ -212,6 +232,7 @@ export async function fetchWebsiteContent(): Promise<WebsiteContent> {
       amenities: amenities.length > 0 ? amenities : DEFAULT_AMENITIES,
       menuCategories: menuCategories.length > 0 ? menuCategories : DEFAULT_MENU_CATEGORIES,
       menuItems: menuItems.length > 0 ? menuItems : DEFAULT_MENU_ITEMS,
+      menuPdfs,
       gallery,
       videos,
     };
@@ -226,6 +247,7 @@ export {
   mapAmenityRow,
   mapCategoryRow,
   mapMenuItemRow,
+  mapMenuPdfRow,
   mapGalleryRow,
   mapVideoRow,
   parseOpeningHours,

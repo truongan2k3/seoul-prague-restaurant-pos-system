@@ -2,13 +2,23 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import HTMLFlipBook from "react-pageflip";
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Maximize2,
+  Minimize2,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 import type { MenuPdfLanguage, WebsiteMenuPdf } from "@/lib/website/types";
 import { MENU_PDF_LANGUAGES } from "@/lib/website/defaults";
 
 type PdfJsModule = typeof import("pdfjs-dist");
 
 let pdfWorkerReady = false;
+
+const ZOOM_STEPS = [1, 1.25, 1.5, 1.75, 2, 2.5] as const;
 
 function proxyPdfUrl(language: MenuPdfLanguage): string {
   return `/api/website/menu-pdf/file?language=${language}`;
@@ -17,11 +27,17 @@ function proxyPdfUrl(language: MenuPdfLanguage): string {
 async function getPdfJs(): Promise<PdfJsModule> {
   const pdfjs = await import("pdfjs-dist");
   if (!pdfWorkerReady && typeof window !== "undefined") {
-    // Use CDN worker to avoid Next.js bundling issues with import.meta.url.
     pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
     pdfWorkerReady = true;
   }
   return pdfjs;
+}
+
+function renderScaleForDevice(): number {
+  if (typeof window === "undefined") return 2;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  // Higher base scale for sharper text on desktop menus.
+  return window.innerWidth >= 1024 ? 2.2 * dpr : 1.6 * dpr;
 }
 
 async function renderPdfToImages(url: string, maxPages = 40): Promise<string[]> {
@@ -34,20 +50,47 @@ async function renderPdfToImages(url: string, maxPages = 40): Promise<string[]> 
   const doc = await pdfjs.getDocument({ data }).promise;
   const pageCount = Math.min(doc.numPages, maxPages);
   const images: string[] = [];
+  const scale = renderScaleForDevice();
 
   for (let pageNum = 1; pageNum <= pageCount; pageNum += 1) {
     const page = await doc.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 1.4 });
+    const viewport = page.getViewport({ scale });
     const canvas = document.createElement("canvas");
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     const context = canvas.getContext("2d");
     if (!context) continue;
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
     await page.render({ canvasContext: context, viewport, canvas }).promise;
-    images.push(canvas.toDataURL("image/jpeg", 0.9));
+    images.push(canvas.toDataURL("image/jpeg", 0.95));
   }
 
   return images;
+}
+
+function useBookSize() {
+  const [size, setSize] = useState({ width: 420, height: 594, maxWidth: 560, maxHeight: 792 });
+
+  useEffect(() => {
+    const update = () => {
+      const vw = window.innerWidth;
+      if (vw >= 1280) {
+        setSize({ width: 560, height: 792, maxWidth: 640, maxHeight: 900 });
+      } else if (vw >= 1024) {
+        setSize({ width: 500, height: 707, maxWidth: 580, maxHeight: 820 });
+      } else if (vw >= 768) {
+        setSize({ width: 420, height: 594, maxWidth: 480, maxHeight: 680 });
+      } else {
+        setSize({ width: 320, height: 453, maxWidth: 360, maxHeight: 510 });
+      }
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  return size;
 }
 
 interface MenuPdfFlipbookProps {
@@ -59,6 +102,8 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
   const bookRef = useRef<{
     pageFlip: () => { flipNext: () => void; flipPrev: () => void };
   } | null>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const bookSize = useBookSize();
 
   const availableLanguages = useMemo(
     () => MENU_PDF_LANGUAGES.filter(({ code }) => pdfs.some((row) => row.language === code)),
@@ -74,7 +119,11 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
   const [error, setError] = useState<string | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
   const [useSimpleViewer, setUseSimpleViewer] = useState(false);
+  const [zoomIndex, setZoomIndex] = useState(0);
+  const [expanded, setExpanded] = useState(false);
+  const [lightboxPage, setLightboxPage] = useState<number | null>(null);
 
+  const zoom = ZOOM_STEPS[zoomIndex] ?? 1;
   const activePdf = pdfs.find((row) => row.language === language) ?? pdfs[0];
   const viewerUrl = activePdf ? proxyPdfUrl(activePdf.language) : "";
 
@@ -87,6 +136,8 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
     setError(null);
     setPageIndex(0);
     setUseSimpleViewer(false);
+    setZoomIndex(0);
+    setLightboxPage(null);
     try {
       const images = await renderPdfToImages(proxyPdfUrl(pdf.language));
       if (images.length === 0) {
@@ -109,6 +160,19 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
     if (activePdf) void loadPdf(activePdf);
   }, [activePdf, loadPdf]);
 
+  useEffect(() => {
+    if (!expanded) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [expanded]);
+
+  const zoomIn = () => setZoomIndex((value) => Math.min(ZOOM_STEPS.length - 1, value + 1));
+  const zoomOut = () => setZoomIndex((value) => Math.max(0, value - 1));
+  const resetZoom = () => setZoomIndex(0);
+
   if (pdfs.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-white/20 px-6 py-16 text-center text-white/50">
@@ -116,6 +180,144 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
       </div>
     );
   }
+
+  const controls = (
+    <div className="flex flex-wrap items-center justify-center gap-2">
+      <button
+        type="button"
+        aria-label="Zoom out"
+        disabled={zoomIndex <= 0}
+        onClick={zoomOut}
+        className="rounded-full border border-white/20 p-2.5 text-white hover:bg-white/10 disabled:opacity-40"
+      >
+        <ZoomOut className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        onClick={resetZoom}
+        className="min-w-[4.5rem] rounded-full border border-white/20 px-3 py-2 text-xs font-semibold tabular-nums text-white/80 hover:bg-white/10"
+      >
+        {Math.round(zoom * 100)}%
+      </button>
+      <button
+        type="button"
+        aria-label="Zoom in"
+        disabled={zoomIndex >= ZOOM_STEPS.length - 1}
+        onClick={zoomIn}
+        className="rounded-full border border-white/20 p-2.5 text-white hover:bg-white/10 disabled:opacity-40"
+      >
+        <ZoomIn className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        aria-label={expanded ? "Exit large view" : "Large view"}
+        onClick={() => setExpanded((value) => !value)}
+        className="inline-flex items-center gap-2 rounded-full border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/85 hover:bg-white/10"
+      >
+        {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+        {expanded ? "Exit" : "Large view"}
+      </button>
+    </div>
+  );
+
+  const flipbook = pages.length > 0 && !useSimpleViewer ? (
+    <div className="flex flex-col items-center gap-5">
+      <div
+        ref={stageRef}
+        className={`w-full overflow-auto ${expanded ? "max-h-[78vh]" : "max-h-[72vh] lg:max-h-none"}`}
+      >
+        <div
+          className="mx-auto origin-top transition-transform duration-300"
+          style={{
+            width: bookSize.maxWidth * 2,
+            maxWidth: "100%",
+            transform: `scale(${zoom})`,
+            transformOrigin: "top center",
+            marginBottom: zoom > 1 ? `${(zoom - 1) * bookSize.maxHeight}px` : undefined,
+          }}
+        >
+          {/* @ts-expect-error react-pageflip types are loose */}
+          <HTMLFlipBook
+            key={`${language}-${pages.length}-${bookSize.width}`}
+            ref={bookRef}
+            width={bookSize.width}
+            height={bookSize.height}
+            size="stretch"
+            minWidth={Math.min(280, bookSize.width)}
+            maxWidth={bookSize.maxWidth}
+            minHeight={Math.min(380, bookSize.height)}
+            maxHeight={bookSize.maxHeight}
+            showCover
+            mobileScrollSupport
+            className="menu-flipbook mx-auto shadow-2xl shadow-black/60"
+            onFlip={(event: { data: number }) => setPageIndex(event.data)}
+          >
+            {pages.map((src, index) => (
+              <div key={`${language}-page-${index}`} className="menu-book-page bg-[#f5f0ea]">
+                <button
+                  type="button"
+                  className="h-full w-full cursor-zoom-in"
+                  onClick={() => setLightboxPage(index)}
+                  aria-label={`Enlarge page ${index + 1}`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={src}
+                    alt={`Menu page ${index + 1}`}
+                    className="h-full w-full object-contain"
+                    draggable={false}
+                  />
+                </button>
+              </div>
+            ))}
+          </HTMLFlipBook>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        <button
+          type="button"
+          aria-label="Previous page"
+          onClick={() => bookRef.current?.pageFlip().flipPrev()}
+          className="rounded-full border border-white/20 p-3 text-white hover:bg-white/10"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+        <span className="text-sm tabular-nums text-white/60">
+          {pageIndex + 1} / {pages.length}
+        </span>
+        <button
+          type="button"
+          aria-label="Next page"
+          onClick={() => bookRef.current?.pageFlip().flipNext()}
+          className="rounded-full border border-white/20 p-3 text-white hover:bg-white/10"
+        >
+          <ChevronRight className="h-5 w-5" />
+        </button>
+      </div>
+
+      {controls}
+      <p className="text-center text-xs text-white/40">
+        Click a page to enlarge · use zoom for finer detail
+      </p>
+    </div>
+  ) : (
+    <div className="space-y-4">
+      {error ? (
+        <p className="rounded-lg border border-amber-800/50 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">
+          Flipbook could not render ({error}). Showing PDF viewer instead.
+        </p>
+      ) : null}
+      <div className="overflow-hidden rounded-xl border border-white/10 bg-[#121214]">
+        <iframe
+          title={`${activePdf?.label ?? "Menu"} PDF`}
+          src={viewerUrl}
+          className="h-[75vh] w-full bg-white lg:h-[85vh]"
+        />
+      </div>
+      {controls}
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -144,76 +346,51 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
       </div>
 
       {loading ? (
-        <div className="flex min-h-[420px] items-center justify-center text-white/60">
+        <div className="flex min-h-[420px] items-center justify-center text-white/60 lg:min-h-[640px]">
           <Loader2 className="mr-2 h-5 w-5 animate-spin" />
           Opening menu book…
         </div>
-      ) : pages.length > 0 && !useSimpleViewer ? (
-        <div className="flex flex-col items-center">
-          <div className="relative w-full max-w-4xl">
-            {/* @ts-expect-error react-pageflip types are loose */}
-            <HTMLFlipBook
-              key={`${language}-${pages.length}`}
-              ref={bookRef}
-              width={420}
-              height={560}
-              size="stretch"
-              minWidth={280}
-              maxWidth={560}
-              minHeight={380}
-              maxHeight={720}
-              showCover
-              mobileScrollSupport
-              className="menu-flipbook mx-auto shadow-2xl shadow-black/60"
-              onFlip={(event: { data: number }) => setPageIndex(event.data)}
-            >
-              {pages.map((src, index) => (
-                <div key={`${language}-page-${index}`} className="menu-book-page bg-[#f5f0ea]">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={src} alt={`Menu page ${index + 1}`} className="h-full w-full object-contain" />
-                </div>
-              ))}
-            </HTMLFlipBook>
-          </div>
-
-          <div className="mt-6 flex items-center gap-4">
+      ) : expanded ? (
+        <div className="fixed inset-0 z-[80] flex flex-col bg-[#0B0B0C]/95 p-4 backdrop-blur-sm lg:p-8">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <p className="text-sm text-white/70">{activePdf?.label ?? "Menu"} · large view</p>
             <button
               type="button"
-              aria-label="Previous page"
-              onClick={() => bookRef.current?.pageFlip().flipPrev()}
-              className="rounded-full border border-white/20 p-3 text-white hover:bg-white/10"
+              onClick={() => setExpanded(false)}
+              className="inline-flex items-center gap-2 rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white hover:bg-white/10"
             >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <span className="text-sm tabular-nums text-white/60">
-              {pageIndex + 1} / {pages.length}
-            </span>
-            <button
-              type="button"
-              aria-label="Next page"
-              onClick={() => bookRef.current?.pageFlip().flipNext()}
-              className="rounded-full border border-white/20 p-3 text-white hover:bg-white/10"
-            >
-              <ChevronRight className="h-5 w-5" />
+              <Minimize2 className="h-4 w-4" />
+              Close
             </button>
           </div>
+          <div className="min-h-0 flex-1 overflow-auto">{flipbook}</div>
         </div>
       ) : (
-        <div className="space-y-4">
-          {error ? (
-            <p className="rounded-lg border border-amber-800/50 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">
-              Flipbook could not render ({error}). Showing PDF viewer instead.
-            </p>
-          ) : null}
-          <div className="overflow-hidden rounded-xl border border-white/10 bg-[#121214]">
-            <iframe
-              title={`${activePdf?.label ?? "Menu"} PDF`}
-              src={viewerUrl}
-              className="h-[75vh] w-full bg-white"
-            />
-          </div>
-        </div>
+        flipbook
       )}
+
+      {lightboxPage != null && pages[lightboxPage] ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setLightboxPage(null)}
+          role="presentation"
+        >
+          <button
+            type="button"
+            className="absolute right-4 top-4 rounded-full border border-white/30 px-4 py-2 text-xs uppercase tracking-[0.14em] text-white"
+            onClick={() => setLightboxPage(null)}
+          >
+            Close
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={pages[lightboxPage]}
+            alt={`Menu page ${lightboxPage + 1} enlarged`}
+            className="max-h-[92vh] max-w-[96vw] object-contain shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      ) : null}
 
       {activePdf ? (
         <div className="text-center">

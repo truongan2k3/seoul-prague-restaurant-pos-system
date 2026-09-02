@@ -3,7 +3,7 @@ import { decodeAuthSession } from "@/src/lib/auth/session-token";
 import { decodeStaffSession, STAFF_COOKIE_NAME } from "@/src/lib/auth/staff-session-token";
 import { isStationPath } from "@/lib/page-routes";
 
-const PUBLIC_PATHS = ["/login", "/register", "/reservation"];
+const PUBLIC_PATHS = ["/login", "/register", "/reservation", "/landing"];
 
 function isPublicPath(pathname: string) {
   if (PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`))) {

@@ -24,7 +24,11 @@ export function ConnectionStatusBadge() {
     pathname === "/register" ||
     pathname === "/status" ||
     pathname === "/reservation" ||
-    pathname.startsWith("/reservation/")
+    pathname.startsWith("/reservation/") ||
+    pathname === "/landing" ||
+    pathname.startsWith("/landing/") ||
+    pathname === "/admin" ||
+    pathname.startsWith("/admin/")
   ) {
     return null;
   }

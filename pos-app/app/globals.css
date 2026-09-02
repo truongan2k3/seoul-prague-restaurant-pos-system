@@ -76,6 +76,20 @@ body {
   touch-action: none;
 }
 
+.landing-theme {
+  color-scheme: dark;
+}
+
+.landing-serif {
+  font-family: var(--font-playfair), "Times New Roman", Georgia, serif;
+}
+
+.landing-theme .pos-input {
+  background: #111;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
 .pos-mobile-sticky-bar {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }

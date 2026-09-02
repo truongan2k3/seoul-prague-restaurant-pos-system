@@ -1,0 +1,431 @@
+"use server";
+
+import { canManageStaff, normalizeStaffRole } from "@/lib/staff-roles";
+import { DEFAULT_OPENING_HOURS, DEFAULT_WEBSITE_SETTINGS } from "@/lib/website/defaults";
+import type {
+  GalleryCategory,
+  VideoSlot,
+  WebsiteAmenity,
+  WebsiteGalleryItem,
+  WebsiteMediaSlot,
+  WebsiteMenuCategory,
+  WebsiteMenuItem,
+  WebsiteOpeningHour,
+  WebsiteSettings,
+  WebsiteVideo,
+} from "@/lib/website/types";
+import { readAuthSession } from "@/src/lib/auth/session";
+import { readStaffSession } from "@/src/lib/auth/staff-session";
+import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
+import {
+  fetchWebsiteContent,
+  mapAmenityRow,
+  mapCategoryRow,
+  mapGalleryRow,
+  mapMenuItemRow,
+  mapSettingsRow,
+  mapVideoRow,
+  parseOpeningHours,
+} from "@/src/lib/website-public";
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+async function requireWebsiteAdmin() {
+  const businessSession = await readAuthSession();
+  const staffSession = await readStaffSession();
+  if (!businessSession || !staffSession) {
+    return { error: new Error("Authentication required.") as Error, admin: null };
+  }
+  if (!canManageStaff(normalizeStaffRole(staffSession.staffRole))) {
+    return { error: new Error("Admin access required.") as Error, admin: null };
+  }
+  return { error: null, admin: createSupabaseAdmin() };
+}
+
+export async function getWebsiteContentForAdmin() {
+  const { error } = await requireWebsiteAdmin();
+  if (error) return { data: null, error };
+  const data = await fetchWebsiteContent();
+  return { data, error: null };
+}
+
+export async function saveWebsiteSettings(input: Partial<WebsiteSettings>) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { data: null, error };
+
+  const payload: Record<string, unknown> = { id: 1, updated_at: nowIso() };
+  if (input.restaurantName !== undefined) payload.restaurant_name = input.restaurantName;
+  if (input.tagline !== undefined) payload.tagline = input.tagline;
+  if (input.description !== undefined) payload.description = input.description;
+  if (input.aboutStory !== undefined) payload.about_story = input.aboutStory;
+  if (input.phone !== undefined) payload.phone = input.phone;
+  if (input.email !== undefined) payload.email = input.email;
+  if (input.address !== undefined) payload.address = input.address;
+  if (input.googleMapsUrl !== undefined) payload.google_maps_url = input.googleMapsUrl;
+  if (input.heroHeadline !== undefined) payload.hero_headline = input.heroHeadline;
+  if (input.heroTagline !== undefined) payload.hero_tagline = input.heroTagline;
+  if (input.heroDescription !== undefined) payload.hero_description = input.heroDescription;
+  if (input.instagramUrl !== undefined) payload.instagram_url = input.instagramUrl;
+  if (input.facebookUrl !== undefined) payload.facebook_url = input.facebookUrl;
+  if (input.tiktokUrl !== undefined) payload.tiktok_url = input.tiktokUrl;
+  if (input.seoTitle !== undefined) payload.seo_title = input.seoTitle;
+  if (input.seoDescription !== undefined) payload.seo_description = input.seoDescription;
+  if (input.seoOgImageUrl !== undefined) payload.seo_og_image_url = input.seoOgImageUrl;
+  if (input.openingHours !== undefined) payload.opening_hours = input.openingHours;
+
+  const { data, error: dbError } = await admin
+    .from("website_settings")
+    .upsert(payload, { onConflict: "id" })
+    .select("*")
+    .single();
+
+  if (dbError) return { data: null, error: dbError };
+  return { data: mapSettingsRow(data as Record<string, unknown>), error: null };
+}
+
+export async function saveWebsiteOpeningHours(hours: WebsiteOpeningHour[]) {
+  return saveWebsiteSettings({ openingHours: hours.length > 0 ? hours : DEFAULT_OPENING_HOURS });
+}
+
+export async function uploadWebsiteMediaSlot(input: {
+  slot: WebsiteMediaSlot;
+  fileBase64: string;
+  fileName: string;
+  mimeType: string;
+  altText?: string;
+}) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { data: null, error };
+
+  const extension = input.fileName.split(".").pop()?.toLowerCase() ?? "bin";
+  const buffer = Buffer.from(input.fileBase64, "base64");
+  const maxBytes = input.mimeType.startsWith("video/") ? 100 * 1024 * 1024 : 15 * 1024 * 1024;
+  if (buffer.length > maxBytes) {
+    return { data: null, error: new Error("File exceeds maximum size.") };
+  }
+
+  const path = `${input.slot}/${Date.now()}.${extension}`;
+  const { error: uploadError } = await admin.storage
+    .from("restaurant_media")
+    .upload(path, buffer, {
+      cacheControl: "31536000",
+      upsert: true,
+      contentType: input.mimeType,
+    });
+
+  if (uploadError) return { data: null, error: uploadError };
+
+  const { data: publicData } = admin.storage.from("restaurant_media").getPublicUrl(path);
+  const fileUrl = publicData.publicUrl;
+
+  const { data, error: dbError } = await admin
+    .from("website_media_assets")
+    .upsert(
+      {
+        slot: input.slot,
+        file_url: fileUrl,
+        storage_path: path,
+        mime_type: input.mimeType,
+        alt_text: input.altText ?? null,
+        updated_at: nowIso(),
+      },
+      { onConflict: "slot" },
+    )
+    .select("*")
+    .single();
+
+  if (dbError) return { data: null, error: dbError };
+  return { data: { fileUrl, slot: input.slot }, error: null };
+}
+
+export async function deleteWebsiteMediaSlot(slot: WebsiteMediaSlot) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { error };
+
+  const { error: dbError } = await admin.from("website_media_assets").delete().eq("slot", slot);
+  return { error: dbError };
+}
+
+export async function upsertWebsiteAmenity(input: Omit<WebsiteAmenity, "id"> & { id?: string }) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { data: null, error };
+
+  const payload = {
+    id: input.id,
+    label: input.label,
+    icon: input.icon,
+    sort_order: input.sortOrder,
+    enabled: input.enabled,
+    updated_at: nowIso(),
+  };
+
+  const { data, error: dbError } = await admin
+    .from("website_amenities")
+    .upsert(payload)
+    .select("*")
+    .single();
+
+  if (dbError) return { data: null, error: dbError };
+  return { data: mapAmenityRow(data as Record<string, unknown>), error: null };
+}
+
+export async function deleteWebsiteAmenity(id: string) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { error };
+  return { error: (await admin.from("website_amenities").delete().eq("id", id)).error };
+}
+
+export async function upsertWebsiteMenuCategory(
+  input: Omit<WebsiteMenuCategory, "id"> & { id?: string },
+) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { data: null, error };
+
+  const { data, error: dbError } = await admin
+    .from("website_menu_categories")
+    .upsert({
+      id: input.id,
+      name: input.name,
+      slug: input.slug,
+      sort_order: input.sortOrder,
+      enabled: input.enabled,
+      updated_at: nowIso(),
+    })
+    .select("*")
+    .single();
+
+  if (dbError) return { data: null, error: dbError };
+  return { data: mapCategoryRow(data as Record<string, unknown>), error: null };
+}
+
+export async function deleteWebsiteMenuCategory(id: string) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { error };
+  return { error: (await admin.from("website_menu_categories").delete().eq("id", id)).error };
+}
+
+export async function upsertWebsiteMenuItem(input: Omit<WebsiteMenuItem, "id"> & { id?: string }) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { data: null, error };
+
+  const { data, error: dbError } = await admin
+    .from("website_menu_items")
+    .upsert({
+      id: input.id,
+      category_id: input.categoryId || null,
+      name: input.name,
+      description: input.description,
+      price: input.price,
+      currency: input.currency,
+      image_url: input.imageUrl,
+      featured: input.featured,
+      available: input.available,
+      sort_order: input.sortOrder,
+      badge: input.badge,
+      updated_at: nowIso(),
+    })
+    .select("*")
+    .single();
+
+  if (dbError) return { data: null, error: dbError };
+  return { data: mapMenuItemRow(data as Record<string, unknown>), error: null };
+}
+
+export async function deleteWebsiteMenuItem(id: string) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { error };
+  return { error: (await admin.from("website_menu_items").delete().eq("id", id)).error };
+}
+
+export async function uploadWebsiteMenuItemImage(input: {
+  itemId: string;
+  fileBase64: string;
+  fileName: string;
+  mimeType: string;
+}) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { data: null, error };
+
+  const extension = input.fileName.split(".").pop()?.toLowerCase() ?? "jpg";
+  const buffer = Buffer.from(input.fileBase64, "base64");
+  const path = `menu/${input.itemId}-${Date.now()}.${extension}`;
+  const { error: uploadError } = await admin.storage
+    .from("restaurant_media")
+    .upload(path, buffer, { cacheControl: "31536000", upsert: true, contentType: input.mimeType });
+  if (uploadError) return { data: null, error: uploadError };
+
+  const { data: publicData } = admin.storage.from("restaurant_media").getPublicUrl(path);
+  const { error: dbError } = await admin
+    .from("website_menu_items")
+    .update({ image_url: publicData.publicUrl, updated_at: nowIso() })
+    .eq("id", input.itemId);
+  if (dbError) return { data: null, error: dbError };
+  return { data: { imageUrl: publicData.publicUrl }, error: null };
+}
+
+export async function upsertWebsiteGalleryItem(
+  input: Omit<WebsiteGalleryItem, "id"> & { id?: string },
+) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { data: null, error };
+
+  const { data, error: dbError } = await admin
+    .from("website_gallery_items")
+    .upsert({
+      id: input.id,
+      category: input.category,
+      title: input.title,
+      image_url: input.imageUrl,
+      storage_path: input.storagePath ?? null,
+      sort_order: input.sortOrder,
+      featured: input.featured,
+      updated_at: nowIso(),
+    })
+    .select("*")
+    .single();
+
+  if (dbError) return { data: null, error: dbError };
+  return { data: mapGalleryRow(data as Record<string, unknown>), error: null };
+}
+
+export async function uploadWebsiteGalleryImage(input: {
+  category: GalleryCategory;
+  title?: string;
+  fileBase64: string;
+  fileName: string;
+  mimeType: string;
+}) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { data: null, error };
+
+  const extension = input.fileName.split(".").pop()?.toLowerCase() ?? "jpg";
+  const buffer = Buffer.from(input.fileBase64, "base64");
+  const path = `gallery/${Date.now()}.${extension}`;
+  const { error: uploadError } = await admin.storage
+    .from("restaurant_media")
+    .upload(path, buffer, { cacheControl: "31536000", upsert: true, contentType: input.mimeType });
+  if (uploadError) return { data: null, error: uploadError };
+
+  const { data: publicData } = admin.storage.from("restaurant_media").getPublicUrl(path);
+  return upsertWebsiteGalleryItem({
+    category: input.category,
+    title: input.title ?? "",
+    imageUrl: publicData.publicUrl,
+    storagePath: path,
+    sortOrder: Date.now(),
+    featured: false,
+  });
+}
+
+export async function deleteWebsiteGalleryItem(id: string) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { error };
+  return { error: (await admin.from("website_gallery_items").delete().eq("id", id)).error };
+}
+
+export async function upsertWebsiteVideo(input: Omit<WebsiteVideo, "id"> & { id?: string }) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { data: null, error };
+
+  const { data, error: dbError } = await admin
+    .from("website_videos")
+    .upsert({
+      id: input.id,
+      title: input.title,
+      description: input.description,
+      video_url: input.videoUrl,
+      poster_url: input.posterUrl,
+      slot: input.slot,
+      sort_order: input.sortOrder,
+      enabled: input.enabled,
+      updated_at: nowIso(),
+    })
+    .select("*")
+    .single();
+
+  if (dbError) return { data: null, error: dbError };
+  return { data: mapVideoRow(data as Record<string, unknown>), error: null };
+}
+
+export async function uploadWebsiteVideoFile(input: {
+  title: string;
+  description?: string;
+  slot: VideoSlot;
+  fileBase64: string;
+  fileName: string;
+  mimeType: string;
+  posterBase64?: string;
+  posterFileName?: string;
+  posterMimeType?: string;
+}) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { data: null, error };
+
+  const extension = input.fileName.split(".").pop()?.toLowerCase() ?? "mp4";
+  const buffer = Buffer.from(input.fileBase64, "base64");
+  const path = `videos/${Date.now()}.${extension}`;
+  const { error: uploadError } = await admin.storage
+    .from("restaurant_media")
+    .upload(path, buffer, { cacheControl: "31536000", upsert: true, contentType: input.mimeType });
+  if (uploadError) return { data: null, error: uploadError };
+
+  const { data: publicData } = admin.storage.from("restaurant_media").getPublicUrl(path);
+  let posterUrl = "";
+  if (input.posterBase64 && input.posterFileName && input.posterMimeType) {
+    const posterExt = input.posterFileName.split(".").pop()?.toLowerCase() ?? "jpg";
+    const posterPath = `videos/posters/${Date.now()}.${posterExt}`;
+    const posterBuffer = Buffer.from(input.posterBase64, "base64");
+    await admin.storage.from("restaurant_media").upload(posterPath, posterBuffer, {
+      cacheControl: "31536000",
+      upsert: true,
+      contentType: input.posterMimeType,
+    });
+    posterUrl = admin.storage.from("restaurant_media").getPublicUrl(posterPath).data.publicUrl;
+  }
+
+  return upsertWebsiteVideo({
+    title: input.title,
+    description: input.description ?? "",
+    videoUrl: publicData.publicUrl,
+    posterUrl,
+    slot: input.slot,
+    sortOrder: Date.now(),
+    enabled: true,
+  });
+}
+
+export async function deleteWebsiteVideo(id: string) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { error };
+  return { error: (await admin.from("website_videos").delete().eq("id", id)).error };
+}
+
+export async function seedWebsiteDefaultsIfEmpty() {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { error };
+
+  const { data: existing } = await admin.from("website_settings").select("id").eq("id", 1).maybeSingle();
+  if (!existing) {
+    await admin.from("website_settings").insert({
+      id: 1,
+      restaurant_name: DEFAULT_WEBSITE_SETTINGS.restaurantName,
+      tagline: DEFAULT_WEBSITE_SETTINGS.tagline,
+      description: DEFAULT_WEBSITE_SETTINGS.description,
+      about_story: DEFAULT_WEBSITE_SETTINGS.aboutStory,
+      phone: DEFAULT_WEBSITE_SETTINGS.phone,
+      email: DEFAULT_WEBSITE_SETTINGS.email,
+      address: DEFAULT_WEBSITE_SETTINGS.address,
+      google_maps_url: DEFAULT_WEBSITE_SETTINGS.googleMapsUrl,
+      hero_headline: DEFAULT_WEBSITE_SETTINGS.heroHeadline,
+      hero_tagline: DEFAULT_WEBSITE_SETTINGS.heroTagline,
+      hero_description: DEFAULT_WEBSITE_SETTINGS.heroDescription,
+      seo_title: DEFAULT_WEBSITE_SETTINGS.seoTitle,
+      seo_description: DEFAULT_WEBSITE_SETTINGS.seoDescription,
+      opening_hours: parseOpeningHours(DEFAULT_OPENING_HOURS),
+      updated_at: nowIso(),
+    });
+  }
+  return { error: null };
+}

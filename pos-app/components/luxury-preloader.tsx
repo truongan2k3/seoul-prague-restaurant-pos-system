@@ -8,6 +8,15 @@ import { PRELOADER_SLIDES } from "@/lib/preloader-slides";
 const INTRO_TOTAL_SECONDS = 3;
 const SAFETY_MS = 4_000;
 
+const SKIP_PRELOADER_PREFIXES = ["/landing", "/admin", "/reservation", "/login", "/register", "/status"];
+
+function shouldSkipPreloader(pathname: string | null): boolean {
+  if (!pathname) return false;
+  return SKIP_PRELOADER_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
 export function LuxuryPreloader() {
   const pathname = usePathname();
   const [playing, setPlaying] = useState(false);
@@ -19,6 +28,10 @@ export function LuxuryPreloader() {
   const finishedRef = useRef(false);
 
   useEffect(() => {
+    if (shouldSkipPreloader(pathname)) {
+      setPlaying(false);
+      return;
+    }
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       return;
     }

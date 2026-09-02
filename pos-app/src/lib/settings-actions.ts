@@ -127,7 +127,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   eurExchangeRate: 25,
   reservationTimeStep: 30,
   reservationMaxGuestsPerSlot: 20,
-  reservationTableHoldingTime: 90,
+  reservationTableHoldingTime: 30,
   reservationOperatingHours: DEFAULT_RESERVATION_OPERATING_HOURS,
   mapReservationTickerSeconds: 6,
   reservationReminderMode: "30",

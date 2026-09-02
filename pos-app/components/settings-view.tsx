@@ -1346,16 +1346,22 @@ export function SettingsView({
                 <span className="text-gray-500 dark:text-gray-400">
                   {translate("settingsTableHoldingTime")}
                 </span>
-                <input
+                  <input
                   type="number"
                   min={15}
                   step={15}
                   value={draft.reservationTableHoldingTime}
                   onChange={(event) =>
-                    updateDraft("reservationTableHoldingTime", Number(event.target.value))
+                    updateDraft(
+                      "reservationTableHoldingTime",
+                      Math.max(15, Number(event.target.value) || 30),
+                    )
                   }
                   className="pos-input mt-1"
                 />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Default 30: if the guest has not checked in 30 minutes after the reserved time, status becomes Late.
+                </p>
               </label>
               <label className="block text-sm">
                 <span className="text-gray-500 dark:text-gray-400">

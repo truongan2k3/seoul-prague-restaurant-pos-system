@@ -97,6 +97,10 @@ export function canAssignTable(status: ReservationStatus): boolean {
   return status === "confirmed" || status === "checked_in" || status === "late";
 }
 
+export function canEditReservation(status: ReservationStatus): boolean {
+  return status === "pending" || status === "confirmed" || status === "late" || status === "checked_in";
+}
+
 export function isWalkIn(source: VisitSource): boolean {
   return source === "walk_in";
 }

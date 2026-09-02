@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapPin, Plus, UserPlus } from "lucide-react";
+import { MapPin, Pencil, Plus, UserPlus } from "lucide-react";
 import { LiveClock } from "@/components/live-clock";
 import { Modal } from "@/components/modal";
 import { useApp } from "@/contexts/app-context";
@@ -12,6 +12,7 @@ import {
   canCancelReservation,
   canCheckIn,
   canConfirmReservation,
+  canEditReservation,
   canMarkNoShow,
   computeReservationStats,
   filterReservationsByPeriod,
@@ -45,6 +46,7 @@ import {
   restoreReservationSnapshot,
   restoreTableSnapshot,
   subscribeToReservationChanges,
+  updateReservationDetails,
 } from "@/src/lib/reservation-actions";
 
 async function confirmReservationWithEmail(reservationId: string) {
@@ -69,6 +71,26 @@ async function cancelReservationWithEmail(reservationId: string) {
     body: JSON.stringify({ id: reservationId, type: "cancelled" }),
   }).catch(() => undefined);
   return result;
+}
+
+async function updateReservationWithEmail(
+  reservationId: string,
+  input: Parameters<typeof updateReservationDetails>[1],
+) {
+  const result = await updateReservationDetails(reservationId, input);
+  if (result.error) return result;
+  void fetch("/api/reservations/notify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: reservationId, type: "updated" }),
+  }).catch(() => undefined);
+  return result;
+}
+
+function toDateTimeLocalValue(date: Date): string {
+  const copy = new Date(date);
+  copy.setMinutes(copy.getMinutes() - copy.getTimezoneOffset());
+  return copy.toISOString().slice(0, 16);
 }
 
 const PERIOD_OPTIONS: ReservationPeriod[] = ["today", "week", "month"];
@@ -109,6 +131,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const [showWalkInModal, setShowWalkInModal] = useState(false);
   const [assignTarget, setAssignTarget] = useState<ReservationRecord | null>(null);
   const [checkInTarget, setCheckInTarget] = useState<ReservationRecord | null>(null);
+  const [editTarget, setEditTarget] = useState<ReservationRecord | null>(null);
   const seenReservationIdsRef = useRef<Set<string>>(new Set());
   const initialLoadDoneRef = useRef(false);
 
@@ -119,6 +142,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const [formDateTime, setFormDateTime] = useState("");
   const [formNotes, setFormNotes] = useState("");
   const [formTableId, setFormTableId] = useState("");
+  const [formEventType, setFormEventType] = useState("");
   const [walkInPartySize, setWalkInPartySize] = useState(2);
   const [walkInName, setWalkInName] = useState("");
   const [walkInTableId, setWalkInTableId] = useState("");
@@ -291,6 +315,41 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     setShowWalkInModal(false);
     setWalkInName("");
     setWalkInTableId("");
+    void loadReservations();
+  };
+
+  const openEditModal = (row: ReservationRecord) => {
+    setEditTarget(row);
+    setFormGuestName(row.guestName);
+    setFormPhone(row.guestPhone ?? "");
+    setFormEmail(row.guestEmail ?? "");
+    setFormPartySize(row.partySize);
+    setFormDateTime(toDateTimeLocalValue(row.reservedAt));
+    setFormNotes(row.notes ?? "");
+    setFormTableId(row.tableId ?? "");
+    setFormEventType(row.eventType ?? "");
+    setError(null);
+  };
+
+  const handleUpdateReservation = async () => {
+    if (!editTarget || !formGuestName.trim() || !formDateTime) return;
+    setBusyId(editTarget.id);
+    const { error: updateError } = await updateReservationWithEmail(editTarget.id, {
+      guestName: formGuestName.trim(),
+      guestPhone: formPhone.trim() || undefined,
+      guestEmail: formEmail.trim() || undefined,
+      partySize: Math.max(1, formPartySize),
+      reservedAt: new Date(formDateTime),
+      notes: formNotes.trim() || undefined,
+      tableId: editTarget.status === "checked_in" ? undefined : formTableId || null,
+      eventType: formEventType || null,
+    });
+    setBusyId(null);
+    if (updateError) {
+      setError(updateError instanceof Error ? updateError.message : String(updateError));
+      return;
+    }
+    setEditTarget(null);
     void loadReservations();
   };
 
@@ -546,6 +605,17 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                     </div>
 
                     <div className="flex flex-wrap gap-2">
+                      {canEditReservation(row.status) && (
+                        <button
+                          type="button"
+                          disabled={busyId === row.id}
+                          onClick={() => openEditModal(row)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          {translate("editReservation")}
+                        </button>
+                      )}
                       {canConfirmReservation(row.status) && (
                         <button
                           type="button"
@@ -652,6 +722,83 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             {translate("saveReservation")}
           </button>
         </div>
+      </Modal>
+
+      <Modal
+        open={editTarget !== null}
+        onClose={() => setEditTarget(null)}
+        title={translate("editReservation")}
+      >
+        {editTarget ? (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {editTarget.bookingCode ? `${editTarget.bookingCode} · ` : ""}
+              {translate(reservationStatusLabelKey(editTarget.status))}
+            </p>
+            <label className="block text-sm">
+              <span className="text-gray-500">{translate("guestName")}</span>
+              <input value={formGuestName} onChange={(e) => setFormGuestName(e.target.value)} className="pos-input mt-1" />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm">
+                <span className="text-gray-500">{translate("guestPhone")}</span>
+                <input value={formPhone} onChange={(e) => setFormPhone(e.target.value)} className="pos-input mt-1" />
+              </label>
+              <label className="block text-sm">
+                <span className="text-gray-500">{translate("partySize")}</span>
+                <input type="number" min={1} value={formPartySize} onChange={(e) => setFormPartySize(Number(e.target.value))} className="pos-input mt-1" />
+              </label>
+            </div>
+            <label className="block text-sm">
+              <span className="text-gray-500">{translate("guestEmail")}</span>
+              <input type="email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} className="pos-input mt-1" />
+            </label>
+            <label className="block text-sm">
+              <span className="text-gray-500">{translate("reservedAt")}</span>
+              <input type="datetime-local" value={formDateTime} onChange={(e) => setFormDateTime(e.target.value)} className="pos-input mt-1" />
+            </label>
+            {editTarget.status !== "checked_in" ? (
+              <label className="block text-sm">
+                <span className="text-gray-500">{translate("selectTable")}</span>
+                <select value={formTableId} onChange={(e) => setFormTableId(e.target.value)} className="pos-input mt-1">
+                  <option value="">{translate("selectEmptyTable")}</option>
+                  {emptyTables.map((table) => (
+                    <option key={table.id} value={table.id}>{translate("table")} {table.label}</option>
+                  ))}
+                </select>
+              </label>
+            ) : editTarget.tableLabel ? (
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                {translate("table")} {editTarget.tableLabel}
+              </p>
+            ) : null}
+            {settings.reservationEventTypes.length > 0 ? (
+              <label className="block text-sm">
+                <span className="text-gray-500">{translate("resEventType")}</span>
+                <select value={formEventType} onChange={(e) => setFormEventType(e.target.value)} className="pos-input mt-1">
+                  <option value="">—</option>
+                  {settings.reservationEventTypes.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {pickEventTypeLabel(option, language === "cs" ? "cs" : language === "zh" ? "en" : "en")}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <label className="block text-sm">
+              <span className="text-gray-500">{translate("resNotes")}</span>
+              <textarea value={formNotes} onChange={(e) => setFormNotes(e.target.value)} className="pos-input mt-1 min-h-[72px]" />
+            </label>
+            <button
+              type="button"
+              disabled={busyId === editTarget.id || !formGuestName.trim() || !formDateTime}
+              onClick={() => void handleUpdateReservation()}
+              className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {translate("saveReservation")}
+            </button>
+          </div>
+        ) : null}
       </Modal>
 
       <Modal open={showWalkInModal} onClose={() => setShowWalkInModal(false)} title={translate("walkIn")}>

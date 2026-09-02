@@ -7,7 +7,7 @@ import {
 } from "@/src/lib/reservation-email";
 import { fetchReservationEmailContext } from "@/src/lib/reservation-guest-server";
 
-const ALLOWED: ReservationEmailKind[] = ["cancelled"];
+const ALLOWED: ReservationEmailKind[] = ["cancelled", "updated"];
 
 /** Staff-triggered guest emails after a client-side status change (e.g. cancel). */
 export async function POST(request: Request) {
@@ -37,6 +37,13 @@ export async function POST(request: Request) {
   if (type === "cancelled" && data.status !== "cancelled") {
     return NextResponse.json(
       { error: "Reservation is not cancelled." },
+      { status: 400 },
+    );
+  }
+
+  if (type === "updated" && data.status === "cancelled") {
+    return NextResponse.json(
+      { error: "Cancelled reservations cannot be updated." },
       { status: 400 },
     );
   }

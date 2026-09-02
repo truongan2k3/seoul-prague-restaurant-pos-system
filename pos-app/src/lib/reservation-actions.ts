@@ -29,6 +29,24 @@ export interface CreateReservationInput {
   status?: ReservationStatus;
 }
 
+export interface UpdateReservationInput {
+  guestName: string;
+  guestPhone?: string;
+  guestEmail?: string;
+  partySize: number;
+  reservedAt: Date;
+  notes?: string;
+  tableId?: string | null;
+  eventType?: string | null;
+}
+
+const STAFF_EDITABLE_STATUSES: ReservationStatus[] = [
+  "pending",
+  "confirmed",
+  "late",
+  "checked_in",
+];
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -102,6 +120,59 @@ export async function confirmReservation(reservationId: string) {
 
 export async function cancelReservation(reservationId: string) {
   return updateReservationStatus(reservationId, "cancelled");
+}
+
+export async function updateReservationDetails(
+  reservationId: string,
+  input: UpdateReservationInput,
+) {
+  const { data: existing, error: fetchError } = await supabase
+    .from("reservations")
+    .select("id, status")
+    .eq("id", reservationId)
+    .single();
+
+  if (fetchError || !existing) {
+    return { data: null, error: fetchError ?? new Error("Reservation not found.") };
+  }
+
+  const status = existing.status as ReservationStatus;
+  if (!STAFF_EDITABLE_STATUSES.includes(status)) {
+    return {
+      data: null,
+      error: new Error("This reservation can no longer be edited."),
+    };
+  }
+
+  const guestName = input.guestName.trim();
+  if (!guestName) {
+    return { data: null, error: new Error("Guest name is required.") };
+  }
+
+  const nextStatus: ReservationStatus = status === "late" ? "confirmed" : status;
+
+  const payload: Record<string, unknown> = {
+    guest_name: guestName,
+    guest_phone: input.guestPhone?.trim() || null,
+    guest_email: input.guestEmail?.trim() || null,
+    party_size: Math.max(1, input.partySize),
+    reserved_at: input.reservedAt.toISOString(),
+    notes: input.notes?.trim() || null,
+    event_type: input.eventType?.trim() || null,
+    status: nextStatus,
+    updated_at: nowIso(),
+  };
+
+  if (input.tableId !== undefined && status !== "checked_in") {
+    payload.table_id = input.tableId || null;
+  }
+
+  return supabase
+    .from("reservations")
+    .update(payload)
+    .eq("id", reservationId)
+    .select("*, tables(label)")
+    .single();
 }
 
 export async function markReservationNoShow(reservationId: string) {

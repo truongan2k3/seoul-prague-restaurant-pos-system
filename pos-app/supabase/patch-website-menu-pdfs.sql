@@ -15,3 +15,13 @@ alter table public.website_menu_pdfs enable row level security;
 
 drop policy if exists "website_menu_pdfs_public_read" on public.website_menu_pdfs;
 create policy "website_menu_pdfs_public_read" on public.website_menu_pdfs for select using (true);
+
+-- Ensure marketing media bucket exists (also created in patch-website-cms.sql).
+insert into storage.buckets (id, name, public)
+values ('restaurant_media', 'restaurant_media', true)
+on conflict (id) do update set public = true;
+
+drop policy if exists "restaurant_media_public_read" on storage.objects;
+create policy "restaurant_media_public_read" on storage.objects
+  for select using (bucket_id = 'restaurant_media');
+

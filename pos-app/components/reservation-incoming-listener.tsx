@@ -61,6 +61,17 @@ export function ReservationIncomingListener() {
     };
   }, []);
 
+  // Keep late status fresh on main POS even when Reservations tab is closed.
+  useEffect(() => {
+    const holdingMinutes = settings.reservationTableHoldingTime || 30;
+    const run = () => {
+      void markLateReservations(holdingMinutes);
+    };
+    run();
+    const intervalId = window.setInterval(run, 60_000);
+    return () => window.clearInterval(intervalId);
+  }, [settings.reservationTableHoldingTime]);
+
   useEffect(() => {
     return subscribeToReservationChanges({
       onInsert: (reservation) => {

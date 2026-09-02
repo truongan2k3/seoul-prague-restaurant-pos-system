@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import HTMLFlipBook from "react-pageflip";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import type { MenuPdfLanguage, WebsiteMenuPdf } from "@/lib/website/types";
@@ -10,13 +10,15 @@ type PdfJsModule = typeof import("pdfjs-dist");
 
 let pdfWorkerReady = false;
 
+function proxyPdfUrl(language: MenuPdfLanguage): string {
+  return `/api/website/menu-pdf/file?language=${language}`;
+}
+
 async function getPdfJs(): Promise<PdfJsModule> {
   const pdfjs = await import("pdfjs-dist");
   if (!pdfWorkerReady && typeof window !== "undefined") {
-    pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-      "pdfjs-dist/build/pdf.worker.min.mjs",
-      import.meta.url,
-    ).toString();
+    // Use CDN worker to avoid Next.js bundling issues with import.meta.url.
+    pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
     pdfWorkerReady = true;
   }
   return pdfjs;
@@ -24,21 +26,25 @@ async function getPdfJs(): Promise<PdfJsModule> {
 
 async function renderPdfToImages(url: string, maxPages = 40): Promise<string[]> {
   const pdfjs = await getPdfJs();
-  const task = pdfjs.getDocument({ url, withCredentials: false });
-  const doc = await task.promise;
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`PDF fetch failed (${response.status})`);
+  }
+  const data = new Uint8Array(await response.arrayBuffer());
+  const doc = await pdfjs.getDocument({ data }).promise;
   const pageCount = Math.min(doc.numPages, maxPages);
   const images: string[] = [];
 
   for (let pageNum = 1; pageNum <= pageCount; pageNum += 1) {
     const page = await doc.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 1.35 });
+    const viewport = page.getViewport({ scale: 1.4 });
     const canvas = document.createElement("canvas");
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     const context = canvas.getContext("2d");
     if (!context) continue;
     await page.render({ canvasContext: context, viewport, canvas }).promise;
-    images.push(canvas.toDataURL("image/jpeg", 0.92));
+    images.push(canvas.toDataURL("image/jpeg", 0.9));
   }
 
   return images;
@@ -50,14 +56,27 @@ interface MenuPdfFlipbookProps {
 }
 
 export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipbookProps) {
-  const bookRef = useRef<{ pageFlip: () => { flipNext: () => void; flipPrev: () => void; getCurrentPageIndex: () => number } } | null>(null);
-  const [language, setLanguage] = useState<MenuPdfLanguage>(initialLanguage);
+  const bookRef = useRef<{
+    pageFlip: () => { flipNext: () => void; flipPrev: () => void };
+  } | null>(null);
+
+  const availableLanguages = useMemo(
+    () => MENU_PDF_LANGUAGES.filter(({ code }) => pdfs.some((row) => row.language === code)),
+    [pdfs],
+  );
+
+  const [language, setLanguage] = useState<MenuPdfLanguage>(() => {
+    if (pdfs.some((row) => row.language === initialLanguage)) return initialLanguage;
+    return pdfs[0]?.language ?? "cs";
+  });
   const [pages, setPages] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
+  const [useSimpleViewer, setUseSimpleViewer] = useState(false);
 
   const activePdf = pdfs.find((row) => row.language === language) ?? pdfs[0];
+  const viewerUrl = activePdf ? proxyPdfUrl(activePdf.language) : "";
 
   const loadPdf = useCallback(async (pdf: WebsiteMenuPdf | undefined) => {
     if (!pdf?.fileUrl) {
@@ -67,16 +86,19 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
     setLoading(true);
     setError(null);
     setPageIndex(0);
+    setUseSimpleViewer(false);
     try {
-      const images = await renderPdfToImages(pdf.fileUrl);
+      const images = await renderPdfToImages(proxyPdfUrl(pdf.language));
       if (images.length === 0) {
         setError("Could not render PDF pages.");
+        setUseSimpleViewer(true);
         setPages([]);
       } else {
         setPages(images);
       }
-    } catch {
-      setError("Failed to load menu PDF. Try opening the download link below.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load menu PDF.");
+      setUseSimpleViewer(true);
       setPages([]);
     } finally {
       setLoading(false);
@@ -99,7 +121,7 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
     <div className="space-y-6">
       <div className="flex flex-wrap gap-2">
         {MENU_PDF_LANGUAGES.map(({ code, label }) => {
-          const available = pdfs.some((row) => row.language === code);
+          const available = availableLanguages.some((row) => row.code === code);
           const active = language === code;
           return (
             <button
@@ -126,25 +148,12 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
           <Loader2 className="mr-2 h-5 w-5 animate-spin" />
           Opening menu book…
         </div>
-      ) : error ? (
-        <div className="rounded-xl border border-red-900/50 bg-red-950/30 px-6 py-8 text-center">
-          <p className="text-red-200">{error}</p>
-          {activePdf ? (
-            <a
-              href={activePdf.fileUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-4 inline-block text-sm text-[#C9A88B] underline"
-            >
-              Download PDF
-            </a>
-          ) : null}
-        </div>
-      ) : pages.length > 0 ? (
+      ) : pages.length > 0 && !useSimpleViewer ? (
         <div className="flex flex-col items-center">
           <div className="relative w-full max-w-4xl">
             {/* @ts-expect-error react-pageflip types are loose */}
             <HTMLFlipBook
+              key={`${language}-${pages.length}`}
               ref={bookRef}
               width={420}
               height={560}
@@ -188,17 +197,34 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
               <ChevronRight className="h-5 w-5" />
             </button>
           </div>
-
-          {activePdf ? (
-            <a
-              href={activePdf.fileUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-4 text-xs uppercase tracking-[0.16em] text-[#C9A88B] hover:text-white"
-            >
-              Download PDF
-            </a>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {error ? (
+            <p className="rounded-lg border border-amber-800/50 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">
+              Flipbook could not render ({error}). Showing PDF viewer instead.
+            </p>
           ) : null}
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-[#121214]">
+            <iframe
+              title={`${activePdf?.label ?? "Menu"} PDF`}
+              src={viewerUrl}
+              className="h-[75vh] w-full bg-white"
+            />
+          </div>
+        </div>
+      )}
+
+      {activePdf ? (
+        <div className="text-center">
+          <a
+            href={viewerUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs uppercase tracking-[0.16em] text-[#C9A88B] hover:text-white"
+          >
+            Open / download PDF
+          </a>
         </div>
       ) : null}
     </div>

@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { fetchWebsiteContent } from "@/src/lib/website-public";
 import { buildRestaurantJsonLd } from "@/lib/website/seo";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function generateMetadata(): Promise<Metadata> {
   const content = await fetchWebsiteContent();
   const { settings } = content;

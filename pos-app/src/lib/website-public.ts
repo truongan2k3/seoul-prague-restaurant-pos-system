@@ -219,6 +219,9 @@ export async function fetchWebsiteContent(): Promise<WebsiteContent> {
     const menuPdfs = (menuPdfsRes.error ? [] : (menuPdfsRes.data ?? [])).map((row) =>
       mapMenuPdfRow(row as Record<string, unknown>),
     );
+    if (menuPdfsRes.error && process.env.NODE_ENV !== "production") {
+      console.warn("[website] menu pdfs fetch:", menuPdfsRes.error.message);
+    }
     const gallery = (galleryRes.data ?? []).map((row) =>
       mapGalleryRow(row as Record<string, unknown>),
     );

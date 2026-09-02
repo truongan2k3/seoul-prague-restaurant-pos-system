@@ -569,7 +569,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                                 className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-800 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200"
                               >
                                 <Pencil className="h-3.5 w-3.5" />
-                                {translate("editTip")}
+                                {translate("editTipAndPayment")}
                               </button>
                             )}
                             {canManageHistory && !isDeleted && (

@@ -73,6 +73,7 @@ export function OrderHistoryModal({
   const { requestPin } = usePinGate();
   const [editTipMode, setEditTipMode] = useState(resolvedInitialEditTip);
   const [editTip, setEditTip] = useState(sale.tip);
+  const [editPaymentMethod, setEditPaymentMethod] = useState<PaymentMethod>(sale.paymentMethod);
   const [editTipPaymentMethod, setEditTipPaymentMethod] = useState<PaymentMethod>(
     resolveTipPaymentMethod(sale),
   );
@@ -84,6 +85,7 @@ export function OrderHistoryModal({
 
   const resetEditState = () => {
     setEditTip(sale.tip);
+    setEditPaymentMethod(sale.paymentMethod);
     setEditTipPaymentMethod(resolveTipPaymentMethod(sale));
     setSaveError(null);
   };
@@ -118,6 +120,7 @@ export function OrderHistoryModal({
     const { data, error } = await updateSaleTipRecord(sale.id, {
       tip: editTip,
       tipPaymentMethod: editTipPaymentMethod,
+      paymentMethod: editPaymentMethod,
     });
     setSaving(false);
 
@@ -143,7 +146,7 @@ export function OrderHistoryModal({
 
     logAction(
       "edit_sale_tip",
-      `Order ${generateOrderNumber(sale.closedAt)} · ${sale.tableLabel} · tip ${sale.tip}→${editTip}`,
+      `Order ${generateOrderNumber(sale.closedAt)} · ${sale.tableLabel} · tip ${sale.tip}→${editTip} · payment ${sale.paymentMethod}→${editPaymentMethod}`,
     );
   };
 
@@ -284,6 +287,24 @@ export function OrderHistoryModal({
           <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
             {editTipMode ? (
               <div className="mb-4 space-y-3 text-sm">
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">{translate("paymentMethod")}</span>
+                  <div className="mt-2 flex gap-2">
+                    {(["cash", "card"] as const).map((method) => (
+                      <button
+                        key={method}
+                        type="button"
+                        onClick={() => setEditPaymentMethod(method)}
+                        className={`min-h-[40px] flex-1 rounded-lg px-3 text-sm font-semibold capitalize ${paymentFilterClass(
+                          editPaymentMethod === method,
+                          method,
+                        )}`}
+                      >
+                        {translate(method)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <label className="block space-y-1">
                   <span>{translate("tip")}</span>
                   <NumericInputField
@@ -411,7 +432,7 @@ export function OrderHistoryModal({
                 onClick={() => setEditTipMode(true)}
                 className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200"
               >
-                {translate("editTip")}
+                {translate("editTipAndPayment")}
               </button>
             )
           )}

@@ -11,10 +11,12 @@ import {
   Sparkles,
   UtensilsCrossed,
   Search,
+  Paintbrush,
 } from "lucide-react";
 
 const LINKS = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/admin/designer", label: "Visual designer", icon: Paintbrush },
   { href: "/admin/media", label: "Media", icon: ImageIcon },
   { href: "/admin/restaurant", label: "Restaurant", icon: Building2 },
   { href: "/admin/hours", label: "Opening hours", icon: Clock },

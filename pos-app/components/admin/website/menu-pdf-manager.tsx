@@ -48,9 +48,14 @@ export function MenuPdfManager({ initial }: MenuPdfManagerProps) {
         return;
       }
       if (file.size > 25 * 1024 * 1024) {
-        setError("PDF must be ≤ 25 MB.");
-        return;
+        setError(null);
+        setMessage(
+          `Recommended size is up to 25 MB. Your file is ${(file.size / 1024 / 1024).toFixed(1)} MB — uploading anyway.`,
+        );
+      } else {
+        setMessage(null);
       }
+      // Soft recommendation only — do not block.
 
       setProgress("Reading PDF pages…");
       const pageCount = await countPdfPages(file);

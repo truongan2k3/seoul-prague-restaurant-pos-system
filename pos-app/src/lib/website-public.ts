@@ -92,6 +92,10 @@ function mapMediaRow(row: Record<string, unknown>): WebsiteMediaAsset {
     height: typeof row.height === "number" ? row.height : undefined,
     mimeType: (row.mime_type as string) || undefined,
     altText: (row.alt_text as string) || undefined,
+    objectPosition:
+      typeof row.object_position === "string" && row.object_position.trim()
+        ? row.object_position.trim()
+        : "50% 50%",
     updatedAt: row.updated_at ? new Date(row.updated_at as string) : undefined,
   };
 }

@@ -30,8 +30,9 @@ export default async function AdminDashboardPage() {
       </div>
 
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
-        Run <code className="rounded bg-black/5 px-1">supabase/patch-website-cms.sql</code> on your Supabase project
-        before saving content. Until then, the landing page uses safe placeholder defaults.
+      Run SQL if needed: <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">supabase/patch-website-cms.sql</code> and{" "}
+        <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">patch-website-media-position.sql</code>.
+        Open <Link href="/admin/designer" className="text-blue-600 underline">Visual designer</Link> to drag images and edit text live.
       </section>
     </div>
   );

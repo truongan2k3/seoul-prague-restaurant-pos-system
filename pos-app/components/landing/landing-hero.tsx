@@ -32,7 +32,12 @@ export function LandingHero({ content }: LandingHeroProps) {
         </video>
       ) : heroImage ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <img
+          src={heroImage}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{ objectPosition: media.hero_image?.objectPosition ?? "50% 50%" }}
+        />
       ) : (
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,#3a1218_0%,#0B0B0C_55%)]" />
       )}

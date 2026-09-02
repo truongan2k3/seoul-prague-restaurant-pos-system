@@ -34,7 +34,12 @@ export function LandingAbout({ content }: { content: WebsiteContent }) {
         <Reveal className="relative aspect-[3/4] overflow-hidden bg-[#1a1a1c]">
           {aboutImage ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={aboutImage} alt="Restaurant interior" className="h-full w-full object-cover" />
+            <img
+              src={aboutImage}
+              alt="Restaurant interior"
+              className="h-full w-full object-cover"
+              style={{ objectPosition: content.media.about_image?.objectPosition ?? "50% 50%" }}
+            />
           ) : (
             <div className="flex h-full items-center justify-center bg-gradient-to-br from-[#2a1518] to-[#111]" >
               <span className="px-6 text-center text-sm text-white/40">Upload about image in /admin</span>
@@ -44,7 +49,7 @@ export function LandingAbout({ content }: { content: WebsiteContent }) {
         <Reveal>
           <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Our story</p>
           <h2 className="landing-serif mt-4 text-3xl text-white lg:text-5xl">
-            The Korean BBQ ritual
+            {content.settings.tagline || "The Korean BBQ ritual"}
           </h2>
           <p className="mt-6 text-base leading-relaxed text-white/70">{content.settings.aboutStory}</p>
           <p className="mt-4 text-base leading-relaxed text-white/60">{content.settings.description}</p>
@@ -59,10 +64,10 @@ export function LandingAbout({ content }: { content: WebsiteContent }) {
 
 export function LandingSignature({ content }: { content: WebsiteContent }) {
   const featured = content.menuItems.filter((item) => item.featured && item.available).slice(0, 3);
-  const signatureImages = [
-    content.media.signature_1?.fileUrl,
-    content.media.signature_2?.fileUrl,
-    content.media.signature_3?.fileUrl,
+  const signatureAssets = [
+    content.media.signature_1,
+    content.media.signature_2,
+    content.media.signature_3,
   ];
 
   return (
@@ -79,12 +84,15 @@ export function LandingSignature({ content }: { content: WebsiteContent }) {
           {featured.map((item, index) => (
             <Reveal key={item.id} className="group overflow-hidden border border-white/10 bg-[#121214]">
               <div className="aspect-square overflow-hidden bg-[#1a1a1c]">
-                {item.imageUrl || signatureImages[index] ? (
+                {item.imageUrl || signatureAssets[index]?.fileUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={item.imageUrl || signatureImages[index]}
+                    src={item.imageUrl || signatureAssets[index]?.fileUrl}
                     alt={item.name}
                     className="h-full w-full object-cover transition duration-700 group-hover:scale-105"
+                    style={{
+                      objectPosition: signatureAssets[index]?.objectPosition ?? "50% 50%",
+                    }}
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center text-sm text-white/30">Photo coming soon</div>

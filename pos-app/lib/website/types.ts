@@ -58,6 +58,8 @@ export interface WebsiteMediaAsset {
   height?: number;
   mimeType?: string;
   altText?: string;
+  /** CSS object-position, e.g. "50% 40%" */
+  objectPosition?: string;
   updatedAt?: Date;
 }
 

@@ -24,6 +24,7 @@ import {
   mapAmenityRow,
   mapCategoryRow,
   mapGalleryRow,
+  mapMediaRow,
   mapMenuItemRow,
   mapMenuPdfRow,
   mapSettingsRow,
@@ -104,10 +105,8 @@ export async function uploadWebsiteMediaSlot(input: {
 
   const extension = input.fileName.split(".").pop()?.toLowerCase() ?? "bin";
   const buffer = Buffer.from(input.fileBase64, "base64");
-  const maxBytes = input.mimeType.startsWith("video/") ? 100 * 1024 * 1024 : 15 * 1024 * 1024;
-  if (buffer.length > maxBytes) {
-    return { data: null, error: new Error("File exceeds maximum size.") };
-  }
+  // No hard size reject — size tips are client-side recommendations only.
+  // Real failures (storage quota, network, auth) are returned as errors.
 
   const path = `${input.slot}/${Date.now()}.${extension}`;
   const { error: uploadError } = await admin.storage
@@ -117,8 +116,12 @@ export async function uploadWebsiteMediaSlot(input: {
       upsert: true,
       contentType: input.mimeType,
     });
-
-  if (uploadError) return { data: null, error: uploadError };
+  if (uploadError) {
+    return {
+      data: null,
+      error: new Error(`Storage upload failed: ${uploadError.message}`),
+    };
+  }
 
   const { data: publicData } = admin.storage.from("restaurant_media").getPublicUrl(path);
   const fileUrl = publicData.publicUrl;
@@ -141,6 +144,35 @@ export async function uploadWebsiteMediaSlot(input: {
 
   if (dbError) return { data: null, error: dbError };
   return { data: { fileUrl, slot: input.slot }, error: null };
+}
+
+export async function updateWebsiteMediaObjectPosition(
+  slot: WebsiteMediaSlot,
+  objectPosition: string,
+) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { data: null, error };
+
+  const normalized = objectPosition.trim() || "50% 50%";
+  const { data, error: dbError } = await admin
+    .from("website_media_assets")
+    .update({ object_position: normalized, updated_at: nowIso() })
+    .eq("slot", slot)
+    .select("*")
+    .single();
+
+  if (dbError) {
+    const missing = /object_position|42703|schema cache/i.test(dbError.message);
+    return {
+      data: null,
+      error: missing
+        ? new Error(
+            "Column object_position missing. Run supabase/patch-website-media-position.sql",
+          )
+        : dbError,
+    };
+  }
+  return { data: mapMediaRow(data as Record<string, unknown>), error: null };
 }
 
 export async function deleteWebsiteMediaSlot(slot: WebsiteMediaSlot) {
@@ -420,10 +452,7 @@ export async function uploadWebsiteMenuPdf(input: {
   }
 
   const buffer = Buffer.from(input.fileBase64, "base64");
-  const maxBytes = 25 * 1024 * 1024;
-  if (buffer.length > maxBytes) {
-    return { data: null, error: new Error("PDF must be ≤ 25 MB.") };
-  }
+  // Soft size recommendation is UI-only; storage/DB errors are returned to the client.
 
   const label = MENU_PDF_LANGUAGES.find((row) => row.code === input.language)?.label ?? input.language;
   const path = `menu-pdfs/${input.language}-${Date.now()}.pdf`;

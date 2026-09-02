@@ -92,7 +92,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Only PDF files are supported." }, { status: 400 });
   }
   if (file.size > MAX_BYTES) {
-    return NextResponse.json({ error: "PDF must be ≤ 25 MB." }, { status: 400 });
+    // Soft recommendation only — continue upload and include a warning.
   }
 
   const bucketError = await ensureRestaurantMediaBucket(admin);
@@ -159,7 +159,13 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({ data: mapMenuPdfRow(data as Record<string, unknown>) });
+  return NextResponse.json({
+    data: mapMenuPdfRow(data as Record<string, unknown>),
+    warning:
+      file.size > MAX_BYTES
+        ? `Recommended PDF size is up to 25 MB. Your file is ${(file.size / 1024 / 1024).toFixed(1)} MB.`
+        : null,
+  });
 }
 
 export async function DELETE(request: Request) {

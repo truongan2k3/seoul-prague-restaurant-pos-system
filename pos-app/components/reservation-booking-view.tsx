@@ -52,6 +52,7 @@ export function ReservationBookingView() {
   const [time, setTime] = useState("18:00");
   const [notes, setNotes] = useState("");
   const [eventType, setEventType] = useState("");
+  const [wantsBbq, setWantsBbq] = useState<boolean | null>(null);
   const [gdprConsent, setGdprConsent] = useState(false);
   const [gdprError, setGdprError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -170,6 +171,7 @@ export function ReservationBookingView() {
     setTime("18:00");
     setNotes("");
     setEventType("");
+    setWantsBbq(null);
     setGdprConsent(false);
     setGdprError(false);
   };
@@ -210,7 +212,11 @@ export function ReservationBookingView() {
           guestCount,
           date,
           time,
-          notes: notes.trim() || undefined,
+          notes: (() => {
+            const bbqTag = wantsBbq === true ? "[BBQ: Yes]" : wantsBbq === false ? "[BBQ: No]" : "";
+            const userNotes = notes.trim();
+            return [bbqTag, userNotes].filter(Boolean).join(" ") || undefined;
+          })(),
           eventType: eventType.trim() || undefined,
           gdprConsent: true,
           lang,
@@ -401,6 +407,35 @@ export function ReservationBookingView() {
                   </select>
                 </label>
               ) : null}
+
+              <div className="rounded-xl border border-zinc-700 bg-zinc-950 p-4">
+                <p className="text-sm font-medium text-zinc-200">{copy.bbqQuestion}</p>
+                <p className="mt-1 text-xs text-zinc-500">{copy.bbqHint}</p>
+                <div className="mt-3 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setWantsBbq(true)}
+                    className={`flex-1 rounded-xl py-3 text-sm font-semibold transition ${
+                      wantsBbq === true
+                        ? "bg-red-600 text-white"
+                        : "border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                    }`}
+                  >
+                    🔥 {copy.bbqYes}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWantsBbq(false)}
+                    className={`flex-1 rounded-xl py-3 text-sm font-semibold transition ${
+                      wantsBbq === false
+                        ? "bg-zinc-700 text-white"
+                        : "border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                    }`}
+                  >
+                    {copy.bbqNo}
+                  </button>
+                </div>
+              </div>
 
               <div className="grid gap-5 sm:grid-cols-3">
                 <label className="block text-sm">

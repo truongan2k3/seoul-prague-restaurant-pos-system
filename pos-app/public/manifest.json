@@ -2,7 +2,7 @@
   "name": "Restaurant POS",
   "short_name": "POS",
   "description": "Multi-device restaurant point of sale",
-  "start_url": "/",
+  "start_url": "/app",
   "display": "standalone",
   "background_color": "#fafafa",
   "theme_color": "#18181b",

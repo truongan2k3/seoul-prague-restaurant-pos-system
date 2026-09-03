@@ -9,7 +9,7 @@ export default async function AdminDashboardPage() {
       <header>
         <h1 className="text-2xl font-semibold">Website dashboard</h1>
         <p className="mt-2 text-sm text-gray-500">
-          Manage the public landing page at <Link href="/landing" className="text-blue-600 underline">/landing</Link>.
+          Manage the public website at <Link href="/" className="text-blue-600 underline">seoulprague.com</Link>.
           Reservations remain on the existing system at{" "}
           <Link href="/reservation" className="text-blue-600 underline">/reservation</Link>.
         </p>

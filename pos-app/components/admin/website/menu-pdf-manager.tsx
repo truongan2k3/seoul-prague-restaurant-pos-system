@@ -91,7 +91,7 @@ export function MenuPdfManager({ initial }: MenuPdfManagerProps) {
         return [...next, payload.data as WebsiteMenuPdf];
       });
       setMessage(
-        `${MENU_PDF_LANGUAGES.find((r) => r.code === language)?.label} menu saved. Open /landing/menu to view.`,
+        `${MENU_PDF_LANGUAGES.find((r) => r.code === language)?.label} menu saved. Open /menu to view.`,
       );
       router.refresh();
     } catch (err) {
@@ -130,7 +130,7 @@ export function MenuPdfManager({ initial }: MenuPdfManagerProps) {
       <h2 className="text-lg font-semibold">Menu PDF books</h2>
       <p className="mt-1 text-sm text-gray-500">
         Upload one PDF per language. Guests flip through pages like a book on{" "}
-        <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">/landing/menu</code>.
+        <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">/menu</code>.
       </p>
       <p className="mt-2 text-xs text-gray-400">PDF only · max 25 MB · recommended A4 portrait</p>
 

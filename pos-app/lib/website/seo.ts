@@ -13,7 +13,7 @@ export function buildRestaurantJsonLd(content: WebsiteContent) {
       "@type": "PostalAddress",
       streetAddress: settings.address,
     },
-    url: "/landing",
+    url: "/",
     servesCuisine: "Korean BBQ",
     openingHoursSpecification: settings.openingHours
       .filter((row) => !row.closed)

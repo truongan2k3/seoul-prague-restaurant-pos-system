@@ -6,7 +6,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { useApp } from "@/contexts/app-context";
 import { LanguageSelector } from "@/components/language-selector";
-import { isStationPath } from "@/lib/page-routes";
+import { isStationPath, POS_HOME_PATH } from "@/lib/page-routes";
+
+function resolvePostLoginPath(next: string | null): string {
+  const path = next?.trim() || POS_HOME_PATH;
+  if (path === "/" || path.startsWith("/landing")) return POS_HOME_PATH;
+  return path;
+}
 
 const AUTH_ERROR_KEYS = {
   invalidCredentials: "authErrorInvalidCredentials",
@@ -17,7 +23,7 @@ const AUTH_ERROR_KEYS = {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nextPath = searchParams.get("next") || "/";
+  const nextPath = resolvePostLoginPath(searchParams.get("next"));
   const { login, session, loading } = useAuth();
   const { translate } = useApp();
 

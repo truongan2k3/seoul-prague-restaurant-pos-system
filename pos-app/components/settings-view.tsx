@@ -22,6 +22,7 @@ import { ReceiptSectionSizesEditor } from "@/components/receipt-section-sizes-ed
 import { DEFAULT_RECEIPT_SECTION_SIZES } from "@/lib/receipt-section-sizes";
 import { LiveClock } from "@/components/live-clock";
 import { MenuCustomizationManager } from "@/components/menu-customization-manager";
+import { POS_HOME_PATH } from "@/lib/page-routes";
 import { useApp } from "@/contexts/app-context";
 import { useAuth } from "@/contexts/auth-context";
 import { useNotifications } from "@/contexts/notification-context";
@@ -328,7 +329,7 @@ export function SettingsView({
   };
 
   const devices = [
-    { href: "/", label: translate("posWindows"), icon: Monitor, desc: "Cashier & floor manager" },
+    { href: POS_HOME_PATH, label: translate("posWindows"), icon: Monitor, desc: "Cashier & floor manager" },
     { href: "/server", label: translate("tabletServer"), icon: Tablet, desc: "Table ordering" },
     {
       href: "/print-station",

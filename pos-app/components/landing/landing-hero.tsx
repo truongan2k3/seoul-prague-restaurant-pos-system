@@ -84,7 +84,7 @@ export function LandingHero({ content }: LandingHeroProps) {
         >
           <BookingCta size="lg" />
           <Link
-            href="/landing/menu"
+            href="/menu"
             className="inline-flex items-center justify-center border border-white/25 px-8 py-4 text-sm font-semibold uppercase tracking-[0.14em] text-white transition hover:bg-white/10"
           >
             View menu

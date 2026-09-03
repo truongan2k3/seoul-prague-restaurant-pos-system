@@ -8,12 +8,22 @@ import { PRELOADER_SLIDES } from "@/lib/preloader-slides";
 const INTRO_TOTAL_SECONDS = 3;
 const SAFETY_MS = 4_000;
 
-const SKIP_PRELOADER_PREFIXES = ["/landing", "/admin", "/reservation", "/login", "/register", "/status"];
+const SKIP_PRELOADER_PREFIXES = [
+  "/",
+  "/menu",
+  "/landing",
+  "/admin",
+  "/reservation",
+  "/login",
+  "/register",
+  "/status",
+];
 
 function shouldSkipPreloader(pathname: string | null): boolean {
   if (!pathname) return false;
+  if (pathname === "/") return true;
   return SKIP_PRELOADER_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    (prefix) => prefix !== "/" && (pathname === prefix || pathname.startsWith(`${prefix}/`)),
   );
 }
 

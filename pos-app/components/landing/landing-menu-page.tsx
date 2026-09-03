@@ -20,7 +20,7 @@ export function LandingMenuPageView({ content }: { content: WebsiteContent }) {
       <LandingNavbar content={content} />
       <main className="pb-24 pt-28 lg:pb-16">
         <div className="mx-auto max-w-7xl px-5 lg:px-8">
-          <Link href="/landing" className="text-sm text-[#C9A88B] hover:text-white">← Back to home</Link>
+          <Link href="/" className="text-sm text-[#C9A88B] hover:text-white">← Back to home</Link>
           <p className="mt-8 text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Menu</p>
           <h1 className="landing-serif mt-4 text-4xl lg:text-6xl">Our menu</h1>
           <p className="mt-4 max-w-2xl text-white/60">

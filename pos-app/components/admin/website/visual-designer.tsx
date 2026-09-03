@@ -205,7 +205,7 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
-            href="/landing"
+            href="/"
             target="_blank"
             className="rounded-lg border border-gray-200 px-4 py-2 text-sm dark:border-gray-700"
           >

@@ -174,7 +174,7 @@ function mapVideoRow(row: Record<string, unknown>): WebsiteVideo {
   };
 }
 
-/** Public read for /landing — uses admin client; tables may not exist until SQL patch is applied. */
+/** Public read for the marketing website — uses admin client; tables may not exist until SQL patch is applied. */
 export async function fetchWebsiteContent(): Promise<WebsiteContent> {
   const fallback = defaultWebsiteContent();
 

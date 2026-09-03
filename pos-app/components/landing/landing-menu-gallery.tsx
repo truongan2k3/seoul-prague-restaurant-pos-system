@@ -31,7 +31,7 @@ export function LandingMenuPreview({ content }: { content: WebsiteContent }) {
             ) : null}
           </div>
           <Link
-            href="/landing/menu"
+            href="/menu"
             className="text-sm uppercase tracking-[0.16em] text-[#C9A88B] hover:text-white"
           >
             Full menu →
@@ -42,7 +42,7 @@ export function LandingMenuPreview({ content }: { content: WebsiteContent }) {
             <div className="rounded-xl border border-white/10 bg-[#121214] p-6 text-center">
               <p className="text-white/70">Digital menu books ready — Czech, English & Chinese</p>
               <Link
-                href="/landing/menu"
+                href="/menu"
                 className="mt-4 inline-block text-sm uppercase tracking-[0.16em] text-[#C9A88B] hover:text-white"
               >
                 Open menu book →
@@ -249,7 +249,7 @@ export function LandingFooter({ content }: { content: WebsiteContent }) {
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-white/50">Links</p>
             <ul className="mt-4 space-y-2 text-sm text-white/70">
-              <li><Link href="/landing/menu" className="hover:text-white">Menu</Link></li>
+              <li><Link href="/menu" className="hover:text-white">Menu</Link></li>
               <li><Link href="/reservation" className="hover:text-white">Reservations</Link></li>
               <li><Link href="/admin" className="hover:text-white">Website admin</Link></li>
               {settings.instagramUrl ? (

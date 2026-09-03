@@ -282,7 +282,7 @@ export default function StatusAdminPage() {
                 />
               </div>
               <p className="mt-2 text-sm text-zinc-400">{formatLastSeen(entry.lastSeenAt)}</p>
-              <p className="mt-1 text-xs text-zinc-500">/{entry.page === "main" ? "" : entry.page}</p>
+              <p className="mt-1 text-xs text-zinc-500">/{entry.page === "main" ? "app" : entry.page}</p>
               <button
                 type="button"
                 disabled={!entry.online || refreshSubmitting != null}

@@ -7,11 +7,11 @@ import { BookingCta } from "@/components/landing/booking-cta";
 import type { WebsiteContent } from "@/lib/website/types";
 
 const NAV = [
-  { href: "/landing#home", label: "Home" },
-  { href: "/landing#about", label: "About" },
-  { href: "/landing/menu", label: "Menu" },
-  { href: "/landing#gallery", label: "Gallery" },
-  { href: "/landing#contact", label: "Contact" },
+  { href: "/#home", label: "Home" },
+  { href: "/#about", label: "About" },
+  { href: "/menu", label: "Menu" },
+  { href: "/#gallery", label: "Gallery" },
+  { href: "/#contact", label: "Contact" },
 ];
 
 interface LandingNavbarProps {
@@ -40,7 +40,7 @@ export function LandingNavbar({ content }: LandingNavbarProps) {
         }`}
       >
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 lg:px-8">
-          <Link href="/landing#home" className="flex items-center gap-3">
+          <Link href="/#home" className="flex items-center gap-3">
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={logoUrl} alt={content.settings.restaurantName} className="h-10 w-10 object-contain" />

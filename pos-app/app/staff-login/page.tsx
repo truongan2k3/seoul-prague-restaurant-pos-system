@@ -6,12 +6,19 @@ import { LanguageSelector } from "@/components/language-selector";
 import { StaffAdminPasscodeModal } from "@/components/staff-admin-passcode-modal";
 import { useApp } from "@/contexts/app-context";
 import { useAuth } from "@/contexts/auth-context";
+import { POS_HOME_PATH } from "@/lib/page-routes";
 import type { StaffMember } from "@/lib/types";
 import {
   prepareStaffLoginRosterAction,
   resolveStaffLoginSessionAction,
   selectStaffAction,
 } from "@/src/lib/staff-auth-actions";
+
+function resolvePostLoginPath(next: string | null): string {
+  const path = next?.trim() || POS_HOME_PATH;
+  if (path === "/" || path.startsWith("/landing")) return POS_HOME_PATH;
+  return path;
+}
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -33,7 +40,7 @@ function StaffLoginSkeleton() {
 function StaffLoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nextPath = searchParams.get("next") || "/";
+  const nextPath = resolvePostLoginPath(searchParams.get("next"));
   const { session, loading: authLoading, logout } = useAuth();
   const { translate } = useApp();
 

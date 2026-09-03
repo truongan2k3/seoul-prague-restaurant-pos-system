@@ -57,13 +57,13 @@ export function WebsiteAdminShell({ children }: { children: React.ReactNode }) {
               })}
             </nav>
             <div className="mt-6 space-y-2 border-t border-gray-200 pt-4 text-sm dark:border-gray-800">
-              <Link href="/landing" className="block text-blue-600 hover:underline dark:text-blue-400">
+              <Link href="/" className="block text-blue-600 hover:underline dark:text-blue-400">
                 View landing page →
               </Link>
               <Link href="/reservation" className="block text-blue-600 hover:underline dark:text-blue-400">
                 Reservation system →
               </Link>
-              <Link href="/" className="block text-gray-500 hover:underline">
+              <Link href="/app" className="block text-gray-500 hover:underline">
                 Back to POS
               </Link>
             </div>

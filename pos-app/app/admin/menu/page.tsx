@@ -9,7 +9,7 @@ export default async function AdminMenuPage() {
       <header>
         <h1 className="text-2xl font-semibold">Menu</h1>
         <p className="mt-2 text-sm text-gray-500">
-          Upload PDF menus (Czech, English, Chinese) for the flipbook on /landing/menu.
+          Upload PDF menus (Czech, English, Chinese) for the flipbook on /menu.
         </p>
       </header>
       <MenuPdfManager initial={content.menuPdfs} />

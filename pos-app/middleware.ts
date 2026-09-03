@@ -3,9 +3,10 @@ import { decodeAuthSession } from "@/src/lib/auth/session-token";
 import { decodeStaffSession, STAFF_COOKIE_NAME } from "@/src/lib/auth/staff-session-token";
 import { isStationPath } from "@/lib/page-routes";
 
-const PUBLIC_PATHS = ["/login", "/register", "/reservation", "/landing"];
+const PUBLIC_PATHS = ["/login", "/register", "/reservation", "/landing", "/menu"];
 
 function isPublicPath(pathname: string) {
+  if (pathname === "/") return true;
   if (PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`))) {
     return true;
   }
@@ -42,9 +43,7 @@ export async function middleware(request: NextRequest) {
   if (!businessSession) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
-    if (pathname !== "/") {
-      loginUrl.searchParams.set("next", pathname);
-    }
+    loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
@@ -66,9 +65,7 @@ export async function middleware(request: NextRequest) {
   if (!staffSession || staffSession.businessId !== businessSession.businessId) {
     const staffLoginUrl = request.nextUrl.clone();
     staffLoginUrl.pathname = "/staff-login";
-    if (pathname !== "/") {
-      staffLoginUrl.searchParams.set("next", pathname);
-    }
+    staffLoginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(staffLoginUrl);
   }
 

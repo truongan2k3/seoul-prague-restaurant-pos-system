@@ -27,6 +27,9 @@ export function ConnectionStatusBadge() {
     pathname.startsWith("/reservation/") ||
     pathname === "/landing" ||
     pathname.startsWith("/landing/") ||
+    pathname === "/" ||
+    pathname === "/menu" ||
+    pathname.startsWith("/menu/") ||
     pathname === "/admin" ||
     pathname.startsWith("/admin/")
   ) {

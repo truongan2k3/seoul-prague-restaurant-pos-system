@@ -14,6 +14,11 @@ import {
 } from "@/lib/reservation-slots";
 import { fetchAppSettings } from "@/src/lib/settings-actions";
 import { supabase } from "@/src/lib/supabase";
+import {
+  GUEST_RESERVATION_ALERT_CHANNEL,
+  GUEST_RESERVATION_ALERT_EVENT,
+  type GuestReservationAlertPayload,
+} from "@/lib/reservation-guest-alert";
 
 export interface CreateReservationInput {
   guestName: string;
@@ -496,6 +501,23 @@ export function subscribeToReservationChanges(handlers: ReservationChangeHandler
       { event: "DELETE", schema: "public", table: "reservations" },
       () => normalized.onChange?.(),
     )
+    .subscribe();
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}
+
+export function subscribeToGuestReservationAlerts(
+  onAlert: (payload: GuestReservationAlertPayload) => void,
+) {
+  const channel = supabase
+    .channel(GUEST_RESERVATION_ALERT_CHANNEL)
+    .on("broadcast", { event: GUEST_RESERVATION_ALERT_EVENT }, (message) => {
+      const payload = message.payload as GuestReservationAlertPayload | undefined;
+      if (!payload?.kind || !payload.reservation?.id) return;
+      onAlert(payload);
+    })
     .subscribe();
 
   return () => {

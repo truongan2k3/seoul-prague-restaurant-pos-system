@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import type { GuestReservationAlertPayload } from "@/lib/reservation-guest-alert";
 import {
   cancelReservationByManageToken,
   fetchReservationByManageToken,
   updateReservationByManageToken,
 } from "@/src/lib/reservation-guest-server";
+import { broadcastGuestReservationAlert } from "@/src/lib/reservation-guest-alert-server";
 import {
   buildManageUrl,
   sendReservationEmail,
@@ -22,6 +24,24 @@ function publicReservation(data: NonNullable<
     status: data.status,
     notes: data.notes,
     manageUrl: buildManageUrl(data.manageToken),
+  };
+}
+
+function alertReservation(
+  data: NonNullable<Awaited<ReturnType<typeof fetchReservationByManageToken>>["data"]>,
+): GuestReservationAlertPayload["reservation"] {
+  return {
+    id: data.id,
+    guestName: data.guestName,
+    guestPhone: data.guestPhone,
+    guestEmail: data.guestEmail,
+    partySize: data.partySize,
+    reservedAt: data.reservedAt,
+    status: data.status,
+    notes: data.notes,
+    bookingCode: data.bookingCode,
+    eventType: data.eventType,
+    source: "reservation",
   };
 }
 
@@ -48,6 +68,8 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
+  const before = await fetchReservationByManageToken(body.token ?? "");
+
   const { data, error } = await updateReservationByManageToken({
     token: body.token ?? "",
     date: body.date ?? "",
@@ -59,6 +81,18 @@ export async function PATCH(request: Request) {
   if (error || !data) {
     return NextResponse.json({ error: error ?? "Update failed." }, { status: 400 });
   }
+
+  await broadcastGuestReservationAlert({
+    kind: "updated",
+    reservation: alertReservation(data),
+    previous: before.data
+      ? {
+          partySize: before.data.partySize,
+          reservedAt: before.data.reservedAt,
+          notes: before.data.notes,
+        }
+      : undefined,
+  });
 
   let emailSent = false;
   if (data.guestEmail) {
@@ -93,6 +127,11 @@ export async function DELETE(request: Request) {
   if (error || !data) {
     return NextResponse.json({ error: error ?? "Cancel failed." }, { status: 400 });
   }
+
+  await broadcastGuestReservationAlert({
+    kind: "cancelled",
+    reservation: alertReservation(data),
+  });
 
   let emailSent = false;
   if (data.guestEmail) {

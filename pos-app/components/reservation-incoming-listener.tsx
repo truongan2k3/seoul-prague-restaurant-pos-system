@@ -7,6 +7,10 @@ import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
 import { playCustomAlertSound } from "@/lib/notification-sound";
 import { pickEventTypeLabel } from "@/lib/reservation-guest-form";
+import {
+  guestAlertToReservationRecord,
+  type GuestReservationAlertPayload,
+} from "@/lib/reservation-guest-alert";
 import type { ReservationRecord } from "@/lib/types";
 import type { GuestVisitProfile } from "@/src/lib/guest-history-actions";
 import { fetchGuestVisitProfile } from "@/src/lib/guest-history-actions";
@@ -14,8 +18,18 @@ import {
   fetchReservations,
   mapReservationsResponse,
   markLateReservations,
+  subscribeToGuestReservationAlerts,
   subscribeToReservationChanges,
 } from "@/src/lib/reservation-actions";
+
+type ScreenAlert =
+  | { kind: "new"; reservation: ReservationRecord }
+  | {
+      kind: "updated";
+      reservation: ReservationRecord;
+      previous?: GuestReservationAlertPayload["previous"];
+    }
+  | { kind: "cancelled"; reservation: ReservationRecord };
 
 async function confirmReservationWithEmail(reservationId: string) {
   const response = await fetch("/api/reservations/confirm", {
@@ -30,25 +44,65 @@ async function confirmReservationWithEmail(reservationId: string) {
   return { error: null };
 }
 
-/** Popup on main POS when a guest submits an online reservation. */
+/** Popup on main POS when a guest books, updates, or cancels online. */
 export function ReservationIncomingListener() {
   const { translate, language, soundMainEnabled } = useApp();
   const { settings } = useSettings();
-  const [incoming, setIncoming] = useState<ReservationRecord | null>(null);
+  const [alert, setAlert] = useState<ScreenAlert | null>(null);
   const [visitProfile, setVisitProfile] = useState<GuestVisitProfile | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const seenIdsRef = useRef<Set<string>>(new Set());
   const readyRef = useRef(false);
+  const queueRef = useRef<ScreenAlert[]>([]);
+  const alertRef = useRef<ScreenAlert | null>(null);
 
   const formatDateTime = useCallback(
-    (date: Date) =>
-      date.toLocaleString(
+    (date: Date | string) =>
+      new Date(date).toLocaleString(
         language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB",
-        { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" },
+        {
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        },
       ),
     [language],
   );
+
+  const playAlertSound = useCallback(() => {
+    if (!soundMainEnabled) return;
+    const soundUrl = settings.soundConfigs.newOrder || settings.soundConfigs.mainNewOrder;
+    playCustomAlertSound(soundUrl, "newOrder");
+  }, [settings.soundConfigs.mainNewOrder, settings.soundConfigs.newOrder, soundMainEnabled]);
+
+  const showNext = useCallback((next: ScreenAlert | null) => {
+    alertRef.current = next;
+    setAlert(next);
+    setError(null);
+    setVisitProfile(null);
+  }, []);
+
+  const enqueueAlert = useCallback(
+    (next: ScreenAlert) => {
+      if (!alertRef.current) {
+        showNext(next);
+        playAlertSound();
+        return;
+      }
+      queueRef.current.push(next);
+      playAlertSound();
+    },
+    [playAlertSound, showNext],
+  );
+
+  const dismissAlert = useCallback(() => {
+    const queued = queueRef.current.shift() ?? null;
+    showNext(queued);
+  }, [showNext]);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,7 +119,6 @@ export function ReservationIncomingListener() {
     };
   }, []);
 
-  // Keep late status fresh on main POS even when Reservations tab is closed.
   useEffect(() => {
     const holdingMinutes = settings.reservationTableHoldingTime || 30;
     const run = () => {
@@ -83,24 +136,29 @@ export function ReservationIncomingListener() {
         seenIdsRef.current.add(reservation.id);
         if (!readyRef.current) return;
         if (reservation.source !== "reservation" || reservation.status !== "pending") return;
-
-        setError(null);
-        setVisitProfile(null);
-        setIncoming(reservation);
-        if (soundMainEnabled) {
-          const soundUrl =
-            settings.soundConfigs.newOrder || settings.soundConfigs.mainNewOrder;
-          playCustomAlertSound(soundUrl, "newOrder");
-        }
+        enqueueAlert({ kind: "new", reservation });
       },
     });
-  }, [settings.soundConfigs.mainNewOrder, settings.soundConfigs.newOrder, soundMainEnabled]);
+  }, [enqueueAlert]);
 
   useEffect(() => {
-    if (!incoming) {
+    return subscribeToGuestReservationAlerts((payload) => {
+      const reservation = guestAlertToReservationRecord(payload);
+      seenIdsRef.current.add(reservation.id);
+      if (payload.kind === "cancelled") {
+        enqueueAlert({ kind: "cancelled", reservation });
+        return;
+      }
+      enqueueAlert({ kind: "updated", reservation, previous: payload.previous });
+    });
+  }, [enqueueAlert]);
+
+  useEffect(() => {
+    if (!alert || alert.kind === "cancelled") {
       setVisitProfile(null);
       return;
     }
+    const incoming = alert.reservation;
     let cancelled = false;
     void fetchGuestVisitProfile({
       email: incoming.guestEmail,
@@ -112,83 +170,146 @@ export function ReservationIncomingListener() {
     return () => {
       cancelled = true;
     };
-  }, [incoming]);
+  }, [alert]);
 
   const handleConfirm = async () => {
-    if (!incoming) return;
+    if (!alert || (alert.kind !== "new" && alert.kind !== "updated")) return;
+    if (alert.reservation.status !== "pending") {
+      dismissAlert();
+      return;
+    }
     setBusy(true);
     setError(null);
-    const result = await confirmReservationWithEmail(incoming.id);
+    const result = await confirmReservationWithEmail(alert.reservation.id);
     setBusy(false);
     if (result.error) {
       setError(result.error);
       return;
     }
-    setIncoming(null);
+    dismissAlert();
   };
 
+  const reservation = alert?.reservation ?? null;
   const eventLabel =
-    incoming?.eventType &&
+    reservation?.eventType &&
     pickEventTypeLabel(
-      settings.reservationEventTypes.find((option) => option.id === incoming.eventType) ?? {
-        id: incoming.eventType,
+      settings.reservationEventTypes.find((option) => option.id === reservation.eventType) ?? {
+        id: reservation.eventType,
         labels: {
-          en: incoming.eventType,
-          cs: incoming.eventType,
-          vi: incoming.eventType,
-          de: incoming.eventType,
-          ko: incoming.eventType,
+          en: reservation.eventType,
+          cs: reservation.eventType,
+          vi: reservation.eventType,
+          de: reservation.eventType,
+          ko: reservation.eventType,
         },
       },
       "en",
     );
 
+  const title =
+    alert?.kind === "cancelled"
+      ? translate("resGuestCancelledTitle")
+      : alert?.kind === "updated"
+        ? translate("resGuestUpdatedTitle")
+        : translate("resIncomingTitle");
+
+  const hint =
+    alert?.kind === "cancelled"
+      ? translate("resGuestCancelledHint")
+      : alert?.kind === "updated"
+        ? translate("resGuestUpdatedHint")
+        : translate("resIncomingHint");
+
+  const previous = alert?.kind === "updated" ? alert.previous : undefined;
+  const showPreviousTime =
+    previous?.reservedAt &&
+    reservation &&
+    new Date(previous.reservedAt).getTime() !== reservation.reservedAt.getTime();
+  const showPreviousParty =
+    previous?.partySize != null && reservation && previous.partySize !== reservation.partySize;
+
+  const canConfirm = Boolean(
+    reservation && (alert?.kind === "new" || alert?.kind === "updated") && reservation.status === "pending",
+  );
+
   return (
     <Modal
-      open={incoming != null}
+      open={alert != null}
       onClose={() => {
-        if (!busy) setIncoming(null);
+        if (!busy) dismissAlert();
       }}
-      title={translate("resIncomingTitle")}
+      title={title}
     >
-      {incoming ? (
+      {reservation ? (
         <div className="space-y-4">
-          <p className="text-sm text-gray-600 dark:text-gray-300">{translate("resIncomingHint")}</p>
-          {visitProfile?.isReturning ? (
+          <p
+            className={`text-sm ${
+              alert?.kind === "cancelled"
+                ? "font-medium text-red-700 dark:text-red-300"
+                : "text-gray-600 dark:text-gray-300"
+            }`}
+          >
+            {hint}
+          </p>
+          {visitProfile?.isReturning && alert?.kind !== "cancelled" ? (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/50">
               <GuestReturningBadge
                 profile={visitProfile}
-                email={incoming.guestEmail}
-                phone={incoming.guestPhone}
+                email={reservation.guestEmail}
+                phone={reservation.guestPhone}
                 defaultOpen
               />
             </div>
           ) : null}
-          <dl className="space-y-2 rounded-xl bg-zinc-100 px-4 py-3 text-sm dark:bg-zinc-800">
+          <dl
+            className={`space-y-2 rounded-xl px-4 py-3 text-sm ${
+              alert?.kind === "cancelled"
+                ? "bg-red-50 dark:bg-red-950/40"
+                : "bg-zinc-100 dark:bg-zinc-800"
+            }`}
+          >
             <div className="flex justify-between gap-3">
               <dt className="text-gray-500 dark:text-gray-400">{translate("guestName")}</dt>
-              <dd className="font-semibold text-gray-900 dark:text-gray-100">{incoming.guestName}</dd>
+              <dd className="font-semibold text-gray-900 dark:text-gray-100">{reservation.guestName}</dd>
             </div>
+            {reservation.bookingCode ? (
+              <div className="flex justify-between gap-3">
+                <dt className="text-gray-500 dark:text-gray-400">{translate("bookingCode")}</dt>
+                <dd className="font-semibold text-gray-900 dark:text-gray-100">{reservation.bookingCode}</dd>
+              </div>
+            ) : null}
             <div className="flex justify-between gap-3">
               <dt className="text-gray-500 dark:text-gray-400">{translate("partySize")}</dt>
-              <dd className="font-semibold text-gray-900 dark:text-gray-100">{incoming.partySize}</dd>
+              <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                {reservation.partySize}
+                {showPreviousParty ? (
+                  <span className="ml-2 text-xs font-normal text-amber-700 dark:text-amber-300">
+                    ({translate("resGuestPrevious")}: {previous?.partySize})
+                  </span>
+                ) : null}
+              </dd>
             </div>
             <div className="flex justify-between gap-3">
               <dt className="text-gray-500 dark:text-gray-400">{translate("reservedAt")}</dt>
-              <dd className="font-semibold text-gray-900 dark:text-gray-100">
-                {formatDateTime(incoming.reservedAt)}
+              <dd className="text-right font-semibold text-gray-900 dark:text-gray-100">
+                {formatDateTime(reservation.reservedAt)}
+                {showPreviousTime ? (
+                  <span className="mt-0.5 block text-xs font-normal text-amber-700 dark:text-amber-300">
+                    {translate("resGuestPrevious")}: {formatDateTime(previous!.reservedAt!)}
+                  </span>
+                ) : null}
               </dd>
             </div>
-            {incoming.guestPhone ? (
+            {reservation.guestPhone ? (
               <div className="flex justify-between gap-3">
                 <dt className="text-gray-500 dark:text-gray-400">{translate("guestPhone")}</dt>
-                <dd className="font-medium text-gray-900 dark:text-gray-100">{incoming.guestPhone}</dd>
+                <dd className="font-medium text-gray-900 dark:text-gray-100">{reservation.guestPhone}</dd>
               </div>
             ) : null}
-            {incoming.guestEmail ? (
+            {reservation.guestEmail ? (
               <div className="flex justify-between gap-3">
                 <dt className="text-gray-500 dark:text-gray-400">{translate("guestEmail")}</dt>
-                <dd className="font-medium text-gray-900 dark:text-gray-100">{incoming.guestEmail}</dd>
+                <dd className="font-medium text-gray-900 dark:text-gray-100">{reservation.guestEmail}</dd>
               </div>
             ) : null}
             {eventLabel ? (
@@ -197,30 +318,38 @@ export function ReservationIncomingListener() {
                 <dd className="font-medium text-gray-900 dark:text-gray-100">{eventLabel}</dd>
               </div>
             ) : null}
-            {incoming.notes ? (
+            {reservation.notes ? (
               <div>
                 <dt className="text-gray-500 dark:text-gray-400">{translate("resNotes")}</dt>
-                <dd className="mt-1 text-gray-800 dark:text-gray-200">{incoming.notes}</dd>
+                <dd className="mt-1 text-gray-800 dark:text-gray-200">{reservation.notes}</dd>
               </div>
             ) : null}
           </dl>
           {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
           <div className="flex flex-col gap-2 sm:flex-row">
+            {canConfirm ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleConfirm()}
+                className="flex-1 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {busy ? translate("confirming") : translate("resIncomingConfirm")}
+              </button>
+            ) : null}
             <button
               type="button"
               disabled={busy}
-              onClick={() => void handleConfirm()}
-              className="flex-1 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              onClick={dismissAlert}
+              className={`flex-1 rounded-xl py-3 text-sm font-semibold ${
+                canConfirm
+                  ? "border border-gray-200 text-gray-800 dark:border-gray-600 dark:text-gray-100"
+                  : alert?.kind === "cancelled"
+                    ? "bg-red-600 text-white"
+                    : "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
+              }`}
             >
-              {busy ? translate("confirming") : translate("resIncomingConfirm")}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => setIncoming(null)}
-              className="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-semibold text-gray-800 dark:border-gray-600 dark:text-gray-100"
-            >
-              {translate("resIncomingLater")}
+              {canConfirm ? translate("resIncomingLater") : translate("resGuestAlertOk")}
             </button>
           </div>
         </div>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapPin, Pencil, Plus, UserPlus } from "lucide-react";
+import { GuestReturningBadge } from "@/components/guest-returning-badge";
 import { LiveClock } from "@/components/live-clock";
 import { Modal } from "@/components/modal";
 import { useApp } from "@/contexts/app-context";
@@ -602,6 +603,11 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                       {row.notes && (
                         <p className="mt-1 text-sm italic text-gray-500">{row.notes}</p>
                       )}
+                      <GuestReturningBadge
+                        email={row.guestEmail}
+                        phone={row.guestPhone}
+                        excludeReservationId={row.id}
+                      />
                     </div>
 
                     <div className="flex flex-wrap gap-2">

@@ -23,6 +23,7 @@ export type GuestReservationCopy = {
   bbqHint: string;
   bbqYes: string;
   bbqNo: string;
+  bbqUndecided: string;
   guestSingular: string;
   guestPlural: string;
   namePlaceholder: string;
@@ -69,6 +70,7 @@ const en: GuestReservationCopy = {
   bbqHint: "Your answer helps us prepare the best experience for you.",
   bbqYes: "Yes, BBQ please",
   bbqNo: "No, regular dining",
+  bbqUndecided: "I don't know yet",
   guestSingular: "guest",
   guestPlural: "guests",
   namePlaceholder: "Full name",
@@ -115,6 +117,7 @@ const cs: GuestReservationCopy = {
   bbqHint: "Vaše odpověď nám pomůže lépe se na vaši návštěvu připravit.",
   bbqYes: "Ano, grilování",
   bbqNo: "Ne, běžné stravování",
+  bbqUndecided: "Ještě nevím",
   guestSingular: "host",
   guestPlural: "hostů",
   namePlaceholder: "Celé jméno",
@@ -161,6 +164,7 @@ const vi: GuestReservationCopy = {
   bbqHint: "Trả lời giúp nhà hàng chuẩn bị tốt hơn cho bạn.",
   bbqYes: "Có, tôi muốn nướng",
   bbqNo: "Không, ăn bình thường",
+  bbqUndecided: "Tôi chưa biết nữa",
   guestSingular: "khách",
   guestPlural: "khách",
   namePlaceholder: "Họ và tên",
@@ -207,6 +211,7 @@ const de: GuestReservationCopy = {
   bbqHint: "Ihre Antwort hilft uns, das beste Erlebnis für Sie vorzubereiten.",
   bbqYes: "Ja, BBQ bitte",
   bbqNo: "Nein, normales Essen",
+  bbqUndecided: "Weiß ich noch nicht",
   guestSingular: "Gast",
   guestPlural: "Gäste",
   namePlaceholder: "Vollständiger Name",
@@ -253,6 +258,7 @@ const ko: GuestReservationCopy = {
   bbqHint: "응답은 최고의 경험을 준비하는 데 도움이 됩니다.",
   bbqYes: "네, BBQ 원합니다",
   bbqNo: "아니요, 일반 식사",
+  bbqUndecided: "아직 모르겠어요",
   guestSingular: "명",
   guestPlural: "명",
   namePlaceholder: "이름",

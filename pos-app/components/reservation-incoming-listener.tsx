@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/modal";
+import { GuestReturningBadge } from "@/components/guest-returning-badge";
 import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
 import { playCustomAlertSound } from "@/lib/notification-sound";
 import { pickEventTypeLabel } from "@/lib/reservation-guest-form";
 import type { ReservationRecord } from "@/lib/types";
+import type { GuestVisitProfile } from "@/src/lib/guest-history-actions";
+import { fetchGuestVisitProfile } from "@/src/lib/guest-history-actions";
 import {
   fetchReservations,
   mapReservationsResponse,
@@ -32,6 +35,7 @@ export function ReservationIncomingListener() {
   const { translate, language, soundMainEnabled } = useApp();
   const { settings } = useSettings();
   const [incoming, setIncoming] = useState<ReservationRecord | null>(null);
+  const [visitProfile, setVisitProfile] = useState<GuestVisitProfile | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const seenIdsRef = useRef<Set<string>>(new Set());
@@ -81,6 +85,7 @@ export function ReservationIncomingListener() {
         if (reservation.source !== "reservation" || reservation.status !== "pending") return;
 
         setError(null);
+        setVisitProfile(null);
         setIncoming(reservation);
         if (soundMainEnabled) {
           const soundUrl =
@@ -90,6 +95,24 @@ export function ReservationIncomingListener() {
       },
     });
   }, [settings.soundConfigs.mainNewOrder, settings.soundConfigs.newOrder, soundMainEnabled]);
+
+  useEffect(() => {
+    if (!incoming) {
+      setVisitProfile(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchGuestVisitProfile({
+      email: incoming.guestEmail,
+      phone: incoming.guestPhone,
+      excludeReservationId: incoming.id,
+    }).then(({ data }) => {
+      if (!cancelled) setVisitProfile(data.isReturning ? data : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [incoming]);
 
   const handleConfirm = async () => {
     if (!incoming) return;
@@ -131,6 +154,16 @@ export function ReservationIncomingListener() {
       {incoming ? (
         <div className="space-y-4">
           <p className="text-sm text-gray-600 dark:text-gray-300">{translate("resIncomingHint")}</p>
+          {visitProfile?.isReturning ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/50">
+              <GuestReturningBadge
+                profile={visitProfile}
+                email={incoming.guestEmail}
+                phone={incoming.guestPhone}
+                defaultOpen
+              />
+            </div>
+          ) : null}
           <dl className="space-y-2 rounded-xl bg-zinc-100 px-4 py-3 text-sm dark:bg-zinc-800">
             <div className="flex justify-between gap-3">
               <dt className="text-gray-500 dark:text-gray-400">{translate("guestName")}</dt>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
-import { AlertTriangle, Eye, Pencil, Trash2 } from "lucide-react";
+import { AlertTriangle, Eye, Pencil, Percent, Trash2 } from "lucide-react";
 import { LiveClock } from "@/components/live-clock";
 import { DateRangeInputs } from "@/components/date-range-inputs";
 import { OrderHistoryModal } from "@/components/order-history-modal";
@@ -507,6 +507,15 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                                 aria-label={translate("historyActivityAlert")}
                               >
                                 <AlertTriangle className="h-5 w-5" strokeWidth={2.5} />
+                              </span>
+                            )}
+                            {sale.discountAmount > 0 && (
+                              <span
+                                title={translate("historyDiscountAlert")}
+                                className="inline-flex shrink-0 text-emerald-600 dark:text-emerald-400"
+                                aria-label={translate("historyDiscountAlert")}
+                              >
+                                <Percent className="h-5 w-5" strokeWidth={2.5} />
                               </span>
                             )}
                           </div>

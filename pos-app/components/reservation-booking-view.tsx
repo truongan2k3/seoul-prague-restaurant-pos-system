@@ -52,7 +52,7 @@ export function ReservationBookingView() {
   const [time, setTime] = useState("18:00");
   const [notes, setNotes] = useState("");
   const [eventType, setEventType] = useState("");
-  const [wantsBbq, setWantsBbq] = useState<boolean | null>(null);
+  const [wantsBbq, setWantsBbq] = useState<"yes" | "no" | "undecided" | null>(null);
   const [gdprConsent, setGdprConsent] = useState(false);
   const [gdprError, setGdprError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -213,7 +213,14 @@ export function ReservationBookingView() {
           date,
           time,
           notes: (() => {
-            const bbqTag = wantsBbq === true ? "[BBQ: Yes]" : wantsBbq === false ? "[BBQ: No]" : "";
+            const bbqTag =
+              wantsBbq === "yes"
+                ? "[BBQ: Yes]"
+                : wantsBbq === "no"
+                  ? "[BBQ: No]"
+                  : wantsBbq === "undecided"
+                    ? "[BBQ: Undecided]"
+                    : "";
             const userNotes = notes.trim();
             return [bbqTag, userNotes].filter(Boolean).join(" ") || undefined;
           })(),
@@ -411,12 +418,12 @@ export function ReservationBookingView() {
               <div className="rounded-xl border border-zinc-700 bg-zinc-950 p-4">
                 <p className="text-sm font-medium text-zinc-200">{copy.bbqQuestion}</p>
                 <p className="mt-1 text-xs text-zinc-500">{copy.bbqHint}</p>
-                <div className="mt-3 flex gap-3">
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
                   <button
                     type="button"
-                    onClick={() => setWantsBbq(true)}
-                    className={`flex-1 rounded-xl py-3 text-sm font-semibold transition ${
-                      wantsBbq === true
+                    onClick={() => setWantsBbq("yes")}
+                    className={`rounded-xl py-3 text-sm font-semibold transition ${
+                      wantsBbq === "yes"
                         ? "bg-red-600 text-white"
                         : "border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
                     }`}
@@ -425,14 +432,25 @@ export function ReservationBookingView() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setWantsBbq(false)}
-                    className={`flex-1 rounded-xl py-3 text-sm font-semibold transition ${
-                      wantsBbq === false
+                    onClick={() => setWantsBbq("no")}
+                    className={`rounded-xl py-3 text-sm font-semibold transition ${
+                      wantsBbq === "no"
                         ? "bg-zinc-700 text-white"
                         : "border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
                     }`}
                   >
                     {copy.bbqNo}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWantsBbq("undecided")}
+                    className={`rounded-xl py-3 text-sm font-semibold transition ${
+                      wantsBbq === "undecided"
+                        ? "bg-amber-700 text-white"
+                        : "border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                    }`}
+                  >
+                    {copy.bbqUndecided}
                   </button>
                 </div>
               </div>

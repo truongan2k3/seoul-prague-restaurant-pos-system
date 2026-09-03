@@ -1,7 +1,57 @@
 import type { ReservationRecord, ReservationStatus, VisitSource } from "@/lib/types";
-import { getPeriodRange, type SummaryPeriod } from "@/lib/summary-analytics";
+import { endOfDay, startOfDay } from "@/lib/summary-analytics";
 
-export type ReservationPeriod = Exclude<SummaryPeriod, "yesterday" | "custom">;
+export type ReservationPeriod = "today" | "week" | "month" | "upcoming" | "all" | "custom";
+
+export interface ReservationDateRange {
+  start: Date | null;
+  end: Date | null;
+}
+
+/** Date windows for the reservation book — unlike sales, these include future days. */
+export function getReservationPeriodRange(
+  period: ReservationPeriod,
+  customRange?: { from?: string; to?: string },
+): ReservationDateRange {
+  const now = new Date();
+
+  if (period === "all") {
+    return { start: null, end: null };
+  }
+
+  if (period === "upcoming") {
+    return { start: startOfDay(now), end: null };
+  }
+
+  if (period === "today") {
+    return { start: startOfDay(now), end: endOfDay(now) };
+  }
+
+  if (period === "week") {
+    const start = startOfDay(now);
+    const weekday = start.getDay();
+    const mondayOffset = weekday === 0 ? 6 : weekday - 1;
+    start.setDate(start.getDate() - mondayOffset);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    return { start, end: endOfDay(end) };
+  }
+
+  if (period === "month") {
+    const start = startOfDay(now);
+    start.setDate(1);
+    const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+    return { start, end: endOfDay(end) };
+  }
+
+  const fromRaw = customRange?.from?.trim();
+  const toRaw = customRange?.to?.trim() || fromRaw;
+  const fromDate = fromRaw ? new Date(`${fromRaw}T12:00:00`) : now;
+  const toDate = toRaw ? new Date(`${toRaw}T12:00:00`) : fromDate;
+  const earlier = fromDate.getTime() <= toDate.getTime() ? fromDate : toDate;
+  const later = fromDate.getTime() <= toDate.getTime() ? toDate : fromDate;
+  return { start: startOfDay(earlier), end: endOfDay(later) };
+}
 
 export type ReservationStatusFilter =
   | "all"
@@ -24,13 +74,15 @@ export interface ReservationStats {
 export function filterReservationsByPeriod(
   reservations: ReservationRecord[],
   period: ReservationPeriod,
+  customRange?: { from?: string; to?: string },
 ): ReservationRecord[] {
-  const range = getPeriodRange(period);
-  return reservations.filter(
-    (row) =>
-      row.reservedAt.getTime() >= range.start.getTime() &&
-      row.reservedAt.getTime() <= range.end.getTime(),
-  );
+  const range = getReservationPeriodRange(period, customRange);
+  return reservations.filter((row) => {
+    const time = row.reservedAt.getTime();
+    if (range.start && time < range.start.getTime()) return false;
+    if (range.end && time > range.end.getTime()) return false;
+    return true;
+  });
 }
 
 export function filterReservationsByStatus(

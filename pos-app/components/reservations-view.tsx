@@ -24,6 +24,8 @@ import {
   type ReservationStatusFilter,
 } from "@/lib/reservation-analytics";
 import { filterButtonClass } from "@/lib/theme-classes";
+import { toDateInputValue } from "@/lib/summary-analytics";
+import { DateRangeInputs } from "@/components/date-range-inputs";
 import {
   RESERVATION_UNDO_MS,
   type ReservationUndoEntry,
@@ -94,12 +96,15 @@ function toDateTimeLocalValue(date: Date): string {
   return copy.toISOString().slice(0, 16);
 }
 
-const PERIOD_OPTIONS: ReservationPeriod[] = ["today", "week", "month"];
+const PERIOD_OPTIONS: ReservationPeriod[] = ["upcoming", "today", "week", "month", "all", "custom"];
 
 const PERIOD_LABEL_KEYS = {
+  upcoming: "resPeriodUpcoming",
   today: "summaryToday",
   week: "summaryWeek",
   month: "summaryMonth",
+  all: "resPeriodAll",
+  custom: "summaryPickRange",
 } as const;
 
 const STATUS_FILTER_OPTIONS: { value: ReservationStatusFilter; labelKey: "resFilterAll" | "resFilterPending" | "resFilterConfirmed" | "resFilterLate" | "resFilterCheckedIn" | "resFilterNoShow" }[] = [
@@ -123,7 +128,13 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const { settings } = useSettings();
   const { pushNotification } = useNotifications();
   const [reservations, setReservations] = useState<ReservationRecord[]>([]);
-  const [period, setPeriod] = useState<ReservationPeriod>("today");
+  const [period, setPeriod] = useState<ReservationPeriod>("upcoming");
+  const [customFrom, setCustomFrom] = useState(() => toDateInputValue(new Date()));
+  const [customTo, setCustomTo] = useState(() => {
+    const next = new Date();
+    next.setFullYear(next.getFullYear() + 1);
+    return toDateInputValue(next);
+  });
   const [statusFilter, setStatusFilter] = useState<ReservationStatusFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -156,7 +167,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     setLoading(true);
     setError(null);
     const since = new Date();
-    since.setDate(since.getDate() - 60);
+    since.setFullYear(since.getFullYear() - 1);
     since.setHours(0, 0, 0, 0);
     const { data, error: fetchError } = await fetchReservations(since);
     if (fetchError) {
@@ -200,14 +211,19 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     setFormDateTime(now.toISOString().slice(0, 16));
   }, [showNewModal]);
 
+  const customRange = useMemo(
+    () => (period === "custom" ? { from: customFrom, to: customTo } : undefined),
+    [period, customFrom, customTo],
+  );
+
   const filtered = useMemo(() => {
-    const byPeriod = filterReservationsByPeriod(reservations, period);
+    const byPeriod = filterReservationsByPeriod(reservations, period, customRange);
     return filterReservationsByStatus(byPeriod, statusFilter);
-  }, [reservations, period, statusFilter]);
+  }, [reservations, period, statusFilter, customRange]);
 
   const stats = useMemo(
-    () => computeReservationStats(filterReservationsByPeriod(reservations, period)),
-    [reservations, period],
+    () => computeReservationStats(filterReservationsByPeriod(reservations, period, customRange)),
+    [reservations, period, customRange],
   );
 
   const emptyTables = useMemo(
@@ -449,6 +465,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       weekday: "short",
       day: "numeric",
       month: "short",
+      year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
     });
@@ -501,6 +518,14 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                 </button>
               ))}
             </div>
+            {period === "custom" && (
+              <DateRangeInputs
+                from={customFrom}
+                to={customTo}
+                onFromChange={setCustomFrom}
+                onToChange={setCustomTo}
+              />
+            )}
             <div className="mt-4 flex flex-wrap gap-2">
               {STATUS_FILTER_OPTIONS.map(({ value, labelKey }) => (
                 <button

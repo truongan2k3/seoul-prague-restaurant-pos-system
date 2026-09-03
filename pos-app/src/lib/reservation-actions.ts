@@ -55,7 +55,8 @@ export async function fetchReservations(since?: Date) {
   let query = supabase
     .from("reservations")
     .select("*, tables(label)")
-    .order("reserved_at", { ascending: true });
+    .order("reserved_at", { ascending: true })
+    .limit(5000);
 
   if (since) {
     query = query.gte("reserved_at", since.toISOString());

@@ -13,6 +13,8 @@ import {
   Eye,
   EyeOff,
   GripVertical,
+  Maximize2,
+  Minimize2,
   Monitor,
   Move,
   Plus,
@@ -20,6 +22,7 @@ import {
   Smartphone,
   Trash2,
 } from "lucide-react";
+import { DesignerDeviceFrame } from "@/components/admin/website/designer-device-frame";
 import {
   ADDABLE_SECTION_TYPES,
   BUILTIN_SECTION_TYPES,
@@ -189,6 +192,8 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
   });
   const [media, setMedia] = useState(initial.media);
   const [device, setDevice] = useState<WebsiteDevice>("desktop");
+  const [zoom, setZoom] = useState(100);
+  const [focusCanvas, setFocusCanvas] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(
     () => normalizePageLayout(initial.settings.pageLayout)[0]?.id ?? null,
   );
@@ -291,8 +296,6 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
 
   const deviceStyleKey = device === "mobile" ? "mobile" : "desktop";
 
-  const previewWidth = device === "mobile" ? "max-w-[390px]" : "max-w-5xl";
-
   const activeSlideshow = useMemo(() => {
     const id = selected?.props?.slideshowId ?? "promo-main";
     return settings.promoSlideshows.find((entry) => entry.id === id) ?? settings.promoSlideshows[0];
@@ -300,74 +303,118 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
 
   const galleryOptions = initial.gallery;
 
+  useEffect(() => {
+    setZoom(device === "mobile" ? 90 : 85);
+  }, [device]);
+
   return (
-    <div className="space-y-4">
-      <header className="sticky top-0 z-30 -mx-1 flex flex-wrap items-start justify-between gap-4 border-b border-gray-200/80 bg-gray-50/95 px-1 py-3 backdrop-blur-md dark:border-gray-800/80 dark:bg-gray-950/95">
-        <div>
-          <h1 className="text-2xl font-semibold">Visual designer</h1>
-          <p className="mt-1 max-w-2xl text-sm text-gray-500">
-            Add blocks, drag to reorder, tune type size per Desktop / Phone, and build event
-            slideshows for the homepage.
+    <div className="flex h-full min-h-0 flex-col bg-[#e8e8eb] dark:bg-[#121214]">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-black/10 bg-white/90 px-4 py-2.5 backdrop-blur dark:border-white/10 dark:bg-[#1a1a1c]/95">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold">Homepage canvas</p>
+          <p className="truncate text-xs text-gray-500">
+            Edit live inside a real {device === "mobile" ? "phone" : "browser"} frame
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <div className="inline-flex rounded-xl border border-gray-200 bg-white p-1 dark:border-gray-700 dark:bg-gray-900">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-gray-700 dark:bg-gray-900">
             <button
               type="button"
               onClick={() => setDevice("desktop")}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium ${
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold ${
                 device === "desktop"
-                  ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
-                  : "text-gray-600 dark:text-gray-300"
+                  ? "bg-white text-gray-900 shadow-sm dark:bg-gray-100 dark:text-gray-900"
+                  : "text-gray-500"
               }`}
             >
-              <Monitor className="h-4 w-4" /> Desktop
+              <Monitor className="h-3.5 w-3.5" /> Desktop
             </button>
             <button
               type="button"
               onClick={() => setDevice("mobile")}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium ${
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold ${
                 device === "mobile"
-                  ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
-                  : "text-gray-600 dark:text-gray-300"
+                  ? "bg-white text-gray-900 shadow-sm dark:bg-gray-100 dark:text-gray-900"
+                  : "text-gray-500"
               }`}
             >
-              <Smartphone className="h-4 w-4" /> Phone
+              <Smartphone className="h-3.5 w-3.5" /> Mobile
             </button>
           </div>
+
+          <div className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs dark:border-gray-700 dark:bg-gray-900">
+            <button
+              type="button"
+              className="rounded px-1.5 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-800"
+              onClick={() => setZoom((z) => Math.max(50, z - 10))}
+            >
+              −
+            </button>
+            <span className="min-w-[3rem] text-center tabular-nums text-gray-600 dark:text-gray-300">
+              {zoom}%
+            </span>
+            <button
+              type="button"
+              className="rounded px-1.5 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-800"
+              onClick={() => setZoom((z) => Math.min(120, z + 10))}
+            >
+              +
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setFocusCanvas((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium dark:border-gray-700 dark:bg-gray-900"
+            title={focusCanvas ? "Show panels" : "Focus canvas"}
+          >
+            {focusCanvas ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            {focusCanvas ? "Panels" : "Focus"}
+          </button>
+
           <Link
             href="/"
             target="_blank"
-            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium dark:border-gray-700 dark:bg-gray-900"
           >
-            Open live site
+            Live ↗
           </Link>
           <button
             type="button"
             disabled={busy}
             onClick={() => void saveAll()}
-            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
           >
-            <Save className="h-4 w-4" />
-            Save design
+            <Save className="h-3.5 w-3.5" />
+            Save
           </button>
         </div>
       </header>
 
       {error ? (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
+        <p className="shrink-0 bg-red-50 px-4 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
           {error}
         </p>
       ) : null}
       {message ? (
-        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">
+        <p className="shrink-0 bg-emerald-50 px-4 py-2 text-sm text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">
           {message}
         </p>
       ) : null}
 
-      <div className="grid items-start gap-4 xl:grid-cols-[260px_minmax(0,1fr)_300px]">
+      <div
+        className={`grid min-h-0 flex-1 items-stretch ${
+          focusCanvas
+            ? "grid-cols-1"
+            : "grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)_280px]"
+        }`}
+      >
         {/* Sections */}
-        <aside className="rounded-2xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900 xl:sticky xl:top-[5.5rem] xl:max-h-[calc(100vh-6.5rem)] xl:overflow-y-auto">
+        <aside
+          className={`min-h-0 overflow-y-auto border-r border-black/10 bg-white p-3 dark:border-white/10 dark:bg-[#1a1a1c] ${
+            focusCanvas ? "hidden lg:hidden" : "hidden lg:block"
+          }`}
+        >
           <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
             Page sections
           </p>
@@ -448,9 +495,18 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
           </div>
         </aside>
 
-        {/* Preview */}
-        <div className="overflow-auto rounded-2xl border border-gray-800 bg-[#0B0B0C] p-4 text-white shadow-xl">
-          <div className={`mx-auto overflow-hidden rounded-[1.25rem] border border-white/10 ${previewWidth}`}>
+        {/* Canvas */}
+        <div
+          className="relative min-h-0 overflow-auto dark:[background-image:radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.08)_1px,transparent_0)]"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 1px 1px, rgba(0,0,0,0.14) 1px, transparent 0)",
+            backgroundSize: "18px 18px",
+          }}
+        >
+          <div className="flex min-h-full justify-center px-4 py-8 lg:px-8 lg:py-10">
+            <DesignerDeviceFrame device={device} zoom={zoom}>
+              <div className="bg-[#0B0B0C] text-white">
             {layout.map((section) => {
               if (!isSectionVisible(section, device)) return null;
               const selectedRing =
@@ -670,11 +726,17 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
                 />
               </div>
             </section>
+              </div>
+            </DesignerDeviceFrame>
           </div>
         </div>
 
         {/* Inspector */}
-        <aside className="space-y-3 rounded-2xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900 xl:sticky xl:top-[5.5rem] xl:max-h-[calc(100vh-6.5rem)] xl:overflow-y-auto">
+        <aside
+          className={`min-h-0 space-y-3 overflow-y-auto border-l border-black/10 bg-white p-3 dark:border-white/10 dark:bg-[#1a1a1c] ${
+            focusCanvas ? "hidden lg:hidden" : "hidden lg:block"
+          }`}
+        >
           <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
             Inspector · {device === "mobile" ? "Phone" : "Desktop"}
           </p>

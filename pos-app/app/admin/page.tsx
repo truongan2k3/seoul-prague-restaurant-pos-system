@@ -30,9 +30,15 @@ export default async function AdminDashboardPage() {
       </div>
 
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
-      Run SQL if needed: <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">supabase/patch-website-cms.sql</code> and{" "}
-        <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">patch-website-media-position.sql</code>.
-        Open <Link href="/admin/designer" className="text-blue-600 underline">Visual designer</Link> to drag images and edit text live.
+        Run SQL if needed:{" "}
+        <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">supabase/patch-website-cms.sql</code>,{" "}
+        <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">patch-website-media-position.sql</code>, and{" "}
+        <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">patch-website-page-layout.sql</code>.
+        Open{" "}
+        <Link href="/admin/designer" className="text-blue-600 underline">
+          Visual designer
+        </Link>{" "}
+        to reorder sections, add event slideshows, and tune Desktop / Phone typography.
       </section>
     </div>
   );

@@ -1328,6 +1328,9 @@ export function NewOrderModal({
       if (pendingKitchenMessage) {
         await flushPendingKitchenMessage();
       }
+
+      // Close after a successful Send. Save no print intentionally keeps the menu open.
+      onClose();
     } catch (error) {
       setSubmittedLineError(error instanceof Error ? error.message : "Failed to send.");
     } finally {

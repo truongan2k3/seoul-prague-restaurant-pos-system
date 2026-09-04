@@ -115,7 +115,7 @@ export function useTableOrderWorkflow({
 
       if (error || !data) {
         setActionError(error?.message ?? "Failed to send order.");
-        return;
+        throw new Error(error?.message ?? "Failed to send order.");
       }
 
       logAction(isAppend ? "add items" : "new order", `Table ${selectedTable?.label}`);
@@ -132,8 +132,8 @@ export function useTableOrderWorkflow({
 
       const updatedTable = mapTableRow(data);
       setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
-      // Stay on the table screen after send so staff can checkout or add more.
-      setModal({ type: "new-order", tableId: modal.tableId, mode: "append" });
+      // Close the order menu after Send (Save no print keeps it open).
+      setModal(null);
       refreshAfterAction();
     } finally {
       actionLockRef.current = false;

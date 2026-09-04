@@ -464,26 +464,24 @@ export function CheckoutPanel({
   useEffect(() => {
     if (!onCfdUpdate || !tableLabel) return;
 
-    // Split-by-items: empty selection → show full bill; with selection → selected + total.
-    const displayOrders =
-      splitMode === "items"
-        ? selectedLineIds.length === 0
-          ? orderSummary
-          : ordersFromLines(totals.payableLines)
+    // Split-by-items picking: keep the full order + select prompt on CFD until
+    // staff presses Proceed to Checkout — do not live-update selected lines.
+    const isSplitSelecting =
+      panelView === "split" && splitMode === "items" && splitPhase === "pick-items";
+
+    const displayOrders = isSplitSelecting
+      ? orderSummary
+      : splitMode === "items"
+        ? ordersFromLines(totals.payableLines)
         : splitMode === "equal" && splitCount > 1
           ? scaleOrdersForEqualSplit(orderSummary, splitCount)
           : orderSummary;
 
-    const subtotal =
-      splitMode === "items" && selectedLineIds.length === 0
-        ? orderSummary.reduce((sum, item) => sum + item.price * item.quantity, 0)
-        : totals.subtotal;
-    const discount =
-      splitMode === "items" && selectedLineIds.length === 0 ? 0 : totals.discountAmount;
-    const tip =
-      splitMode === "items" && selectedLineIds.length === 0 ? 0 : totalTipWithKeep;
-    const total =
-      splitMode === "items" && selectedLineIds.length === 0 ? subtotal : payTotal;
+    const fullSubtotal = orderSummary.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const subtotal = isSplitSelecting ? fullSubtotal : totals.subtotal;
+    const discount = isSplitSelecting ? 0 : totals.discountAmount;
+    const tip = isSplitSelecting ? 0 : totalTipWithKeep;
+    const total = isSplitSelecting ? fullSubtotal : payTotal;
 
     onCfdUpdate(
       buildCfdCheckoutPayload(tableLabel, displayOrders, menuItems, {
@@ -493,23 +491,23 @@ export function CheckoutPanel({
         grandTotal: total,
         amountDueNow: total,
         amountGiven:
+          !isSplitSelecting &&
           paymentMethod === "cash" &&
           usingCashGiven &&
-          !insufficientPayment &&
-          !(splitMode === "items" && selectedLineIds.length === 0)
+          !insufficientPayment
             ? cashGivenNum
             : undefined,
         changeDue:
+          !isSplitSelecting &&
           paymentMethod === "cash" &&
           usingCashGiven &&
           !usingRoundUp &&
-          !insufficientPayment &&
-          !(splitMode === "items" && selectedLineIds.length === 0)
+          !insufficientPayment
             ? changeDueAmount
             : undefined,
-        // During active thank-you after a share payment, don't force-interrupt.
         staffInitiated: true,
         deferIfThankYou: panelView === "split",
+        mode: isSplitSelecting ? "split-select" : "checkout",
       }),
     );
   }, [
@@ -519,6 +517,7 @@ export function CheckoutPanel({
     menuItems,
     splitMode,
     splitCount,
+    splitPhase,
     selectedLineIds,
     totals.payableLines,
     totals.subtotal,

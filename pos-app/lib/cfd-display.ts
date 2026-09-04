@@ -37,6 +37,11 @@ export interface CfdCheckoutPayload {
    * has shown at least the minimum duration (split next-person flow).
    */
   deferIfThankYou?: boolean;
+  /**
+   * During split-by-items picking: show the full order with a select prompt.
+   * Switches back to checkout totals after staff proceeds to payment.
+   */
+  mode?: "checkout" | "split-select";
 }
 
 export interface CfdEventPayload {
@@ -90,6 +95,7 @@ export function buildCfdCheckoutPayload(
     changeDue?: number;
     staffInitiated?: boolean;
     deferIfThankYou?: boolean;
+    mode?: "checkout" | "split-select";
   },
 ): CfdCheckoutPayload {
   const menuById = new Map(menuItems.map((item) => [item.id, item]));
@@ -129,6 +135,7 @@ export function buildCfdCheckoutPayload(
     changeDue: totals.changeDue,
     staffInitiated: totals.staffInitiated,
     deferIfThankYou: totals.deferIfThankYou,
+    mode: totals.mode,
   };
 }
 
@@ -413,6 +420,7 @@ export function checkoutPayloadFingerprint(payload: CfdCheckoutPayload | null): 
   if (!payload) return "";
   return [
     payload.tableNumber,
+    payload.mode ?? "checkout",
     payload.amountDueNow,
     payload.tip,
     payload.discount,

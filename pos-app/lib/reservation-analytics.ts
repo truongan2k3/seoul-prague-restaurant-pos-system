@@ -1,19 +1,50 @@
 import type { ReservationRecord, ReservationStatus, VisitSource } from "@/lib/types";
-import { endOfDay, startOfDay } from "@/lib/summary-analytics";
+import { endOfDay, startOfDay, toDateInputValue } from "@/lib/summary-analytics";
 
-export type ReservationPeriod = "today" | "week" | "month" | "upcoming" | "all" | "custom";
+export type ReservationPeriod = "day" | "week" | "range" | "upcoming" | "all" | "today";
 
 export interface ReservationDateRange {
   start: Date | null;
   end: Date | null;
 }
 
+export interface ReservationPeriodOptions {
+  from?: string;
+  to?: string;
+  /** YYYY-MM-DD used for day/week navigation. */
+  anchorDate?: string;
+}
+
+function parseIsoDate(iso: string | undefined, fallback: Date): Date {
+  if (!iso?.trim()) return fallback;
+  const parsed = new Date(`${iso.trim()}T12:00:00`);
+  return Number.isNaN(parsed.getTime()) ? fallback : parsed;
+}
+
+export function shiftIsoDate(iso: string, days: number): string {
+  const date = parseIsoDate(iso, new Date());
+  date.setDate(date.getDate() + days);
+  return toDateInputValue(date);
+}
+
+/** Monday–Sunday (local) containing the given date. */
+export function weekBoundsForDate(iso: string): { from: string; to: string } {
+  const date = startOfDay(parseIsoDate(iso, new Date()));
+  const weekday = date.getDay();
+  const mondayOffset = weekday === 0 ? 6 : weekday - 1;
+  date.setDate(date.getDate() - mondayOffset);
+  const end = new Date(date);
+  end.setDate(end.getDate() + 6);
+  return { from: toDateInputValue(date), to: toDateInputValue(end) };
+}
+
 /** Date windows for the reservation book — unlike sales, these include future days. */
 export function getReservationPeriodRange(
   period: ReservationPeriod,
-  customRange?: { from?: string; to?: string },
+  options?: ReservationPeriodOptions,
 ): ReservationDateRange {
   const now = new Date();
+  const anchor = parseIsoDate(options?.anchorDate || options?.from, now);
 
   if (period === "all") {
     return { start: null, end: null };
@@ -23,31 +54,23 @@ export function getReservationPeriodRange(
     return { start: startOfDay(now), end: null };
   }
 
-  if (period === "today") {
-    return { start: startOfDay(now), end: endOfDay(now) };
+  if (period === "today" || period === "day") {
+    return { start: startOfDay(anchor), end: endOfDay(anchor) };
   }
 
   if (period === "week") {
-    const start = startOfDay(now);
-    const weekday = start.getDay();
-    const mondayOffset = weekday === 0 ? 6 : weekday - 1;
-    start.setDate(start.getDate() - mondayOffset);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 6);
-    return { start, end: endOfDay(end) };
+    const { from, to } = weekBoundsForDate(toDateInputValue(anchor));
+    return {
+      start: startOfDay(parseIsoDate(from, now)),
+      end: endOfDay(parseIsoDate(to, now)),
+    };
   }
 
-  if (period === "month") {
-    const start = startOfDay(now);
-    start.setDate(1);
-    const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
-    return { start, end: endOfDay(end) };
-  }
-
-  const fromRaw = customRange?.from?.trim();
-  const toRaw = customRange?.to?.trim() || fromRaw;
-  const fromDate = fromRaw ? new Date(`${fromRaw}T12:00:00`) : now;
-  const toDate = toRaw ? new Date(`${toRaw}T12:00:00`) : fromDate;
+  // range
+  const fromRaw = options?.from?.trim();
+  const toRaw = options?.to?.trim() || fromRaw;
+  const fromDate = fromRaw ? parseIsoDate(fromRaw, now) : now;
+  const toDate = toRaw ? parseIsoDate(toRaw, now) : fromDate;
   const earlier = fromDate.getTime() <= toDate.getTime() ? fromDate : toDate;
   const later = fromDate.getTime() <= toDate.getTime() ? toDate : fromDate;
   return { start: startOfDay(earlier), end: endOfDay(later) };
@@ -74,9 +97,9 @@ export interface ReservationStats {
 export function filterReservationsByPeriod(
   reservations: ReservationRecord[],
   period: ReservationPeriod,
-  customRange?: { from?: string; to?: string },
+  options?: ReservationPeriodOptions,
 ): ReservationRecord[] {
-  const range = getReservationPeriodRange(period, customRange);
+  const range = getReservationPeriodRange(period, options);
   return reservations.filter((row) => {
     const time = row.reservedAt.getTime();
     if (range.start && time < range.start.getTime()) return false;

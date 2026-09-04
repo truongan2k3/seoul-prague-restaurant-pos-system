@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapPin, Pencil, Plus, UserPlus } from "lucide-react";
+import { MapPin, ChevronLeft, ChevronRight, Pencil, Plus, UserPlus } from "lucide-react";
 import { GuestReturningBadge } from "@/components/guest-returning-badge";
 import { LiveClock } from "@/components/live-clock";
 import { Modal } from "@/components/modal";
+import { DateRangeInputs } from "@/components/date-range-inputs";
 import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
 import { useNotifications } from "@/contexts/notification-context";
@@ -20,12 +21,13 @@ import {
   filterReservationsByStatus,
   isLateReservation,
   reservationStatusLabelKey,
+  shiftIsoDate,
+  weekBoundsForDate,
   type ReservationPeriod,
   type ReservationStatusFilter,
 } from "@/lib/reservation-analytics";
 import { filterButtonClass } from "@/lib/theme-classes";
 import { toDateInputValue } from "@/lib/summary-analytics";
-import { DateRangeInputs } from "@/components/date-range-inputs";
 import {
   RESERVATION_UNDO_MS,
   type ReservationUndoEntry,
@@ -96,15 +98,15 @@ function toDateTimeLocalValue(date: Date): string {
   return copy.toISOString().slice(0, 16);
 }
 
-const PERIOD_OPTIONS: ReservationPeriod[] = ["upcoming", "today", "week", "month", "all", "custom"];
+const PERIOD_OPTIONS: ReservationPeriod[] = ["day", "week", "range", "upcoming", "all"];
 
 const PERIOD_LABEL_KEYS = {
+  day: "resPeriodDay",
+  week: "resPeriodWeek",
+  range: "resPeriodRange",
   upcoming: "resPeriodUpcoming",
-  today: "summaryToday",
-  week: "summaryWeek",
-  month: "summaryMonth",
   all: "resPeriodAll",
-  custom: "summaryPickRange",
+  today: "summaryToday",
 } as const;
 
 const STATUS_FILTER_OPTIONS: { value: ReservationStatusFilter; labelKey: "resFilterAll" | "resFilterPending" | "resFilterConfirmed" | "resFilterLate" | "resFilterCheckedIn" | "resFilterNoShow" }[] = [
@@ -128,13 +130,10 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const { settings } = useSettings();
   const { pushNotification } = useNotifications();
   const [reservations, setReservations] = useState<ReservationRecord[]>([]);
-  const [period, setPeriod] = useState<ReservationPeriod>("upcoming");
+  const [period, setPeriod] = useState<ReservationPeriod>("day");
+  const [anchorDate, setAnchorDate] = useState(() => toDateInputValue(new Date()));
   const [customFrom, setCustomFrom] = useState(() => toDateInputValue(new Date()));
-  const [customTo, setCustomTo] = useState(() => {
-    const next = new Date();
-    next.setFullYear(next.getFullYear() + 1);
-    return toDateInputValue(next);
-  });
+  const [customTo, setCustomTo] = useState(() => toDateInputValue(new Date()));
   const [statusFilter, setStatusFilter] = useState<ReservationStatusFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -211,20 +210,59 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     setFormDateTime(now.toISOString().slice(0, 16));
   }, [showNewModal]);
 
-  const customRange = useMemo(
-    () => (period === "custom" ? { from: customFrom, to: customTo } : undefined),
-    [period, customFrom, customTo],
-  );
+  const periodOptions = useMemo(() => {
+    if (period === "day" || period === "today") {
+      return { anchorDate, from: anchorDate, to: anchorDate };
+    }
+    if (period === "week") {
+      const bounds = weekBoundsForDate(anchorDate);
+      return { anchorDate, from: bounds.from, to: bounds.to };
+    }
+    if (period === "range") {
+      return { from: customFrom, to: customTo, anchorDate };
+    }
+    return { anchorDate };
+  }, [period, anchorDate, customFrom, customTo]);
 
   const filtered = useMemo(() => {
-    const byPeriod = filterReservationsByPeriod(reservations, period, customRange);
+    const byPeriod = filterReservationsByPeriod(reservations, period, periodOptions);
     return filterReservationsByStatus(byPeriod, statusFilter);
-  }, [reservations, period, statusFilter, customRange]);
+  }, [reservations, period, statusFilter, periodOptions]);
 
   const stats = useMemo(
-    () => computeReservationStats(filterReservationsByPeriod(reservations, period, customRange)),
-    [reservations, period, customRange],
+    () => computeReservationStats(filterReservationsByPeriod(reservations, period, periodOptions)),
+    [reservations, period, periodOptions],
   );
+
+  const jumpToToday = () => setAnchorDate(toDateInputValue(new Date()));
+
+  const shiftAnchor = (days: number) => {
+    setAnchorDate((prev) => shiftIsoDate(prev, days));
+  };
+
+  const dateNavLocale = language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB";
+
+  const dayLabel = useMemo(() => {
+    const date = new Date(`${anchorDate}T12:00:00`);
+    return date.toLocaleDateString(dateNavLocale, {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  }, [anchorDate, dateNavLocale]);
+
+  const weekLabel = useMemo(() => {
+    const bounds = weekBoundsForDate(anchorDate);
+    const from = new Date(`${bounds.from}T12:00:00`);
+    const to = new Date(`${bounds.to}T12:00:00`);
+    const fmt = (d: Date) =>
+      d.toLocaleDateString(dateNavLocale, { day: "numeric", month: "short" });
+    return `${fmt(from)} – ${fmt(to)}`;
+  }, [anchorDate, dateNavLocale]);
+
+  const showDayNav = period === "day" || period === "week";
+  const isTodayAnchor = anchorDate === toDateInputValue(new Date());
 
   const emptyTables = useMemo(
     () => tables.filter((table) => table.status === "empty"),
@@ -511,14 +549,71 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                 <button
                   key={option}
                   type="button"
-                  onClick={() => setPeriod(option)}
+                  onClick={() => {
+                    setPeriod(option);
+                    if (option === "day" || option === "week") {
+                      setAnchorDate((prev) => prev || toDateInputValue(new Date()));
+                    }
+                    if (option === "range") {
+                      setCustomFrom(anchorDate);
+                      setCustomTo(anchorDate);
+                    }
+                  }}
                   className={filterButtonClass(period === option)}
                 >
                   {translate(PERIOD_LABEL_KEYS[option])}
                 </button>
               ))}
             </div>
-            {period === "custom" && (
+
+            {showDayNav ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => shiftAnchor(period === "week" ? -7 : -1)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                  aria-label={translate(period === "week" ? "resPrevWeek" : "resPrevDay")}
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                {period === "day" ? (
+                  <label className="relative inline-flex min-w-[11rem] flex-1 cursor-pointer items-center justify-center sm:flex-none">
+                    <span className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-center text-sm font-semibold tabular-nums text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
+                      {dayLabel}
+                    </span>
+                    <input
+                      type="date"
+                      value={anchorDate}
+                      onChange={(event) => setAnchorDate(event.target.value)}
+                      className="absolute inset-0 cursor-pointer opacity-0"
+                      aria-label={translate("resPeriodDay")}
+                    />
+                  </label>
+                ) : (
+                  <span className="min-w-[11rem] flex-1 rounded-xl border border-gray-200 bg-white px-4 py-2 text-center text-sm font-semibold tabular-nums text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:flex-none">
+                    {weekLabel}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => shiftAnchor(period === "week" ? 7 : 1)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                  aria-label={translate(period === "week" ? "resNextWeek" : "resNextDay")}
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={jumpToToday}
+                  disabled={isTodayAnchor}
+                  className={filterButtonClass(isTodayAnchor)}
+                >
+                  {translate("resTodayJump")}
+                </button>
+              </div>
+            ) : null}
+
+            {period === "range" && (
               <DateRangeInputs
                 from={customFrom}
                 to={customTo}

@@ -120,6 +120,7 @@ function CheckoutView({
   translate: (key: TranslationKey) => string;
 }) {
   const displayTotal = checkout.total ?? checkout.amountDueNow;
+  const isSplitSelect = checkout.mode === "split-select";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -127,9 +128,18 @@ function CheckoutView({
         <p className="text-2xl font-bold text-white sm:text-3xl">
           {translate("table")}: {checkout.tableNumber}
         </p>
-        <p className="mt-1 text-sm font-semibold uppercase tracking-widest text-zinc-400">
-          {translate("orderDetails")}
-        </p>
+        {isSplitSelect ? (
+          <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+            <p className="text-lg font-bold text-amber-200 sm:text-xl">
+              {translate("cfdPleaseSelectItems")}
+            </p>
+            <p className="mt-1 text-sm text-amber-200/70">{translate("cfdSplitSelectHint")}</p>
+          </div>
+        ) : (
+          <p className="mt-1 text-sm font-semibold uppercase tracking-widest text-zinc-400">
+            {translate("orderDetails")}
+          </p>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
@@ -165,35 +175,41 @@ function CheckoutView({
 
       <footer className="shrink-0 border-t border-zinc-700 bg-zinc-900 px-4 py-5 shadow-[0_-8px_24px_rgba(0,0,0,0.35)] sm:px-6">
         <div className="mx-auto max-w-3xl space-y-2 text-lg text-zinc-300">
-          <div className="flex justify-between">
-            <span>{translate("subtotal")}</span>
-            <span className="tabular-nums">{formatCzk(checkout.subtotal)}</span>
-          </div>
-          {checkout.discount > 0 && (
-            <div className="flex justify-between text-orange-300">
-              <span>{translate("discount")}</span>
-              <span className="tabular-nums">−{formatCzk(checkout.discount)}</span>
-            </div>
-          )}
-          {checkout.tip > 0 && (
-            <div className="flex justify-between text-emerald-300">
-              <span>{translate("tip")}</span>
-              <span className="tabular-nums">{formatCzk(checkout.tip)}</span>
-            </div>
+          {!isSplitSelect && (
+            <>
+              <div className="flex justify-between">
+                <span>{translate("subtotal")}</span>
+                <span className="tabular-nums">{formatCzk(checkout.subtotal)}</span>
+              </div>
+              {checkout.discount > 0 && (
+                <div className="flex justify-between text-orange-300">
+                  <span>{translate("discount")}</span>
+                  <span className="tabular-nums">−{formatCzk(checkout.discount)}</span>
+                </div>
+              )}
+              {checkout.tip > 0 && (
+                <div className="flex justify-between text-emerald-300">
+                  <span>{translate("tip")}</span>
+                  <span className="tabular-nums">{formatCzk(checkout.tip)}</span>
+                </div>
+              )}
+            </>
           )}
           <div className="flex items-end justify-between border-t border-zinc-700 pt-3">
-            <span className="text-xl font-bold uppercase tracking-wide text-white">{translate("total")}</span>
+            <span className="text-xl font-bold uppercase tracking-wide text-white">
+              {translate("total")}
+            </span>
             <span className="text-4xl font-black tabular-nums text-white sm:text-5xl">
               {formatCzk(displayTotal)} CZK
             </span>
           </div>
-          {checkout.amountGiven != null && checkout.amountGiven > 0 && (
+          {!isSplitSelect && checkout.amountGiven != null && checkout.amountGiven > 0 && (
             <div className="flex justify-between pt-1 text-zinc-400">
               <span>{translate("amountGiven")}</span>
               <span className="tabular-nums">{formatCzk(checkout.amountGiven)}</span>
             </div>
           )}
-          {checkout.changeDue != null && checkout.changeDue > 0 && (
+          {!isSplitSelect && checkout.changeDue != null && checkout.changeDue > 0 && (
             <div className="mt-3 flex items-end justify-between rounded-2xl border-2 border-amber-500/60 bg-amber-500/10 px-4 py-4">
               <span className="text-lg font-bold uppercase tracking-wide text-amber-200 sm:text-xl">
                 {translate("changeDue")}

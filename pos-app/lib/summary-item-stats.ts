@@ -37,17 +37,22 @@ export interface SummaryTypeTotal {
 }
 
 export interface SummaryItemStatsReport {
-  /** Combined rows (sold + cancelled) — used by UI top sellers path via separate aggregator. */
+  /** Sold-only rows (main report). */
   rows: SummaryItemStatRow[];
   soldRows: SummaryItemStatRow[];
   cancelledRows: SummaryItemStatRow[];
+  /** Sold-only tax (main report). */
   taxTotals: SummaryItemTaxTotal[];
   soldTaxTotals: SummaryItemTaxTotal[];
   cancelledTaxTotals: SummaryItemTaxTotal[];
+  /** Sold-only type totals (main report). */
   typeTotals: SummaryTypeTotal[];
   soldTypeTotals: SummaryTypeTotal[];
   cancelledTypeTotals: SummaryTypeTotal[];
+  /** Sold-only category totals (main report). */
   categoryTotals: SummaryTypeTotal[];
+  soldCategoryTotals: SummaryTypeTotal[];
+  cancelledCategoryTotals: SummaryTypeTotal[];
   totalQuantity: number;
   totalOriginal: number;
   soldQuantity: number;
@@ -248,23 +253,10 @@ function finalizeRows(counts: Map<string, AccRow>): {
   };
 }
 
-function mergeTypeTotals(sold: SummaryTypeTotal[], cancelled: SummaryTypeTotal[]): SummaryTypeTotal[] {
-  const map = new Map<string, SummaryTypeTotal>();
-  for (const row of [...sold, ...cancelled]) {
-    const existing = map.get(row.key);
-    if (existing) {
-      existing.quantity += row.quantity;
-      existing.originalTotal += row.originalTotal;
-    } else {
-      map.set(row.key, { ...row });
-    }
-  }
-  return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
-}
-
 /**
  * Aggregate item quantities for Summary / Excel.
- * Sold and cancelled are tracked separately. Money uses original unit price only.
+ * Sold and cancelled stay separate — cancelled never rolls into sold totals.
+ * Voided (deleted) bills count under cancelled. Money uses original unit price only.
  */
 export function computeSummaryItemStats(
   sales: SaleRecord[],
@@ -275,9 +267,10 @@ export function computeSummaryItemStats(
   const cancelledCounts = new Map<string, AccRow>();
 
   for (const sale of sales) {
+    const target = sale.deletedAt ? cancelledCounts : soldCounts;
     for (const item of sale.items) {
       const meta = itemMeta(item, menuItems, language);
-      addLine(soldCounts, meta, item.quantity);
+      addLine(target, meta, item.quantity);
     }
 
     for (const entry of sale.activityLog ?? []) {
@@ -290,34 +283,21 @@ export function computeSummaryItemStats(
   const sold = finalizeRows(soldCounts);
   const cancelled = finalizeRows(cancelledCounts);
 
-  const combinedCounts = new Map<string, AccRow>();
-  for (const [key, row] of soldCounts) {
-    combinedCounts.set(key, { ...row });
-  }
-  for (const [key, row] of cancelledCounts) {
-    const existing = combinedCounts.get(key);
-    if (existing) {
-      existing.quantity += row.quantity;
-      existing.originalTotal += row.originalTotal;
-    } else {
-      combinedCounts.set(key, { ...row });
-    }
-  }
-  const combined = finalizeRows(combinedCounts);
-
   return {
-    rows: combined.rows,
+    rows: sold.rows,
     soldRows: sold.rows,
     cancelledRows: cancelled.rows,
-    taxTotals: combined.taxTotals,
+    taxTotals: sold.taxTotals,
     soldTaxTotals: sold.taxTotals,
     cancelledTaxTotals: cancelled.taxTotals,
-    typeTotals: mergeTypeTotals(sold.typeTotals, cancelled.typeTotals),
+    typeTotals: sold.typeTotals,
     soldTypeTotals: sold.typeTotals,
     cancelledTypeTotals: cancelled.typeTotals,
-    categoryTotals: combined.categoryTotals,
-    totalQuantity: combined.totalQuantity,
-    totalOriginal: combined.totalOriginal,
+    categoryTotals: sold.categoryTotals,
+    soldCategoryTotals: sold.categoryTotals,
+    cancelledCategoryTotals: cancelled.categoryTotals,
+    totalQuantity: sold.totalQuantity,
+    totalOriginal: sold.totalOriginal,
     soldQuantity: sold.totalQuantity,
     soldOriginal: sold.totalOriginal,
     cancelledQuantity: cancelled.totalQuantity,

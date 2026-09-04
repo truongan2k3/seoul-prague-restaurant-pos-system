@@ -246,10 +246,10 @@ export function SummaryView({
         overviewSection: translate("summaryExcelOverview"),
         soldTotal: translate("summaryExcelSoldTotal"),
         cancelledTotal: translate("summaryExcelCancelledTotal"),
-        grandTotal: translate("summaryExcelGrandTotal"),
         food: translate("summaryExcelFood"),
         drinks: translate("summaryExcelDrinks"),
         emptyCancelled: translate("summaryExcelEmptyCancelled"),
+        emptySold: translate("summaryExcelEmptySold"),
         subtotal: translate("summaryExcelSubtotal"),
       });
     } finally {

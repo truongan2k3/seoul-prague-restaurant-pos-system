@@ -33,10 +33,10 @@ export type SummaryExcelLabels = {
   overviewSection: string;
   soldTotal: string;
   cancelledTotal: string;
-  grandTotal: string;
   food: string;
   drinks: string;
   emptyCancelled: string;
+  emptySold: string;
   subtotal: string;
 };
 
@@ -135,7 +135,12 @@ function pushCategoryTotals(
   pushBlank(rows);
 }
 
-function pushTaxBlock(rows: unknown[][], title: string, totals: SummaryItemTaxTotal[], labels: SummaryExcelLabels) {
+function pushTaxBlock(
+  rows: unknown[][],
+  title: string,
+  totals: SummaryItemTaxTotal[],
+  labels: SummaryExcelLabels,
+) {
   pushSectionTitle(rows, title);
   rows.push([labels.taxRate, labels.taxBase, labels.taxVat, labels.taxGross]);
   for (const row of totals) {
@@ -149,6 +154,12 @@ function pushTaxBlock(rows: unknown[][], title: string, totals: SummaryItemTaxTo
   pushBlank(rows);
 }
 
+/**
+ * Excel layout:
+ * 1) Sold report only (items + type + category) — never mixes cancelled
+ * 2) Cancelled report as its own block (items + type + category)
+ * Tax sheet mirrors the same split — no combined grand total.
+ */
 export function buildSummaryItemsWorkbook(
   report: SummaryItemStatsReport,
   range: DateRange,
@@ -164,11 +175,20 @@ export function buildSummaryItemsWorkbook(
     [labels.overviewSection],
     [labels.soldTotal, report.soldQuantity, roundMoney(report.soldOriginal)],
     [labels.cancelledTotal, report.cancelledQuantity, roundMoney(report.cancelledOriginal)],
-    [labels.grandTotal, report.totalQuantity, roundMoney(report.totalOriginal)],
     [],
   ];
 
-  pushItemBlock(itemRows, labels.soldSection, report.soldRows, labels);
+  // —— Sold report (excludes cancelled) ——
+  pushItemBlock(itemRows, labels.soldSection, report.soldRows, labels, labels.emptySold);
+  pushTypeTotals(itemRows, `${labels.typeTotalsSection} — ${labels.soldSection}`, report.soldTypeTotals, labels);
+  pushCategoryTotals(
+    itemRows,
+    `${labels.categoryTotalsSection} — ${labels.soldSection}`,
+    report.soldCategoryTotals,
+    labels,
+  );
+
+  // —— Cancelled only ——
   pushItemBlock(
     itemRows,
     labels.cancelledSection,
@@ -176,16 +196,18 @@ export function buildSummaryItemsWorkbook(
     labels,
     labels.emptyCancelled,
   );
-
-  pushTypeTotals(itemRows, `${labels.typeTotalsSection} — ${labels.soldSection}`, report.soldTypeTotals, labels);
   pushTypeTotals(
     itemRows,
     `${labels.typeTotalsSection} — ${labels.cancelledSection}`,
     report.cancelledTypeTotals,
     labels,
   );
-  pushTypeTotals(itemRows, `${labels.typeTotalsSection} — ${labels.grandTotal}`, report.typeTotals, labels);
-  pushCategoryTotals(itemRows, labels.categoryTotalsSection, report.categoryTotals, labels);
+  pushCategoryTotals(
+    itemRows,
+    `${labels.categoryTotalsSection} — ${labels.cancelledSection}`,
+    report.cancelledCategoryTotals,
+    labels,
+  );
 
   const taxRows: unknown[][] = [
     [labels.period, periodLabel],
@@ -198,7 +220,6 @@ export function buildSummaryItemsWorkbook(
     report.cancelledTaxTotals,
     labels,
   );
-  pushTaxBlock(taxRows, `${labels.taxSheet} — ${labels.grandTotal}`, report.taxTotals, labels);
 
   const itemsSheet = XLSX.utils.aoa_to_sheet(itemRows);
   const taxSheet = XLSX.utils.aoa_to_sheet(taxRows);
@@ -215,7 +236,6 @@ export function buildSummaryItemsWorkbook(
   ];
   taxSheet["!cols"] = [{ wch: 28 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
 
-  // Highlight section titles (col A where next row looks like a header / known titles)
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, itemsSheet, labels.itemsSheet.slice(0, 31));
   XLSX.utils.book_append_sheet(workbook, taxSheet, labels.taxSheet.slice(0, 31));

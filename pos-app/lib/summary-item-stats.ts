@@ -29,12 +29,41 @@ export interface SummaryItemTaxTotal {
   gross: number;
 }
 
+export interface SummaryTypeTotal {
+  key: string;
+  label: string;
+  quantity: number;
+  originalTotal: number;
+}
+
 export interface SummaryItemStatsReport {
+  /** Combined rows (sold + cancelled) — used by UI top sellers path via separate aggregator. */
   rows: SummaryItemStatRow[];
+  soldRows: SummaryItemStatRow[];
+  cancelledRows: SummaryItemStatRow[];
   taxTotals: SummaryItemTaxTotal[];
+  soldTaxTotals: SummaryItemTaxTotal[];
+  cancelledTaxTotals: SummaryItemTaxTotal[];
+  typeTotals: SummaryTypeTotal[];
+  soldTypeTotals: SummaryTypeTotal[];
+  cancelledTypeTotals: SummaryTypeTotal[];
+  categoryTotals: SummaryTypeTotal[];
   totalQuantity: number;
   totalOriginal: number;
+  soldQuantity: number;
+  soldOriginal: number;
+  cancelledQuantity: number;
+  cancelledOriginal: number;
 }
+
+type AccRow = {
+  name: string;
+  quantity: number;
+  originalTotal: number;
+  taxGroup: TaxGroup;
+  category: string;
+  itemType: "food" | "drink";
+};
 
 function resolveTaxGroup(menu: MenuItem | undefined, item?: Pick<OrderItem, "taxGroup" | "itemType" | "station">): TaxGroup {
   if (item?.taxGroup === "A" || item?.taxGroup === "B") return item.taxGroup;
@@ -94,71 +123,48 @@ function emptyTaxBucket(): Record<TaxGroup, { base: number; vat: number; gross: 
   };
 }
 
-/**
- * Aggregate item quantities for Summary / Excel.
- * Includes: paid sale lines, voided (deleted) sale lines, and cancelled/removed activity.
- * Money uses original unit price only (ignores line edits and bill discounts).
- */
-export function computeSummaryItemStats(
-  sales: SaleRecord[],
-  menuItems: MenuItem[],
-  language: LanguageCode,
-): SummaryItemStatsReport {
-  const counts = new Map<
-    string,
-    {
-      name: string;
-      quantity: number;
-      originalTotal: number;
-      taxGroup: TaxGroup;
-      category: string;
-      itemType: "food" | "drink";
-    }
-  >();
-
-  const addLine = (
-    meta: {
-      key: string;
-      name: string;
-      category: string;
-      itemType: "food" | "drink";
-      taxGroup: TaxGroup;
-      unitPrice: number;
-    },
-    quantity: number,
-  ) => {
-    if (quantity <= 0) return;
-    const existing = counts.get(meta.key);
-    const lineTotal = meta.unitPrice * quantity;
-    if (existing) {
-      existing.quantity += quantity;
-      existing.originalTotal += lineTotal;
-    } else {
-      counts.set(meta.key, {
-        name: meta.name,
-        quantity,
-        originalTotal: lineTotal,
-        taxGroup: meta.taxGroup,
-        category: meta.category,
-        itemType: meta.itemType,
-      });
-    }
-  };
-
-  for (const sale of sales) {
-    for (const item of sale.items) {
-      const meta = itemMeta(item, menuItems, language);
-      addLine(meta, item.quantity);
-    }
-
-    for (const entry of sale.activityLog ?? []) {
-      if (!isCancelActivityAction(entry.action)) continue;
-      const cancelled = metaFromCancelEntry(entry, menuItems, language);
-      addLine(cancelled, cancelled.quantity);
-    }
+function addLine(
+  counts: Map<string, AccRow>,
+  meta: {
+    key: string;
+    name: string;
+    category: string;
+    itemType: "food" | "drink";
+    taxGroup: TaxGroup;
+    unitPrice: number;
+  },
+  quantity: number,
+) {
+  if (quantity <= 0) return;
+  const existing = counts.get(meta.key);
+  const lineTotal = meta.unitPrice * quantity;
+  if (existing) {
+    existing.quantity += quantity;
+    existing.originalTotal += lineTotal;
+  } else {
+    counts.set(meta.key, {
+      name: meta.name,
+      quantity,
+      originalTotal: lineTotal,
+      taxGroup: meta.taxGroup,
+      category: meta.category,
+      itemType: meta.itemType,
+    });
   }
+}
 
+function finalizeRows(counts: Map<string, AccRow>): {
+  rows: SummaryItemStatRow[];
+  taxTotals: SummaryItemTaxTotal[];
+  typeTotals: SummaryTypeTotal[];
+  categoryTotals: SummaryTypeTotal[];
+  totalQuantity: number;
+  totalOriginal: number;
+} {
   const taxBucket = emptyTaxBucket();
+  const typeMap = new Map<string, SummaryTypeTotal>();
+  const categoryMap = new Map<string, SummaryTypeTotal>();
+
   const rows: SummaryItemStatRow[] = [...counts.entries()]
     .map(([key, row]) => {
       const taxRate = VAT_RATES[row.taxGroup];
@@ -167,6 +173,35 @@ export function computeSummaryItemStats(
       taxBucket[row.taxGroup].base += base;
       taxBucket[row.taxGroup].vat += vat;
       taxBucket[row.taxGroup].gross += taxGross;
+
+      const typeKey = row.itemType;
+      const typeLabel = row.itemType === "drink" ? "Drinks" : "Food";
+      const typeExisting = typeMap.get(typeKey);
+      if (typeExisting) {
+        typeExisting.quantity += row.quantity;
+        typeExisting.originalTotal += row.originalTotal;
+      } else {
+        typeMap.set(typeKey, {
+          key: typeKey,
+          label: typeLabel,
+          quantity: row.quantity,
+          originalTotal: row.originalTotal,
+        });
+      }
+
+      const catExisting = categoryMap.get(row.category);
+      if (catExisting) {
+        catExisting.quantity += row.quantity;
+        catExisting.originalTotal += row.originalTotal;
+      } else {
+        categoryMap.set(row.category, {
+          key: row.category,
+          label: row.category,
+          quantity: row.quantity,
+          originalTotal: row.originalTotal,
+        });
+      }
+
       return {
         key,
         name: row.name,
@@ -198,10 +233,94 @@ export function computeSummaryItemStats(
     gross: taxBucket.A.gross + taxBucket.B.gross,
   });
 
+  const typeTotals = [...typeMap.values()].sort((a, b) => a.label.localeCompare(b.label));
+  const categoryTotals = [...categoryMap.values()].sort(
+    (a, b) => b.quantity - a.quantity || a.label.localeCompare(b.label),
+  );
+
   return {
     rows,
     taxTotals,
+    typeTotals,
+    categoryTotals,
     totalQuantity: rows.reduce((sum, row) => sum + row.quantity, 0),
     totalOriginal: rows.reduce((sum, row) => sum + row.originalTotal, 0),
+  };
+}
+
+function mergeTypeTotals(sold: SummaryTypeTotal[], cancelled: SummaryTypeTotal[]): SummaryTypeTotal[] {
+  const map = new Map<string, SummaryTypeTotal>();
+  for (const row of [...sold, ...cancelled]) {
+    const existing = map.get(row.key);
+    if (existing) {
+      existing.quantity += row.quantity;
+      existing.originalTotal += row.originalTotal;
+    } else {
+      map.set(row.key, { ...row });
+    }
+  }
+  return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/**
+ * Aggregate item quantities for Summary / Excel.
+ * Sold and cancelled are tracked separately. Money uses original unit price only.
+ */
+export function computeSummaryItemStats(
+  sales: SaleRecord[],
+  menuItems: MenuItem[],
+  language: LanguageCode,
+): SummaryItemStatsReport {
+  const soldCounts = new Map<string, AccRow>();
+  const cancelledCounts = new Map<string, AccRow>();
+
+  for (const sale of sales) {
+    for (const item of sale.items) {
+      const meta = itemMeta(item, menuItems, language);
+      addLine(soldCounts, meta, item.quantity);
+    }
+
+    for (const entry of sale.activityLog ?? []) {
+      if (!isCancelActivityAction(entry.action)) continue;
+      const cancelled = metaFromCancelEntry(entry, menuItems, language);
+      addLine(cancelledCounts, cancelled, cancelled.quantity);
+    }
+  }
+
+  const sold = finalizeRows(soldCounts);
+  const cancelled = finalizeRows(cancelledCounts);
+
+  const combinedCounts = new Map<string, AccRow>();
+  for (const [key, row] of soldCounts) {
+    combinedCounts.set(key, { ...row });
+  }
+  for (const [key, row] of cancelledCounts) {
+    const existing = combinedCounts.get(key);
+    if (existing) {
+      existing.quantity += row.quantity;
+      existing.originalTotal += row.originalTotal;
+    } else {
+      combinedCounts.set(key, { ...row });
+    }
+  }
+  const combined = finalizeRows(combinedCounts);
+
+  return {
+    rows: combined.rows,
+    soldRows: sold.rows,
+    cancelledRows: cancelled.rows,
+    taxTotals: combined.taxTotals,
+    soldTaxTotals: sold.taxTotals,
+    cancelledTaxTotals: cancelled.taxTotals,
+    typeTotals: mergeTypeTotals(sold.typeTotals, cancelled.typeTotals),
+    soldTypeTotals: sold.typeTotals,
+    cancelledTypeTotals: cancelled.typeTotals,
+    categoryTotals: combined.categoryTotals,
+    totalQuantity: combined.totalQuantity,
+    totalOriginal: combined.totalOriginal,
+    soldQuantity: sold.totalQuantity,
+    soldOriginal: sold.totalOriginal,
+    cancelledQuantity: cancelled.totalQuantity,
+    cancelledOriginal: cancelled.totalOriginal,
   };
 }

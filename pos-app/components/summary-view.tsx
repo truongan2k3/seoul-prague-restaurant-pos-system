@@ -236,8 +236,21 @@ export function SummaryView({
         taxVat: translate("taxSummaryVat"),
         taxGross: translate("taxSummaryGross"),
         category: translate("summaryExcelCategory"),
+        itemType: translate("summaryExcelItemType"),
         period: translate("summaryExcelPeriod"),
         note: translate("summaryExcelNote"),
+        soldSection: translate("summaryExcelSoldSection"),
+        cancelledSection: translate("summaryExcelCancelledSection"),
+        typeTotalsSection: translate("summaryExcelTypeTotals"),
+        categoryTotalsSection: translate("summaryExcelCategoryTotals"),
+        overviewSection: translate("summaryExcelOverview"),
+        soldTotal: translate("summaryExcelSoldTotal"),
+        cancelledTotal: translate("summaryExcelCancelledTotal"),
+        grandTotal: translate("summaryExcelGrandTotal"),
+        food: translate("summaryExcelFood"),
+        drinks: translate("summaryExcelDrinks"),
+        emptyCancelled: translate("summaryExcelEmptyCancelled"),
+        subtotal: translate("summaryExcelSubtotal"),
       });
     } finally {
       setExcelExporting(false);

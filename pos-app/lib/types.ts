@@ -285,7 +285,7 @@ export interface MenuOptionGroup {
   nameCz: string;
   nameZh?: string;
   required?: boolean;
-  /** Allow selecting multiple options in the group (future; order UI is single-select today). */
+  /** Allow selecting multiple options in the group. */
   multi?: boolean;
   options: MenuOptionChoice[];
 }

@@ -153,18 +153,21 @@ function isChickenOption(option: MenuOptionChoice): boolean {
   );
 }
 
+/** Per option-group: selected option id(s). Multi groups may have several. */
+export type OptionGroupSelections = Record<string, string[]>;
+
 export function getDefaultSelections(
   config: MenuCustomizationConfig,
   item?: Pick<MenuItem, "category">,
-): Record<string, string> {
+): OptionGroupSelections {
   const preferChicken = item ? isLunchMenuItem(item) : false;
-  const selections: Record<string, string> = {};
+  const selections: OptionGroupSelections = {};
 
   for (const group of config.optionGroups ?? []) {
     const chicken = preferChicken ? group.options.find(isChickenOption) : undefined;
     const defaultOption =
       chicken ?? group.options.find((option) => option.default) ?? group.options[0];
-    if (defaultOption) selections[group.id] = defaultOption.id;
+    if (defaultOption) selections[group.id] = [defaultOption.id];
   }
 
   return selections;
@@ -172,22 +175,24 @@ export function getDefaultSelections(
 
 export function resolveSelectedOptions(
   config: MenuCustomizationConfig,
-  selections: Record<string, string>,
+  selections: OptionGroupSelections,
 ): SelectedMenuOption[] {
   const resolved: SelectedMenuOption[] = [];
   for (const group of config.optionGroups ?? []) {
-    const optionId = selections[group.id];
-    const option = group.options.find((entry) => entry.id === optionId);
-    if (!option) continue;
-    resolved.push({
-      groupId: group.id,
-      optionId: option.id,
-      nameEn: option.nameEn,
-      nameCz: option.nameCz,
-      nameZh: option.nameZh,
-      price: option.price,
-      priceDelta: option.priceDelta ?? 0,
-    });
+    const optionIds = selections[group.id] ?? [];
+    for (const optionId of optionIds) {
+      const option = group.options.find((entry) => entry.id === optionId);
+      if (!option) continue;
+      resolved.push({
+        groupId: group.id,
+        optionId: option.id,
+        nameEn: option.nameEn,
+        nameCz: option.nameCz,
+        nameZh: option.nameZh,
+        price: option.price,
+        priceDelta: option.priceDelta ?? 0,
+      });
+    }
   }
   return resolved;
 }
@@ -224,9 +229,13 @@ export function optionLabel(
 
 export function buildCustomizationSignature(
   menuItemId: string,
-  selections: Record<string, string>,
+  selections: OptionGroupSelections,
 ): string {
-  return JSON.stringify({ menuItemId, selections });
+  const normalized: OptionGroupSelections = {};
+  for (const groupId of Object.keys(selections).sort()) {
+    normalized[groupId] = [...selections[groupId]].sort();
+  }
+  return JSON.stringify({ menuItemId, selections: normalized });
 }
 
 export function buildLineDisplayName(

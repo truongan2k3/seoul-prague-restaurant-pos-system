@@ -15,7 +15,6 @@ import {
   filterSalesInRange,
   formatSummaryDate,
   getPeriodRange,
-  saleNetTotal,
   toDateInputValue,
   type CategoryTopSellers,
   type SummaryPeriod,
@@ -486,52 +485,6 @@ export function SummaryView({
                 ))}
               </div>
             )}
-          </section>
-
-          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {translate("zReport")}
-            </h2>
-            <div className="mt-4 overflow-x-auto">
-              {filteredSales.length === 0 ? (
-                <p className="text-sm text-gray-500 dark:text-gray-400">{translate("summaryNoSales")}</p>
-              ) : (
-                <table className="w-full text-left text-sm text-gray-800 dark:text-gray-200">
-                  <thead>
-                    <tr className="border-b border-gray-200 text-gray-500 dark:border-gray-700 dark:text-gray-400">
-                      <th className="py-2 pr-4">Time</th>
-                      <th className="py-2 pr-4">{translate("table")}</th>
-                      <th className="py-2 pr-4">{translate("staff")}</th>
-                      <th className="py-2 pr-4">{translate("payment")}</th>
-                      <th className="py-2 text-right">{translate("totalExclTip")}</th>
-                      <th className="py-2 text-right">{translate("tips")}</th>
-                      <th className="py-2 text-right">{translate("grandTotal")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredSales.map((sale) => (
-                      <tr key={sale.id} className="border-b dark:border-gray-800/50">
-                        <td className="py-2 pr-4 tabular-nums">
-                          {sale.closedAt.toLocaleString(language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB")}
-                        </td>
-                        <td className="py-2 pr-4">{sale.tableLabel}</td>
-                        <td className="py-2 pr-4">{sale.staffName}</td>
-                        <td className="py-2 pr-4 capitalize">{sale.paymentMethod}</td>
-                        <td className="py-2 text-right tabular-nums">
-                          {formatPrice(saleNetTotal(sale))}
-                        </td>
-                        <td className="py-2 text-right tabular-nums text-gray-600 dark:text-gray-400">
-                          {sale.tip > 0 ? formatPrice(sale.tip) : "—"}
-                        </td>
-                        <td className="py-2 text-right font-medium tabular-nums">
-                          {formatPrice(sale.grandTotal)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
           </section>
         </div>
       </div>

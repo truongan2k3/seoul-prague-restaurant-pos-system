@@ -7,6 +7,10 @@ import {
   defaultWebsiteContent,
   emptyWebsiteMedia,
 } from "@/lib/website/defaults";
+import {
+  normalizePageLayout,
+  normalizePromoSlideshows,
+} from "@/lib/website/page-layout";
 import type {
   GalleryCategory,
   VideoSlot,
@@ -78,6 +82,8 @@ function mapSettingsRow(row: Record<string, unknown> | null): WebsiteSettings {
       (row.seo_description as string) || DEFAULT_WEBSITE_SETTINGS.seoDescription,
     seoOgImageUrl: (row.seo_og_image_url as string) || "",
     openingHours: parseOpeningHours(row.opening_hours),
+    pageLayout: normalizePageLayout(row.page_layout),
+    promoSlideshows: normalizePromoSlideshows(row.promo_slideshows),
     updatedAt: row.updated_at ? new Date(row.updated_at as string) : undefined,
   };
 }

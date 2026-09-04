@@ -2,7 +2,11 @@
 
 import { motion, useReducedMotion } from "framer-motion";
 import { BookingCta } from "@/components/landing/booking-cta";
-import type { WebsiteContent } from "@/lib/website/types";
+import {
+  responsiveBodyClass,
+  responsiveHeadlineClass,
+} from "@/lib/website/page-layout";
+import type { WebsiteContent, WebsitePageSection } from "@/lib/website/types";
 
 function Reveal({
   children,
@@ -113,16 +117,25 @@ export function LandingSignature({ content }: { content: WebsiteContent }) {
   );
 }
 
-export function LandingExperience() {
+export function LandingExperience({ section }: { section?: WebsitePageSection }) {
+  const eyebrow = section?.props?.eyebrow || "Experience";
+  const headline = section?.props?.headline || "Korean BBQ, reimagined for Prague";
+  const headlineClass = section
+    ? responsiveHeadlineClass(section)
+    : "text-3xl lg:text-5xl";
+
   return (
     <section className="relative overflow-hidden bg-[#141416] py-24 lg:py-32">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(139,30,45,0.25),transparent_50%)]" />
       <div className="relative mx-auto max-w-7xl px-5 lg:px-8">
         <Reveal className="max-w-3xl">
-          <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Experience</p>
-          <h2 className="landing-serif mt-4 text-3xl text-white lg:text-5xl">
-            Korean BBQ, reimagined for Prague
-          </h2>
+          <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">{eyebrow}</p>
+          <h2 className={`landing-serif mt-4 text-white ${headlineClass}`}>{headline}</h2>
+          {section?.props?.body ? (
+            <p className={`mt-4 text-white/65 ${responsiveBodyClass(section)}`}>
+              {section.props.body}
+            </p>
+          ) : null}
           <div className="mt-10 grid gap-8 sm:grid-cols-3">
             {[
               { title: "Tableside grilling", body: "Premium cuts prepared at your table with charcoal warmth and attentive service." },

@@ -27,6 +27,75 @@ export interface WebsiteOpeningHour {
   note?: string;
 }
 
+export type WebsiteDevice = "desktop" | "mobile";
+
+export type WebsiteSectionType =
+  | "hero"
+  | "promo_slideshow"
+  | "about"
+  | "signature"
+  | "experience"
+  | "menu"
+  | "gallery"
+  | "video"
+  | "amenities"
+  | "contact"
+  | "custom_text"
+  | "custom_cta"
+  | "spacer";
+
+export type WebsiteTypeScaleSize = "sm" | "md" | "lg" | "xl" | "2xl";
+export type WebsiteBodyScaleSize = "sm" | "md" | "lg";
+
+export interface WebsiteTypeScale {
+  headline?: WebsiteTypeScaleSize;
+  body?: WebsiteBodyScaleSize;
+}
+
+export interface WebsiteSectionDeviceStyle {
+  /** Hide this section only on this device. */
+  hidden?: boolean;
+  typeScale?: WebsiteTypeScale;
+  padding?: "compact" | "normal" | "spacious";
+}
+
+export interface WebsitePageSection {
+  id: string;
+  type: WebsiteSectionType;
+  enabled: boolean;
+  sortOrder: number;
+  desktop?: WebsiteSectionDeviceStyle;
+  mobile?: WebsiteSectionDeviceStyle;
+  props?: {
+    eyebrow?: string;
+    headline?: string;
+    body?: string;
+    ctaLabel?: string;
+    ctaHref?: string;
+    slideshowId?: string;
+    background?: "dark" | "charcoal" | "warm";
+  };
+}
+
+export interface WebsitePromoSlide {
+  id: string;
+  title: string;
+  subtitle: string;
+  imageUrl: string;
+  ctaLabel?: string;
+  ctaHref?: string;
+  enabled: boolean;
+  sortOrder: number;
+}
+
+export interface WebsitePromoSlideshow {
+  id: string;
+  name: string;
+  enabled: boolean;
+  autoplayMs: number;
+  slides: WebsitePromoSlide[];
+}
+
 export interface WebsiteSettings {
   restaurantName: string;
   tagline: string;
@@ -46,6 +115,10 @@ export interface WebsiteSettings {
   seoDescription: string;
   seoOgImageUrl: string;
   openingHours: WebsiteOpeningHour[];
+  /** Ordered homepage sections for the visual designer. */
+  pageLayout: WebsitePageSection[];
+  /** Event / promo carousels referenced by promo_slideshow sections. */
+  promoSlideshows: WebsitePromoSlideshow[];
   updatedAt?: Date;
 }
 

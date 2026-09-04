@@ -78,6 +78,8 @@ export async function saveWebsiteSettings(input: Partial<WebsiteSettings>) {
   if (input.seoDescription !== undefined) payload.seo_description = input.seoDescription;
   if (input.seoOgImageUrl !== undefined) payload.seo_og_image_url = input.seoOgImageUrl;
   if (input.openingHours !== undefined) payload.opening_hours = input.openingHours;
+  if (input.pageLayout !== undefined) payload.page_layout = input.pageLayout;
+  if (input.promoSlideshows !== undefined) payload.promo_slideshows = input.promoSlideshows;
 
   const { data, error: dbError } = await admin
     .from("website_settings")
@@ -85,7 +87,13 @@ export async function saveWebsiteSettings(input: Partial<WebsiteSettings>) {
     .select("*")
     .single();
 
-  if (dbError) return { data: null, error: dbError };
+  if (dbError) {
+    const hint =
+      /page_layout|promo_slideshows/i.test(dbError.message)
+        ? " Run supabase/patch-website-page-layout.sql if columns are missing."
+        : "";
+    return { data: null, error: new Error(`${dbError.message}${hint}`) };
+  }
   return { data: mapSettingsRow(data as Record<string, unknown>), error: null };
 }
 
@@ -515,6 +523,8 @@ export async function seedWebsiteDefaultsIfEmpty() {
       seo_title: DEFAULT_WEBSITE_SETTINGS.seoTitle,
       seo_description: DEFAULT_WEBSITE_SETTINGS.seoDescription,
       opening_hours: parseOpeningHours(DEFAULT_OPENING_HOURS),
+      page_layout: DEFAULT_WEBSITE_SETTINGS.pageLayout,
+      promo_slideshows: DEFAULT_WEBSITE_SETTINGS.promoSlideshows,
       updated_at: nowIso(),
     });
   }

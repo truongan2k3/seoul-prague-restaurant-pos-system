@@ -1,4 +1,8 @@
 import { DEFAULT_RESERVATION_GUEST_VENUE } from "@/lib/reservation-guest-form";
+import {
+  createDefaultPageLayout,
+  createDefaultPromoSlideshows,
+} from "@/lib/website/page-layout";
 import type {
   WebsiteAmenity,
   WebsiteContent,
@@ -51,6 +55,8 @@ export const DEFAULT_WEBSITE_SETTINGS: WebsiteSettings = {
     "Book a table for premium Korean BBQ in Prague. Grilled at your table, editorial dining, unforgettable hospitality.",
   seoOgImageUrl: "",
   openingHours: DEFAULT_OPENING_HOURS,
+  pageLayout: createDefaultPageLayout(),
+  promoSlideshows: createDefaultPromoSlideshows(),
 };
 
 export const DEFAULT_AMENITIES: WebsiteAmenity[] = [

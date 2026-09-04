@@ -24,6 +24,12 @@ import {
 } from "lucide-react";
 import { DesignerDeviceFrame } from "@/components/admin/website/designer-device-frame";
 import {
+  InlinePlusUpload,
+  uploadWebsiteGalleryFile,
+  uploadWebsiteSlotFile,
+  uploadWebsiteVideoApiFile,
+} from "@/components/admin/website/inline-plus-upload";
+import {
   ADDABLE_SECTION_TYPES,
   BUILTIN_SECTION_TYPES,
   SECTION_LABELS,
@@ -38,12 +44,14 @@ import {
 import type {
   WebsiteContent,
   WebsiteDevice,
+  WebsiteGalleryItem,
   WebsiteMediaSlot,
   WebsitePageSection,
   WebsitePromoSlide,
   WebsitePromoSlideshow,
   WebsiteSettings,
   WebsiteSectionType,
+  WebsiteVideo,
 } from "@/lib/website/types";
 import {
   saveWebsiteSettings,
@@ -105,12 +113,16 @@ function DraggableMedia({
   objectPosition,
   className,
   onPositionSaved,
+  onUploaded,
+  onError,
 }: {
   slot: WebsiteMediaSlot;
   url?: string;
   objectPosition?: string;
   className?: string;
   onPositionSaved: (slot: WebsiteMediaSlot, position: string) => void;
+  onUploaded: (slot: WebsiteMediaSlot, asset: NonNullable<WebsiteContent["media"][WebsiteMediaSlot]>) => void;
+  onError: (message: string) => void;
 }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startY: number; posX: number; posY: number } | null>(
@@ -122,13 +134,17 @@ function DraggableMedia({
     setPosition(objectPosition ?? "50% 50%");
   }, [objectPosition, url]);
 
-  if (!url) {
-    return (
-      <div className={`flex items-center justify-center bg-[#1a1a1c] text-sm text-white/40 ${className}`}>
-        Upload in Media
-      </div>
-    );
-  }
+  const accept =
+    slot === "hero_video" ? "video/mp4,video/webm" : "image/png,image/jpeg,image/webp,image/svg+xml";
+
+  const handleUpload = async (file: File) => {
+    const result = await uploadWebsiteSlotFile(slot, file, slot.replaceAll("_", " "));
+    if (result.error || !result.data) {
+      onError(result.error || "Upload failed.");
+      return;
+    }
+    onUploaded(slot, result.data);
+  };
 
   const parse = (value: string) => {
     const parts = value.split(/\s+/);
@@ -138,43 +154,61 @@ function DraggableMedia({
     };
   };
 
+  if (!url) {
+    return (
+      <div
+        className={`relative flex flex-col items-center justify-center gap-3 bg-[#1a1a1c] text-sm text-white/50 ${className}`}
+      >
+        <p>No media yet</p>
+        <InlinePlusUpload accept={accept} label="Add file" onFile={handleUpload} />
+      </div>
+    );
+  }
+
   return (
-    <div ref={frameRef} className={`relative overflow-hidden ${className}`}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={url}
-        alt=""
-        className="h-full w-full cursor-grab object-cover active:cursor-grabbing"
-        style={{ objectPosition: position }}
-        draggable={false}
-        onPointerDown={(event) => {
-          const current = parse(position);
-          dragRef.current = {
-            startX: event.clientX,
-            startY: event.clientY,
-            posX: current.x,
-            posY: current.y,
-          };
-          (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
-        }}
-        onPointerMove={(event) => {
-          if (!dragRef.current || !frameRef.current) return;
-          const rect = frameRef.current.getBoundingClientRect();
-          const dx = ((event.clientX - dragRef.current.startX) / rect.width) * 100;
-          const dy = ((event.clientY - dragRef.current.startY) / rect.height) * 100;
-          const nextX = Math.min(100, Math.max(0, dragRef.current.posX - dx));
-          const nextY = Math.min(100, Math.max(0, dragRef.current.posY - dy));
-          setPosition(`${nextX.toFixed(1)}% ${nextY.toFixed(1)}%`);
-        }}
-        onPointerUp={() => {
-          if (!dragRef.current) return;
-          dragRef.current = null;
-          onPositionSaved(slot, position);
-        }}
-      />
+    <div ref={frameRef} className={`group relative overflow-hidden ${className}`}>
+      {slot === "hero_video" ? (
+        <video src={url} className="h-full w-full object-cover" muted playsInline autoPlay loop />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={url}
+          alt=""
+          className="h-full w-full cursor-grab object-cover active:cursor-grabbing"
+          style={{ objectPosition: position }}
+          draggable={false}
+          onPointerDown={(event) => {
+            const current = parse(position);
+            dragRef.current = {
+              startX: event.clientX,
+              startY: event.clientY,
+              posX: current.x,
+              posY: current.y,
+            };
+            (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+          }}
+          onPointerMove={(event) => {
+            if (!dragRef.current || !frameRef.current) return;
+            const rect = frameRef.current.getBoundingClientRect();
+            const dx = ((event.clientX - dragRef.current.startX) / rect.width) * 100;
+            const dy = ((event.clientY - dragRef.current.startY) / rect.height) * 100;
+            const nextX = Math.min(100, Math.max(0, dragRef.current.posX - dx));
+            const nextY = Math.min(100, Math.max(0, dragRef.current.posY - dy));
+            setPosition(`${nextX.toFixed(1)}% ${nextY.toFixed(1)}%`);
+          }}
+          onPointerUp={() => {
+            if (!dragRef.current) return;
+            dragRef.current = null;
+            onPositionSaved(slot, position);
+          }}
+        />
+      )}
       <span className="pointer-events-none absolute bottom-2 left-2 inline-flex items-center gap-1 rounded bg-black/55 px-2 py-1 text-[10px] uppercase tracking-wide text-white">
         <Move className="h-3 w-3" /> Drag image
       </span>
+      <div className="absolute right-2 top-2 opacity-100 transition lg:opacity-0 lg:group-hover:opacity-100">
+        <InlinePlusUpload accept={accept} hasMedia onFile={handleUpload} />
+      </div>
     </div>
   );
 }
@@ -191,6 +225,8 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
     promoSlideshows: normalizePromoSlideshows(initial.settings.promoSlideshows),
   });
   const [media, setMedia] = useState(initial.media);
+  const [gallery, setGallery] = useState<WebsiteGalleryItem[]>(initial.gallery);
+  const [videos, setVideos] = useState<WebsiteVideo[]>(initial.videos);
   const [device, setDevice] = useState<WebsiteDevice>("desktop");
   const [zoom, setZoom] = useState(100);
   const [focusCanvas, setFocusCanvas] = useState(false);
@@ -268,6 +304,59 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
     setMessage(`Saved position for ${slot.replaceAll("_", " ")}.`);
   };
 
+  const handleMediaUploaded = (
+    slot: WebsiteMediaSlot,
+    asset: NonNullable<WebsiteContent["media"][WebsiteMediaSlot]>,
+  ) => {
+    setMedia((prev) => ({ ...prev, [slot]: asset }));
+    setMessage(`Uploaded ${slot.replaceAll("_", " ")}.`);
+    setError(null);
+  };
+
+  const handleGalleryUpload = async (file: File) => {
+    setError(null);
+    const result = await uploadWebsiteGalleryFile(file);
+    if (result.error || !result.data) {
+      setError(result.error || "Gallery upload failed.");
+      return;
+    }
+    setGallery((prev) => [
+      {
+        id: result.data!.id,
+        category: "food",
+        title: result.data!.title,
+        imageUrl: result.data!.imageUrl,
+        sortOrder: Date.now(),
+        featured: false,
+      },
+      ...prev,
+    ]);
+    setMessage("Gallery image added.");
+  };
+
+  const handleVideoUpload = async (file: File) => {
+    setError(null);
+    const result = await uploadWebsiteVideoApiFile(file, file.name.replace(/\.[^.]+$/, ""), "promo");
+    if (result.error || !result.data) {
+      setError(result.error || "Video upload failed.");
+      return;
+    }
+    setVideos((prev) => [
+      {
+        id: result.data!.id,
+        title: result.data!.title,
+        description: "",
+        videoUrl: result.data!.videoUrl,
+        posterUrl: result.data!.posterUrl || "",
+        slot: "promo",
+        sortOrder: Date.now(),
+        enabled: true,
+      },
+      ...prev,
+    ]);
+    setMessage("Video added.");
+  };
+
   const onDragEnd = (result: DropResult) => {
     if (!result.destination) return;
     const next = [...layout];
@@ -301,7 +390,7 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
     return settings.promoSlideshows.find((entry) => entry.id === id) ?? settings.promoSlideshows[0];
   }, [selected, settings.promoSlideshows]);
 
-  const galleryOptions = initial.gallery;
+  const galleryOptions = gallery;
 
   useEffect(() => {
     setZoom(device === "mobile" ? 90 : 85);
@@ -313,7 +402,7 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">Homepage canvas</p>
           <p className="truncate text-xs text-gray-500">
-            Edit live inside a real {device === "mobile" ? "phone" : "browser"} frame
+            Edit everything here — tap + on any image/video to upload
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -528,8 +617,25 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
                       objectPosition={media.hero_image?.objectPosition}
                       className="absolute inset-0"
                       onPositionSaved={savePosition}
+                      onUploaded={handleMediaUploaded}
+                      onError={setError}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0C] via-[#0B0B0C]/65 to-black/25" />
+                    <div className="absolute right-3 top-3 z-20 flex flex-wrap gap-2">
+                      <InlinePlusUpload
+                        accept="video/mp4,video/webm"
+                        label={media.hero_video ? "Replace video" : "Add video"}
+                        hasMedia={Boolean(media.hero_video)}
+                        onFile={async (file) => {
+                          const result = await uploadWebsiteSlotFile("hero_video", file, "Hero video");
+                          if (result.error || !result.data) {
+                            setError(result.error || "Video upload failed.");
+                            return;
+                          }
+                          handleMediaUploaded("hero_video", result.data);
+                        }}
+                      />
+                    </div>
                     <div className="relative z-10 flex min-h-[70vh] flex-col justify-end px-6 pb-12 pt-20">
                       <EditableText
                         value={settings.restaurantName}
@@ -610,6 +716,8 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
                       objectPosition={media.about_image?.objectPosition}
                       className="aspect-[3/4] w-full"
                       onPositionSaved={savePosition}
+                      onUploaded={handleMediaUploaded}
+                      onError={setError}
                     />
                     <div className="flex flex-col justify-center">
                       <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Our story</p>
@@ -649,6 +757,8 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
                           objectPosition={media[slot]?.objectPosition}
                           className="aspect-square w-full"
                           onPositionSaved={savePosition}
+                          onUploaded={handleMediaUploaded}
+                          onError={setError}
                         />
                       ))}
                     </div>
@@ -699,12 +809,67 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
                   onClick={() => setSelectedId(section.id)}
                   className={`cursor-pointer border-t border-white/10 bg-[#101012] px-6 py-10 ${selectedRing}`}
                 >
-                  <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">
-                    {SECTION_LABELS[section.type]}
-                  </p>
-                  <p className={`mt-3 text-white/70 ${body}`}>
-                    Managed in dedicated admin tabs · visibility & order controlled here
-                  </p>
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">
+                      {SECTION_LABELS[section.type]}
+                    </p>
+                    {section.type === "gallery" ? (
+                      <InlinePlusUpload
+                        accept="image/png,image/jpeg,image/webp"
+                        label="Add image"
+                        onFile={handleGalleryUpload}
+                      />
+                    ) : null}
+                    {section.type === "video" ? (
+                      <InlinePlusUpload
+                        accept="video/mp4,video/webm"
+                        label="Add video"
+                        onFile={handleVideoUpload}
+                      />
+                    ) : null}
+                  </div>
+
+                  {section.type === "gallery" ? (
+                    <div
+                      className={`grid gap-2 ${device === "desktop" ? "grid-cols-3" : "grid-cols-2"}`}
+                    >
+                      {gallery.slice(0, 6).map((item) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          key={item.id}
+                          src={item.imageUrl}
+                          alt={item.title}
+                          className="aspect-square w-full object-cover"
+                        />
+                      ))}
+                      {gallery.length === 0 ? (
+                        <p className="col-span-full text-sm text-white/50">
+                          Tap + to add gallery photos here.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : section.type === "video" ? (
+                    <div className="space-y-3">
+                      {videos.filter((v) => v.enabled).slice(0, 2).map((video) => (
+                        <div key={video.id} className="overflow-hidden rounded-xl bg-black/40">
+                          <video
+                            src={video.videoUrl}
+                            poster={video.posterUrl || undefined}
+                            controls
+                            className="max-h-56 w-full"
+                          />
+                          <p className="px-3 py-2 text-sm text-white/70">{video.title}</p>
+                        </div>
+                      ))}
+                      {videos.length === 0 ? (
+                        <p className="text-sm text-white/50">Tap + to add a promo video here.</p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className={`mt-3 text-white/70 ${body}`}>
+                      Content syncs from the live site settings for this block.
+                    </p>
+                  )}
                 </section>
               );
             })}
@@ -912,19 +1077,36 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
 
               {selected.type === "promo_slideshow" && activeSlideshow ? (
                 <div className="space-y-3 border-t border-gray-100 pt-3 dark:border-gray-800">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Event slides
                     </p>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded-lg bg-gray-900 px-2 py-1 text-xs font-semibold text-white dark:bg-gray-100 dark:text-gray-900"
-                      onClick={() => {
+                    <InlinePlusUpload
+                      accept="image/png,image/jpeg,image/webp"
+                      label="Slide"
+                      className="!border-gray-300 !bg-gray-900 !text-white dark:!bg-gray-100 dark:!text-gray-900"
+                      onFile={async (file) => {
+                        const result = await uploadWebsiteGalleryFile(file, "Event slide", "events");
+                        if (result.error || !result.data) {
+                          setError(result.error || "Slide image upload failed.");
+                          return;
+                        }
+                        setGallery((prev) => [
+                          {
+                            id: result.data!.id,
+                            category: "events",
+                            title: result.data!.title,
+                            imageUrl: result.data!.imageUrl,
+                            sortOrder: Date.now(),
+                            featured: false,
+                          },
+                          ...prev,
+                        ]);
                         const slide: WebsitePromoSlide = {
                           id: newSlideId(),
                           title: "New event",
                           subtitle: "Describe the occasion…",
-                          imageUrl: galleryOptions[0]?.imageUrl ?? "",
+                          imageUrl: result.data!.imageUrl,
                           ctaLabel: "Reserve",
                           ctaHref: "/reservation",
                           enabled: true,
@@ -937,10 +1119,9 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
                               : entry,
                           ),
                         );
+                        setMessage("Event slide added.");
                       }}
-                    >
-                      <Plus className="h-3 w-3" /> Slide
-                    </button>
+                    />
                   </div>
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">
                     Autoplay (ms)

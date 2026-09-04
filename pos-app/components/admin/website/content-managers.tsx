@@ -234,36 +234,41 @@ export function GalleryManager({ initial }: { initial: WebsiteContent["gallery"]
 
   const handleUpload = async (file: File) => {
     setBusy(true);
-    const buffer = await file.arrayBuffer();
-    let binary = "";
-    const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
-    const { uploadWebsiteGalleryImage } = await import("@/src/lib/website-actions");
-    const { data, error } = await uploadWebsiteGalleryImage({
-      category: "food",
-      title: file.name,
-      fileBase64: btoa(binary),
-      fileName: file.name,
-      mimeType: file.type,
-    });
+    setMessage(null);
+    const { uploadWebsiteGalleryFile } = await import(
+      "@/components/admin/website/inline-plus-upload"
+    );
+    const result = await uploadWebsiteGalleryFile(file, file.name, "food");
     setBusy(false);
-    if (error) {
-      setMessage(error.message);
+    if (result.error || !result.data) {
+      setMessage(result.error || "Upload failed.");
       return;
     }
-    if (data) setRows((prev) => [...prev, data]);
-    setMessage("Uploaded.");
+    setRows((prev) => [
+      ...prev,
+      {
+        id: result.data!.id,
+        category: "food",
+        title: result.data!.title,
+        imageUrl: result.data!.imageUrl,
+        sortOrder: Date.now(),
+        featured: false,
+      },
+    ]);
+    setMessage(result.warning ? `Uploaded. ${result.warning}` : "Uploaded.");
   };
 
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
       <h2 className="text-lg font-semibold">Gallery</h2>
+      <p className="mt-1 text-sm text-gray-500">Prefer uploading inside Visual designer (tap + on Gallery).</p>
       <input
         type="file"
         accept="image/*"
         disabled={busy}
         onChange={(e) => {
           const file = e.target.files?.[0];
+          e.target.value = "";
           if (file) void handleUpload(file);
         }}
         className="mt-4 block w-full text-sm"
@@ -298,33 +303,48 @@ export function GalleryManager({ initial }: { initial: WebsiteContent["gallery"]
 export function VideosManager({ initial }: { initial: WebsiteContent["videos"] }) {
   const [rows, setRows] = useState(initial);
   const [title, setTitle] = useState("");
+  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
       <h2 className="text-lg font-semibold">Videos</h2>
+      <p className="mt-1 text-sm text-gray-500">Prefer uploading inside Visual designer (tap + on Video).</p>
       <div className="mt-4 space-y-3">
         <input value={title} onChange={(e) => setTitle(e.target.value)} className="pos-input" placeholder="Video title" />
         <input
           type="file"
           accept="video/mp4,video/webm"
+          disabled={busy}
           onChange={async (e) => {
             const file = e.target.files?.[0];
+            e.target.value = "";
             if (!file) return;
-            const buffer = await file.arrayBuffer();
-            let binary = "";
-            const bytes = new Uint8Array(buffer);
-            for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
-            const { uploadWebsiteVideoFile } = await import("@/src/lib/website-actions");
-            const { data, error } = await uploadWebsiteVideoFile({
-              title: title || file.name,
-              slot: "promo",
-              fileBase64: btoa(binary),
-              fileName: file.name,
-              mimeType: file.type,
-            });
-            setMessage(error ? error.message : "Video uploaded.");
-            if (data) setRows((prev) => [...prev, data]);
+            setBusy(true);
+            setMessage(null);
+            const { uploadWebsiteVideoApiFile } = await import(
+              "@/components/admin/website/inline-plus-upload"
+            );
+            const result = await uploadWebsiteVideoApiFile(file, title || file.name, "promo");
+            setBusy(false);
+            if (result.error || !result.data) {
+              setMessage(result.error || "Upload failed.");
+              return;
+            }
+            setRows((prev) => [
+              ...prev,
+              {
+                id: result.data!.id,
+                title: result.data!.title,
+                description: "",
+                videoUrl: result.data!.videoUrl,
+                posterUrl: result.data!.posterUrl || "",
+                slot: "promo",
+                sortOrder: Date.now(),
+                enabled: true,
+              },
+            ]);
+            setMessage(result.warning ? `Video uploaded. ${result.warning}` : "Video uploaded.");
           }}
           className="block w-full text-sm"
         />

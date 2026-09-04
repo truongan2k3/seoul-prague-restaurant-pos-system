@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, Minus, Printer } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Download, Minus, Printer } from "lucide-react";
 import { LiveClock } from "@/components/live-clock";
 import { DateRangeInputs } from "@/components/date-range-inputs";
 import { useApp } from "@/contexts/app-context";
@@ -22,6 +22,8 @@ import {
   type TopSellerGroup,
   type TopSellerRow,
 } from "@/lib/summary-analytics";
+import { downloadSummaryItemsExcel } from "@/lib/summary-excel-export";
+import { computeSummaryItemStats } from "@/lib/summary-item-stats";
 import { computeTaxSummaryReport } from "@/lib/tax-summary";
 import { printTaxSummaryReport } from "@/src/lib/printTaxSummary";
 import { filterButtonClass, segmentButtonClass } from "@/lib/theme-classes";
@@ -147,6 +149,7 @@ export function SummaryView({
   const [customTo, setCustomTo] = useState(() => toDateInputValue(new Date()));
   const [sellerGroup, setSellerGroup] = useState<TopSellerGroup>("all");
   const [taxPrinting, setTaxPrinting] = useState(false);
+  const [excelExporting, setExcelExporting] = useState(false);
 
   const todayRange = useMemo(() => getPeriodRange("today"), []);
   const yesterdayRange = useMemo(() => getPeriodRange("yesterday"), []);
@@ -201,6 +204,11 @@ export function SummaryView({
     [filteredSales, menuItems, activeRange, settings],
   );
 
+  const itemStatsReport = useMemo(
+    () => computeSummaryItemStats(filteredSales, menuItems, language),
+    [filteredSales, menuItems, language],
+  );
+
   const handlePrintTaxSummary = async () => {
     setTaxPrinting(true);
     try {
@@ -211,6 +219,29 @@ export function SummaryView({
       });
     } finally {
       setTaxPrinting(false);
+    }
+  };
+
+  const handleDownloadExcel = () => {
+    if (itemStatsReport.rows.length === 0) return;
+    setExcelExporting(true);
+    try {
+      downloadSummaryItemsExcel(itemStatsReport, activeRange, language, {
+        itemsSheet: translate("summaryExcelItemsSheet"),
+        taxSheet: translate("summaryExcelTaxSheet"),
+        itemName: translate("summaryExcelItemName"),
+        quantity: translate("summaryExcelQuantity"),
+        originalTotal: translate("summaryExcelOriginalTotal"),
+        taxRate: translate("taxSummaryRate"),
+        taxBase: translate("taxSummaryBase"),
+        taxVat: translate("taxSummaryVat"),
+        taxGross: translate("taxSummaryGross"),
+        category: translate("summaryExcelCategory"),
+        period: translate("summaryExcelPeriod"),
+        note: translate("summaryExcelNote"),
+      });
+    } finally {
+      setExcelExporting(false);
     }
   };
 
@@ -334,20 +365,36 @@ export function SummaryView({
 
             <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  {translate("topItems")}
-                </h2>
-                <div className="pos-segment">
-                  {GROUP_OPTIONS.map((group) => (
-                    <button
-                      key={group}
-                      type="button"
-                      onClick={() => setSellerGroup(group)}
-                      className={segmentButtonClass(sellerGroup === group)}
-                    >
-                      {translate(GROUP_LABEL_KEYS[group])}
-                    </button>
-                  ))}
+                <div>
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    {translate("topItems")}
+                  </h2>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {translate("summaryExcelHint")}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={itemStatsReport.rows.length === 0 || excelExporting}
+                    onClick={handleDownloadExcel}
+                    className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-800 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                  >
+                    <Download className="h-4 w-4" />
+                    {excelExporting ? "…" : translate("summaryExcelDownload")}
+                  </button>
+                  <div className="pos-segment">
+                    {GROUP_OPTIONS.map((group) => (
+                      <button
+                        key={group}
+                        type="button"
+                        onClick={() => setSellerGroup(group)}
+                        className={segmentButtonClass(sellerGroup === group)}
+                      >
+                        {translate(GROUP_LABEL_KEYS[group])}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 

@@ -1,3 +1,5 @@
+import { isCancelActivityAction } from "@/lib/order-activity";
+import { resolveOriginalUnitPrice } from "@/lib/order-line-pricing";
 import { menuItemDisplayName, resolveMenuItemForOrder } from "@/lib/menu-display";
 import type { LanguageCode, MenuItem, OrderItem, PaymentMethod, SaleRecord } from "@/lib/types";
 
@@ -158,27 +160,46 @@ function aggregateTopSellers(
 ): TopSellerRow[] {
   const counts = new Map<string, TopSellerRow>();
 
+  const bump = (meta: ReturnType<typeof saleItemMeta>, quantity: number, unitPrice: number) => {
+    if (!predicate(meta) || quantity <= 0) return;
+    const existing = counts.get(meta.key);
+    const lineRevenue = unitPrice * quantity;
+    if (existing) {
+      existing.quantity += quantity;
+      existing.revenue += lineRevenue;
+    } else {
+      counts.set(meta.key, {
+        key: meta.key,
+        name: meta.name,
+        quantity,
+        revenue: lineRevenue,
+        category: meta.category,
+        itemType: meta.itemType,
+      });
+    }
+  };
+
   for (const sale of sales) {
-    if (!isActiveSale(sale)) continue;
+    // Include voided (deleted) sales — quantity still counts in Summary.
     for (const item of sale.items) {
       const meta = saleItemMeta(item, menuItems, language);
-      if (!predicate(meta)) continue;
+      bump(meta, item.quantity, resolveOriginalUnitPrice(item, menuItems));
+    }
 
-      const existing = counts.get(meta.key);
-      const lineRevenue = item.price * item.quantity;
-      if (existing) {
-        existing.quantity += item.quantity;
-        existing.revenue += lineRevenue;
-      } else {
-        counts.set(meta.key, {
-          key: meta.key,
-          name: meta.name,
-          quantity: item.quantity,
-          revenue: lineRevenue,
-          category: meta.category,
-          itemType: meta.itemType,
-        });
+    for (const entry of sale.activityLog ?? []) {
+      if (!isCancelActivityAction(entry.action)) continue;
+      const name = (entry.itemName ?? "Item").trim() || "Item";
+      const quantity = Math.max(0, Number(entry.meta?.quantity ?? 1) || 0);
+      const synthetic: OrderItem = { name, quantity, price: 0 };
+      const menu = resolveMenuItemForOrder(synthetic, menuItems);
+      if (menu) {
+        synthetic.menuItemId = menu.id;
+        synthetic.price = menu.price;
+        synthetic.originalPrice = menu.price;
+        synthetic.station = menu.station;
       }
+      const meta = saleItemMeta(synthetic, menuItems, language);
+      bump(meta, quantity, resolveOriginalUnitPrice(synthetic, menuItems));
     }
   }
 

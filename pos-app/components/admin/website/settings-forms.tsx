@@ -41,7 +41,13 @@ export function WebsiteSettingsForm({ initial, fields, title, onSaved }: Setting
     setMessage(null);
     const patch: Partial<WebsiteSettings> = {};
     for (const key of fields) {
-      if (key !== "openingHours" && key !== "updatedAt") {
+      if (
+        key !== "openingHours" &&
+        key !== "updatedAt" &&
+        key !== "socialLinks" &&
+        key !== "pageLayout" &&
+        key !== "promoSlideshows"
+      ) {
         patch[key] = form[key] as never;
       }
     }
@@ -60,7 +66,15 @@ export function WebsiteSettingsForm({ initial, fields, title, onSaved }: Setting
       <h2 className="text-lg font-semibold">{title}</h2>
       <div className="mt-4 space-y-4">
         {fields.map((field) => {
-          if (field === "openingHours" || field === "updatedAt") return null;
+          if (
+            field === "openingHours" ||
+            field === "updatedAt" ||
+            field === "socialLinks" ||
+            field === "pageLayout" ||
+            field === "promoSlideshows"
+          ) {
+            return null;
+          }
           const value = form[field];
           const multiline = field === "description" || field === "aboutStory" || field === "seoDescription";
           return (

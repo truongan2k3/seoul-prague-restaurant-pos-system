@@ -11,6 +11,8 @@ import {
   normalizePageLayout,
   normalizePromoSlideshows,
 } from "@/lib/website/page-layout";
+import { sortMenuPdfs } from "@/lib/website/menu-pdf-order";
+import { normalizeSocialLinks, socialLinksFromLegacy } from "@/lib/website/social-links";
 import type {
   GalleryCategory,
   VideoSlot,
@@ -77,6 +79,15 @@ function mapSettingsRow(row: Record<string, unknown> | null): WebsiteSettings {
     instagramUrl: (row.instagram_url as string) || "",
     facebookUrl: (row.facebook_url as string) || "",
     tiktokUrl: (row.tiktok_url as string) || "",
+    socialLinks: (() => {
+      const parsed = normalizeSocialLinks(row.social_links);
+      if (parsed.length > 0) return parsed;
+      return socialLinksFromLegacy({
+        instagramUrl: (row.instagram_url as string) || "",
+        facebookUrl: (row.facebook_url as string) || "",
+        tiktokUrl: (row.tiktok_url as string) || "",
+      });
+    })(),
     seoTitle: (row.seo_title as string) || DEFAULT_WEBSITE_SETTINGS.seoTitle,
     seoDescription:
       (row.seo_description as string) || DEFAULT_WEBSITE_SETTINGS.seoDescription,
@@ -152,6 +163,7 @@ function mapMenuPdfRow(row: Record<string, unknown>): WebsiteMenuPdf {
     storagePath: (row.storage_path as string) || undefined,
     pageCount: typeof row.page_count === "number" ? row.page_count : undefined,
     fileSize: typeof row.file_size === "number" ? row.file_size : undefined,
+    sortOrder: Number(row.sort_order ?? 0),
     updatedAt: row.updated_at ? new Date(row.updated_at as string) : undefined,
   };
 }
@@ -202,7 +214,7 @@ export async function fetchWebsiteContent(): Promise<WebsiteContent> {
       admin.from("website_amenities").select("*").order("sort_order"),
       admin.from("website_menu_categories").select("*").order("sort_order"),
       admin.from("website_menu_items").select("*").order("sort_order"),
-      admin.from("website_menu_pdfs").select("*").order("language"),
+      admin.from("website_menu_pdfs").select("*"),
       admin.from("website_gallery_items").select("*").order("sort_order"),
       admin.from("website_videos").select("*").order("sort_order"),
     ]);
@@ -227,8 +239,10 @@ export async function fetchWebsiteContent(): Promise<WebsiteContent> {
     const menuItems = (itemsRes.data ?? []).map((row) =>
       mapMenuItemRow(row as Record<string, unknown>),
     );
-    const menuPdfs = (menuPdfsRes.error ? [] : (menuPdfsRes.data ?? [])).map((row) =>
-      mapMenuPdfRow(row as Record<string, unknown>),
+    const menuPdfs = sortMenuPdfs(
+      (menuPdfsRes.error ? [] : (menuPdfsRes.data ?? [])).map((row) =>
+        mapMenuPdfRow(row as Record<string, unknown>),
+      ),
     );
     if (menuPdfsRes.error && process.env.NODE_ENV !== "production") {
       console.warn("[website] menu pdfs fetch:", menuPdfsRes.error.message);

@@ -87,6 +87,17 @@ export async function POST(request: Request) {
 
   const label = MENU_PDF_LANGUAGES.find((row) => row.code === language)?.label ?? language;
 
+  // Preserve existing sort_order on replace; new rows stay 0 until admin reorders.
+  const { data: existing } = await admin
+    .from("website_menu_pdfs")
+    .select("sort_order")
+    .eq("language", language)
+    .maybeSingle();
+  const sortOrder =
+    existing && typeof (existing as { sort_order?: number }).sort_order === "number"
+      ? Number((existing as { sort_order: number }).sort_order)
+      : 0;
+
   const { data, error: dbError } = await admin
     .from("website_menu_pdfs")
     .upsert(
@@ -97,6 +108,7 @@ export async function POST(request: Request) {
         storage_path: storagePath,
         page_count: pageCount,
         file_size: fileSize || null,
+        sort_order: sortOrder,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "language" },
@@ -105,6 +117,43 @@ export async function POST(request: Request) {
     .single();
 
   if (dbError) {
+    // Retry without sort_order if column is missing (pre-migration).
+    if (/sort_order/i.test(dbError.message)) {
+      const retry = await admin
+        .from("website_menu_pdfs")
+        .upsert(
+          {
+            language,
+            label,
+            file_url: publicUrl,
+            storage_path: storagePath,
+            page_count: pageCount,
+            file_size: fileSize || null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "language" },
+        )
+        .select("*")
+        .single();
+      if (retry.error) {
+        const missingTable = /does not exist|42P01|schema cache/i.test(retry.error.message);
+        return NextResponse.json(
+          {
+            error: missingTable
+              ? "Table website_menu_pdfs is missing. Run supabase/patch-website-menu-pdfs.sql in Supabase SQL editor."
+              : `Database save failed: ${retry.error.message}`,
+          },
+          { status: 500 },
+        );
+      }
+      return NextResponse.json({
+        data: mapMenuPdfRow(retry.data as Record<string, unknown>),
+        warning:
+          fileSize > MAX_BYTES
+            ? `Recommended PDF size is up to 25 MB. Your file is ${(fileSize / 1024 / 1024).toFixed(1)} MB.`
+            : null,
+      });
+    }
     const missingTable = /does not exist|42P01|schema cache/i.test(dbError.message);
     return NextResponse.json(
       {
@@ -122,6 +171,51 @@ export async function POST(request: Request) {
       fileSize > MAX_BYTES
         ? `Recommended PDF size is up to 25 MB. Your file is ${(fileSize / 1024 / 1024).toFixed(1)} MB.`
         : null,
+  });
+}
+
+export async function PATCH(request: Request) {
+  const auth = await requireAdmin();
+  if (auth.error || !auth.admin) {
+    return NextResponse.json({ error: auth.error ?? "Unauthorized" }, { status: 401 });
+  }
+
+  let body: { orderedIds?: string[] };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
+  const orderedIds = Array.isArray(body.orderedIds)
+    ? body.orderedIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+    : [];
+  if (orderedIds.length === 0) {
+    return NextResponse.json({ error: "orderedIds required." }, { status: 400 });
+  }
+
+  const now = new Date().toISOString();
+  for (let index = 0; index < orderedIds.length; index += 1) {
+    const { error } = await auth.admin
+      .from("website_menu_pdfs")
+      .update({ sort_order: index, updated_at: now })
+      .eq("id", orderedIds[index]);
+    if (error) {
+      const hint = /sort_order|does not exist|schema cache/i.test(error.message)
+        ? " Run supabase/patch-website-social-menu-pdf-order.sql in Supabase SQL editor."
+        : "";
+      return NextResponse.json({ error: `${error.message}${hint}` }, { status: 500 });
+    }
+  }
+
+  const { data, error: listError } = await auth.admin.from("website_menu_pdfs").select("*");
+  if (listError) {
+    return NextResponse.json({ error: listError.message }, { status: 500 });
+  }
+
+  const { sortMenuPdfs } = await import("@/lib/website/menu-pdf-order");
+  return NextResponse.json({
+    data: sortMenuPdfs((data ?? []).map((row) => mapMenuPdfRow(row as Record<string, unknown>))),
   });
 }
 

@@ -114,11 +114,29 @@ function renderSection(content: WebsiteContent, section: WebsitePageSection) {
 
 export function LandingPageView({ content }: LandingPageViewProps) {
   const layout = normalizePageLayout(content.settings.pageLayout);
+  const contactEmbedsAmenities = layout.some(
+    (section) => section.type === "contact" && section.enabled,
+  );
 
   return (
     <div className="landing-theme min-h-screen bg-[#0B0B0C] text-white">
       <LandingNavbar content={content} />
-      <main>{layout.map((section) => renderSection(content, section))}</main>
+      <main>
+        {layout.map((section) => {
+          if (section.type === "amenities") {
+            if (!section.enabled) return null;
+            return (
+              <SectionShell key={section.id} section={section}>
+                <LandingAmenities
+                  content={content}
+                  embeddedInContact={contactEmbedsAmenities}
+                />
+              </SectionShell>
+            );
+          }
+          return renderSection(content, section);
+        })}
+      </main>
       <LandingFooter content={content} />
     </div>
   );

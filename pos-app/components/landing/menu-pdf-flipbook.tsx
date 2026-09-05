@@ -18,7 +18,9 @@ type PdfJsModule = typeof import("pdfjs-dist");
 
 let pdfWorkerReady = false;
 
-const ZOOM_STEPS = [1, 1.25, 1.5, 1.75, 2, 2.5] as const;
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 3;
+const ZOOM_STEP = 0.15;
 
 function proxyPdfUrl(language: MenuPdfLanguage): string {
   return `/api/website/menu-pdf/file?language=${language}`;
@@ -36,7 +38,6 @@ async function getPdfJs(): Promise<PdfJsModule> {
 function renderScaleForDevice(): number {
   if (typeof window === "undefined") return 2;
   const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-  // Higher base scale for sharper text on desktop menus.
   return window.innerWidth >= 1024 ? 2.2 * dpr : 1.6 * dpr;
 }
 
@@ -93,6 +94,10 @@ function useBookSize() {
   return size;
 }
 
+function clampZoom(value: number) {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
+}
+
 interface MenuPdfFlipbookProps {
   pdfs: WebsiteMenuPdf[];
   initialLanguage?: MenuPdfLanguage;
@@ -100,9 +105,16 @@ interface MenuPdfFlipbookProps {
 
 export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipbookProps) {
   const bookRef = useRef<{
-    pageFlip: () => { flipNext: () => void; flipPrev: () => void };
+    pageFlip: () => {
+      flipNext: () => void;
+      flipPrev: () => void;
+      turnToPage: (page: number) => void;
+    };
   } | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const panRef = useRef({ x: 0, y: 0 });
+  const pinchRef = useRef<{ distance: number; zoom: number } | null>(null);
+  const dragRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
   const bookSize = useBookSize();
 
   const availableLanguages = useMemo(
@@ -119,42 +131,52 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
   const [error, setError] = useState<string | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
   const [useSimpleViewer, setUseSimpleViewer] = useState(false);
-  const [zoomIndex, setZoomIndex] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [expanded, setExpanded] = useState(false);
   const [lightboxPage, setLightboxPage] = useState<number | null>(null);
 
-  const zoom = ZOOM_STEPS[zoomIndex] ?? 1;
+  const zoomed = zoom > 1.02;
   const activePdf = pdfs.find((row) => row.language === language) ?? pdfs[0];
   const viewerUrl = activePdf ? proxyPdfUrl(activePdf.language) : "";
 
-  const loadPdf = useCallback(async (pdf: WebsiteMenuPdf | undefined) => {
-    if (!pdf?.fileUrl) {
-      setPages([]);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    setPageIndex(0);
-    setUseSimpleViewer(false);
-    setZoomIndex(0);
-    setLightboxPage(null);
-    try {
-      const images = await renderPdfToImages(proxyPdfUrl(pdf.language));
-      if (images.length === 0) {
-        setError("Could not render PDF pages.");
+  const resetView = useCallback(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+    panRef.current = { x: 0, y: 0 };
+  }, []);
+
+  const loadPdf = useCallback(
+    async (pdf: WebsiteMenuPdf | undefined) => {
+      if (!pdf?.fileUrl) {
+        setPages([]);
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      setPageIndex(0);
+      setUseSimpleViewer(false);
+      resetView();
+      setLightboxPage(null);
+      try {
+        const images = await renderPdfToImages(proxyPdfUrl(pdf.language));
+        if (images.length === 0) {
+          setError("Could not render PDF pages.");
+          setUseSimpleViewer(true);
+          setPages([]);
+        } else {
+          setPages(images);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load menu PDF.");
         setUseSimpleViewer(true);
         setPages([]);
-      } else {
-        setPages(images);
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load menu PDF.");
-      setUseSimpleViewer(true);
-      setPages([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    [resetView],
+  );
 
   useEffect(() => {
     if (activePdf) void loadPdf(activePdf);
@@ -169,9 +191,126 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
     };
   }, [expanded]);
 
-  const zoomIn = () => setZoomIndex((value) => Math.min(ZOOM_STEPS.length - 1, value + 1));
-  const zoomOut = () => setZoomIndex((value) => Math.max(0, value - 1));
-  const resetZoom = () => setZoomIndex(0);
+  // Wheel zoom scoped to the viewer stage (does not zoom the whole page).
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const delta = event.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+      setZoom((current) => {
+        const next = clampZoom(Number((current + delta).toFixed(2)));
+        if (next <= 1) {
+          setPan({ x: 0, y: 0 });
+          panRef.current = { x: 0, y: 0 };
+        }
+        return next;
+      });
+    };
+
+    stage.addEventListener("wheel", onWheel, { passive: false });
+    return () => stage.removeEventListener("wheel", onWheel);
+  }, [loading, pages.length, expanded, useSimpleViewer]);
+
+  // Pinch zoom + pan when zoomed (touch).
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    const distance = (touches: TouchList) => {
+      const [a, b] = [touches[0], touches[1]];
+      return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    };
+
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length === 2) {
+        pinchRef.current = { distance: distance(event.touches), zoom };
+        dragRef.current = null;
+        return;
+      }
+      if (event.touches.length === 1 && zoom > 1.02) {
+        const touch = event.touches[0];
+        dragRef.current = {
+          x: touch.clientX,
+          y: touch.clientY,
+          panX: panRef.current.x,
+          panY: panRef.current.y,
+        };
+      }
+    };
+
+    const onTouchMove = (event: TouchEvent) => {
+      if (event.touches.length === 2 && pinchRef.current) {
+        event.preventDefault();
+        const ratio = distance(event.touches) / pinchRef.current.distance;
+        const next = clampZoom(pinchRef.current.zoom * ratio);
+        setZoom(next);
+        if (next <= 1) {
+          setPan({ x: 0, y: 0 });
+          panRef.current = { x: 0, y: 0 };
+        }
+        return;
+      }
+      if (event.touches.length === 1 && dragRef.current && zoom > 1.02) {
+        event.preventDefault();
+        const touch = event.touches[0];
+        const next = {
+          x: dragRef.current.panX + (touch.clientX - dragRef.current.x),
+          y: dragRef.current.panY + (touch.clientY - dragRef.current.y),
+        };
+        panRef.current = next;
+        setPan(next);
+      }
+    };
+
+    const onTouchEnd = () => {
+      pinchRef.current = null;
+      dragRef.current = null;
+    };
+
+    stage.addEventListener("touchstart", onTouchStart, { passive: true });
+    stage.addEventListener("touchmove", onTouchMove, { passive: false });
+    stage.addEventListener("touchend", onTouchEnd);
+    stage.addEventListener("touchcancel", onTouchEnd);
+    return () => {
+      stage.removeEventListener("touchstart", onTouchStart);
+      stage.removeEventListener("touchmove", onTouchMove);
+      stage.removeEventListener("touchend", onTouchEnd);
+      stage.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, [zoom, loading, pages.length, expanded, useSimpleViewer]);
+
+  const zoomIn = () =>
+    setZoom((value) => clampZoom(Number((value + ZOOM_STEP).toFixed(2))));
+  const zoomOut = () =>
+    setZoom((value) => {
+      const next = clampZoom(Number((value - ZOOM_STEP).toFixed(2)));
+      if (next <= 1) {
+        setPan({ x: 0, y: 0 });
+        panRef.current = { x: 0, y: 0 };
+      }
+      return next;
+    });
+
+  const goToPage = (index: number) => {
+    if (index < 0 || index >= pages.length) return;
+    try {
+      bookRef.current?.pageFlip().turnToPage(index);
+    } catch {
+      // ignore when flipbook is not ready
+    }
+    setPageIndex(index);
+  };
+
+  const flipPrev = () => {
+    if (zoomed) return;
+    bookRef.current?.pageFlip().flipPrev();
+  };
+  const flipNext = () => {
+    if (zoomed) return;
+    bookRef.current?.pageFlip().flipNext();
+  };
 
   if (pdfs.length === 0) {
     return (
@@ -186,7 +325,7 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
       <button
         type="button"
         aria-label="Zoom out"
-        disabled={zoomIndex <= 0}
+        disabled={zoom <= MIN_ZOOM}
         onClick={zoomOut}
         className="rounded-full border border-white/20 p-2.5 text-white hover:bg-white/10 disabled:opacity-40"
       >
@@ -194,7 +333,7 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
       </button>
       <button
         type="button"
-        onClick={resetZoom}
+        onClick={resetView}
         className="min-w-[4.5rem] rounded-full border border-white/20 px-3 py-2 text-xs font-semibold tabular-nums text-white/80 hover:bg-white/10"
       >
         {Math.round(zoom * 100)}%
@@ -202,7 +341,7 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
       <button
         type="button"
         aria-label="Zoom in"
-        disabled={zoomIndex >= ZOOM_STEPS.length - 1}
+        disabled={zoom >= MAX_ZOOM}
         onClick={zoomIn}
         className="rounded-full border border-white/20 p-2.5 text-white hover:bg-white/10 disabled:opacity-40"
       >
@@ -220,104 +359,161 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
     </div>
   );
 
-  const flipbook = pages.length > 0 && !useSimpleViewer ? (
-    <div className="flex flex-col items-center gap-5">
-      <div
-        ref={stageRef}
-        className={`w-full overflow-auto ${expanded ? "max-h-[78vh]" : "max-h-[72vh] lg:max-h-none"}`}
-      >
+  const thumbnails =
+    pages.length > 0 ? (
+      <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
+        {pages.map((src, index) => (
+          <button
+            key={`thumb-${index}`}
+            type="button"
+            onClick={() => goToPage(index)}
+            aria-label={`Go to page ${index + 1}`}
+            className={`relative h-16 w-12 shrink-0 overflow-hidden border transition ${
+              pageIndex === index
+                ? "border-[#C9A88B] ring-1 ring-[#C9A88B]/60"
+                : "border-white/15 opacity-70 hover:opacity-100"
+            }`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={src} alt="" className="h-full w-full object-cover" draggable={false} />
+          </button>
+        ))}
+      </div>
+    ) : null;
+
+  const flipbook =
+    pages.length > 0 && !useSimpleViewer ? (
+      <div className="flex flex-col items-center gap-5">
         <div
-          className="mx-auto origin-top transition-transform duration-300"
-          style={{
-            width: bookSize.maxWidth * 2,
-            maxWidth: "100%",
-            transform: `scale(${zoom})`,
-            transformOrigin: "top center",
-            marginBottom: zoom > 1 ? `${(zoom - 1) * bookSize.maxHeight}px` : undefined,
+          ref={stageRef}
+          className={`relative w-full overflow-hidden touch-none ${
+            expanded ? "max-h-[78vh]" : "max-h-[72vh] lg:max-h-none"
+          } ${zoomed ? "cursor-grab active:cursor-grabbing" : ""}`}
+          onPointerDown={(event) => {
+            if (!zoomed || event.pointerType === "touch") return;
+            dragRef.current = {
+              x: event.clientX,
+              y: event.clientY,
+              panX: panRef.current.x,
+              panY: panRef.current.y,
+            };
+            (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+          }}
+          onPointerMove={(event) => {
+            if (!dragRef.current || !zoomed || event.pointerType === "touch") return;
+            const next = {
+              x: dragRef.current.panX + (event.clientX - dragRef.current.x),
+              y: dragRef.current.panY + (event.clientY - dragRef.current.y),
+            };
+            panRef.current = next;
+            setPan(next);
+          }}
+          onPointerUp={() => {
+            dragRef.current = null;
           }}
         >
-          {/* @ts-expect-error react-pageflip types are loose */}
-          <HTMLFlipBook
-            key={`${language}-${pages.length}-${bookSize.width}`}
-            ref={bookRef}
-            width={bookSize.width}
-            height={bookSize.height}
-            size="stretch"
-            minWidth={Math.min(280, bookSize.width)}
-            maxWidth={bookSize.maxWidth}
-            minHeight={Math.min(380, bookSize.height)}
-            maxHeight={bookSize.maxHeight}
-            showCover
-            mobileScrollSupport
-            className="menu-flipbook mx-auto shadow-2xl shadow-black/60"
-            onFlip={(event: { data: number }) => setPageIndex(event.data)}
+          <div
+            className="mx-auto origin-center will-change-transform"
+            style={{
+              width: bookSize.maxWidth * 2,
+              maxWidth: "100%",
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transition: dragRef.current ? undefined : "transform 160ms ease-out",
+            }}
           >
-            {pages.map((src, index) => (
-              <div key={`${language}-page-${index}`} className="menu-book-page bg-[#f5f0ea]">
-                <button
-                  type="button"
-                  className="h-full w-full cursor-zoom-in"
-                  onClick={() => setLightboxPage(index)}
-                  aria-label={`Enlarge page ${index + 1}`}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={src}
-                    alt={`Menu page ${index + 1}`}
-                    className="h-full w-full object-contain"
-                    draggable={false}
-                  />
-                </button>
-              </div>
-            ))}
-          </HTMLFlipBook>
+            {/* @ts-expect-error react-pageflip types are loose */}
+            <HTMLFlipBook
+              key={`${language}-${pages.length}-${bookSize.width}`}
+              ref={bookRef}
+              width={bookSize.width}
+              height={bookSize.height}
+              size="stretch"
+              minWidth={Math.min(280, bookSize.width)}
+              maxWidth={bookSize.maxWidth}
+              minHeight={Math.min(380, bookSize.height)}
+              maxHeight={bookSize.maxHeight}
+              showCover
+              mobileScrollSupport={!zoomed}
+              disableFlipByClick={zoomed}
+              className={`menu-flipbook mx-auto shadow-2xl shadow-black/60 ${
+                zoomed ? "pointer-events-none" : ""
+              }`}
+              onFlip={(event: { data: number }) => setPageIndex(event.data)}
+            >
+              {pages.map((src, index) => (
+                <div key={`${language}-page-${index}`} className="menu-book-page bg-[#f5f0ea]">
+                  <button
+                    type="button"
+                    className="h-full w-full cursor-zoom-in"
+                    onClick={() => {
+                      if (zoomed) return;
+                      setLightboxPage(index);
+                    }}
+                    aria-label={`Enlarge page ${index + 1}`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={src}
+                      alt={`Menu page ${index + 1}`}
+                      className="h-full w-full object-contain"
+                      draggable={false}
+                    />
+                  </button>
+                </div>
+              ))}
+            </HTMLFlipBook>
+          </div>
         </div>
-      </div>
 
-      <div className="flex flex-wrap items-center justify-center gap-3">
-        <button
-          type="button"
-          aria-label="Previous page"
-          onClick={() => bookRef.current?.pageFlip().flipPrev()}
-          className="rounded-full border border-white/20 p-3 text-white hover:bg-white/10"
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </button>
-        <span className="text-sm tabular-nums text-white/60">
-          {pageIndex + 1} / {pages.length}
-        </span>
-        <button
-          type="button"
-          aria-label="Next page"
-          onClick={() => bookRef.current?.pageFlip().flipNext()}
-          className="rounded-full border border-white/20 p-3 text-white hover:bg-white/10"
-        >
-          <ChevronRight className="h-5 w-5" />
-        </button>
-      </div>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            aria-label="Previous page"
+            disabled={zoomed || pageIndex <= 0}
+            onClick={flipPrev}
+            className="rounded-full border border-white/20 p-3 text-white hover:bg-white/10 disabled:opacity-40"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <span className="text-sm tabular-nums text-white/60">
+            {pageIndex + 1} / {pages.length}
+          </span>
+          <button
+            type="button"
+            aria-label="Next page"
+            disabled={zoomed || pageIndex >= pages.length - 1}
+            onClick={flipNext}
+            className="rounded-full border border-white/20 p-3 text-white hover:bg-white/10 disabled:opacity-40"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        </div>
 
-      {controls}
-      <p className="text-center text-xs text-white/40">
-        Click a page to enlarge · use zoom for finer detail
-      </p>
-    </div>
-  ) : (
-    <div className="space-y-4">
-      {error ? (
-        <p className="rounded-lg border border-amber-800/50 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">
-          Flipbook could not render ({error}). Showing PDF viewer instead.
+        {thumbnails}
+        {controls}
+        <p className="text-center text-xs text-white/40">
+          {zoomed
+            ? "Zoomed — drag or swipe to pan · pinch / scroll to zoom"
+            : "Scroll or pinch to zoom · click a thumbnail to jump · click a page to enlarge"}
         </p>
-      ) : null}
-      <div className="overflow-hidden rounded-xl border border-white/10 bg-[#121214]">
-        <iframe
-          title={`${activePdf?.label ?? "Menu"} PDF`}
-          src={viewerUrl}
-          className="h-[75vh] w-full bg-white lg:h-[85vh]"
-        />
       </div>
-      {controls}
-    </div>
-  );
+    ) : (
+      <div className="space-y-4">
+        {error ? (
+          <p className="rounded-lg border border-amber-800/50 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">
+            Flipbook could not render ({error}). Showing PDF viewer instead.
+          </p>
+        ) : null}
+        <div className="overflow-hidden rounded-xl border border-white/10 bg-[#121214]">
+          <iframe
+            title={`${activePdf?.label ?? "Menu"} PDF`}
+            src={viewerUrl}
+            className="h-[75vh] w-full bg-white lg:h-[85vh]"
+          />
+        </div>
+        {controls}
+      </div>
+    );
 
   return (
     <div className="space-y-6">
@@ -363,7 +559,7 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
               Close
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-auto">{flipbook}</div>
+          <div className="min-h-0 flex-1 overflow-hidden">{flipbook}</div>
         </div>
       ) : (
         flipbook

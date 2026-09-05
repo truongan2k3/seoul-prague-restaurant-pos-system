@@ -8,8 +8,12 @@ create table if not exists public.website_menu_pdfs (
   storage_path text,
   page_count int,
   file_size bigint,
+  sort_order int not null default 0,
   updated_at timestamptz not null default now()
 );
+
+alter table public.website_menu_pdfs
+  add column if not exists sort_order int not null default 0;
 
 alter table public.website_menu_pdfs enable row level security;
 

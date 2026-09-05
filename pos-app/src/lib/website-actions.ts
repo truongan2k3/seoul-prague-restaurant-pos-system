@@ -75,6 +75,20 @@ export async function saveWebsiteSettings(input: Partial<WebsiteSettings>) {
   if (input.instagramUrl !== undefined) payload.instagram_url = input.instagramUrl;
   if (input.facebookUrl !== undefined) payload.facebook_url = input.facebookUrl;
   if (input.tiktokUrl !== undefined) payload.tiktok_url = input.tiktokUrl;
+  if (input.socialLinks !== undefined) {
+    payload.social_links = input.socialLinks.map((link, index) => ({
+      id: link.id,
+      platform: link.platform,
+      url: link.url,
+      sortOrder: link.sortOrder ?? index,
+    }));
+    // Keep legacy columns in sync for older consumers.
+    const byPlatform = (name: string) =>
+      input.socialLinks?.find((link) => link.platform === name)?.url ?? "";
+    payload.instagram_url = byPlatform("instagram");
+    payload.facebook_url = byPlatform("facebook");
+    payload.tiktok_url = byPlatform("tiktok");
+  }
   if (input.seoTitle !== undefined) payload.seo_title = input.seoTitle;
   if (input.seoDescription !== undefined) payload.seo_description = input.seoDescription;
   if (input.seoOgImageUrl !== undefined) payload.seo_og_image_url = input.seoOgImageUrl;
@@ -90,8 +104,8 @@ export async function saveWebsiteSettings(input: Partial<WebsiteSettings>) {
 
   if (dbError) {
     const hint =
-      /page_layout|promo_slideshows/i.test(dbError.message)
-        ? " Run supabase/patch-website-page-layout.sql if columns are missing."
+      /page_layout|promo_slideshows|social_links/i.test(dbError.message)
+        ? " Run supabase/patch-website-page-layout.sql and supabase/patch-website-social-menu-pdf-order.sql if columns are missing."
         : "";
     return { data: null, error: new Error(`${dbError.message}${hint}`) };
   }
@@ -501,6 +515,33 @@ export async function deleteWebsiteMenuPdf(language: MenuPdfLanguage) {
   const { error, admin } = await requireWebsiteAdmin();
   if (error || !admin) return { error };
   return { error: (await admin.from("website_menu_pdfs").delete().eq("language", language)).error };
+}
+
+export async function reorderWebsiteMenuPdfs(orderedIds: string[]) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { data: null, error };
+  if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+    return { data: null, error: new Error("orderedIds required.") };
+  }
+
+  const updates = orderedIds.map((id, index) =>
+    admin
+      .from("website_menu_pdfs")
+      .update({ sort_order: index, updated_at: nowIso() })
+      .eq("id", id),
+  );
+  const results = await Promise.all(updates);
+  const firstError = results.find((row) => row.error)?.error;
+  if (firstError) {
+    const missing =
+      /sort_order|does not exist|schema cache/i.test(firstError.message)
+        ? " Run supabase/patch-website-social-menu-pdf-order.sql in Supabase SQL editor."
+        : "";
+    return { data: null, error: new Error(`${firstError.message}${missing}`) };
+  }
+
+  const content = await fetchWebsiteContent();
+  return { data: content.menuPdfs, error: null };
 }
 
 export async function seedWebsiteDefaultsIfEmpty() {

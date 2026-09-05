@@ -1,3 +1,4 @@
+import { SocialLinksManager } from "@/components/admin/website/social-links-manager";
 import { WebsiteSettingsForm } from "@/components/admin/website/settings-forms";
 import { fetchWebsiteContent } from "@/src/lib/website-public";
 
@@ -11,18 +12,23 @@ export default async function AdminRestaurantPage() {
       <WebsiteSettingsForm
         title="General"
         initial={content.settings}
-        fields={["restaurantName", "tagline", "description", "aboutStory", "phone", "email", "address", "googleMapsUrl"]}
+        fields={[
+          "restaurantName",
+          "tagline",
+          "description",
+          "aboutStory",
+          "phone",
+          "email",
+          "address",
+          "googleMapsUrl",
+        ]}
       />
       <WebsiteSettingsForm
         title="Hero copy"
         initial={content.settings}
         fields={["heroHeadline", "heroTagline", "heroDescription"]}
       />
-      <WebsiteSettingsForm
-        title="Social links"
-        initial={content.settings}
-        fields={["instagramUrl", "facebookUrl", "tiktokUrl"]}
-      />
+      <SocialLinksManager initial={content.settings.socialLinks} />
     </div>
   );
 }

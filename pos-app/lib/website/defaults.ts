@@ -50,6 +50,7 @@ export const DEFAULT_WEBSITE_SETTINGS: WebsiteSettings = {
   instagramUrl: "",
   facebookUrl: "",
   tiktokUrl: "",
+  socialLinks: [],
   seoTitle: `${venue.restaurantName} — Premium Korean BBQ in Prague`,
   seoDescription:
     "Book a table for premium Korean BBQ in Prague. Grilled at your table, editorial dining, unforgettable hospitality.",

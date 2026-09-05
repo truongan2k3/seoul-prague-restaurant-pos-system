@@ -96,6 +96,13 @@ export interface WebsitePromoSlideshow {
   slides: WebsitePromoSlide[];
 }
 
+export interface WebsiteSocialLink {
+  id: string;
+  platform: string;
+  url: string;
+  sortOrder: number;
+}
+
 export interface WebsiteSettings {
   restaurantName: string;
   tagline: string;
@@ -111,6 +118,8 @@ export interface WebsiteSettings {
   instagramUrl: string;
   facebookUrl: string;
   tiktokUrl: string;
+  /** Configurable social platforms (preferred over legacy URL fields). */
+  socialLinks: WebsiteSocialLink[];
   seoTitle: string;
   seoDescription: string;
   seoOgImageUrl: string;
@@ -178,6 +187,8 @@ export interface WebsiteMenuPdf {
   storagePath?: string;
   pageCount?: number;
   fileSize?: number;
+  /** Admin drag order. When all zero, English is shown first by default. */
+  sortOrder: number;
   updatedAt?: Date;
 }
 

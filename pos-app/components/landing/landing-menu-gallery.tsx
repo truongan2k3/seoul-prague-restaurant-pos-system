@@ -472,45 +472,45 @@ export function LandingContact({ content }: { content: WebsiteContent }) {
           {settings.restaurantName}
         </h2>
 
-        {/* Wireframe panel: info + amenities + social | opening hours */}
-        <div className="grid border border-white/10 lg:grid-cols-[minmax(0,1.35fr)_minmax(240px,0.75fr)]">
-          <div className="flex min-w-0 flex-col">
-            <div className="border-b border-white/10 p-6 sm:p-8 lg:p-10">
-              <p className="text-xs uppercase tracking-[0.28em] text-[#C9A88B]">Info</p>
-              <div className="mt-5 space-y-3 text-white/70">
-                {settings.address ? (
-                  <p className="text-base leading-relaxed sm:text-lg">{settings.address}</p>
-                ) : null}
-                {settings.phone ? (
-                  <p>
-                    <a href={`tel:${settings.phone.replace(/\s+/g, "")}`} className="hover:text-white">
-                      {settings.phone}
-                    </a>
-                  </p>
-                ) : null}
-                {settings.email ? (
-                  <p>
-                    <a href={`mailto:${settings.email}`} className="hover:text-white">
-                      {settings.email}
-                    </a>
-                  </p>
-                ) : null}
-              </div>
-              {settings.googleMapsUrl ? (
-                <a
-                  href={settings.googleMapsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-5 inline-block text-sm uppercase tracking-[0.14em] text-[#C9A88B] hover:text-white"
-                >
-                  Open in Google Maps →
-                </a>
+        {/* Info left | amenities + social + opening hours right */}
+        <div className="grid border border-white/10 lg:grid-cols-2">
+          <div className="border-b border-white/10 p-6 sm:p-8 lg:border-b-0 lg:border-r lg:p-10">
+            <p className="text-xs uppercase tracking-[0.28em] text-[#C9A88B]">Info</p>
+            <div className="mt-5 space-y-3 text-white/70">
+              {settings.address ? (
+                <p className="text-base leading-relaxed sm:text-lg">{settings.address}</p>
               ) : null}
-              <div className="mt-8">
-                <BookingCta size="lg" />
-              </div>
+              {settings.phone ? (
+                <p>
+                  <a href={`tel:${settings.phone.replace(/\s+/g, "")}`} className="hover:text-white">
+                    {settings.phone}
+                  </a>
+                </p>
+              ) : null}
+              {settings.email ? (
+                <p>
+                  <a href={`mailto:${settings.email}`} className="hover:text-white">
+                    {settings.email}
+                  </a>
+                </p>
+              ) : null}
             </div>
+            {settings.googleMapsUrl ? (
+              <a
+                href={settings.googleMapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-5 inline-block text-sm uppercase tracking-[0.14em] text-[#C9A88B] hover:text-white"
+              >
+                Open in Google Maps →
+              </a>
+            ) : null}
+            <div className="mt-8">
+              <BookingCta size="lg" />
+            </div>
+          </div>
 
+          <div className="flex min-w-0 flex-col">
             {amenities.length > 0 ? (
               <div className="border-b border-white/10 p-6 sm:p-8 lg:p-10">
                 <AmenitiesBlock content={content} compact />
@@ -518,15 +518,15 @@ export function LandingContact({ content }: { content: WebsiteContent }) {
             ) : null}
 
             {socialLinks.length > 0 ? (
-              <div className="p-6 sm:p-8 lg:p-10">
+              <div className="border-b border-white/10 p-6 sm:p-8 lg:p-10">
                 <SocialLinksRow links={socialLinks} embedded />
               </div>
             ) : null}
-          </div>
 
-          <div className="border-t border-white/10 p-6 sm:p-8 lg:border-t-0 lg:border-l lg:p-10">
-            <h3 className="text-xs uppercase tracking-[0.28em] text-[#C9A88B]">Opening hours</h3>
-            <p className="mt-5 text-lg leading-relaxed text-white/85 sm:text-xl">{hoursLine}</p>
+            <div className="p-6 sm:p-8 lg:p-10">
+              <h3 className="text-xs uppercase tracking-[0.28em] text-[#C9A88B]">Opening hours</h3>
+              <p className="mt-5 text-lg leading-relaxed text-white/85 sm:text-xl">{hoursLine}</p>
+            </div>
           </div>
         </div>
       </div>

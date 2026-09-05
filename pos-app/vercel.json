@@ -1,0 +1,10 @@
+{
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "seoulprague.com" }],
+      "destination": "https://www.seoulprague.com/:path*",
+      "permanent": true
+    }
+  ]
+}

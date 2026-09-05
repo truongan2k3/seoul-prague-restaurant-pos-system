@@ -28,8 +28,42 @@ function isStatusPath(pathname: string) {
   return pathname === "/status" || pathname.startsWith("/status/");
 }
 
+const CANONICAL_HOST = "www.seoulprague.com";
+const APEX_HOSTS = new Set(["seoulprague.com", "www.seoulprague.com"]);
+
+function shouldForceHttps(request: NextRequest) {
+  const proto = request.headers.get("x-forwarded-proto");
+  // Local/dev stays http; production behind Vercel/proxy must land on https.
+  if (process.env.NODE_ENV !== "production") return false;
+  if (!proto) return false;
+  return proto.split(",")[0]?.trim() === "http";
+}
+
+function canonicalHostRedirect(request: NextRequest) {
+  const host = (request.headers.get("host") || "").toLowerCase().split(":")[0];
+  if (!APEX_HOSTS.has(host)) return null;
+  if (host === CANONICAL_HOST) return null;
+
+  const url = request.nextUrl.clone();
+  url.protocol = "https:";
+  url.hostname = CANONICAL_HOST;
+  url.port = "";
+  return NextResponse.redirect(url, 308);
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Guests typing www.seoulprague.com (no https) must still reach the site.
+  if (shouldForceHttps(request)) {
+    const url = request.nextUrl.clone();
+    url.protocol = "https:";
+    url.port = "";
+    return NextResponse.redirect(url, 308);
+  }
+
+  const hostRedirect = canonicalHostRedirect(request);
+  if (hostRedirect) return hostRedirect;
 
   if (isStaticAsset(pathname) || isPublicPath(pathname)) {
     return NextResponse.next();

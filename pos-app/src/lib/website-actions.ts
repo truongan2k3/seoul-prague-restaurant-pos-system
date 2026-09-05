@@ -37,6 +37,14 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+/** Postgres uuid columns reject placeholder ids like "amen-wifi" from DEFAULT_AMENITIES. */
+function isUuid(value: string | undefined | null): value is string {
+  if (!value) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
 async function requireWebsiteAdmin() {
   const businessSession = await readAuthSession();
   const staffSession = await readStaffSession();
@@ -210,8 +218,7 @@ export async function upsertWebsiteAmenity(input: Omit<WebsiteAmenity, "id"> & {
   const { error, admin } = await requireWebsiteAdmin();
   if (error || !admin) return { data: null, error };
 
-  const payload = {
-    id: input.id,
+  const payload: Record<string, unknown> = {
     label: input.label,
     icon: input.icon,
     icon_url: input.iconUrl || null,
@@ -219,12 +226,16 @@ export async function upsertWebsiteAmenity(input: Omit<WebsiteAmenity, "id"> & {
     enabled: input.enabled,
     updated_at: nowIso(),
   };
+  // Only send id when it is a real UUID — default/demo ids (amen-wifi, …) must insert fresh.
+  if (isUuid(input.id)) {
+    payload.id = input.id;
+  }
 
-  const { data, error: dbError } = await admin
-    .from("website_amenities")
-    .upsert(payload)
-    .select("*")
-    .single();
+  const query = isUuid(input.id)
+    ? admin.from("website_amenities").upsert(payload)
+    : admin.from("website_amenities").insert(payload);
+
+  const { data, error: dbError } = await query.select("*").single();
 
   if (dbError) return { data: null, error: dbError };
   return { data: mapAmenityRow(data as Record<string, unknown>), error: null };
@@ -233,6 +244,8 @@ export async function upsertWebsiteAmenity(input: Omit<WebsiteAmenity, "id"> & {
 export async function deleteWebsiteAmenity(id: string) {
   const { error, admin } = await requireWebsiteAdmin();
   if (error || !admin) return { error };
+  // Placeholder default ids never hit the DB — treat as already gone.
+  if (!isUuid(id)) return { error: null };
   return { error: (await admin.from("website_amenities").delete().eq("id", id)).error };
 }
 

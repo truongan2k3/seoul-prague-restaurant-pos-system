@@ -162,10 +162,28 @@ export function LandingAmenities({ content }: { content: WebsiteContent }) {
       <div className="mx-auto max-w-7xl px-5 lg:px-8">
         <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Amenities</p>
         <h2 className="landing-serif mt-4 mb-10 text-3xl text-white">Comfort & details</h2>
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {amenities.map((item) => (
-            <li key={item.id} className="border border-white/10 px-5 py-4 text-white/80">
-              {item.label}
+            <li
+              key={item.id}
+              className="flex items-center gap-6 border border-white/10 px-6 py-7 text-white/85"
+            >
+              {item.iconUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={item.iconUrl}
+                  alt=""
+                  className="h-20 w-20 shrink-0 object-contain sm:h-24 sm:w-24"
+                />
+              ) : (
+                <span
+                  aria-hidden
+                  className="flex h-20 w-20 shrink-0 items-center justify-center border border-[#C9A88B]/40 text-xl uppercase tracking-wide text-[#C9A88B] sm:h-24 sm:w-24"
+                >
+                  {(item.label.trim()[0] || "•").toUpperCase()}
+                </span>
+              )}
+              <span className="text-lg leading-snug sm:text-xl">{item.label}</span>
             </li>
           ))}
         </ul>

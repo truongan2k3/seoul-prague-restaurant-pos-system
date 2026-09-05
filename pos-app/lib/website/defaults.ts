@@ -60,12 +60,12 @@ export const DEFAULT_WEBSITE_SETTINGS: WebsiteSettings = {
 };
 
 export const DEFAULT_AMENITIES: WebsiteAmenity[] = [
-  { id: "amen-wifi", label: "Free Wi‑Fi", icon: "wifi", sortOrder: 0, enabled: true },
-  { id: "amen-ac", label: "Air conditioning", icon: "wind", sortOrder: 1, enabled: true },
-  { id: "amen-parking", label: "Parking nearby", icon: "car", sortOrder: 2, enabled: true },
-  { id: "amen-charging", label: "Charging sockets at tables", icon: "plug", sortOrder: 3, enabled: true },
-  { id: "amen-accessible", label: "Wheelchair accessible", icon: "accessibility", sortOrder: 4, enabled: true },
-  { id: "amen-private", label: "Private dining", icon: "users", sortOrder: 5, enabled: true },
+  { id: "amen-wifi", label: "Free Wi‑Fi", icon: "wifi", iconUrl: "", sortOrder: 0, enabled: true },
+  { id: "amen-ac", label: "Air conditioning", icon: "wind", iconUrl: "", sortOrder: 1, enabled: true },
+  { id: "amen-parking", label: "Parking nearby", icon: "car", iconUrl: "", sortOrder: 2, enabled: true },
+  { id: "amen-charging", label: "Charging sockets at tables", icon: "plug", iconUrl: "", sortOrder: 3, enabled: true },
+  { id: "amen-accessible", label: "Wheelchair accessible", icon: "accessibility", iconUrl: "", sortOrder: 4, enabled: true },
+  { id: "amen-private", label: "Private dining", icon: "users", iconUrl: "", sortOrder: 5, enabled: true },
 ];
 
 export const DEFAULT_MENU_CATEGORIES: WebsiteMenuCategory[] = [

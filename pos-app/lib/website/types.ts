@@ -140,6 +140,8 @@ export interface WebsiteAmenity {
   id: string;
   label: string;
   icon: string;
+  /** Custom PNG/SVG icon URL (preferred over lucide `icon` name). */
+  iconUrl: string;
   sortOrder: number;
   enabled: boolean;
 }

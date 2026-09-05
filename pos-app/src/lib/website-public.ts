@@ -111,6 +111,7 @@ function mapAmenityRow(row: Record<string, unknown>): WebsiteAmenity {
     id: row.id as string,
     label: row.label as string,
     icon: (row.icon as string) || "sparkles",
+    iconUrl: (row.icon_url as string) || "",
     sortOrder: Number(row.sort_order ?? 0),
     enabled: row.enabled !== false,
   };

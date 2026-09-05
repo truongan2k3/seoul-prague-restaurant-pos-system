@@ -83,21 +83,16 @@ export function MediaSlotCard({ spec, asset, onUpdated }: MediaSlotCardProps) {
 
     setBusy(true);
     try {
-      const form = new FormData();
-      form.set("slot", spec.slot);
-      form.set("file", file);
-      form.set("altText", spec.title);
-      const response = await fetch("/api/website/media", { method: "POST", body: form });
-      const payload = (await response.json().catch(() => ({}))) as {
-        error?: string;
-        warning?: string | null;
-      };
-      if (!response.ok) {
-        setError(payload.error || `Upload failed (HTTP ${response.status}).`);
+      const { uploadWebsiteSlotFile } = await import(
+        "@/components/admin/website/inline-plus-upload"
+      );
+      const result = await uploadWebsiteSlotFile(spec.slot, file, spec.title);
+      if (result.error) {
+        setError(result.error);
         return;
       }
-      if (payload.warning) {
-        setWarning((prev) => `${prev ? `${prev} ` : ""}${payload.warning}`);
+      if (result.warning) {
+        setWarning((prev) => `${prev ? `${prev} ` : ""}${result.warning}`);
       }
       setMessage("Saved.");
       onUpdated();

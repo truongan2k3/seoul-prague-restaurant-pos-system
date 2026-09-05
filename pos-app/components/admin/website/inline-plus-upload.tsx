@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Loader2, Plus, Replace } from "lucide-react";
+import { uploadFileDirectToStorage } from "@/lib/website/direct-upload";
 import type { WebsiteMediaAsset, WebsiteMediaSlot } from "@/lib/website/types";
 
 type UploadKind = "slot" | "gallery" | "video";
@@ -11,11 +12,23 @@ export async function uploadWebsiteSlotFile(
   file: File,
   altText = "",
 ): Promise<{ data?: WebsiteMediaAsset; error?: string; warning?: string | null }> {
-  const form = new FormData();
-  form.set("slot", slot);
-  form.set("file", file);
-  form.set("altText", altText);
-  const response = await fetch("/api/website/media", { method: "POST", body: form });
+  const uploaded = await uploadFileDirectToStorage(file, slot);
+  if (uploaded.error || !uploaded.publicUrl || !uploaded.storagePath) {
+    return { error: uploaded.error || "Direct upload failed." };
+  }
+
+  const response = await fetch("/api/website/media", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      slot,
+      altText,
+      publicUrl: uploaded.publicUrl,
+      storagePath: uploaded.storagePath,
+      mimeType: file.type || null,
+      fileSize: file.size,
+    }),
+  });
   const payload = (await response.json().catch(() => ({}))) as {
     data?: WebsiteMediaAsset;
     error?: string;
@@ -30,11 +43,24 @@ export async function uploadWebsiteGalleryFile(
   title = "",
   category = "food",
 ): Promise<{ data?: { id: string; imageUrl: string; title: string }; error?: string; warning?: string | null }> {
-  const form = new FormData();
-  form.set("file", file);
-  form.set("title", title);
-  form.set("category", category);
-  const response = await fetch("/api/website/gallery", { method: "POST", body: form });
+  const uploaded = await uploadFileDirectToStorage(file, "gallery");
+  if (uploaded.error || !uploaded.publicUrl || !uploaded.storagePath) {
+    return { error: uploaded.error || "Direct upload failed." };
+  }
+
+  const response = await fetch("/api/website/gallery", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title,
+      category,
+      publicUrl: uploaded.publicUrl,
+      storagePath: uploaded.storagePath,
+      mimeType: file.type || null,
+      fileSize: file.size,
+      fileName: file.name,
+    }),
+  });
   const payload = (await response.json().catch(() => ({}))) as {
     data?: { id: string; imageUrl: string; title: string };
     error?: string;
@@ -48,16 +74,37 @@ export async function uploadWebsiteVideoApiFile(
   file: File,
   title = "Promo video",
   slot: "hero" | "promo" | "atmosphere" = "promo",
+  poster?: File | null,
 ): Promise<{
   data?: { id: string; videoUrl: string; title: string; posterUrl: string };
   error?: string;
   warning?: string | null;
 }> {
-  const form = new FormData();
-  form.set("file", file);
-  form.set("title", title);
-  form.set("slot", slot);
-  const response = await fetch("/api/website/video", { method: "POST", body: form });
+  const uploaded = await uploadFileDirectToStorage(file, "videos");
+  if (uploaded.error || !uploaded.publicUrl || !uploaded.storagePath) {
+    return { error: uploaded.error || "Direct upload failed." };
+  }
+
+  let posterUrl = "";
+  if (poster && poster.size > 0) {
+    const posterUp = await uploadFileDirectToStorage(poster, "videos/posters");
+    if (posterUp.error) return { error: posterUp.error };
+    posterUrl = posterUp.publicUrl || "";
+  }
+
+  const response = await fetch("/api/website/video", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title,
+      slot,
+      publicUrl: uploaded.publicUrl,
+      storagePath: uploaded.storagePath,
+      mimeType: file.type || null,
+      fileSize: file.size,
+      posterUrl,
+    }),
+  });
   const payload = (await response.json().catch(() => ({}))) as {
     data?: { id: string; videoUrl: string; title: string; posterUrl: string };
     error?: string;
@@ -67,7 +114,7 @@ export async function uploadWebsiteVideoApiFile(
   return { data: payload.data, warning: payload.warning };
 }
 
-/** Compact “+” control for in-canvas / inspector uploads (FormData — avoids server-action base64 limits). */
+/** Compact “+” control for in-canvas / inspector uploads (direct-to-storage). */
 export function InlinePlusUpload({
   accept,
   label = "Add media",

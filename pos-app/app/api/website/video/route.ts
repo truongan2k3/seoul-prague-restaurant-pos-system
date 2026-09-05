@@ -35,15 +35,9 @@ async function requireAdmin() {
   }
 }
 
-async function ensureBucket(admin: ReturnType<typeof createSupabaseAdmin>) {
-  const { data: buckets } = await admin.storage.listBuckets();
-  const exists = (buckets ?? []).some((bucket) => bucket.name === "restaurant_media");
-  if (exists) return null;
-  const { error } = await admin.storage.createBucket("restaurant_media", { public: true });
-  if (error && !/already exists|duplicate/i.test(error.message)) return error.message;
-  return null;
-}
-
+/**
+ * Confirm a video row after direct-to-storage upload (avoids HTTP 413).
+ */
 export async function POST(request: Request) {
   const auth = await requireAdmin();
   if (auth.error || !auth.admin) {
@@ -51,65 +45,46 @@ export async function POST(request: Request) {
   }
   const admin = auth.admin;
 
-  let form: FormData;
+  let body: {
+    title?: string;
+    description?: string;
+    slot?: string;
+    publicUrl?: string;
+    storagePath?: string;
+    mimeType?: string;
+    fileSize?: number;
+    posterUrl?: string;
+  };
   try {
-    form = await request.formData();
-  } catch (err) {
+    body = (await request.json()) as typeof body;
+  } catch {
     return NextResponse.json(
       {
-        error: `Could not read upload: ${errorMessage(err)}. Try a shorter video or compress the file.`,
+        error:
+          "Send JSON metadata after direct storage upload. Do not POST the video through this API.",
       },
       { status: 400 },
     );
   }
 
-  const title = String(form.get("title") ?? "").trim() || "Promo video";
-  const description = String(form.get("description") ?? "").trim();
-  const slotRaw = String(form.get("slot") ?? "promo").trim() as VideoSlot;
+  const title = String(body.title ?? "").trim() || "Promo video";
+  const description = String(body.description ?? "").trim();
+  const slotRaw = String(body.slot ?? "promo").trim() as VideoSlot;
   const slot = SLOTS.includes(slotRaw) ? slotRaw : "promo";
-  const file = form.get("file");
-  const poster = form.get("poster");
+  const publicUrl = String(body.publicUrl ?? "").trim();
+  const storagePath = String(body.storagePath ?? "").trim();
+  const mimeType = String(body.mimeType ?? "").trim();
+  const fileSize = Number(body.fileSize ?? 0);
+  const posterUrl = String(body.posterUrl ?? "").trim();
 
-  if (!(file instanceof File) || file.size === 0) {
-    return NextResponse.json({ error: "Missing video file." }, { status: 400 });
+  if (!publicUrl || !storagePath) {
+    return NextResponse.json({ error: "Missing publicUrl or storagePath." }, { status: 400 });
   }
-  if (!file.type.startsWith("video/")) {
+  if (!storagePath.startsWith("videos/")) {
+    return NextResponse.json({ error: "storagePath must be under videos/." }, { status: 400 });
+  }
+  if (mimeType && !mimeType.startsWith("video/")) {
     return NextResponse.json({ error: "File must be a video (MP4 / WebM)." }, { status: 400 });
-  }
-
-  const bucketError = await ensureBucket(admin);
-  if (bucketError) {
-    return NextResponse.json({ error: `Storage bucket missing: ${bucketError}` }, { status: 500 });
-  }
-
-  const extension = file.name.split(".").pop()?.toLowerCase() || "mp4";
-  const path = `videos/${Date.now()}.${extension}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
-
-  const { error: uploadError } = await admin.storage.from("restaurant_media").upload(path, buffer, {
-    cacheControl: "31536000",
-    upsert: true,
-    contentType: file.type || undefined,
-  });
-  if (uploadError) {
-    return NextResponse.json(
-      { error: `Storage upload failed: ${uploadError.message}` },
-      { status: 500 },
-    );
-  }
-
-  const { data: publicData } = admin.storage.from("restaurant_media").getPublicUrl(path);
-  let posterUrl = "";
-  if (poster instanceof File && poster.size > 0) {
-    const posterExt = poster.name.split(".").pop()?.toLowerCase() || "jpg";
-    const posterPath = `videos/posters/${Date.now()}.${posterExt}`;
-    const posterBuffer = Buffer.from(await poster.arrayBuffer());
-    await admin.storage.from("restaurant_media").upload(posterPath, posterBuffer, {
-      cacheControl: "31536000",
-      upsert: true,
-      contentType: poster.type || undefined,
-    });
-    posterUrl = admin.storage.from("restaurant_media").getPublicUrl(posterPath).data.publicUrl;
   }
 
   const { data, error: dbError } = await admin
@@ -117,7 +92,7 @@ export async function POST(request: Request) {
     .insert({
       title,
       description,
-      video_url: publicData.publicUrl,
+      video_url: publicUrl,
       poster_url: posterUrl || null,
       slot,
       sort_order: Date.now(),
@@ -137,8 +112,8 @@ export async function POST(request: Request) {
   return NextResponse.json({
     data: mapVideoRow(data as Record<string, unknown>),
     warning:
-      file.size > 80 * 1024 * 1024
-        ? `Large video (${(file.size / 1024 / 1024).toFixed(1)} MB). Compress for faster page loads.`
+      fileSize > 80 * 1024 * 1024
+        ? `Large video (${(fileSize / 1024 / 1024).toFixed(1)} MB). Compress for faster page loads.`
         : null,
   });
 }

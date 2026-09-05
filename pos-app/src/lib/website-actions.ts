@@ -199,6 +199,7 @@ export async function upsertWebsiteAmenity(input: Omit<WebsiteAmenity, "id"> & {
     id: input.id,
     label: input.label,
     icon: input.icon,
+    icon_url: input.iconUrl || null,
     sort_order: input.sortOrder,
     enabled: input.enabled,
     updated_at: nowIso(),

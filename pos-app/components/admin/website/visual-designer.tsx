@@ -42,10 +42,14 @@ import {
   paddingClassForSection,
 } from "@/lib/website/page-layout";
 import type {
+  WebsiteAmenity,
   WebsiteContent,
   WebsiteDevice,
   WebsiteGalleryItem,
   WebsiteMediaSlot,
+  WebsiteMenuCategory,
+  WebsiteMenuItem,
+  WebsiteMenuPdf,
   WebsitePageSection,
   WebsitePromoSlide,
   WebsitePromoSlideshow,
@@ -57,6 +61,12 @@ import {
   saveWebsiteSettings,
   updateWebsiteMediaObjectPosition,
 } from "@/src/lib/website-actions";
+import {
+  AmenitiesDesignerPanel,
+  DesignerAmenitiesCanvasPreview,
+  DesignerMenuCanvasPreview,
+  MenuDesignerPanel,
+} from "@/components/admin/website/designer-section-editors";
 
 function EditableText({
   value,
@@ -227,6 +237,12 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
   const [media, setMedia] = useState(initial.media);
   const [gallery, setGallery] = useState<WebsiteGalleryItem[]>(initial.gallery);
   const [videos, setVideos] = useState<WebsiteVideo[]>(initial.videos);
+  const [amenities, setAmenities] = useState<WebsiteAmenity[]>(initial.amenities);
+  const [menuCategories, setMenuCategories] = useState<WebsiteMenuCategory[]>(
+    initial.menuCategories,
+  );
+  const [menuItems, setMenuItems] = useState<WebsiteMenuItem[]>(initial.menuItems);
+  const [menuPdfs, setMenuPdfs] = useState<WebsiteMenuPdf[]>(initial.menuPdfs);
   const [device, setDevice] = useState<WebsiteDevice>("desktop");
   const [zoom, setZoom] = useState(100);
   const [focusCanvas, setFocusCanvas] = useState(false);
@@ -865,6 +881,15 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
                         <p className="text-sm text-white/50">Tap + to add a promo video here.</p>
                       ) : null}
                     </div>
+                  ) : section.type === "menu" ? (
+                    <DesignerMenuCanvasPreview
+                      categories={menuCategories}
+                      items={menuItems}
+                      menuPdfs={menuPdfs}
+                      bodyClass={body}
+                    />
+                  ) : section.type === "amenities" ? (
+                    <DesignerAmenitiesCanvasPreview amenities={amenities} bodyClass={body} />
                   ) : (
                     <p className={`mt-3 text-white/70 ${body}`}>
                       Content syncs from the live site settings for this block.
@@ -1004,6 +1029,21 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
                 />
                 Hide on {device}
               </label>
+
+              {selected.type === "amenities" ? (
+                <AmenitiesDesignerPanel amenities={amenities} onChange={setAmenities} />
+              ) : null}
+
+              {selected.type === "menu" ? (
+                <MenuDesignerPanel
+                  categories={menuCategories}
+                  items={menuItems}
+                  menuPdfs={menuPdfs}
+                  onCategoriesChange={setMenuCategories}
+                  onItemsChange={setMenuItems}
+                  onMenuPdfsChange={setMenuPdfs}
+                />
+              ) : null}
 
               {(selected.type === "custom_text" ||
                 selected.type === "custom_cta" ||

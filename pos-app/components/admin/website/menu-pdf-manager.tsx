@@ -23,9 +23,11 @@ async function countPdfPages(file: File): Promise<number | undefined> {
 
 interface MenuPdfManagerProps {
   initial: WebsiteMenuPdf[];
+  compact?: boolean;
+  onChange?: (rows: WebsiteMenuPdf[]) => void;
 }
 
-export function MenuPdfManager({ initial }: MenuPdfManagerProps) {
+export function MenuPdfManager({ initial, compact = false, onChange }: MenuPdfManagerProps) {
   const router = useRouter();
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [rows, setRows] = useState(initial);
@@ -97,12 +99,14 @@ export function MenuPdfManager({ initial }: MenuPdfManagerProps) {
 
       setRows((prev) => {
         const next = prev.filter((row) => row.language !== language);
-        return [...next, payload.data as WebsiteMenuPdf];
+        const merged = [...next, payload.data as WebsiteMenuPdf];
+        onChange?.(merged);
+        return merged;
       });
       setMessage(
         `${MENU_PDF_LANGUAGES.find((r) => r.code === language)?.label} menu saved. Open /menu to view.`,
       );
-      router.refresh();
+      if (!compact) router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed unexpectedly.");
     } finally {
@@ -124,9 +128,13 @@ export function MenuPdfManager({ initial }: MenuPdfManagerProps) {
         setError(payload.error || "Delete failed.");
         return;
       }
-      setRows((prev) => prev.filter((row) => row.language !== language));
+      setRows((prev) => {
+        const next = prev.filter((row) => row.language !== language);
+        onChange?.(next);
+        return next;
+      });
       setMessage("PDF removed.");
-      router.refresh();
+      if (!compact) router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed.");
     } finally {
@@ -135,22 +143,36 @@ export function MenuPdfManager({ initial }: MenuPdfManagerProps) {
   };
 
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-      <h2 className="text-lg font-semibold">Menu PDF books</h2>
-      <p className="mt-1 text-sm text-gray-500">
-        Upload one PDF per language. Guests flip through pages like a book on{" "}
-        <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">/menu</code>.
-      </p>
-      <p className="mt-2 text-xs text-gray-400">PDF only · max 25 MB · recommended A4 portrait</p>
+    <section
+      className={
+        compact
+          ? "space-y-3"
+          : "rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900"
+      }
+    >
+      {compact ? null : (
+        <>
+          <h2 className="text-lg font-semibold">Menu PDF books</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Upload one PDF per language. Guests flip through pages like a book on{" "}
+            <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">/menu</code>.
+          </p>
+          <p className="mt-2 text-xs text-gray-400">PDF only · max 25 MB · recommended A4 portrait</p>
+        </>
+      )}
 
-      <div className="mt-6 space-y-4">
+      <div className={compact ? "space-y-2" : "mt-6 space-y-4"}>
         {MENU_PDF_LANGUAGES.map(({ code, label }) => {
           const row = getRow(code);
           const busy = busyLang === code;
           return (
             <article
               key={code}
-              className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"
+              className={
+                compact
+                  ? "rounded-lg border border-gray-200 p-2 dark:border-gray-700"
+                  : "rounded-xl border border-gray-200 p-4 dark:border-gray-800"
+              }
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>

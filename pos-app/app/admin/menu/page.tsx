@@ -9,7 +9,11 @@ export default async function AdminMenuPage() {
       <header>
         <h1 className="text-2xl font-semibold">Menu</h1>
         <p className="mt-2 text-sm text-gray-500">
-          Upload PDF menus (Czech, English, Chinese) for the flipbook on /menu.
+          Prefer editing inside{" "}
+          <a href="/admin/designer" className="text-[#8B6914] underline">
+            Visual designer
+          </a>{" "}
+          (Menu preview section). You can still manage PDF books and items here.
         </p>
       </header>
       <MenuPdfManager initial={content.menuPdfs} />

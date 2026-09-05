@@ -276,9 +276,48 @@ export function LandingVideo({ content }: { content: WebsiteContent }) {
   );
 }
 
-function AmenitiesBlock({ content }: { content: WebsiteContent }) {
+function AmenitiesBlock({
+  content,
+  compact = false,
+}: {
+  content: WebsiteContent;
+  compact?: boolean;
+}) {
   const amenities = content.amenities.filter((row) => row.enabled);
   if (amenities.length === 0) return null;
+
+  if (compact) {
+    return (
+      <div>
+        <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Amenities</p>
+        <ul className="mt-5 grid gap-3 sm:grid-cols-2">
+          {amenities.map((item) => (
+            <li
+              key={item.id}
+              className="flex items-center gap-3 border border-white/10 px-3.5 py-3 text-white/85"
+            >
+              {item.iconUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={item.iconUrl}
+                  alt=""
+                  className="h-10 w-10 shrink-0 object-contain"
+                />
+              ) : (
+                <span
+                  aria-hidden
+                  className="flex h-10 w-10 shrink-0 items-center justify-center border border-[#C9A88B]/40 text-sm uppercase tracking-wide text-[#C9A88B]"
+                >
+                  {(item.label.trim()[0] || "•").toUpperCase()}
+                </span>
+              )}
+              <span className="text-sm leading-snug sm:text-base">{item.label}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-16 border-t border-white/10 pt-14">
@@ -354,12 +393,20 @@ function SocialIcon({ platform }: { platform: string }) {
   );
 }
 
-function SocialLinksRow({ links }: { links: WebsiteSocialLink[] }) {
+function SocialLinksRow({
+  links,
+  embedded = false,
+}: {
+  links: WebsiteSocialLink[];
+  embedded?: boolean;
+}) {
   if (links.length === 0) return null;
   return (
-    <div className="mt-14 border-t border-white/10 pt-12">
-      <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Follow us</p>
-      <ul className="mt-6 flex flex-wrap gap-3">
+    <div className={embedded ? "" : "mt-14 border-t border-white/10 pt-12"}>
+      <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">
+        {embedded ? "Social media" : "Follow us"}
+      </p>
+      <ul className="mt-5 flex flex-wrap gap-3">
         {links.map((link) => (
           <li key={link.id}>
             <a
@@ -401,6 +448,7 @@ export function LandingAmenities({
 
 export function LandingContact({ content }: { content: WebsiteContent }) {
   const { settings } = content;
+  const amenities = content.amenities.filter((row) => row.enabled);
   const hoursLine = useMemo(
     () => formatOpeningHoursOneLine(settings.openingHours),
     [settings.openingHours],
@@ -419,52 +467,68 @@ export function LandingContact({ content }: { content: WebsiteContent }) {
   return (
     <section id="contact" className="bg-[#0B0B0C] py-24 lg:py-32">
       <div className="mx-auto max-w-7xl px-5 lg:px-8">
-        <div className="grid gap-12 lg:grid-cols-2 lg:items-start lg:gap-16">
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Visit us</p>
-            <h2 className="landing-serif mt-4 text-3xl text-white lg:text-5xl">
-              {settings.restaurantName}
-            </h2>
-            <div className="mt-8 space-y-3 text-white/70">
-              {settings.address ? <p className="text-base leading-relaxed">{settings.address}</p> : null}
-              {settings.phone ? (
-                <p>
-                  <a href={`tel:${settings.phone.replace(/\s+/g, "")}`} className="hover:text-white">
-                    {settings.phone}
-                  </a>
-                </p>
+        <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Visit us</p>
+        <h2 className="landing-serif mt-4 mb-10 text-3xl text-white lg:text-5xl">
+          {settings.restaurantName}
+        </h2>
+
+        {/* Wireframe panel: info + amenities + social | opening hours */}
+        <div className="grid border border-white/10 lg:grid-cols-[minmax(0,1.35fr)_minmax(240px,0.75fr)]">
+          <div className="flex min-w-0 flex-col">
+            <div className="border-b border-white/10 p-6 sm:p-8 lg:p-10">
+              <p className="text-xs uppercase tracking-[0.28em] text-[#C9A88B]">Info</p>
+              <div className="mt-5 space-y-3 text-white/70">
+                {settings.address ? (
+                  <p className="text-base leading-relaxed sm:text-lg">{settings.address}</p>
+                ) : null}
+                {settings.phone ? (
+                  <p>
+                    <a href={`tel:${settings.phone.replace(/\s+/g, "")}`} className="hover:text-white">
+                      {settings.phone}
+                    </a>
+                  </p>
+                ) : null}
+                {settings.email ? (
+                  <p>
+                    <a href={`mailto:${settings.email}`} className="hover:text-white">
+                      {settings.email}
+                    </a>
+                  </p>
+                ) : null}
+              </div>
+              {settings.googleMapsUrl ? (
+                <a
+                  href={settings.googleMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-5 inline-block text-sm uppercase tracking-[0.14em] text-[#C9A88B] hover:text-white"
+                >
+                  Open in Google Maps →
+                </a>
               ) : null}
-              {settings.email ? (
-                <p>
-                  <a href={`mailto:${settings.email}`} className="hover:text-white">
-                    {settings.email}
-                  </a>
-                </p>
-              ) : null}
+              <div className="mt-8">
+                <BookingCta size="lg" />
+              </div>
             </div>
-            {settings.googleMapsUrl ? (
-              <a
-                href={settings.googleMapsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-5 inline-block text-sm uppercase tracking-[0.14em] text-[#C9A88B] hover:text-white"
-              >
-                Open in Google Maps →
-              </a>
+
+            {amenities.length > 0 ? (
+              <div className="border-b border-white/10 p-6 sm:p-8 lg:p-10">
+                <AmenitiesBlock content={content} compact />
+              </div>
             ) : null}
-            <div className="mt-10">
-              <BookingCta size="lg" />
-            </div>
+
+            {socialLinks.length > 0 ? (
+              <div className="p-6 sm:p-8 lg:p-10">
+                <SocialLinksRow links={socialLinks} embedded />
+              </div>
+            ) : null}
           </div>
 
-          <div className="lg:border-l lg:border-white/10 lg:pl-16">
+          <div className="border-t border-white/10 p-6 sm:p-8 lg:border-t-0 lg:border-l lg:p-10">
             <h3 className="text-xs uppercase tracking-[0.28em] text-[#C9A88B]">Opening hours</h3>
             <p className="mt-5 text-lg leading-relaxed text-white/85 sm:text-xl">{hoursLine}</p>
           </div>
         </div>
-
-        <AmenitiesBlock content={content} />
-        <SocialLinksRow links={socialLinks} />
       </div>
     </section>
   );

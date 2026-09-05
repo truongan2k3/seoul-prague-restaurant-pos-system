@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useEffect, useMemo, useRef } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { BookingCta } from "@/components/landing/booking-cta";
 import { formatOpeningHoursOneLine } from "@/lib/website/opening-hours-display";
 import { resolveSocialLinks, socialPlatformLabel } from "@/lib/website/social-links";
@@ -100,12 +100,74 @@ export function LandingMenuPreview({ content }: { content: WebsiteContent }) {
   );
 }
 
-const GALLERY_PREVIEW_COUNT = 4;
+/** Varied sizes / offsets / tilts — messy collage while drifting sideways. */
+const GALLERY_FRAME_STYLES = [
+  { width: "w-[200px] sm:w-[240px] lg:w-[280px]", height: "h-[260px] sm:h-[300px] lg:h-[340px]", offset: "mt-10", rotate: "-rotate-2" },
+  { width: "w-[150px] sm:w-[190px] lg:w-[210px]", height: "h-[200px] sm:h-[240px] lg:h-[260px]", offset: "mt-0", rotate: "rotate-3" },
+  { width: "w-[230px] sm:w-[270px] lg:w-[310px]", height: "h-[170px] sm:h-[210px] lg:h-[230px]", offset: "mt-16", rotate: "-rotate-1" },
+  { width: "w-[170px] sm:w-[200px] lg:w-[230px]", height: "h-[250px] sm:h-[290px] lg:h-[330px]", offset: "mt-3", rotate: "rotate-2" },
+  { width: "w-[210px] sm:w-[240px] lg:w-[270px]", height: "h-[150px] sm:h-[190px] lg:h-[210px]", offset: "mt-20", rotate: "-rotate-3" },
+  { width: "w-[160px] sm:w-[195px] lg:w-[225px]", height: "h-[230px] sm:h-[270px] lg:h-[310px]", offset: "mt-6", rotate: "rotate-1" },
+] as const;
 
 export function LandingGallery({ content }: { content: WebsiteContent }) {
   const reduceMotion = useReducedMotion();
   const items = content.gallery.filter((item) => item.imageUrl);
-  const [expanded, setExpanded] = useState(false);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const pausedRef = useRef(false);
+  const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loopItems = useMemo(
+    () => (items.length >= 2 ? [...items, ...items] : items),
+    [items],
+  );
+
+  const pauseDrift = () => {
+    pausedRef.current = true;
+    if (resumeTimerRef.current) {
+      clearTimeout(resumeTimerRef.current);
+      resumeTimerRef.current = null;
+    }
+  };
+
+  const scheduleResume = (delayMs = 900) => {
+    if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+    resumeTimerRef.current = setTimeout(() => {
+      pausedRef.current = false;
+      resumeTimerRef.current = null;
+    }, delayMs);
+  };
+
+  useEffect(() => {
+    if (reduceMotion || items.length < 2) return;
+    const el = scrollerRef.current;
+    if (!el) return;
+
+    let raf = 0;
+    let last = performance.now();
+    const speedPx = 32; // slow floating drift
+
+    const tick = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      if (!pausedRef.current) {
+        const half = el.scrollWidth / 2;
+        if (half > 0) {
+          el.scrollLeft += speedPx * dt;
+          if (el.scrollLeft >= half) {
+            el.scrollLeft -= half;
+          }
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+    };
+  }, [reduceMotion, items.length]);
 
   if (items.length === 0) {
     return (
@@ -119,69 +181,70 @@ export function LandingGallery({ content }: { content: WebsiteContent }) {
     );
   }
 
-  const visible = expanded ? items : items.slice(0, GALLERY_PREVIEW_COUNT);
-  const hasMore = items.length > GALLERY_PREVIEW_COUNT;
-
   return (
-    <section id="gallery" className="bg-[#0F0F10] py-24 lg:py-32">
+    <section id="gallery" className="overflow-hidden bg-[#0F0F10] py-24 lg:py-32">
       <div className="mx-auto max-w-7xl px-5 lg:px-8">
         <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Gallery</p>
-        <h2 className="landing-serif mt-4 mb-10 text-3xl text-white lg:text-5xl">Atmosphere & plates</h2>
+        <h2 className="landing-serif mt-4 text-3xl text-white lg:text-5xl">Atmosphere & plates</h2>
+      </div>
 
-        <div className="relative">
-          <motion.div layout className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
-            <AnimatePresence initial={false}>
-              {visible.map((item, index) => {
-                const isLastPreview =
-                  !expanded && hasMore && index === GALLERY_PREVIEW_COUNT - 1;
-                return (
-                  <motion.figure
-                    key={item.id}
-                    layout
-                    initial={reduceMotion ? false : { opacity: 0, y: 16 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={reduceMotion ? undefined : { opacity: 0, scale: 0.98 }}
-                    transition={{ duration: 0.35, delay: Math.min(index, 6) * 0.04 }}
-                    className="relative aspect-[4/5] overflow-hidden border border-white/10 bg-[#121214]"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={item.imageUrl}
-                      alt={item.title || "Gallery"}
-                      className={`h-full w-full object-cover transition duration-500 ${
-                        isLastPreview ? "scale-105 blur-[2px] brightness-75" : ""
-                      }`}
-                    />
-                    {isLastPreview ? (
-                      <div
-                        aria-hidden
-                        className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0F0F10] via-[#0F0F10]/35 to-transparent"
-                      />
-                    ) : null}
-                  </motion.figure>
-                );
-              })}
-            </AnimatePresence>
-          </motion.div>
+      <div className="relative mt-10">
+        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-[#0F0F10] to-transparent sm:w-16" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-[#0F0F10] to-transparent sm:w-16" />
 
-          {hasMore && !expanded ? (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-[#0F0F10] to-transparent" />
-          ) : null}
-        </div>
-
-        {hasMore ? (
-          <div className="mt-10 flex justify-center">
-            <button
-              type="button"
-              onClick={() => setExpanded((value) => !value)}
-              className="rounded-full border border-[#C9A88B]/50 px-8 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-[#C9A88B] transition hover:border-[#C9A88B] hover:bg-[#C9A88B]/10 hover:text-white"
-            >
-              {expanded
-                ? "Show less"
-                : `Show more · ${items.length - GALLERY_PREVIEW_COUNT} more`}
-            </button>
+        <div
+          ref={scrollerRef}
+          className="landing-gallery-drift-mask overflow-x-auto overflow-y-hidden pb-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          style={{ WebkitOverflowScrolling: "touch" }}
+          onPointerEnter={pauseDrift}
+          onPointerLeave={() => scheduleResume(400)}
+          onPointerDown={pauseDrift}
+          onPointerUp={() => scheduleResume(700)}
+          onTouchStart={pauseDrift}
+          onTouchEnd={() => scheduleResume(900)}
+          onWheel={() => {
+            pauseDrift();
+            scheduleResume(1200);
+          }}
+          onScroll={() => {
+            const el = scrollerRef.current;
+            if (!el || items.length < 2) return;
+            const half = el.scrollWidth / 2;
+            if (half > 0 && el.scrollLeft >= half) {
+              el.scrollLeft -= half;
+            }
+          }}
+        >
+          <div className="landing-gallery-drift flex w-max items-start gap-2 px-5 sm:gap-3 sm:px-8 lg:gap-4">
+            {loopItems.map((item, index) => {
+              const sourceIndex = index % items.length;
+              const frame = GALLERY_FRAME_STYLES[sourceIndex % GALLERY_FRAME_STYLES.length];
+              const bobDelay = `${(sourceIndex % 6) * 0.35}s`;
+              return (
+                <figure
+                  key={`${item.id}-${index}`}
+                  className={`landing-gallery-frame relative shrink-0 overflow-hidden border border-white/10 bg-[#121214] shadow-[0_12px_40px_rgba(0,0,0,0.35)] ${frame.width} ${frame.height} ${frame.offset} ${frame.rotate} ${
+                    reduceMotion ? "" : "landing-gallery-frame-bob"
+                  }`}
+                  style={
+                    reduceMotion
+                      ? undefined
+                      : ({ ["--gallery-bob-delay" as string]: bobDelay } as React.CSSProperties)
+                  }
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={item.imageUrl}
+                    alt={item.title || "Gallery"}
+                    className="h-full w-full object-cover"
+                    draggable={false}
+                    loading={index < 8 ? "eager" : "lazy"}
+                  />
+                </figure>
+              );
+            })}
           </div>
-        ) : null}
+        </div>
       </div>
     </section>
   );

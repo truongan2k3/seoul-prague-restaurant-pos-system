@@ -84,6 +84,29 @@ body {
   font-family: var(--font-playfair), "Times New Roman", Georgia, serif;
 }
 
+/* Landing gallery — soft vertical bob while the strip drifts horizontally */
+@keyframes landing-gallery-bob {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -7px;
+  }
+}
+
+.landing-gallery-frame-bob {
+  animation: landing-gallery-bob 5.5s ease-in-out infinite;
+  animation-delay: var(--gallery-bob-delay, 0s);
+  will-change: translate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-gallery-frame-bob {
+    animation: none;
+  }
+}
+
 .landing-theme .pos-input {
   background: #111;
   border-color: rgba(255, 255, 255, 0.12);

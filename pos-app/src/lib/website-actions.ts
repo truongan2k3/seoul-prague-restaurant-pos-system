@@ -2,6 +2,7 @@
 
 import { canManageStaff, normalizeStaffRole } from "@/lib/staff-roles";
 import { DEFAULT_OPENING_HOURS, DEFAULT_WEBSITE_SETTINGS } from "@/lib/website/defaults";
+import { nextWebsiteSortOrder } from "@/lib/website/sort-order";
 import type {
   GalleryCategory,
   MenuPdfLanguage,
@@ -358,7 +359,7 @@ export async function uploadWebsiteGalleryImage(input: {
     title: input.title ?? "",
     imageUrl: publicData.publicUrl,
     storagePath: path,
-    sortOrder: Date.now(),
+    sortOrder: nextWebsiteSortOrder(),
     featured: false,
   });
 }
@@ -435,7 +436,7 @@ export async function uploadWebsiteVideoFile(input: {
     videoUrl: publicData.publicUrl,
     posterUrl,
     slot: input.slot,
-    sortOrder: Date.now(),
+    sortOrder: nextWebsiteSortOrder(),
     enabled: true,
   });
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { canManageStaff, normalizeStaffRole } from "@/lib/staff-roles";
+import { nextWebsiteSortOrder } from "@/lib/website/sort-order";
 import type { GalleryCategory } from "@/lib/website/types";
 import { readAuthSession } from "@/src/lib/auth/session";
 import { readStaffSession } from "@/src/lib/auth/staff-session";
@@ -101,7 +102,7 @@ export async function POST(request: Request) {
       title: title || fileName.replace(/\.[^.]+$/, "") || "Gallery image",
       image_url: publicUrl,
       storage_path: storagePath,
-      sort_order: Date.now(),
+      sort_order: nextWebsiteSortOrder(),
       featured: false,
     })
     .select("*")

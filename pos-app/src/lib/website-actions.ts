@@ -263,6 +263,34 @@ export async function deleteWebsiteAmenity(id: string) {
   return { error: deleteError };
 }
 
+export async function reorderWebsiteAmenities(orderedIds: string[]) {
+  const { error, admin } = await requireWebsiteAdmin();
+  if (error || !admin) return { data: null, error };
+  if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+    return { data: null, error: new Error("orderedIds required.") };
+  }
+
+  const uuidIds = orderedIds.filter((id) => isUuid(id));
+  if (uuidIds.length === 0) {
+    return { data: null, error: new Error("No persisted amenities to reorder yet.") };
+  }
+
+  const results = await Promise.all(
+    uuidIds.map((id, index) =>
+      admin
+        .from("website_amenities")
+        .update({ sort_order: index, updated_at: nowIso() })
+        .eq("id", id),
+    ),
+  );
+  const firstError = results.find((row) => row.error)?.error;
+  if (firstError) return { data: null, error: firstError };
+
+  revalidateWebsitePaths();
+  const content = await fetchWebsiteContent();
+  return { data: content.amenities, error: null };
+}
+
 export async function upsertWebsiteMenuCategory(
   input: Omit<WebsiteMenuCategory, "id"> & { id?: string },
 ) {

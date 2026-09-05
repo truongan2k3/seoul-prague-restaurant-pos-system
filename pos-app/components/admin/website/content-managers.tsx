@@ -1,20 +1,31 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  DragDropContext,
+  Draggable,
+  Droppable,
+  type DropResult,
+} from "@hello-pangea/dnd";
+import { GripVertical } from "lucide-react";
 import type { WebsiteAmenity, WebsiteContent } from "@/lib/website/types";
 import {
   deleteWebsiteAmenity,
+  reorderWebsiteAmenities,
   upsertWebsiteAmenity,
 } from "@/src/lib/website-actions";
 
 export function AmenitiesManager({ initial }: { initial: WebsiteAmenity[] }) {
-  const [rows, setRows] = useState(initial);
+  const [rows, setRows] = useState(
+    () => [...initial].sort((a, b) => a.sortOrder - b.sortOrder),
+  );
   useEffect(() => {
-    setRows(initial);
+    setRows([...initial].sort((a, b) => a.sortOrder - b.sortOrder));
   }, [initial]);
   const [label, setLabel] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [reordering, setReordering] = useState(false);
   const iconInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const add = async () => {
@@ -64,83 +75,155 @@ export function AmenitiesManager({ initial }: { initial: WebsiteAmenity[] }) {
     }
   };
 
+  const persistOrder = async (next: WebsiteAmenity[]) => {
+    setReordering(true);
+    setMessage(null);
+    const { data, error } = await reorderWebsiteAmenities(next.map((row) => row.id));
+    setReordering(false);
+    if (error) {
+      setMessage(error.message);
+      setRows([...initial].sort((a, b) => a.sortOrder - b.sortOrder));
+      return;
+    }
+    if (data) setRows(data);
+    setMessage("Order saved.");
+  };
+
+  const handleDragEnd = (result: DropResult) => {
+    if (!result.destination || result.source.index === result.destination.index) return;
+    const next = [...rows];
+    const [moved] = next.splice(result.source.index, 1);
+    next.splice(result.destination.index, 0, moved);
+    const withOrder = next.map((row, index) => ({ ...row, sortOrder: index }));
+    setRows(withOrder);
+    void persistOrder(withOrder);
+  };
+
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
       <h2 className="text-lg font-semibold">Amenities</h2>
       <p className="mt-1 text-sm text-gray-500">
-        Upload a custom PNG/SVG icon for each amenity. Icons show large on the landing page.
+        Upload a custom PNG/SVG icon for each amenity. Drag the handle to change order on the
+        landing page.
       </p>
-      <ul className="mt-4 space-y-3">
-        {rows.map((row) => (
-          <li
-            key={row.id}
-            className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 px-3 py-3 dark:border-gray-800"
-          >
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100 dark:bg-gray-800">
-              {row.iconUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={row.iconUrl} alt="" className="h-12 w-12 object-contain" />
-              ) : (
-                <span className="text-xs text-gray-400">No icon</span>
-              )}
-            </div>
-            <span className="min-w-0 flex-1 font-medium">{row.label}</span>
-            <input
-              ref={(el) => {
-                iconInputRefs.current[row.id] = el;
-              }}
-              type="file"
-              accept="image/png,image/svg+xml,image/webp,image/jpeg"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                e.target.value = "";
-                if (file) void uploadIcon(row, file);
-              }}
-            />
-            <button
-              type="button"
-              disabled={busyId === row.id}
-              className="text-xs font-medium text-[#8B6914] disabled:opacity-50"
-              onClick={() => iconInputRefs.current[row.id]?.click()}
+      <p className="mt-2 text-xs font-medium uppercase tracking-wide text-gray-500">
+        Display order {reordering ? "· saving…" : "· drag to reorder"}
+      </p>
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <Droppable droppableId="amenities">
+          {(provided) => (
+            <ul
+              ref={provided.innerRef}
+              {...provided.droppableProps}
+              className="mt-3 space-y-3"
             >
-              {busyId === row.id ? "Uploading…" : row.iconUrl ? "Change icon" : "Upload PNG"}
-            </button>
-            {row.iconUrl ? (
-              <button
-                type="button"
-                className="text-xs text-gray-500"
-                onClick={async () => {
-                  const { data } = await upsertWebsiteAmenity({ ...row, iconUrl: "" });
-                  if (data) setRows((prev) => prev.map((item) => (item.id === row.id ? data : item)));
-                }}
-              >
-                Clear icon
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="text-xs text-gray-500"
-              onClick={async () => {
-                const { data } = await upsertWebsiteAmenity({ ...row, enabled: !row.enabled });
-                if (data) setRows((prev) => prev.map((item) => (item.id === row.id ? data : item)));
-              }}
-            >
-              {row.enabled ? "Hide" : "Show"}
-            </button>
-            <button
-              type="button"
-              className="text-xs text-red-600"
-              onClick={async () => {
-                await deleteWebsiteAmenity(row.id);
-                setRows((prev) => prev.filter((item) => item.id !== row.id));
-              }}
-            >
-              Delete
-            </button>
-          </li>
-        ))}
-      </ul>
+              {rows.map((row, index) => (
+                <Draggable
+                  key={row.id}
+                  draggableId={row.id}
+                  index={index}
+                  isDragDisabled={reordering}
+                >
+                  {(dragProvided, snapshot) => (
+                    <li
+                      ref={dragProvided.innerRef}
+                      {...dragProvided.draggableProps}
+                      className={`flex flex-wrap items-center gap-3 rounded-lg border px-3 py-3 dark:border-gray-800 ${
+                        snapshot.isDragging
+                          ? "border-[#8B6914] bg-[#8B6914]/5 shadow-lg"
+                          : "border-gray-200 bg-white dark:bg-gray-900"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        aria-label={`Drag to reorder ${row.label}`}
+                        className="cursor-grab touch-none text-gray-400 hover:text-gray-700 active:cursor-grabbing disabled:opacity-40"
+                        disabled={reordering}
+                        {...dragProvided.dragHandleProps}
+                      >
+                        <GripVertical className="h-5 w-5" />
+                      </button>
+                      <span className="w-5 shrink-0 text-xs text-gray-400">{index + 1}.</span>
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100 dark:bg-gray-800">
+                        {row.iconUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={row.iconUrl} alt="" className="h-12 w-12 object-contain" />
+                        ) : (
+                          <span className="text-xs text-gray-400">No icon</span>
+                        )}
+                      </div>
+                      <span className="min-w-0 flex-1 font-medium">{row.label}</span>
+                      <input
+                        ref={(el) => {
+                          iconInputRefs.current[row.id] = el;
+                        }}
+                        type="file"
+                        accept="image/png,image/svg+xml,image/webp,image/jpeg"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = "";
+                          if (file) void uploadIcon(row, file);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={busyId === row.id}
+                        className="text-xs font-medium text-[#8B6914] disabled:opacity-50"
+                        onClick={() => iconInputRefs.current[row.id]?.click()}
+                      >
+                        {busyId === row.id ? "Uploading…" : row.iconUrl ? "Change icon" : "Upload PNG"}
+                      </button>
+                      {row.iconUrl ? (
+                        <button
+                          type="button"
+                          className="text-xs text-gray-500"
+                          onClick={async () => {
+                            const { data } = await upsertWebsiteAmenity({ ...row, iconUrl: "" });
+                            if (data)
+                              setRows((prev) =>
+                                prev.map((item) => (item.id === row.id ? data : item)),
+                              );
+                          }}
+                        >
+                          Clear icon
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="text-xs text-gray-500"
+                        onClick={async () => {
+                          const { data } = await upsertWebsiteAmenity({
+                            ...row,
+                            enabled: !row.enabled,
+                          });
+                          if (data)
+                            setRows((prev) =>
+                              prev.map((item) => (item.id === row.id ? data : item)),
+                            );
+                        }}
+                      >
+                        {row.enabled ? "Hide" : "Show"}
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs text-red-600"
+                        onClick={async () => {
+                          await deleteWebsiteAmenity(row.id);
+                          setRows((prev) => prev.filter((item) => item.id !== row.id));
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </li>
+                  )}
+                </Draggable>
+              ))}
+              {provided.placeholder}
+            </ul>
+          )}
+        </Droppable>
+      </DragDropContext>
       <div className="mt-4 flex gap-2">
         <input
           value={label}

@@ -283,7 +283,9 @@ function AmenitiesBlock({
   content: WebsiteContent;
   compact?: boolean;
 }) {
-  const amenities = content.amenities.filter((row) => row.enabled);
+  const amenities = [...content.amenities]
+    .filter((row) => row.enabled)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
   if (amenities.length === 0) return null;
 
   if (compact) {
@@ -434,7 +436,7 @@ export function LandingAmenities({
   embeddedInContact?: boolean;
 }) {
   if (embeddedInContact) return null;
-  const amenities = content.amenities.filter((row) => row.enabled);
+  const amenities = [...content.amenities].filter((row) => row.enabled).sort((a, b) => a.sortOrder - b.sortOrder);
   if (amenities.length === 0) return null;
 
   return (
@@ -448,7 +450,7 @@ export function LandingAmenities({
 
 export function LandingContact({ content }: { content: WebsiteContent }) {
   const { settings } = content;
-  const amenities = content.amenities.filter((row) => row.enabled);
+  const amenities = [...content.amenities].filter((row) => row.enabled).sort((a, b) => a.sortOrder - b.sortOrder);
   const hoursLine = useMemo(
     () => formatOpeningHoursOneLine(settings.openingHours),
     [settings.openingHours],

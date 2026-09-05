@@ -1,6 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
+import {
+  DragDropContext,
+  Draggable,
+  Droppable,
+  type DropResult,
+} from "@hello-pangea/dnd";
+import { GripVertical } from "lucide-react";
 import type {
   WebsiteAmenity,
   WebsiteMenuCategory,
@@ -10,6 +17,7 @@ import type {
 import { MenuPdfManager } from "@/components/admin/website/menu-pdf-manager";
 import {
   deleteWebsiteAmenity,
+  reorderWebsiteAmenities,
   upsertWebsiteAmenity,
   upsertWebsiteMenuCategory,
   upsertWebsiteMenuItem,
@@ -31,7 +39,9 @@ export function AmenitiesDesignerPanel({
   const [label, setLabel] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [reordering, setReordering] = useState(false);
   const iconRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const rows = [...amenities].sort((a, b) => a.sortOrder - b.sortOrder);
 
   const add = async () => {
     if (!label.trim()) return;
@@ -80,85 +90,156 @@ export function AmenitiesDesignerPanel({
     }
   };
 
+  const persistOrder = async (next: WebsiteAmenity[]) => {
+    setReordering(true);
+    setMessage(null);
+    const { data, error } = await reorderWebsiteAmenities(next.map((row) => row.id));
+    setReordering(false);
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    onChange(data ?? next);
+    setMessage("Order saved.");
+  };
+
+  const handleDragEnd = (result: DropResult) => {
+    if (!result.destination || result.source.index === result.destination.index) return;
+    const next = [...rows];
+    const [moved] = next.splice(result.source.index, 1);
+    next.splice(result.destination.index, 0, moved);
+    const withOrder = next.map((row, index) => ({ ...row, sortOrder: index }));
+    onChange(withOrder);
+    void persistOrder(withOrder);
+  };
+
   return (
     <div className="space-y-3 border-t border-gray-100 pt-3 dark:border-gray-800">
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Amenities</p>
-      <p className="text-[11px] text-gray-500">Edit here — canvas preview updates live.</p>
-      <ul className="max-h-72 space-y-2 overflow-y-auto">
-        {amenities.map((row) => (
-          <li
-            key={row.id}
-            className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 p-2 dark:border-gray-700"
-          >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-gray-100 dark:bg-gray-800">
-              {row.iconUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={row.iconUrl} alt="" className="h-8 w-8 object-contain" />
-              ) : (
-                <span className="text-[10px] text-gray-400">PNG</span>
-              )}
-            </div>
-            <input
-              className="pos-input min-w-0 flex-1 !py-1 text-sm"
-              value={row.label}
-              onChange={(event) =>
-                onChange(
-                  amenities.map((item) =>
-                    item.id === row.id ? { ...item, label: event.target.value } : item,
-                  ),
-                )
-              }
-              onBlur={async () => {
-                const current = amenities.find((item) => item.id === row.id);
-                if (!current) return;
-                const { data } = await upsertWebsiteAmenity(current);
-                if (data) onChange(amenities.map((item) => (item.id === row.id ? data : item)));
-              }}
-            />
-            <input
-              ref={(el) => {
-                iconRefs.current[row.id] = el;
-              }}
-              type="file"
-              accept="image/png,image/svg+xml,image/webp,image/jpeg"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (file) void uploadIcon(row, file);
-              }}
-            />
-            <button
-              type="button"
-              disabled={busyId === row.id}
-              className="text-[11px] font-medium text-[#8B6914] disabled:opacity-50"
-              onClick={() => iconRefs.current[row.id]?.click()}
+      <p className="text-[11px] text-gray-500">
+        Edit here — canvas updates live. Drag to reorder
+        {reordering ? " · saving…" : ""}.
+      </p>
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <Droppable droppableId="designer-amenities">
+          {(provided) => (
+            <ul
+              ref={provided.innerRef}
+              {...provided.droppableProps}
+              className="max-h-72 space-y-2 overflow-y-auto"
             >
-              {busyId === row.id ? "…" : "Icon"}
-            </button>
-            <button
-              type="button"
-              className="text-[11px] text-gray-500"
-              onClick={async () => {
-                const { data } = await upsertWebsiteAmenity({ ...row, enabled: !row.enabled });
-                if (data) onChange(amenities.map((item) => (item.id === row.id ? data : item)));
-              }}
-            >
-              {row.enabled ? "Hide" : "Show"}
-            </button>
-            <button
-              type="button"
-              className="text-[11px] text-red-600"
-              onClick={async () => {
-                await deleteWebsiteAmenity(row.id);
-                onChange(amenities.filter((item) => item.id !== row.id));
-              }}
-            >
-              Del
-            </button>
-          </li>
-        ))}
-      </ul>
+              {rows.map((row, index) => (
+                <Draggable
+                  key={row.id}
+                  draggableId={row.id}
+                  index={index}
+                  isDragDisabled={reordering}
+                >
+                  {(dragProvided, snapshot) => (
+                    <li
+                      ref={dragProvided.innerRef}
+                      {...dragProvided.draggableProps}
+                      className={`flex flex-wrap items-center gap-2 rounded-lg border p-2 dark:border-gray-700 ${
+                        snapshot.isDragging
+                          ? "border-[#8B6914] bg-[#8B6914]/5 shadow"
+                          : "border-gray-200"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        aria-label={`Drag to reorder ${row.label}`}
+                        className="cursor-grab touch-none text-gray-400 hover:text-gray-700 active:cursor-grabbing"
+                        disabled={reordering}
+                        {...dragProvided.dragHandleProps}
+                      >
+                        <GripVertical className="h-4 w-4" />
+                      </button>
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-gray-100 dark:bg-gray-800">
+                        {row.iconUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={row.iconUrl} alt="" className="h-8 w-8 object-contain" />
+                        ) : (
+                          <span className="text-[10px] text-gray-400">PNG</span>
+                        )}
+                      </div>
+                      <input
+                        className="pos-input min-w-0 flex-1 !py-1 text-sm"
+                        value={row.label}
+                        onChange={(event) =>
+                          onChange(
+                            amenities.map((item) =>
+                              item.id === row.id
+                                ? { ...item, label: event.target.value }
+                                : item,
+                            ),
+                          )
+                        }
+                        onBlur={async () => {
+                          const current = amenities.find((item) => item.id === row.id);
+                          if (!current) return;
+                          const { data } = await upsertWebsiteAmenity(current);
+                          if (data)
+                            onChange(
+                              amenities.map((item) => (item.id === row.id ? data : item)),
+                            );
+                        }}
+                      />
+                      <input
+                        ref={(el) => {
+                          iconRefs.current[row.id] = el;
+                        }}
+                        type="file"
+                        accept="image/png,image/svg+xml,image/webp,image/jpeg"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          event.target.value = "";
+                          if (file) void uploadIcon(row, file);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={busyId === row.id}
+                        className="text-[11px] font-medium text-[#8B6914] disabled:opacity-50"
+                        onClick={() => iconRefs.current[row.id]?.click()}
+                      >
+                        {busyId === row.id ? "…" : "Icon"}
+                      </button>
+                      <button
+                        type="button"
+                        className="text-[11px] text-gray-500"
+                        onClick={async () => {
+                          const { data } = await upsertWebsiteAmenity({
+                            ...row,
+                            enabled: !row.enabled,
+                          });
+                          if (data)
+                            onChange(
+                              amenities.map((item) => (item.id === row.id ? data : item)),
+                            );
+                        }}
+                      >
+                        {row.enabled ? "Hide" : "Show"}
+                      </button>
+                      <button
+                        type="button"
+                        className="text-[11px] text-red-600"
+                        onClick={async () => {
+                          await deleteWebsiteAmenity(row.id);
+                          onChange(amenities.filter((item) => item.id !== row.id));
+                        }}
+                      >
+                        Del
+                      </button>
+                    </li>
+                  )}
+                </Draggable>
+              ))}
+              {provided.placeholder}
+            </ul>
+          )}
+        </Droppable>
+      </DragDropContext>
       <div className="flex gap-2">
         <input
           value={label}
@@ -182,7 +263,6 @@ export function AmenitiesDesignerPanel({
   );
 }
 
-/** Compact menu editor for the visual designer inspector. */
 export function MenuDesignerPanel({
   categories,
   items,

@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from "next/cache";
 import {
   DEFAULT_AMENITIES,
   DEFAULT_MENU_CATEGORIES,
@@ -195,6 +196,8 @@ function mapVideoRow(row: Record<string, unknown>): WebsiteVideo {
 
 /** Public read for the marketing website — uses admin client; tables may not exist until SQL patch is applied. */
 export async function fetchWebsiteContent(): Promise<WebsiteContent> {
+  // Always read fresh CMS data — admin save/preview must not see a stale RSC cache.
+  noStore();
   const fallback = defaultWebsiteContent();
 
   try {
@@ -230,9 +233,28 @@ export async function fetchWebsiteContent(): Promise<WebsiteContent> {
       }
     }
 
-    const amenities = (amenitiesRes.data ?? []).map((row) =>
+    let amenities = (amenitiesRes.data ?? []).map((row) =>
       mapAmenityRow(row as Record<string, unknown>),
     );
+    // Persist placeholder defaults so admin edits/icon uploads survive reload + match preview.
+    if (amenities.length === 0 && !amenitiesRes.error) {
+      const seedRows = DEFAULT_AMENITIES.map((item) => ({
+        label: item.label,
+        icon: item.icon,
+        icon_url: item.iconUrl || null,
+        sort_order: item.sortOrder,
+        enabled: item.enabled,
+        updated_at: new Date().toISOString(),
+      }));
+      const seeded = await admin.from("website_amenities").insert(seedRows).select("*");
+      if (!seeded.error && seeded.data) {
+        amenities = seeded.data.map((row) => mapAmenityRow(row as Record<string, unknown>));
+      } else if (seeded.error && process.env.NODE_ENV !== "production") {
+        console.warn("[website] amenity seed:", seeded.error.message);
+      }
+    } else if (amenitiesRes.error && process.env.NODE_ENV !== "production") {
+      console.warn("[website] amenities fetch:", amenitiesRes.error.message);
+    }
     const menuCategories = (categoriesRes.data ?? []).map((row) =>
       mapCategoryRow(row as Record<string, unknown>),
     );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { WebsiteAmenity, WebsiteContent } from "@/lib/website/types";
 import {
   deleteWebsiteAmenity,
@@ -9,6 +9,9 @@ import {
 
 export function AmenitiesManager({ initial }: { initial: WebsiteAmenity[] }) {
   const [rows, setRows] = useState(initial);
+  useEffect(() => {
+    setRows(initial);
+  }, [initial]);
   const [label, setLabel] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);

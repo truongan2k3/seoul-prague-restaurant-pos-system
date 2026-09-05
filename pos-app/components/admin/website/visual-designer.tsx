@@ -412,6 +412,24 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
     setZoom(device === "mobile" ? 90 : 85);
   }, [device]);
 
+  // Keep canvas/inspector aligned with server after Save + router.refresh() / full reload.
+  useEffect(() => {
+    setMedia(initial.media);
+    setGallery(initial.gallery);
+    setVideos(initial.videos);
+    setAmenities(initial.amenities);
+    setMenuCategories(initial.menuCategories);
+    setMenuItems(initial.menuItems);
+    setMenuPdfs(initial.menuPdfs);
+    if (!dirtyRef.current) {
+      setSettings({
+        ...initial.settings,
+        pageLayout: normalizePageLayout(initial.settings.pageLayout),
+        promoSlideshows: normalizePromoSlideshows(initial.settings.promoSlideshows),
+      });
+    }
+  }, [initial]);
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#e8e8eb] dark:bg-[#121214]">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-black/10 bg-white/90 px-4 py-2.5 backdrop-blur dark:border-white/10 dark:bg-[#1a1a1c]/95">

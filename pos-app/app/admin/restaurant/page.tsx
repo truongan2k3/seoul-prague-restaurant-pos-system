@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { SocialLinksManager } from "@/components/admin/website/social-links-manager";
 import { WebsiteSettingsForm } from "@/components/admin/website/settings-forms";
 import { fetchWebsiteContent } from "@/src/lib/website-public";

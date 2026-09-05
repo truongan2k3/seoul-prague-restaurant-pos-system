@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { redirect } from "next/navigation";
 import { WebsiteAdminShell } from "@/components/admin/website/admin-shell";
 import { readAuthSession } from "@/src/lib/auth/session";

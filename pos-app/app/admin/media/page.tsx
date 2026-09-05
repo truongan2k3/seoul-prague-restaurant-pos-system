@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { MediaManager } from "@/components/admin/website/media-manager";
 import { fetchWebsiteContent } from "@/src/lib/website-public";
 

@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { WebsiteVisualDesigner } from "@/components/admin/website/visual-designer";
 import { fetchWebsiteContent } from "@/src/lib/website-public";
 

@@ -1,5 +1,7 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
+
 import { canManageStaff, normalizeStaffRole } from "@/lib/staff-roles";
 import { DEFAULT_OPENING_HOURS, DEFAULT_WEBSITE_SETTINGS } from "@/lib/website/defaults";
 import { nextWebsiteSortOrder } from "@/lib/website/sort-order";
@@ -43,6 +45,12 @@ function isUuid(value: string | undefined | null): value is string {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value,
   );
+}
+
+function revalidateWebsitePaths() {
+  revalidatePath("/", "layout");
+  revalidatePath("/menu");
+  revalidatePath("/admin", "layout");
 }
 
 async function requireWebsiteAdmin() {
@@ -117,6 +125,7 @@ export async function saveWebsiteSettings(input: Partial<WebsiteSettings>) {
         : "";
     return { data: null, error: new Error(`${dbError.message}${hint}`) };
   }
+  revalidateWebsitePaths();
   return { data: mapSettingsRow(data as Record<string, unknown>), error: null };
 }
 
@@ -203,6 +212,7 @@ export async function updateWebsiteMediaObjectPosition(
         : dbError,
     };
   }
+  revalidateWebsitePaths();
   return { data: mapMediaRow(data as Record<string, unknown>), error: null };
 }
 
@@ -238,6 +248,7 @@ export async function upsertWebsiteAmenity(input: Omit<WebsiteAmenity, "id"> & {
   const { data, error: dbError } = await query.select("*").single();
 
   if (dbError) return { data: null, error: dbError };
+  revalidateWebsitePaths();
   return { data: mapAmenityRow(data as Record<string, unknown>), error: null };
 }
 
@@ -246,7 +257,9 @@ export async function deleteWebsiteAmenity(id: string) {
   if (error || !admin) return { error };
   // Placeholder default ids never hit the DB — treat as already gone.
   if (!isUuid(id)) return { error: null };
-  return { error: (await admin.from("website_amenities").delete().eq("id", id)).error };
+  const { error: deleteError } = await admin.from("website_amenities").delete().eq("id", id);
+  if (!deleteError) revalidateWebsitePaths();
+  return { error: deleteError };
 }
 
 export async function upsertWebsiteMenuCategory(
@@ -269,6 +282,7 @@ export async function upsertWebsiteMenuCategory(
     .single();
 
   if (dbError) return { data: null, error: dbError };
+  revalidateWebsitePaths();
   return { data: mapCategoryRow(data as Record<string, unknown>), error: null };
 }
 
@@ -302,6 +316,7 @@ export async function upsertWebsiteMenuItem(input: Omit<WebsiteMenuItem, "id"> &
     .single();
 
   if (dbError) return { data: null, error: dbError };
+  revalidateWebsitePaths();
   return { data: mapMenuItemRow(data as Record<string, unknown>), error: null };
 }
 
@@ -359,6 +374,7 @@ export async function upsertWebsiteGalleryItem(
     .single();
 
   if (dbError) return { data: null, error: dbError };
+  revalidateWebsitePaths();
   return { data: mapGalleryRow(data as Record<string, unknown>), error: null };
 }
 
@@ -418,6 +434,7 @@ export async function upsertWebsiteVideo(input: Omit<WebsiteVideo, "id"> & { id?
     .single();
 
   if (dbError) return { data: null, error: dbError };
+  revalidateWebsitePaths();
   return { data: mapVideoRow(data as Record<string, unknown>), error: null };
 }
 
@@ -521,6 +538,7 @@ export async function uploadWebsiteMenuPdf(input: {
     .single();
 
   if (dbError) return { data: null, error: dbError };
+  revalidateWebsitePaths();
   return { data: mapMenuPdfRow(data as Record<string, unknown>), error: null };
 }
 

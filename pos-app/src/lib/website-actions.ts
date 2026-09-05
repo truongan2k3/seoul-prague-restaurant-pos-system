@@ -221,6 +221,7 @@ export async function deleteWebsiteMediaSlot(slot: WebsiteMediaSlot) {
   if (error || !admin) return { error };
 
   const { error: dbError } = await admin.from("website_media_assets").delete().eq("slot", slot);
+  if (!dbError) revalidateWebsitePaths();
   return { error: dbError };
 }
 

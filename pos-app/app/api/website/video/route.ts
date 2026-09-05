@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { canManageStaff, normalizeStaffRole } from "@/lib/staff-roles";
+import { nextWebsiteSortOrder } from "@/lib/website/sort-order";
 import type { VideoSlot } from "@/lib/website/types";
 import { readAuthSession } from "@/src/lib/auth/session";
 import { readStaffSession } from "@/src/lib/auth/staff-session";
@@ -95,7 +96,7 @@ export async function POST(request: Request) {
       video_url: publicUrl,
       poster_url: posterUrl || null,
       slot,
-      sort_order: Date.now(),
+      sort_order: nextWebsiteSortOrder(),
       enabled: true,
       updated_at: new Date().toISOString(),
     })

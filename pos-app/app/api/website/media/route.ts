@@ -43,6 +43,10 @@ async function requireAdmin() {
   }
 }
 
+/**
+ * Confirm a media slot after the browser uploaded directly to Supabase Storage.
+ * Body is small JSON only — avoids Vercel/Next HTTP 413.
+ */
 export async function POST(request: Request) {
   const auth = await requireAdmin();
   if (auth.error || !auth.admin) {
@@ -50,66 +54,51 @@ export async function POST(request: Request) {
   }
   const admin = auth.admin;
 
-  let form: FormData;
+  let body: {
+    slot?: string;
+    altText?: string;
+    publicUrl?: string;
+    storagePath?: string;
+    mimeType?: string;
+    fileSize?: number;
+  };
   try {
-    form = await request.formData();
-  } catch (err) {
+    body = (await request.json()) as typeof body;
+  } catch {
     return NextResponse.json(
-      { error: `Could not read upload: ${errorMessage(err)}` },
+      {
+        error:
+          "Send JSON metadata after direct storage upload (signed-upload). Do not POST the file through this API.",
+      },
       { status: 400 },
     );
   }
 
-  const slot = String(form.get("slot") ?? "").trim() as WebsiteMediaSlot;
-  const altText = String(form.get("altText") ?? "").trim();
-  const file = form.get("file");
+  const slot = String(body.slot ?? "").trim() as WebsiteMediaSlot;
+  const altText = String(body.altText ?? "").trim();
+  const publicUrl = String(body.publicUrl ?? "").trim();
+  const storagePath = String(body.storagePath ?? "").trim();
+  const mimeType = String(body.mimeType ?? "").trim() || null;
+  const fileSize = Number(body.fileSize ?? 0);
 
   if (!SLOTS.includes(slot)) {
     return NextResponse.json({ error: "Invalid media slot." }, { status: 400 });
   }
-  if (!(file instanceof File) || file.size === 0) {
-    return NextResponse.json({ error: "Missing file." }, { status: 400 });
+  if (!publicUrl || !storagePath) {
+    return NextResponse.json({ error: "Missing publicUrl or storagePath." }, { status: 400 });
+  }
+  if (!storagePath.startsWith(`${slot}/`)) {
+    return NextResponse.json({ error: "storagePath does not match slot." }, { status: 400 });
   }
 
-  const extension = file.name.split(".").pop()?.toLowerCase() || "bin";
-  const path = `${slot}/${Date.now()}.${extension}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
-
-  const { data: buckets } = await admin.storage.listBuckets();
-  const exists = (buckets ?? []).some((bucket) => bucket.name === "restaurant_media");
-  if (!exists) {
-    const { error: createError } = await admin.storage.createBucket("restaurant_media", {
-      public: true,
-    });
-    if (createError && !/already exists|duplicate/i.test(createError.message)) {
-      return NextResponse.json(
-        { error: `Storage bucket missing: ${createError.message}` },
-        { status: 500 },
-      );
-    }
-  }
-
-  const { error: uploadError } = await admin.storage.from("restaurant_media").upload(path, buffer, {
-    cacheControl: "31536000",
-    upsert: true,
-    contentType: file.type || undefined,
-  });
-  if (uploadError) {
-    return NextResponse.json(
-      { error: `Storage upload failed: ${uploadError.message}` },
-      { status: 500 },
-    );
-  }
-
-  const { data: publicData } = admin.storage.from("restaurant_media").getPublicUrl(path);
   const { data, error: dbError } = await admin
     .from("website_media_assets")
     .upsert(
       {
         slot,
-        file_url: publicData.publicUrl,
-        storage_path: path,
-        mime_type: file.type || null,
+        file_url: publicUrl,
+        storage_path: storagePath,
+        mime_type: mimeType,
         alt_text: altText || null,
         updated_at: new Date().toISOString(),
       },
@@ -128,8 +117,8 @@ export async function POST(request: Request) {
   return NextResponse.json({
     data: mapMediaRow(data as Record<string, unknown>),
     warning:
-      file.size > 50 * 1024 * 1024
-        ? `Large file (${(file.size / 1024 / 1024).toFixed(1)} MB). Recommended sizes are lower for faster loading.`
+      fileSize > 50 * 1024 * 1024
+        ? `Large file (${(fileSize / 1024 / 1024).toFixed(1)} MB). Recommended sizes are lower for faster loading.`
         : null,
   });
 }

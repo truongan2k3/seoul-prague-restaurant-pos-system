@@ -61,14 +61,23 @@ export function MenuPdfManager({ initial }: MenuPdfManagerProps) {
       const pageCount = await countPdfPages(file);
 
       setProgress(`Uploading ${(file.size / 1024 / 1024).toFixed(1)} MB…`);
-      const form = new FormData();
-      form.set("language", language);
-      form.set("file", file);
-      if (pageCount != null) form.set("pageCount", String(pageCount));
+      const { uploadFileDirectToStorage } = await import("@/lib/website/direct-upload");
+      const uploaded = await uploadFileDirectToStorage(file, "menu-pdfs");
+      if (uploaded.error || !uploaded.publicUrl || !uploaded.storagePath) {
+        setError(uploaded.error || "Direct upload failed.");
+        return;
+      }
 
       const response = await fetch("/api/website/menu-pdf", {
         method: "POST",
-        body: form,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          language,
+          publicUrl: uploaded.publicUrl,
+          storagePath: uploaded.storagePath,
+          pageCount: pageCount ?? null,
+          fileSize: file.size,
+        }),
       });
 
       const payload = (await response.json().catch(() => ({}))) as {

@@ -37,26 +37,9 @@ async function requireAdmin() {
   }
 }
 
-async function ensureRestaurantMediaBucket(
-  admin: ReturnType<typeof createSupabaseAdmin>,
-): Promise<string | null> {
-  const { data: buckets, error: listError } = await admin.storage.listBuckets();
-  if (listError) return listError.message;
-
-  const exists = (buckets ?? []).some((bucket) => bucket.name === "restaurant_media");
-  if (exists) return null;
-
-  const { error: createError } = await admin.storage.createBucket("restaurant_media", {
-    public: true,
-    fileSizeLimit: MAX_BYTES,
-    allowedMimeTypes: ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/svg+xml", "video/mp4", "video/webm"],
-  });
-  if (createError && !/already exists|duplicate/i.test(createError.message)) {
-    return createError.message;
-  }
-  return null;
-}
-
+/**
+ * Confirm a menu PDF after direct-to-storage upload (avoids HTTP 413).
+ */
 export async function POST(request: Request) {
   const auth = await requireAdmin();
   if (auth.error || !auth.admin) {
@@ -64,71 +47,45 @@ export async function POST(request: Request) {
   }
   const admin = auth.admin;
 
-  let form: FormData;
+  let body: {
+    language?: string;
+    publicUrl?: string;
+    storagePath?: string;
+    pageCount?: number | null;
+    fileSize?: number;
+  };
   try {
-    form = await request.formData();
+    body = (await request.json()) as typeof body;
   } catch {
     return NextResponse.json(
-      { error: "Could not read upload. File may be too large (max 25 MB)." },
+      {
+        error:
+          "Send JSON metadata after direct storage upload. Do not POST the PDF through this API.",
+      },
       { status: 400 },
     );
   }
 
-  const language = String(form.get("language") ?? "").trim() as MenuPdfLanguage;
-  const file = form.get("file");
+  const language = String(body.language ?? "").trim() as MenuPdfLanguage;
+  const publicUrl = String(body.publicUrl ?? "").trim();
+  const storagePath = String(body.storagePath ?? "").trim();
+  const fileSize = Number(body.fileSize ?? 0);
+  const pageCount =
+    body.pageCount != null && Number.isFinite(Number(body.pageCount))
+      ? Number(body.pageCount)
+      : null;
 
   if (!ALLOWED.includes(language)) {
     return NextResponse.json({ error: "Invalid language. Use cs, en, or zh." }, { status: 400 });
   }
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: "Missing PDF file." }, { status: 400 });
+  if (!publicUrl || !storagePath) {
+    return NextResponse.json({ error: "Missing publicUrl or storagePath." }, { status: 400 });
+  }
+  if (!storagePath.startsWith("menu-pdfs/")) {
+    return NextResponse.json({ error: "storagePath must be under menu-pdfs/." }, { status: 400 });
   }
 
-  const isPdf =
-    file.type === "application/pdf" ||
-    file.type === "application/x-pdf" ||
-    file.name.toLowerCase().endsWith(".pdf");
-  if (!isPdf) {
-    return NextResponse.json({ error: "Only PDF files are supported." }, { status: 400 });
-  }
-  if (file.size > MAX_BYTES) {
-    // Soft recommendation only — continue upload and include a warning.
-  }
-
-  const bucketError = await ensureRestaurantMediaBucket(admin);
-  if (bucketError) {
-    return NextResponse.json(
-      {
-        error: `Storage bucket missing (${bucketError}). Run supabase/patch-website-cms.sql or create bucket "restaurant_media".`,
-      },
-      { status: 500 },
-    );
-  }
-
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const path = `menu-pdfs/${language}-${Date.now()}.pdf`;
-  const { error: uploadError } = await admin.storage.from("restaurant_media").upload(path, buffer, {
-    cacheControl: "31536000",
-    upsert: true,
-    contentType: "application/pdf",
-  });
-
-  if (uploadError) {
-    return NextResponse.json(
-      {
-        error: `Storage upload failed: ${uploadError.message}. Ensure SUPABASE_SERVICE_ROLE_KEY is set and bucket restaurant_media exists.`,
-      },
-      { status: 500 },
-    );
-  }
-
-  const { data: publicData } = admin.storage.from("restaurant_media").getPublicUrl(path);
   const label = MENU_PDF_LANGUAGES.find((row) => row.code === language)?.label ?? language;
-  const pageCountRaw = form.get("pageCount");
-  const pageCount =
-    typeof pageCountRaw === "string" && pageCountRaw.trim()
-      ? Number(pageCountRaw)
-      : null;
 
   const { data, error: dbError } = await admin
     .from("website_menu_pdfs")
@@ -136,10 +93,10 @@ export async function POST(request: Request) {
       {
         language,
         label,
-        file_url: publicData.publicUrl,
-        storage_path: path,
-        page_count: Number.isFinite(pageCount) ? pageCount : null,
-        file_size: buffer.length,
+        file_url: publicUrl,
+        storage_path: storagePath,
+        page_count: pageCount,
+        file_size: fileSize || null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "language" },
@@ -162,8 +119,8 @@ export async function POST(request: Request) {
   return NextResponse.json({
     data: mapMenuPdfRow(data as Record<string, unknown>),
     warning:
-      file.size > MAX_BYTES
-        ? `Recommended PDF size is up to 25 MB. Your file is ${(file.size / 1024 / 1024).toFixed(1)} MB.`
+      fileSize > MAX_BYTES
+        ? `Recommended PDF size is up to 25 MB. Your file is ${(fileSize / 1024 / 1024).toFixed(1)} MB.`
         : null,
   });
 }

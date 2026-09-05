@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { WebsiteAmenity, WebsiteContent } from "@/lib/website/types";
 import {
   deleteWebsiteAmenity,
@@ -11,12 +11,15 @@ export function AmenitiesManager({ initial }: { initial: WebsiteAmenity[] }) {
   const [rows, setRows] = useState(initial);
   const [label, setLabel] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const iconInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const add = async () => {
     if (!label.trim()) return;
     const { data, error } = await upsertWebsiteAmenity({
       label: label.trim(),
       icon: "sparkles",
+      iconUrl: "",
       sortOrder: rows.length,
       enabled: true,
     });
@@ -29,41 +32,124 @@ export function AmenitiesManager({ initial }: { initial: WebsiteAmenity[] }) {
     setMessage("Added.");
   };
 
+  const uploadIcon = async (row: WebsiteAmenity, file: File) => {
+    setBusyId(row.id);
+    setMessage(null);
+    try {
+      if (!file.type.startsWith("image/")) {
+        setMessage("Icon must be a PNG, SVG, or other image.");
+        return;
+      }
+      const { uploadFileDirectToStorage } = await import("@/lib/website/direct-upload");
+      const uploaded = await uploadFileDirectToStorage(file, "amenities");
+      if (uploaded.error || !uploaded.publicUrl) {
+        setMessage(uploaded.error || "Icon upload failed.");
+        return;
+      }
+      const { data, error } = await upsertWebsiteAmenity({
+        ...row,
+        iconUrl: uploaded.publicUrl,
+      });
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
+      if (data) setRows((prev) => prev.map((item) => (item.id === row.id ? data : item)));
+      setMessage("Icon saved.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
       <h2 className="text-lg font-semibold">Amenities</h2>
-      <ul className="mt-4 space-y-2">
+      <p className="mt-1 text-sm text-gray-500">
+        Upload a custom PNG/SVG icon for each amenity. Icons show large on the landing page.
+      </p>
+      <ul className="mt-4 space-y-3">
         {rows.map((row) => (
-          <li key={row.id} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-800">
-            <span>{row.label}</span>
-            <div className="flex gap-2">
+          <li
+            key={row.id}
+            className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 px-3 py-3 dark:border-gray-800"
+          >
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100 dark:bg-gray-800">
+              {row.iconUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={row.iconUrl} alt="" className="h-12 w-12 object-contain" />
+              ) : (
+                <span className="text-xs text-gray-400">No icon</span>
+              )}
+            </div>
+            <span className="min-w-0 flex-1 font-medium">{row.label}</span>
+            <input
+              ref={(el) => {
+                iconInputRefs.current[row.id] = el;
+              }}
+              type="file"
+              accept="image/png,image/svg+xml,image/webp,image/jpeg"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void uploadIcon(row, file);
+              }}
+            />
+            <button
+              type="button"
+              disabled={busyId === row.id}
+              className="text-xs font-medium text-[#8B6914] disabled:opacity-50"
+              onClick={() => iconInputRefs.current[row.id]?.click()}
+            >
+              {busyId === row.id ? "Uploading…" : row.iconUrl ? "Change icon" : "Upload PNG"}
+            </button>
+            {row.iconUrl ? (
               <button
                 type="button"
                 className="text-xs text-gray-500"
                 onClick={async () => {
-                  const { data } = await upsertWebsiteAmenity({ ...row, enabled: !row.enabled });
+                  const { data } = await upsertWebsiteAmenity({ ...row, iconUrl: "" });
                   if (data) setRows((prev) => prev.map((item) => (item.id === row.id ? data : item)));
                 }}
               >
-                {row.enabled ? "Hide" : "Show"}
+                Clear icon
               </button>
-              <button
-                type="button"
-                className="text-xs text-red-600"
-                onClick={async () => {
-                  await deleteWebsiteAmenity(row.id);
-                  setRows((prev) => prev.filter((item) => item.id !== row.id));
-                }}
-              >
-                Delete
-              </button>
-            </div>
+            ) : null}
+            <button
+              type="button"
+              className="text-xs text-gray-500"
+              onClick={async () => {
+                const { data } = await upsertWebsiteAmenity({ ...row, enabled: !row.enabled });
+                if (data) setRows((prev) => prev.map((item) => (item.id === row.id ? data : item)));
+              }}
+            >
+              {row.enabled ? "Hide" : "Show"}
+            </button>
+            <button
+              type="button"
+              className="text-xs text-red-600"
+              onClick={async () => {
+                await deleteWebsiteAmenity(row.id);
+                setRows((prev) => prev.filter((item) => item.id !== row.id));
+              }}
+            >
+              Delete
+            </button>
           </li>
         ))}
       </ul>
       <div className="mt-4 flex gap-2">
-        <input value={label} onChange={(e) => setLabel(e.target.value)} className="pos-input flex-1" placeholder="New amenity" />
-        <button type="button" onClick={() => void add()} className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white dark:bg-gray-100 dark:text-gray-900">
+        <input
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          className="pos-input flex-1"
+          placeholder="New amenity"
+        />
+        <button
+          type="button"
+          onClick={() => void add()}
+          className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white dark:bg-gray-100 dark:text-gray-900"
+        >
           Add
         </button>
       </div>

@@ -41,11 +41,16 @@ create table if not exists public.website_amenities (
   id uuid primary key default gen_random_uuid(),
   label text not null,
   icon text not null default 'sparkles',
+  icon_url text,
   sort_order int not null default 0,
   enabled boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Amenity custom icons (safe for existing DBs that already have the table)
+alter table public.website_amenities
+  add column if not exists icon_url text;
 
 create table if not exists public.website_menu_categories (
   id uuid primary key default gen_random_uuid(),

@@ -238,7 +238,8 @@ export function LandingGallery({ content }: { content: WebsiteContent }) {
                     alt={item.title || "Gallery"}
                     className="h-full w-full object-cover"
                     draggable={false}
-                    loading={index < 8 ? "eager" : "lazy"}
+                    loading={index < 2 ? "eager" : "lazy"}
+                    decoding="async"
                   />
                 </figure>
               );

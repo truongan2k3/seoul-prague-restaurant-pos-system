@@ -3,7 +3,8 @@ import type { MenuPdfLanguage } from "@/lib/website/types";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+/** Cache PDF responses so repeat flipbook loads skip Supabase. */
+export const revalidate = 3600;
 
 const ALLOWED: MenuPdfLanguage[] = ["cs", "en", "zh"];
 
@@ -36,7 +37,9 @@ export async function GET(request: Request) {
     }
 
     if (!bytes) {
-      const response = await fetch(data.file_url, { cache: "no-store" });
+      const response = await fetch(data.file_url, {
+        next: { revalidate: 3600 },
+      });
       if (!response.ok) {
         return NextResponse.json({ error: "Could not fetch PDF file." }, { status: 502 });
       }
@@ -48,7 +51,8 @@ export async function GET(request: Request) {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `inline; filename="menu-${language}.pdf"`,
-        "Cache-Control": "public, max-age=300",
+        "Cache-Control":
+          "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800",
       },
     });
   } catch (error) {

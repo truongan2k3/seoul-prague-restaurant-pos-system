@@ -51,6 +51,8 @@ function revalidateWebsitePaths() {
   revalidatePath("/", "layout");
   revalidatePath("/menu");
   revalidatePath("/admin", "layout");
+  // Invalidate PDF proxy cache when menu PDFs change.
+  revalidatePath("/api/website/menu-pdf/file");
 }
 
 async function requireWebsiteAdmin() {

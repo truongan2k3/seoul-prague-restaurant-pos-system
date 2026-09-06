@@ -3,8 +3,8 @@ import { LandingPageView } from "@/components/landing/landing-page-view";
 import { buildRestaurantJsonLd } from "@/lib/website/seo";
 import { fetchWebsiteContent } from "@/src/lib/website-public";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+/** ISR — admin saves call revalidatePath("/"). Keeps CDN/edge from re-hitting Supabase every guest. */
+export const revalidate = 120;
 
 export async function generateMetadata(): Promise<Metadata> {
   const content = await fetchWebsiteContent();

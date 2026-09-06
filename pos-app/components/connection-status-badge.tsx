@@ -360,7 +360,7 @@ export function ConnectionStatusBadge({ children }: { children?: ReactNode }) {
   );
 }
 
-/** Inline Online + Printer chips for main POS top bars (one row). */
+/** Inline Online + Printer chips for main POS top bars — desktop only (mobile uses sidebar icons). */
 export function PosStatusChips({ className = "" }: { className?: string }) {
   const pathname = usePathname();
   const { status } = useConnectionStatus();
@@ -375,7 +375,7 @@ export function PosStatusChips({ className = "" }: { className?: string }) {
 
   return (
     <div
-      className={`flex flex-nowrap items-center gap-1 ${className}`}
+      className={`hidden flex-nowrap items-center gap-1 lg:flex ${className}`}
       role="status"
       aria-live="polite"
     >
@@ -399,7 +399,68 @@ export function PosStatusChips({ className = "" }: { className?: string }) {
   );
 }
 
-/** Clock + status chips — single non-wrapping row for mobile headers. */
+function networkIconShell(status: ConnectionStatus): string {
+  if (status === "online") {
+    return "bg-emerald-500/15 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-300";
+  }
+  if (status === "no-network") {
+    return "bg-rose-500/15 text-rose-600 dark:bg-rose-400/15 dark:text-rose-300";
+  }
+  return "bg-amber-500/15 text-amber-600 dark:bg-amber-400/15 dark:text-amber-300";
+}
+
+function bridgeIconShell(status: BridgeStatus): string {
+  if (status === "online") {
+    return "bg-sky-500/15 text-sky-600 dark:bg-sky-400/15 dark:text-sky-300";
+  }
+  if (status === "offline" || status === "invalid") {
+    return "bg-rose-500/15 text-rose-600 dark:bg-rose-400/15 dark:text-rose-300";
+  }
+  return "bg-stone-500/10 text-stone-500 dark:bg-zinc-700/50 dark:text-zinc-400";
+}
+
+/** Icon-only Online + Printer for the mobile left sidebar rail. */
+export function SidebarStatusIcons({ className = "" }: { className?: string }) {
+  const pathname = usePathname();
+  const { status } = useConnectionStatus();
+  const bridge = useContext(PrintBridgeStatusContext);
+
+  if (shouldHideOnPath(pathname) || !bridge) return null;
+  if (pathname && isStationPath(pathname)) return null;
+
+  const showPrinter = Boolean(pathname && isPosMainPath(pathname));
+  const { bridgeStatus, bridgeDetail } = bridge;
+  const NetworkIcon = status === "online" ? Wifi : WifiOff;
+  const printerTitle =
+    bridgeDetail ?? `Printer: ${bridgeLabel(bridgeStatus)}`;
+
+  return (
+    <div
+      className={`flex flex-col items-center gap-1.5 lg:hidden ${className}`}
+      role="status"
+      aria-live="polite"
+    >
+      <span
+        className={`inline-flex h-8 w-8 items-center justify-center rounded-md ${networkIconShell(status)}`}
+        title={CONNECTION_STATUS_LABELS[status]}
+        aria-label={CONNECTION_STATUS_LABELS[status]}
+      >
+        <NetworkIcon className="h-4 w-4" aria-hidden />
+      </span>
+      {showPrinter ? (
+        <span
+          className={`inline-flex h-8 w-8 items-center justify-center rounded-md ${bridgeIconShell(bridgeStatus)}`}
+          title={printerTitle}
+          aria-label={printerTitle}
+        >
+          <Printer className="h-4 w-4" aria-hidden />
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Clock (desktop) + status chips (desktop). Mobile status lives in the sidebar. */
 export function HeaderClockWithStatus({
   clockClassName,
   className = "",
@@ -407,16 +468,14 @@ export function HeaderClockWithStatus({
   clockClassName?: string;
   className?: string;
 }) {
+  // Custom className (e.g. station boards) keeps the plain inline clock.
+  const clockVariant = clockClassName ? "plain" : "header";
+
   return (
     <div
-      className={`flex flex-nowrap items-center justify-end gap-1.5 sm:gap-2 ${className}`}
+      className={`flex flex-nowrap items-center justify-end gap-2 sm:gap-3 ${className}`}
     >
-      <LiveClock
-        className={
-          clockClassName ??
-          "hidden text-[11px] font-medium tabular-nums text-gray-500 sm:inline dark:text-gray-400"
-        }
-      />
+      <LiveClock variant={clockVariant} className={clockClassName} />
       <PosStatusChips />
     </div>
   );

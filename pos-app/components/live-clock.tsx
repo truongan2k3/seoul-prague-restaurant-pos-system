@@ -15,7 +15,13 @@ const TIME_OPTS: Intl.DateTimeFormatOptions = {
   second: "2-digit",
 };
 
-export function LiveClock({ className }: { className?: string }) {
+interface LiveClockProps {
+  className?: string;
+  /** `header` = stacked date/time pill for desktop POS headers. */
+  variant?: "plain" | "header";
+}
+
+export function LiveClock({ className, variant = "plain" }: LiveClockProps) {
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -23,6 +29,33 @@ export function LiveClock({ className }: { className?: string }) {
     const interval = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(interval);
   }, []);
+
+  if (variant === "header") {
+    if (!now) {
+      return (
+        <time
+          className={`hidden min-w-[7.5rem] sm:block ${className ?? ""}`}
+          aria-hidden="true"
+        >
+          &nbsp;
+        </time>
+      );
+    }
+
+    return (
+      <time
+        dateTime={now.toISOString()}
+        className={`hidden min-w-[7.5rem] flex-col items-end justify-center rounded-lg border border-gray-200/80 bg-gradient-to-b from-white to-gray-50 px-2.5 py-1 shadow-sm dark:border-zinc-700/80 dark:from-zinc-900 dark:to-zinc-950 sm:flex ${className ?? ""}`}
+      >
+        <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-gray-400 dark:text-zinc-500">
+          {now.toLocaleDateString("en-GB", DATE_OPTS)}
+        </span>
+        <span className="text-sm font-semibold tabular-nums tracking-tight text-gray-900 dark:text-zinc-50">
+          {now.toLocaleTimeString("en-GB", TIME_OPTS)}
+        </span>
+      </time>
+    );
+  }
 
   const resolvedClass =
     className ?? "text-sm font-medium tabular-nums text-gray-600 dark:text-gray-400";

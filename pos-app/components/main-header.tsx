@@ -32,7 +32,7 @@ export function MainHeader({ activeTab }: MainHeaderProps) {
       </h1>
       <div className="flex items-center gap-3">
         <NotificationBell />
-        <HeaderClockWithStatus clockClassName="text-xs font-medium tabular-nums text-gray-500 dark:text-gray-400" />
+        <HeaderClockWithStatus />
       </div>
     </header>
   );

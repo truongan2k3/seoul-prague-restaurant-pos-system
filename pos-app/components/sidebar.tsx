@@ -18,6 +18,7 @@ import {
   User,
   Users,
 } from "lucide-react";
+import { SidebarStatusIcons } from "@/components/connection-status-badge";
 import { LanguageSelector } from "@/components/language-selector";
 import { StaffSelfProfileModal } from "@/components/staff-self-profile-modal";
 import { StaffQuickSwitchModal } from "@/components/staff-quick-switch-modal";
@@ -223,6 +224,8 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
               isExpanded ? "p-2 lg:p-4" : "p-1 lg:p-2"
             }`}
           >
+            <SidebarStatusIcons className={isExpanded ? "mb-1" : undefined} />
+
             <div className="flex justify-center">
               <LanguageSelector variant="flag-menu" />
             </div>

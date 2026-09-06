@@ -515,8 +515,8 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
   return (
     <div className="flex h-full flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
-        <h1 className="text-lg font-semibold">{translate("reservations")}</h1>
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white px-2.5 py-1.5 sm:px-4 sm:py-2.5 lg:px-6 lg:py-4 dark:border-gray-800 dark:bg-gray-900">
+        <h1 className="text-sm font-semibold sm:text-base lg:text-lg">{translate("reservations")}</h1>
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -678,7 +678,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-lg font-semibold">{row.guestName}</h2>
+                        <h2 className="text-sm font-semibold sm:text-base lg:text-lg">{row.guestName}</h2>
                         <span
                           className={`rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${
                             isLateReservation(row)

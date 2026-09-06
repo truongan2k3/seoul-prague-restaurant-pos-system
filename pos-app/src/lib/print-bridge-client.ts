@@ -58,6 +58,22 @@ export function validatePrintBridgeUrl(bridgeUrl: string): { ok: boolean; messag
   return { ok: true, message: "Bridge URL looks valid" };
 }
 
+/** True when URL points at this machine (only the PC running print-bridge can ping it). */
+export function isLoopbackPrintBridgeUrl(bridgeUrl: string): boolean {
+  try {
+    const host = new URL(bridgeUrl.trim()).hostname.toLowerCase();
+    return (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "::1" ||
+      host === "[::1]" ||
+      host === "0.0.0.0"
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function pingPrintBridge(bridgeUrl: string): Promise<{ ok: boolean; message: string }> {
   const check = validatePrintBridgeUrl(bridgeUrl);
   if (!check.ok) return check;

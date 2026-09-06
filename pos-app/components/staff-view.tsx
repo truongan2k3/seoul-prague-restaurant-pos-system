@@ -115,9 +115,9 @@ export function StaffView({ onRefresh }: StaffViewProps) {
 
   return (
     <div className="flex h-full flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <header className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
+      <header className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-2.5 py-1.5 sm:px-4 sm:py-2.5 lg:px-6 lg:py-4 dark:border-gray-800 dark:bg-gray-900">
         <div>
-          <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <h1 className="text-sm font-semibold sm:text-base lg:text-lg text-gray-900 dark:text-gray-100">
             {translate("staffManagement")}
           </h1>
           <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -129,7 +129,7 @@ export function StaffView({ onRefresh }: StaffViewProps) {
 
       <div className="flex-1 overflow-auto p-6">
         <section className="mx-auto max-w-5xl rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 px-6 py-4 dark:border-gray-700">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 px-2.5 py-1.5 sm:px-4 sm:py-2.5 lg:px-6 lg:py-4 dark:border-gray-700">
             <div className="flex items-center gap-2">
               <Users className="h-5 w-5 text-gray-400" />
               <h2 className="font-semibold text-gray-900 dark:text-gray-100">Team roster</h2>

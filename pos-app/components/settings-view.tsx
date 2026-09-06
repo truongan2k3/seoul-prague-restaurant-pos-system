@@ -344,8 +344,8 @@ export function SettingsView({
 
   return (
     <div className="flex h-full flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <header className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
-        <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{translate("settings")}</h1>
+      <header className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white px-2.5 py-1.5 sm:px-4 sm:py-2.5 lg:px-6 lg:py-4 dark:border-gray-800 dark:bg-gray-900">
+        <h1 className="text-sm font-semibold sm:text-base lg:text-lg text-zinc-900 dark:text-zinc-100">{translate("settings")}</h1>
         <div className="flex items-center gap-3">
           {saving && (
             <span className="text-xs text-gray-500 dark:text-gray-400">{translate("settingsSaving")}</span>

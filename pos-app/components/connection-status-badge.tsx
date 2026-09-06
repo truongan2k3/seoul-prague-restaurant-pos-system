@@ -21,6 +21,13 @@ import { useSettings } from "@/contexts/settings-context";
 import { LiveClock } from "@/components/live-clock";
 import { isPosMainPath, isStationPath } from "@/lib/page-routes";
 import {
+  isPrintBridgePresenceFresh,
+  startPrintBridgePresencePublisher,
+  subscribePrintBridgePresence,
+  type PrintBridgePresencePayload,
+} from "@/lib/print-bridge-presence";
+import {
+  isLoopbackPrintBridgeUrl,
   pingPrintBridge,
   validatePrintBridgeUrl,
 } from "@/src/lib/print-bridge-client";
@@ -30,6 +37,7 @@ type BridgeStatus = "checking" | "online" | "offline" | "off" | "invalid";
 const BRIDGE_POLL_MS = 12_000;
 const NETWORK_ALERT_COOLDOWN_MS = 60_000;
 const BRIDGE_ALERT_COOLDOWN_MS = 45_000;
+const SHARED_STALE_CHECK_MS = 5_000;
 
 const HIDDEN_PATH_PREFIXES = [
   "/login",
@@ -47,12 +55,6 @@ function shouldHideOnPath(pathname: string | null): boolean {
   return HIDDEN_PATH_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
-}
-
-/** Customer display and other station screens — no printer chrome. */
-function isClientOrStation(pathname: string | null): boolean {
-  if (!pathname) return false;
-  return isStationPath(pathname);
 }
 
 function networkBadgeClass(status: ConnectionStatus): string {
@@ -93,13 +95,15 @@ function bridgeLabel(status: BridgeStatus): string {
 interface PrintBridgeStatusValue {
   bridgeStatus: BridgeStatus;
   bridgeDetail: string | null;
+  /** True when this device is the one that can reach the bridge (PC). */
+  isBridgeHost: boolean;
   checkBridge: () => Promise<void>;
 }
 
 const PrintBridgeStatusContext = createContext<PrintBridgeStatusValue | null>(null);
 
 /**
- * Polls print-bridge + shows network/bridge error modals.
+ * Polls print-bridge on the PC; broadcasts health so tablets inherit Printer: Online.
  * Status chips render in page headers via {@link PosStatusChips}.
  */
 export function ConnectionStatusBadge({ children }: { children?: ReactNode }) {
@@ -109,6 +113,9 @@ export function ConnectionStatusBadge({ children }: { children?: ReactNode }) {
 
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus>("off");
   const [bridgeDetail, setBridgeDetail] = useState<string | null>(null);
+  const [isBridgeHost, setIsBridgeHost] = useState(false);
+  const [sharedPresence, setSharedPresence] =
+    useState<PrintBridgePresencePayload | null>(null);
   const [networkAlert, setNetworkAlert] = useState<string | null>(null);
   const [bridgeAlert, setBridgeAlert] = useState<string | null>(null);
 
@@ -116,44 +123,125 @@ export function ConnectionStatusBadge({ children }: { children?: ReactNode }) {
   const lastBridgeAlertAt = useRef(0);
   const prevNetworkStatus = useRef<ConnectionStatus | null>(null);
   const prevBridgeStatus = useRef<BridgeStatus | null>(null);
+  const localOnlineRef = useRef(false);
+  const localDetailRef = useRef<string | undefined>(undefined);
 
   const silentPrint = settings.silentPrintEnabled;
   const bridgeUrl = settings.printBridgeUrl?.trim() ?? "";
   const hidden = shouldHideOnPath(pathname);
   const onMain = Boolean(pathname && isPosMainPath(pathname));
-  const onStation = isClientOrStation(pathname);
+  const onStation = Boolean(pathname && isStationPath(pathname));
+  const loopback = Boolean(bridgeUrl && isLoopbackPrintBridgeUrl(bridgeUrl));
+
+  const applySharedPresence = useCallback((payload: PrintBridgePresencePayload | null) => {
+    if (localOnlineRef.current) return;
+    if (!payload || !isPrintBridgePresenceFresh(payload.at)) {
+      if (!localOnlineRef.current && loopback) {
+        setBridgeStatus((prev) => (prev === "off" || prev === "invalid" ? prev : "offline"));
+        setBridgeDetail(
+          payload?.detail ??
+            "Chưa nhận heartbeat từ máy PC chạy print-bridge.",
+        );
+        setIsBridgeHost(false);
+      }
+      return;
+    }
+    if (payload.online) {
+      setBridgeStatus("online");
+      setBridgeDetail(
+        payload.detail ?? "Đồng bộ từ máy PC (print-bridge).",
+      );
+      setIsBridgeHost(false);
+      return;
+    }
+    setBridgeStatus("offline");
+    setBridgeDetail(payload.detail ?? "Print bridge offline trên máy PC.");
+    setIsBridgeHost(false);
+  }, [loopback]);
 
   const checkBridge = useCallback(async () => {
     if (!silentPrint) {
+      localOnlineRef.current = false;
       setBridgeStatus("off");
       setBridgeDetail(null);
+      setIsBridgeHost(false);
       return;
     }
     if (!bridgeUrl) {
+      localOnlineRef.current = false;
       setBridgeStatus("invalid");
       setBridgeDetail("Chưa cấu hình địa chỉ Print Bridge trong Settings.");
+      setIsBridgeHost(false);
       return;
     }
     const validation = validatePrintBridgeUrl(bridgeUrl);
     if (!validation.ok) {
+      localOnlineRef.current = false;
       setBridgeStatus("invalid");
       setBridgeDetail(validation.message);
+      setIsBridgeHost(false);
       return;
     }
 
     setBridgeStatus((prev) => (prev === "online" || prev === "offline" ? prev : "checking"));
     const result = await pingPrintBridge(bridgeUrl);
+
     if (result.ok) {
+      localOnlineRef.current = true;
+      localDetailRef.current = result.message;
+      setIsBridgeHost(true);
       setBridgeStatus("online");
       setBridgeDetail(null);
       return;
     }
+
+    localOnlineRef.current = false;
+    localDetailRef.current = result.message;
+
+    // Loopback URL failed → this device is not the PC; use shared heartbeat.
+    if (isLoopbackPrintBridgeUrl(bridgeUrl)) {
+      setIsBridgeHost(false);
+      applySharedPresence(sharedPresence);
+      return;
+    }
+
+    // LAN bridge URL: every device can ping the PC directly.
+    setIsBridgeHost(true);
     setBridgeStatus("offline");
     setBridgeDetail(result.message);
-  }, [silentPrint, bridgeUrl]);
+  }, [silentPrint, bridgeUrl, applySharedPresence, sharedPresence]);
+
+  // Tablets subscribe; the PC (bridge host) only publishes to avoid same-client channel clash.
+  useEffect(() => {
+    if (hidden || !onMain || !silentPrint) return;
+    if (isBridgeHost) return;
+    return subscribePrintBridgePresence((payload) => {
+      setSharedPresence(payload);
+      applySharedPresence(payload);
+    });
+  }, [hidden, onMain, silentPrint, applySharedPresence, isBridgeHost]);
+
+  // Stale shared heartbeat cleanup (tablets only).
+  useEffect(() => {
+    if (hidden || !onMain || !silentPrint || isBridgeHost) return;
+    const id = window.setInterval(() => {
+      if (localOnlineRef.current) return;
+      applySharedPresence(sharedPresence);
+    }, SHARED_STALE_CHECK_MS);
+    return () => window.clearInterval(id);
+  }, [hidden, onMain, silentPrint, isBridgeHost, sharedPresence, applySharedPresence]);
+
+  // PC publishes while it is the bridge host.
+  useEffect(() => {
+    if (hidden || !onMain || !silentPrint) return;
+    if (!isBridgeHost) return;
+    return startPrintBridgePresencePublisher(() => ({
+      online: localOnlineRef.current,
+      detail: localDetailRef.current,
+    }));
+  }, [hidden, onMain, silentPrint, isBridgeHost]);
 
   useEffect(() => {
-    // Only poll bridge on main POS — stations/client don't need printer status.
     if (hidden || !onMain) return;
     void checkBridge();
     if (!silentPrint) return;
@@ -177,9 +265,9 @@ export function ConnectionStatusBadge({ children }: { children?: ReactNode }) {
     );
   }, [status, hidden, onStation]);
 
+  // Bridge popups only on the bridge host (PC), not on tablets inheriting status.
   useEffect(() => {
-    // Bridge popups only on main
-    if (hidden || !onMain) return;
+    if (hidden || !onMain || !isBridgeHost) return;
     const prev = prevBridgeStatus.current;
     prevBridgeStatus.current = bridgeStatus;
     if (bridgeStatus !== "offline" && bridgeStatus !== "invalid") return;
@@ -195,13 +283,13 @@ export function ConnectionStatusBadge({ children }: { children?: ReactNode }) {
       bridgeDetail ??
       (bridgeStatus === "invalid"
         ? "URL bridge không hợp lệ hoặc thiếu cấu hình."
-        : "Không kết nối được tới máy in / bridge. Kiểm tra print-bridge đang chạy.");
+        : "Không kết nối được tới máy in / bridge. Kiểm tra print-bridge đang chạy trên PC.");
     setBridgeAlert(`${title}: ${body}`);
-  }, [bridgeStatus, bridgeDetail, hidden, onMain]);
+  }, [bridgeStatus, bridgeDetail, hidden, onMain, isBridgeHost]);
 
   const value = useMemo(
-    () => ({ bridgeStatus, bridgeDetail, checkBridge }),
-    [bridgeStatus, bridgeDetail, checkBridge],
+    () => ({ bridgeStatus, bridgeDetail, isBridgeHost, checkBridge }),
+    [bridgeStatus, bridgeDetail, isBridgeHost, checkBridge],
   );
 
   return (
@@ -272,14 +360,13 @@ export function ConnectionStatusBadge({ children }: { children?: ReactNode }) {
   );
 }
 
-/** Inline Online (+ Printer on main only) chips for page top bars. */
+/** Inline Online + Printer chips for main POS top bars (one row). */
 export function PosStatusChips({ className = "" }: { className?: string }) {
   const pathname = usePathname();
   const { status } = useConnectionStatus();
   const bridge = useContext(PrintBridgeStatusContext);
 
   if (shouldHideOnPath(pathname) || !bridge) return null;
-  // Client / station screens: no connection chrome in the header.
   if (pathname && isStationPath(pathname)) return null;
 
   const showPrinter = Boolean(pathname && isPosMainPath(pathname));
@@ -288,12 +375,12 @@ export function PosStatusChips({ className = "" }: { className?: string }) {
 
   return (
     <div
-      className={`flex flex-nowrap items-center gap-1.5 ${className}`}
+      className={`flex flex-nowrap items-center gap-1 ${className}`}
       role="status"
       aria-live="polite"
     >
       <span
-        className={`inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-none sm:text-[11px] ${networkBadgeClass(status)}`}
+        className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-none sm:text-[11px] ${networkBadgeClass(status)}`}
         title={CONNECTION_STATUS_LABELS[status]}
       >
         <NetworkIcon className="size-3 shrink-0" aria-hidden />
@@ -301,7 +388,7 @@ export function PosStatusChips({ className = "" }: { className?: string }) {
       </span>
       {showPrinter ? (
         <span
-          className={`inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-none sm:text-[11px] ${bridgeBadgeClass(bridgeStatus)}`}
+          className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-none sm:text-[11px] ${bridgeBadgeClass(bridgeStatus)}`}
           title={bridgeDetail ?? `Printer: ${bridgeLabel(bridgeStatus)}`}
         >
           <Printer className="size-3 shrink-0" aria-hidden />
@@ -312,7 +399,7 @@ export function PosStatusChips({ className = "" }: { className?: string }) {
   );
 }
 
-/** Clock + status chips for POS page headers (one row, no overlay). */
+/** Clock + status chips — single non-wrapping row for mobile headers. */
 export function HeaderClockWithStatus({
   clockClassName,
   className = "",
@@ -321,8 +408,15 @@ export function HeaderClockWithStatus({
   className?: string;
 }) {
   return (
-    <div className={`flex flex-wrap items-center justify-end gap-2 ${className}`}>
-      <LiveClock className={clockClassName} />
+    <div
+      className={`flex flex-nowrap items-center justify-end gap-1.5 sm:gap-2 ${className}`}
+    >
+      <LiveClock
+        className={
+          clockClassName ??
+          "hidden text-[11px] font-medium tabular-nums text-gray-500 sm:inline dark:text-gray-400"
+        }
+      />
       <PosStatusChips />
     </div>
   );

@@ -123,12 +123,12 @@ export function MapView({
 
   return (
     <div className="flex h-full flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900 sm:px-6 sm:py-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-white px-2.5 py-1.5 dark:border-gray-800 dark:bg-gray-900 sm:gap-3 sm:px-4 sm:py-2.5 lg:px-6 lg:py-3">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2.5">
+          <h1 className="shrink-0 text-sm font-semibold text-gray-900 dark:text-gray-100 sm:text-base lg:text-lg">
             {translate("map")}
           </h1>
-          <div className="hidden items-center gap-3 text-xs text-gray-500 sm:flex dark:text-gray-400">
+          <div className="hidden items-center gap-3 text-xs text-gray-500 md:flex dark:text-gray-400">
             <span className="inline-flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-full border border-gray-400 bg-gray-100 dark:border-gray-600 dark:bg-gray-800" />
               {translate("available")}
@@ -145,7 +145,7 @@ export function MapView({
           <button
             type="button"
             onClick={() => setEditMode((value) => !value)}
-            className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
+            className={`shrink-0 rounded-md border px-2 py-1 text-[11px] font-medium sm:rounded-lg sm:px-3 sm:py-1.5 sm:text-sm ${
               editMode
                 ? "border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-300"
                 : "border-gray-200 bg-white text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
@@ -154,12 +154,12 @@ export function MapView({
             {editMode ? translate("saveLayout") : translate("editMode")}
           </button>
           {editMode && (
-            <span className="text-xs text-gray-500 dark:text-gray-400">
+            <span className="hidden text-xs text-gray-500 sm:inline dark:text-gray-400">
               {translate("editLayoutHint")}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <NotificationBell />
           <HeaderClockWithStatus />
         </div>

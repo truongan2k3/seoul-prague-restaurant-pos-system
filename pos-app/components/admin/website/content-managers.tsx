@@ -54,6 +54,12 @@ export function AmenitiesManager({ initial }: { initial: WebsiteAmenity[] }) {
         setMessage("Icon must be a PNG, SVG, or other image.");
         return;
       }
+      const { AMENITY_ICON_SPEC } = await import("@/lib/website/media-slots");
+      if (file.size > AMENITY_ICON_SPEC.maxSizeMb * 1024 * 1024) {
+        setMessage(
+          `Icon is ${(file.size / 1024 / 1024).toFixed(2)} MB — recommended ≤ ${AMENITY_ICON_SPEC.maxSizeMb} MB / ${AMENITY_ICON_SPEC.recommendedWidth}px. Upload continues, but landing will load slower.`,
+        );
+      }
       const { uploadFileDirectToStorage } = await import("@/lib/website/direct-upload");
       const uploaded = await uploadFileDirectToStorage(file, "amenities");
       if (uploaded.error || !uploaded.publicUrl) {
@@ -69,7 +75,7 @@ export function AmenitiesManager({ initial }: { initial: WebsiteAmenity[] }) {
         return;
       }
       if (data) setRows((prev) => prev.map((item) => (item.id === row.id ? data : item)));
-      setMessage("Icon saved.");
+      setMessage((prev) => prev ?? "Icon saved.");
     } finally {
       setBusyId(null);
     }

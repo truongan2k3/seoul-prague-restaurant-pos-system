@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { BookingCta } from "@/components/landing/booking-cta";
+import { LandingImage } from "@/lib/website/landing-image";
 import type { WebsiteContent } from "@/lib/website/types";
 
 const NAV = [
@@ -42,8 +43,16 @@ export function LandingNavbar({ content }: LandingNavbarProps) {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 lg:px-8">
           <Link href="/#home" className="flex items-center gap-3">
             {logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt={content.settings.restaurantName} className="h-10 w-10 object-contain" />
+              <LandingImage
+                src={logoUrl}
+                alt={content.settings.restaurantName}
+                width={40}
+                height={40}
+                sizes="40px"
+                quality={80}
+                priority
+                className="h-10 w-10 object-contain"
+              />
             ) : (
               <span className="landing-serif text-lg font-medium tracking-wide text-[#E8D5C4]">
                 {content.settings.restaurantName.split(" ")[0]}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { BookingCta } from "@/components/landing/booking-cta";
+import { LandingImage } from "@/lib/website/landing-image";
 import type { WebsiteContent } from "@/lib/website/types";
 
 interface LandingHeroProps {
@@ -15,10 +16,12 @@ export function LandingHero({ content }: LandingHeroProps) {
   const { settings, media } = content;
   const heroVideo = media.hero_video?.fileUrl;
   const heroImage = media.hero_image?.fileUrl;
+  // Skip autoplay when the user prefers reduced motion — use the poster/image instead.
+  const playVideo = Boolean(heroVideo) && !reduceMotion;
 
   return (
     <section id="home" className="relative flex min-h-[100svh] items-end overflow-hidden bg-[#0B0B0C] pb-24 pt-28 lg:pb-32">
-      {heroVideo ? (
+      {playVideo ? (
         <video
           className="absolute inset-0 h-full w-full object-cover"
           autoPlay
@@ -26,16 +29,20 @@ export function LandingHero({ content }: LandingHeroProps) {
           loop
           playsInline
           poster={heroImage || undefined}
-          preload="metadata"
+          // With a poster, avoid fetching video bytes until playback starts.
+          preload={heroImage ? "none" : "metadata"}
         >
           <source src={heroVideo} type={media.hero_video?.mimeType || "video/mp4"} />
         </video>
       ) : heroImage ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <LandingImage
           src={heroImage}
           alt=""
-          className="absolute inset-0 h-full w-full object-cover"
+          fill
+          priority
+          sizes="100vw"
+          quality={70}
+          className="object-cover"
           style={{ objectPosition: media.hero_image?.objectPosition ?? "50% 50%" }}
         />
       ) : (

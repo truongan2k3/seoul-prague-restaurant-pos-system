@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { canManageStaff, normalizeStaffRole } from "@/lib/staff-roles";
+import { GALLERY_IMAGE_SPEC } from "@/lib/website/media-slots";
 import { nextWebsiteSortOrder } from "@/lib/website/sort-order";
 import type { GalleryCategory } from "@/lib/website/types";
 import { readAuthSession } from "@/src/lib/auth/session";
@@ -118,8 +119,8 @@ export async function POST(request: Request) {
   return NextResponse.json({
     data: mapGalleryRow(data as Record<string, unknown>),
     warning:
-      fileSize > 20 * 1024 * 1024
-        ? `Large image (${(fileSize / 1024 / 1024).toFixed(1)} MB). Consider compressing for faster loading.`
+      fileSize > GALLERY_IMAGE_SPEC.maxSizeMb * 1024 * 1024
+        ? `Large image (${(fileSize / 1024 / 1024).toFixed(1)} MB). Recommended up to ${GALLERY_IMAGE_SPEC.maxSizeMb} MB / ~${GALLERY_IMAGE_SPEC.recommendedWidth}px wide.`
         : null,
   });
 }

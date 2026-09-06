@@ -32,18 +32,18 @@ export const WEBSITE_MEDIA_SLOTS: MediaSlotSpec[] = [
     recommendedHeight: 1080,
     aspectRatio: "16:9",
     formats: ["JPG", "WEBP"],
-    maxSizeMb: 15,
+    maxSizeMb: 6,
     kind: "image",
   },
   {
     slot: "hero_video",
     title: "Hero video",
-    description: "Cinematic background video for the homepage hero.",
+    description: "Cinematic background video for the homepage hero. Prefer short muted loops under ~30s.",
     recommendedWidth: 1920,
     recommendedHeight: 1080,
     aspectRatio: "16:9",
     formats: ["MP4", "WEBM"],
-    maxSizeMb: 100,
+    maxSizeMb: 40,
     kind: "video",
   },
   {
@@ -54,7 +54,7 @@ export const WEBSITE_MEDIA_SLOTS: MediaSlotSpec[] = [
     recommendedHeight: 1600,
     aspectRatio: "3:4",
     formats: ["JPG", "WEBP"],
-    maxSizeMb: 12,
+    maxSizeMb: 8,
     kind: "image",
   },
   {
@@ -65,7 +65,7 @@ export const WEBSITE_MEDIA_SLOTS: MediaSlotSpec[] = [
     recommendedHeight: 1200,
     aspectRatio: "1:1",
     formats: ["JPG", "WEBP"],
-    maxSizeMb: 10,
+    maxSizeMb: 6,
     kind: "image",
   },
   {
@@ -76,7 +76,7 @@ export const WEBSITE_MEDIA_SLOTS: MediaSlotSpec[] = [
     recommendedHeight: 1200,
     aspectRatio: "1:1",
     formats: ["JPG", "WEBP"],
-    maxSizeMb: 10,
+    maxSizeMb: 6,
     kind: "image",
   },
   {
@@ -87,15 +87,24 @@ export const WEBSITE_MEDIA_SLOTS: MediaSlotSpec[] = [
     recommendedHeight: 1200,
     aspectRatio: "1:1",
     formats: ["JPG", "WEBP"],
-    maxSizeMb: 10,
+    maxSizeMb: 6,
     kind: "image",
   },
 ];
 
 export const GALLERY_IMAGE_SPEC = {
-  recommendedWidth: 1600,
-  recommendedHeight: 1200,
+  recommendedWidth: 1200,
+  recommendedHeight: 900,
   aspectRatio: "4:3",
   formats: ["JPG", "WEBP"],
-  maxSizeMb: 12,
+  maxSizeMb: 8,
+};
+
+/** Small PNG/SVG icons shown at ~40–80px on the landing page. */
+export const AMENITY_ICON_SPEC = {
+  recommendedWidth: 256,
+  recommendedHeight: 256,
+  aspectRatio: "1:1",
+  formats: ["PNG", "SVG", "WEBP"],
+  maxSizeMb: 0.5,
 };

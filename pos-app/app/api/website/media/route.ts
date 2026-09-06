@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { canManageStaff, normalizeStaffRole } from "@/lib/staff-roles";
+import { WEBSITE_MEDIA_SLOTS } from "@/lib/website/media-slots";
 import type { WebsiteMediaSlot } from "@/lib/website/types";
 import { readAuthSession } from "@/src/lib/auth/session";
 import { readStaffSession } from "@/src/lib/auth/staff-session";
@@ -116,9 +117,11 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     data: mapMediaRow(data as Record<string, unknown>),
-    warning:
-      fileSize > 50 * 1024 * 1024
-        ? `Large file (${(fileSize / 1024 / 1024).toFixed(1)} MB). Recommended sizes are lower for faster loading.`
-        : null,
+    warning: (() => {
+      const spec = WEBSITE_MEDIA_SLOTS.find((row) => row.slot === slot);
+      const limitMb = spec?.maxSizeMb ?? 8;
+      if (!fileSize || fileSize <= limitMb * 1024 * 1024) return null;
+      return `Large file (${(fileSize / 1024 / 1024).toFixed(1)} MB). Recommended up to ${limitMb} MB for faster landing loads.`;
+    })(),
   });
 }

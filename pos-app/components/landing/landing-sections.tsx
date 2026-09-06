@@ -2,6 +2,7 @@
 
 import { motion, useReducedMotion } from "framer-motion";
 import { BookingCta } from "@/components/landing/booking-cta";
+import { LandingImage } from "@/lib/website/landing-image";
 import {
   responsiveBodyClass,
   responsiveHeadlineClass,
@@ -37,11 +38,13 @@ export function LandingAbout({ content }: { content: WebsiteContent }) {
       <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 lg:grid-cols-2 lg:gap-20 lg:px-8">
         <Reveal className="relative aspect-[3/4] overflow-hidden bg-[#1a1a1c]">
           {aboutImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <LandingImage
               src={aboutImage}
               alt="Restaurant interior"
-              className="h-full w-full object-cover"
+              fill
+              sizes="(max-width: 1024px) 100vw, 50vw"
+              quality={72}
+              className="object-cover"
               style={{ objectPosition: content.media.about_image?.objectPosition ?? "50% 50%" }}
             />
           ) : (
@@ -89,11 +92,13 @@ export function LandingSignature({ content }: { content: WebsiteContent }) {
             <Reveal key={item.id} className="group overflow-hidden border border-white/10 bg-[#121214]">
               <div className="aspect-square overflow-hidden bg-[#1a1a1c]">
                 {item.imageUrl || signatureAssets[index]?.fileUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={item.imageUrl || signatureAssets[index]?.fileUrl}
+                  <LandingImage
+                    src={(item.imageUrl || signatureAssets[index]?.fileUrl)!}
                     alt={item.name}
-                    className="h-full w-full object-cover transition duration-700 group-hover:scale-105"
+                    fill
+                    sizes="(max-width: 768px) 100vw, 33vw"
+                    quality={72}
+                    className="object-cover transition duration-700 group-hover:scale-105"
                     style={{
                       objectPosition: signatureAssets[index]?.objectPosition ?? "50% 50%",
                     }}

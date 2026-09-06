@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { BookingCta } from "@/components/landing/booking-cta";
+import { LandingImage } from "@/lib/website/landing-image";
 import { formatOpeningHoursOneLine } from "@/lib/website/opening-hours-display";
 import { resolveSocialLinks, socialPlatformLabel } from "@/lib/website/social-links";
 import type { WebsiteContent, WebsiteSocialLink } from "@/lib/website/types";
@@ -71,8 +72,15 @@ export function LandingMenuPreview({ content }: { content: WebsiteContent }) {
                       className="flex gap-4 border border-white/8 bg-[#121214] p-4"
                     >
                       {item.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={item.imageUrl} alt={item.name} className="h-20 w-20 shrink-0 object-cover" />
+                        <LandingImage
+                          src={item.imageUrl}
+                          alt={item.name}
+                          width={80}
+                          height={80}
+                          sizes="80px"
+                          quality={70}
+                          className="h-20 w-20 shrink-0 object-cover"
+                        />
                       ) : (
                         <div className="h-20 w-20 shrink-0 bg-[#1f1f22]" />
                       )}
@@ -232,14 +240,15 @@ export function LandingGallery({ content }: { content: WebsiteContent }) {
                       : ({ ["--gallery-bob-delay" as string]: bobDelay } as React.CSSProperties)
                   }
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  <LandingImage
                     src={item.imageUrl}
                     alt={item.title || "Gallery"}
-                    className="h-full w-full object-cover"
+                    fill
+                    sizes="(max-width: 640px) 70vw, (max-width: 1024px) 40vw, 280px"
+                    quality={65}
+                    className="object-cover"
                     draggable={false}
-                    loading={index < 2 ? "eager" : "lazy"}
-                    decoding="async"
+                    priority={index < 2}
                   />
                 </figure>
               );
@@ -300,10 +309,13 @@ function AmenitiesBlock({
               className="flex items-center gap-3 border border-white/10 px-3.5 py-3 text-white/85"
             >
               {item.iconUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <LandingImage
                   src={item.iconUrl}
                   alt=""
+                  width={40}
+                  height={40}
+                  sizes="40px"
+                  quality={70}
                   className="h-10 w-10 shrink-0 object-contain"
                 />
               ) : (
@@ -333,10 +345,13 @@ function AmenitiesBlock({
             className="flex items-center gap-5 border border-white/10 px-5 py-5 text-white/85"
           >
             {item.iconUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <LandingImage
                 src={item.iconUrl}
                 alt=""
+                width={80}
+                height={80}
+                sizes="(max-width: 640px) 64px, 80px"
+                quality={70}
                 className="h-16 w-16 shrink-0 object-contain sm:h-20 sm:w-20"
               />
             ) : (

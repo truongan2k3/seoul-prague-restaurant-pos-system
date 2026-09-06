@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { LandingImage } from "@/lib/website/landing-image";
 import type { WebsiteContent, WebsitePageSection } from "@/lib/website/types";
 import {
   responsiveBodyClass,
@@ -64,11 +65,14 @@ export function LandingPromoSlideshow({
             className="absolute inset-0"
           >
             {active.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <LandingImage
                 src={active.imageUrl}
                 alt=""
-                className="h-full w-full object-cover"
+                fill
+                sizes="100vw"
+                quality={70}
+                priority={index === 0}
+                className="object-cover"
               />
             ) : (
               <div className="h-full w-full bg-[radial-gradient(circle_at_20%_20%,#5a1d24_0%,#120e0f_55%)]" />

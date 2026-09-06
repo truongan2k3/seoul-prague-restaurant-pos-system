@@ -3,6 +3,7 @@ import { LandingNavbar } from "@/components/landing/landing-navbar";
 import { LandingFooter } from "@/components/landing/landing-menu-gallery";
 import { BookingCta } from "@/components/landing/booking-cta";
 import { MenuPdfFlipbook } from "@/components/landing/menu-pdf-flipbook";
+import { LandingImage } from "@/lib/website/landing-image";
 import type { WebsiteContent } from "@/lib/website/types";
 
 function formatPrice(price: number | null, currency: string): string {
@@ -48,8 +49,15 @@ export function LandingMenuPageView({ content }: { content: WebsiteContent }) {
                         <li key={item.id} className="flex flex-wrap items-start justify-between gap-4 py-6">
                           <div className="flex min-w-0 flex-1 gap-4">
                             {item.imageUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={item.imageUrl} alt={item.name} className="h-24 w-24 object-cover" />
+                              <LandingImage
+                                src={item.imageUrl}
+                                alt={item.name}
+                                width={96}
+                                height={96}
+                                sizes="96px"
+                                quality={70}
+                                className="h-24 w-24 object-cover"
+                              />
                             ) : null}
                             <div>
                               <h3 className="text-lg font-medium text-white">{item.name}</h3>

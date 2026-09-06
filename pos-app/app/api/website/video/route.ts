@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { canManageStaff, normalizeStaffRole } from "@/lib/staff-roles";
+import { WEBSITE_MEDIA_SLOTS } from "@/lib/website/media-slots";
 import { nextWebsiteSortOrder } from "@/lib/website/sort-order";
 import type { VideoSlot } from "@/lib/website/types";
 import { readAuthSession } from "@/src/lib/auth/session";
@@ -112,9 +113,11 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     data: mapVideoRow(data as Record<string, unknown>),
-    warning:
-      fileSize > 80 * 1024 * 1024
-        ? `Large video (${(fileSize / 1024 / 1024).toFixed(1)} MB). Compress for faster page loads.`
-        : null,
+    warning: (() => {
+      const limitMb =
+        WEBSITE_MEDIA_SLOTS.find((row) => row.slot === "hero_video")?.maxSizeMb ?? 40;
+      if (!fileSize || fileSize <= limitMb * 1024 * 1024) return null;
+      return `Large video (${(fileSize / 1024 / 1024).toFixed(1)} MB). Recommended up to ${limitMb} MB — short muted loops load much faster.`;
+    })(),
   });
 }

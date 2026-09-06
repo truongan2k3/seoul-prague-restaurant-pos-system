@@ -12,7 +12,6 @@ import type {
   WebsiteMenuPdf,
   WebsiteOpeningHour,
   WebsiteSettings,
-  WebsiteVideo,
   MenuPdfLanguage,
 } from "@/lib/website/types";
 
@@ -134,13 +133,11 @@ export const DEFAULT_MENU_ITEMS: WebsiteMenuItem[] = [
 
 export const DEFAULT_GALLERY: WebsiteGalleryItem[] = [];
 
-export const DEFAULT_VIDEOS: WebsiteVideo[] = [];
 
 export function emptyWebsiteMedia(): WebsiteContent["media"] {
   return {
     logo: null,
     hero_image: null,
-    hero_video: null,
     about_image: null,
     signature_1: null,
     signature_2: null,
@@ -163,6 +160,5 @@ export function defaultWebsiteContent(): WebsiteContent {
     menuItems: DEFAULT_MENU_ITEMS,
     menuPdfs: [],
     gallery: DEFAULT_GALLERY,
-    videos: DEFAULT_VIDEOS,
   };
 }

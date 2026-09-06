@@ -14,7 +14,6 @@ export const BUILTIN_SECTION_TYPES: WebsiteSectionType[] = [
   "experience",
   "menu",
   "gallery",
-  "video",
   "amenities",
   "contact",
 ];
@@ -34,7 +33,6 @@ export const SECTION_LABELS: Record<WebsiteSectionType, string> = {
   experience: "Experience",
   menu: "Menu preview",
   gallery: "Gallery",
-  video: "Video",
   amenities: "Amenities",
   contact: "Contact",
   custom_text: "Text block",
@@ -117,8 +115,7 @@ export function createDefaultPageLayout(): WebsitePageSection[] {
     "experience",
     "menu",
     "gallery",
-    "video",
-    "amenities",
+      "amenities",
     "contact",
   ];
   return types.map((type, index) => ({

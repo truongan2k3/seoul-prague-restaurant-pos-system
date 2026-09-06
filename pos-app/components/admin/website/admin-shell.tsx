@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import {
   Building2,
   Clock,
-  Film,
   ImageIcon,
   LayoutDashboard,
   Paintbrush,
@@ -23,7 +22,6 @@ const LINKS = [
   { href: "/admin/amenities", label: "Amenities", icon: Sparkles },
   { href: "/admin/menu", label: "Menu", icon: UtensilsCrossed },
   { href: "/admin/gallery", label: "Gallery", icon: ImageIcon },
-  { href: "/admin/videos", label: "Videos", icon: Film },
   { href: "/admin/seo", label: "SEO", icon: Search },
 ];
 

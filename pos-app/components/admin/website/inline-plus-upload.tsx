@@ -5,7 +5,7 @@ import { Loader2, Plus, Replace } from "lucide-react";
 import { uploadFileDirectToStorage } from "@/lib/website/direct-upload";
 import type { WebsiteMediaAsset, WebsiteMediaSlot } from "@/lib/website/types";
 
-type UploadKind = "slot" | "gallery" | "video";
+type UploadKind = "slot" | "gallery";
 
 export async function uploadWebsiteSlotFile(
   slot: WebsiteMediaSlot,
@@ -70,49 +70,6 @@ export async function uploadWebsiteGalleryFile(
   return { data: payload.data, warning: payload.warning };
 }
 
-export async function uploadWebsiteVideoApiFile(
-  file: File,
-  title = "Promo video",
-  slot: "hero" | "promo" | "atmosphere" = "promo",
-  poster?: File | null,
-): Promise<{
-  data?: { id: string; videoUrl: string; title: string; posterUrl: string };
-  error?: string;
-  warning?: string | null;
-}> {
-  const uploaded = await uploadFileDirectToStorage(file, "videos");
-  if (uploaded.error || !uploaded.publicUrl || !uploaded.storagePath) {
-    return { error: uploaded.error || "Direct upload failed." };
-  }
-
-  let posterUrl = "";
-  if (poster && poster.size > 0) {
-    const posterUp = await uploadFileDirectToStorage(poster, "videos/posters");
-    if (posterUp.error) return { error: posterUp.error };
-    posterUrl = posterUp.publicUrl || "";
-  }
-
-  const response = await fetch("/api/website/video", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      title,
-      slot,
-      publicUrl: uploaded.publicUrl,
-      storagePath: uploaded.storagePath,
-      mimeType: file.type || null,
-      fileSize: file.size,
-      posterUrl,
-    }),
-  });
-  const payload = (await response.json().catch(() => ({}))) as {
-    data?: { id: string; videoUrl: string; title: string; posterUrl: string };
-    error?: string;
-    warning?: string | null;
-  };
-  if (!response.ok) return { error: payload.error || `Upload failed (HTTP ${response.status})` };
-  return { data: payload.data, warning: payload.warning };
-}
 
 /** Compact “+” control for in-canvas / inspector uploads (direct-to-storage). */
 export function InlinePlusUpload({
@@ -164,4 +121,3 @@ export function InlinePlusUpload({
   );
 }
 
-export type { UploadKind };

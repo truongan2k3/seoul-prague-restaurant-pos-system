@@ -16,7 +16,6 @@ import { sortMenuPdfs } from "@/lib/website/menu-pdf-order";
 import { normalizeSocialLinks, socialLinksFromLegacy } from "@/lib/website/social-links";
 import type {
   GalleryCategory,
-  VideoSlot,
   WebsiteAmenity,
   WebsiteContent,
   WebsiteGalleryItem,
@@ -27,7 +26,6 @@ import type {
   WebsiteMenuPdf,
   WebsiteOpeningHour,
   WebsiteSettings,
-  WebsiteVideo,
   MenuPdfLanguage,
 } from "@/lib/website/types";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
@@ -181,18 +179,6 @@ function mapGalleryRow(row: Record<string, unknown>): WebsiteGalleryItem {
   };
 }
 
-function mapVideoRow(row: Record<string, unknown>): WebsiteVideo {
-  return {
-    id: row.id as string,
-    title: (row.title as string) || "",
-    description: (row.description as string) || "",
-    videoUrl: row.video_url as string,
-    posterUrl: (row.poster_url as string) || "",
-    slot: (row.slot as VideoSlot) || "promo",
-    sortOrder: Number(row.sort_order ?? 0),
-    enabled: row.enabled !== false,
-  };
-}
 
 /**
  * Public CMS read. Deduped per request (metadata + page).
@@ -212,7 +198,6 @@ export const fetchWebsiteContent = cache(async (): Promise<WebsiteContent> => {
       itemsRes,
       menuPdfsRes,
       galleryRes,
-      videosRes,
     ] = await Promise.all([
       admin.from("website_settings").select("*").eq("id", 1).maybeSingle(),
       admin.from("website_media_assets").select("*"),
@@ -221,7 +206,6 @@ export const fetchWebsiteContent = cache(async (): Promise<WebsiteContent> => {
       admin.from("website_menu_items").select("*").order("sort_order"),
       admin.from("website_menu_pdfs").select("*"),
       admin.from("website_gallery_items").select("*").order("sort_order"),
-      admin.from("website_videos").select("*").order("sort_order"),
     ]);
 
     if (settingsRes.error?.code === "42P01") return fallback;
@@ -258,9 +242,6 @@ export const fetchWebsiteContent = cache(async (): Promise<WebsiteContent> => {
     const gallery = (galleryRes.data ?? []).map((row) =>
       mapGalleryRow(row as Record<string, unknown>),
     );
-    const videos = (videosRes.data ?? []).map((row) =>
-      mapVideoRow(row as Record<string, unknown>),
-    );
 
     return {
       settings,
@@ -270,7 +251,6 @@ export const fetchWebsiteContent = cache(async (): Promise<WebsiteContent> => {
       menuItems: menuItems.length > 0 ? menuItems : DEFAULT_MENU_ITEMS,
       menuPdfs,
       gallery,
-      videos,
     };
   } catch {
     return fallback;
@@ -285,6 +265,5 @@ export {
   mapMenuItemRow,
   mapMenuPdfRow,
   mapGalleryRow,
-  mapVideoRow,
   parseOpeningHours,
 };

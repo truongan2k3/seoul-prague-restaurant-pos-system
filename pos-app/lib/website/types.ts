@@ -1,7 +1,6 @@
 export type WebsiteMediaSlot =
   | "logo"
   | "hero_image"
-  | "hero_video"
   | "about_image"
   | "signature_1"
   | "signature_2"
@@ -16,8 +15,6 @@ export type GalleryCategory =
   | "atmosphere"
   | "drinks"
   | "events";
-
-export type VideoSlot = "hero" | "promo" | "atmosphere";
 
 export interface WebsiteOpeningHour {
   day: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
@@ -37,7 +34,6 @@ export type WebsiteSectionType =
   | "experience"
   | "menu"
   | "gallery"
-  | "video"
   | "amenities"
   | "contact"
   | "custom_text"
@@ -202,16 +198,6 @@ export interface WebsiteGalleryItem {
   featured: boolean;
 }
 
-export interface WebsiteVideo {
-  id: string;
-  title: string;
-  description: string;
-  videoUrl: string;
-  posterUrl: string;
-  slot: VideoSlot;
-  sortOrder: number;
-  enabled: boolean;
-}
 
 export interface WebsiteContent {
   settings: WebsiteSettings;
@@ -221,5 +207,4 @@ export interface WebsiteContent {
   menuItems: WebsiteMenuItem[];
   menuPdfs: WebsiteMenuPdf[];
   gallery: WebsiteGalleryItem[];
-  videos: WebsiteVideo[];
 }

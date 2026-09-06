@@ -260,31 +260,6 @@ export function LandingGallery({ content }: { content: WebsiteContent }) {
   );
 }
 
-export function LandingVideo({ content }: { content: WebsiteContent }) {
-  const video = content.videos.find((row) => row.enabled && row.slot === "promo") ?? content.videos.find((row) => row.enabled);
-  if (!video) return null;
-
-  return (
-    <section className="bg-[#0B0B0C] py-24 lg:py-32">
-      <div className="mx-auto max-w-7xl px-5 lg:px-8">
-        <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Film</p>
-        <h2 className="landing-serif mt-4 mb-8 text-3xl text-white lg:text-5xl">{video.title || "Our story in motion"}</h2>
-        <div className="relative aspect-video overflow-hidden border border-white/10 bg-black">
-          <video
-            className="h-full w-full object-cover"
-            controls
-            playsInline
-            preload="none"
-            poster={video.posterUrl || undefined}
-          >
-            <source src={video.videoUrl} />
-          </video>
-        </div>
-        {video.description ? <p className="mt-4 max-w-2xl text-white/60">{video.description}</p> : null}
-      </div>
-    </section>
-  );
-}
 
 function AmenitiesBlock({
   content,

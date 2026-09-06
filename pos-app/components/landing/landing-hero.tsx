@@ -14,27 +14,14 @@ interface LandingHeroProps {
 export function LandingHero({ content }: LandingHeroProps) {
   const reduceMotion = useReducedMotion();
   const { settings, media } = content;
-  const heroVideo = media.hero_video?.fileUrl;
   const heroImage = media.hero_image?.fileUrl;
-  // Skip autoplay when the user prefers reduced motion — use the poster/image instead.
-  const playVideo = Boolean(heroVideo) && !reduceMotion;
 
   return (
-    <section id="home" className="relative flex min-h-[100svh] items-end overflow-hidden bg-[#0B0B0C] pb-24 pt-28 lg:pb-32">
-      {playVideo ? (
-        <video
-          className="absolute inset-0 h-full w-full object-cover"
-          autoPlay
-          muted
-          loop
-          playsInline
-          poster={heroImage || undefined}
-          // With a poster, avoid fetching video bytes until playback starts.
-          preload={heroImage ? "none" : "metadata"}
-        >
-          <source src={heroVideo} type={media.hero_video?.mimeType || "video/mp4"} />
-        </video>
-      ) : heroImage ? (
+    <section
+      id="home"
+      className="relative flex min-h-[100svh] items-end overflow-hidden bg-[#0B0B0C] pb-24 pt-28 lg:pb-32"
+    >
+      {heroImage ? (
         <LandingImage
           src={heroImage}
           alt=""

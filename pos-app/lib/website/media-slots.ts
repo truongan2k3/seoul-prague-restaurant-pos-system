@@ -9,7 +9,7 @@ export interface MediaSlotSpec {
   aspectRatio: string;
   formats: string[];
   maxSizeMb: number;
-  kind: "image" | "video";
+  kind: "image";
 }
 
 export const WEBSITE_MEDIA_SLOTS: MediaSlotSpec[] = [
@@ -27,24 +27,13 @@ export const WEBSITE_MEDIA_SLOTS: MediaSlotSpec[] = [
   {
     slot: "hero_image",
     title: "Hero image",
-    description: "Full-screen hero background when no hero video is set.",
+    description: "Full-screen hero background.",
     recommendedWidth: 1920,
     recommendedHeight: 1080,
     aspectRatio: "16:9",
     formats: ["JPG", "WEBP"],
     maxSizeMb: 6,
     kind: "image",
-  },
-  {
-    slot: "hero_video",
-    title: "Hero video",
-    description: "Cinematic background video for the homepage hero. Prefer short muted loops under ~30s.",
-    recommendedWidth: 1920,
-    recommendedHeight: 1080,
-    aspectRatio: "16:9",
-    formats: ["MP4", "WEBM"],
-    maxSizeMb: 40,
-    kind: "video",
   },
   {
     slot: "about_image",

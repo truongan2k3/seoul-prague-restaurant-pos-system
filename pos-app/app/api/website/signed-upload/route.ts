@@ -10,21 +10,18 @@ const BUCKET = "restaurant_media";
 const FOLDERS = new Set([
   "logo",
   "hero_image",
-  "hero_video",
   "about_image",
   "signature_1",
   "signature_2",
   "signature_3",
   "gallery",
-  "videos",
-  "videos/posters",
   "amenities",
   "menu-pdfs",
   "misc",
 ]);
 
-/** 200 MB — enough for promo videos; bypasses Next/Vercel body limits via signed PUT. */
-const FILE_SIZE_LIMIT = 200 * 1024 * 1024;
+/** 50 MB — images / PDFs; signed PUT bypasses Next/Vercel body limits. */
+const FILE_SIZE_LIMIT = 50 * 1024 * 1024;
 
 function errorMessage(error: unknown): string {
   if (!error) return "Request failed.";

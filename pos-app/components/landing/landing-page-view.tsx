@@ -11,7 +11,6 @@ import {
   LandingFooter,
   LandingGallery,
   LandingMenuPreview,
-  LandingVideo,
 } from "@/components/landing/landing-menu-gallery";
 import {
   LandingCustomCta,
@@ -81,12 +80,6 @@ function renderSection(content: WebsiteContent, section: WebsitePageSection) {
       return (
         <SectionShell key={section.id} section={section}>
           <LandingGallery content={content} />
-        </SectionShell>
-      );
-    case "video":
-      return (
-        <SectionShell key={section.id} section={section}>
-          <LandingVideo content={content} />
         </SectionShell>
       );
     case "amenities":

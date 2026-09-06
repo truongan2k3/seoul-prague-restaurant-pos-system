@@ -27,10 +27,7 @@ export function MediaSlotCard({ spec, asset, onUpdated }: MediaSlotCardProps) {
   const [error, setError] = useState<string | null>(null);
   const [position, setPosition] = useState(asset?.objectPosition ?? "50% 50%");
 
-  const accept =
-    spec.kind === "video"
-      ? "video/mp4,video/webm"
-      : "image/png,image/jpeg,image/webp,image/svg+xml";
+  const accept = "image/png,image/jpeg,image/webp,image/svg+xml";
 
   const parsePosition = (value: string) => {
     const parts = value.split(/\s+/);
@@ -171,30 +168,26 @@ export function MediaSlotCard({ spec, asset, onUpdated }: MediaSlotCardProps) {
         style={{ aspectRatio: `${spec.recommendedWidth} / ${spec.recommendedHeight}` }}
       >
         {asset?.fileUrl ? (
-          spec.kind === "video" ? (
-            <video src={asset.fileUrl} controls className="h-full w-full object-cover" />
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={asset.fileUrl}
-              alt={asset.altText || spec.title}
-              className="h-full w-full cursor-grab object-cover active:cursor-grabbing"
-              style={{ objectPosition: position }}
-              draggable={false}
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={() => void onPointerUp()}
-              onPointerCancel={() => {
-                dragRef.current = null;
-              }}
-            />
-          )
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={asset.fileUrl}
+            alt={asset.altText || spec.title}
+            className="h-full w-full cursor-grab object-cover active:cursor-grabbing"
+            style={{ objectPosition: position }}
+            draggable={false}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={() => void onPointerUp()}
+            onPointerCancel={() => {
+              dragRef.current = null;
+            }}
+          />
         ) : (
           <div className="flex h-full min-h-[9rem] items-center justify-center text-sm text-gray-400">
             No file uploaded
           </div>
         )}
-        {asset?.fileUrl && spec.kind === "image" ? (
+        {asset?.fileUrl ? (
           <p className="pointer-events-none absolute bottom-2 left-2 inline-flex items-center gap-1 rounded bg-black/60 px-2 py-1 text-[10px] uppercase tracking-wide text-white">
             <Move className="h-3 w-3" /> Drag to reposition
           </p>

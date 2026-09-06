@@ -152,6 +152,28 @@ export function reservationStatusLabelKey(
   return map[status];
 }
 
+/** Colored status pills for reservation lists / tickers. */
+export function reservationStatusTone(status: ReservationStatus): string {
+  switch (status) {
+    case "pending":
+      return "bg-amber-100 text-amber-900 ring-1 ring-inset ring-amber-300/70 dark:bg-amber-950 dark:text-amber-200 dark:ring-amber-700/60";
+    case "confirmed":
+      return "bg-emerald-100 text-emerald-900 ring-1 ring-inset ring-emerald-300/70 dark:bg-emerald-950 dark:text-emerald-200 dark:ring-emerald-700/60";
+    case "checked_in":
+      return "bg-sky-100 text-sky-900 ring-1 ring-inset ring-sky-300/70 dark:bg-sky-950 dark:text-sky-200 dark:ring-sky-700/60";
+    case "late":
+      return "bg-orange-100 text-orange-950 ring-1 ring-inset ring-orange-400/80 dark:bg-orange-950 dark:text-orange-100 dark:ring-orange-600/70";
+    case "no_show":
+      return "bg-rose-100 text-rose-900 ring-1 ring-inset ring-rose-300/70 dark:bg-rose-950 dark:text-rose-200 dark:ring-rose-700/60";
+    case "cancelled":
+      return "bg-zinc-200 text-zinc-700 ring-1 ring-inset ring-zinc-300/80 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-zinc-600/60";
+    case "completed":
+      return "bg-violet-100 text-violet-900 ring-1 ring-inset ring-violet-300/70 dark:bg-violet-950 dark:text-violet-200 dark:ring-violet-700/60";
+    default:
+      return "bg-gray-100 text-gray-700 ring-1 ring-inset ring-gray-300/70 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-600/60";
+  }
+}
+
 export function canConfirmReservation(status: ReservationStatus): boolean {
   return status === "pending";
 }

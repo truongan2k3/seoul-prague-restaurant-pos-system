@@ -195,13 +195,13 @@ input[type="search"] {
   @apply w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100;
 }
 
-/* Filter / period / payment toggle buttons */
+/* Filter / period / payment toggle buttons — denser on phones */
 .pos-filter-btn {
-  @apply rounded-lg px-3 py-2 text-sm font-medium transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700;
+  @apply rounded-md px-2 py-1 text-[11px] font-medium transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 sm:rounded-lg sm:px-3 sm:py-2 sm:text-sm;
 }
 
 .pos-filter-btn-active {
-  @apply rounded-lg px-3 py-2 text-sm font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-600 dark:text-white dark:hover:bg-blue-700;
+  @apply rounded-md px-2 py-1 text-[11px] font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-600 dark:text-white dark:hover:bg-blue-700 sm:rounded-lg sm:px-3 sm:py-2 sm:text-sm;
 }
 
 /* Segmented control (compact tabs inside a pill track) */

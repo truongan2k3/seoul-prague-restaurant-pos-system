@@ -26,8 +26,8 @@ export function OnScreenKeyboard({ value, onChange, onHide }: OnScreenKeyboardPr
   const clear = () => onChange("");
 
   return (
-    <div className="shrink-0 border-t border-gray-200 bg-gray-100 px-1.5 py-2 sm:px-2 dark:border-gray-700 dark:bg-gray-900">
-      <div className="mb-2 flex items-center justify-between gap-2 px-0.5 sm:px-1">
+    <div className="shrink-0 border-t border-gray-200 bg-gray-100 px-1 py-1 sm:px-2 sm:py-2 dark:border-gray-700 dark:bg-gray-900">
+      <div className="mb-1 flex sm:mb-2 items-center justify-between gap-2 px-0.5 sm:px-1">
         <p className="min-w-0 flex-1 truncate text-xs font-medium text-gray-500 dark:text-gray-400">
           {value || translate("searchMenu")}
         </p>
@@ -41,7 +41,7 @@ export function OnScreenKeyboard({ value, onChange, onHide }: OnScreenKeyboardPr
         </button>
       </div>
 
-      <div className="space-y-1 sm:space-y-1.5">
+      <div className="space-y-0.5 sm:space-y-1.5">
         {ROWS.map((row, rowIndex) => (
           <div
             key={rowIndex}
@@ -53,7 +53,7 @@ export function OnScreenKeyboard({ value, onChange, onHide }: OnScreenKeyboardPr
                 key={key}
                 type="button"
                 onClick={() => append(key)}
-                className="min-h-[34px] min-w-0 rounded-md border border-gray-300 bg-white px-0 text-[11px] font-semibold uppercase leading-none text-gray-900 active:bg-gray-200 sm:min-h-[44px] sm:rounded-lg sm:text-base dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:active:bg-gray-700"
+                className="min-h-[28px] sm:min-h-[34px] min-w-0 rounded-md border border-gray-300 bg-white px-0 text-[10px] sm:text-[11px] font-semibold uppercase leading-none text-gray-900 active:bg-gray-200 sm:min-h-[44px] sm:rounded-lg sm:text-base dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:active:bg-gray-700"
               >
                 {key}
               </button>
@@ -65,7 +65,7 @@ export function OnScreenKeyboard({ value, onChange, onHide }: OnScreenKeyboardPr
           <button
             type="button"
             onClick={() => append(" ")}
-            className="min-h-[34px] min-w-0 rounded-md border border-gray-300 bg-white text-[11px] font-semibold text-gray-900 active:bg-gray-200 sm:min-h-[44px] sm:rounded-lg sm:text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:active:bg-gray-700"
+            className="min-h-[28px] sm:min-h-[34px] min-w-0 rounded-md border border-gray-300 bg-white text-[10px] sm:text-[11px] font-semibold text-gray-900 active:bg-gray-200 sm:min-h-[44px] sm:rounded-lg sm:text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:active:bg-gray-700"
           >
             {translate("keyboardSpace")}
           </button>
@@ -73,14 +73,14 @@ export function OnScreenKeyboard({ value, onChange, onHide }: OnScreenKeyboardPr
             type="button"
             onClick={backspace}
             aria-label={translate("keyboardBackspace")}
-            className="inline-flex min-h-[34px] min-w-0 items-center justify-center rounded-md border border-gray-300 bg-white text-gray-900 active:bg-gray-200 sm:min-h-[44px] sm:rounded-lg dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:active:bg-gray-700"
+            className="inline-flex min-h-[28px] sm:min-h-[34px] min-w-0 items-center justify-center rounded-md border border-gray-300 bg-white text-gray-900 active:bg-gray-200 sm:min-h-[44px] sm:rounded-lg dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:active:bg-gray-700"
           >
             <Delete className="h-4 w-4 sm:h-5 sm:w-5" />
           </button>
           <button
             type="button"
             onClick={clear}
-            className="min-h-[34px] min-w-0 rounded-md border border-gray-300 bg-white px-1 text-[10px] font-semibold text-gray-900 active:bg-gray-200 sm:min-h-[44px] sm:rounded-lg sm:px-2 sm:text-xs dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:active:bg-gray-700"
+            className="min-h-[28px] sm:min-h-[34px] min-w-0 rounded-md border border-gray-300 bg-white px-1 text-[10px] font-semibold text-gray-900 active:bg-gray-200 sm:min-h-[44px] sm:rounded-lg sm:px-2 sm:text-xs dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:active:bg-gray-700"
           >
             {translate("keyboardClear")}
           </button>

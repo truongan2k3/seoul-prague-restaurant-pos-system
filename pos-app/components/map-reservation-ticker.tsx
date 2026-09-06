@@ -7,6 +7,7 @@ import { useSettings } from "@/contexts/settings-context";
 import {
   filterReservationsByPeriod,
   reservationStatusLabelKey,
+  reservationStatusTone,
 } from "@/lib/reservation-analytics";
 import type { ReservationRecord, ReservationStatus } from "@/lib/types";
 import {
@@ -36,19 +37,6 @@ function formatTime(date: Date, language: string): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
-}
-
-function statusTone(status: ReservationRecord["status"]): string {
-  switch (status) {
-    case "pending":
-      return "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200";
-    case "confirmed":
-      return "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200";
-    case "late":
-      return "bg-orange-100 text-orange-900 dark:bg-orange-950 dark:text-orange-200";
-    default:
-      return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
-  }
 }
 
 export function MapReservationTicker() {
@@ -144,7 +132,7 @@ export function MapReservationTicker() {
             {formatTime(current.reservedAt, language)}
           </span>
           <span
-            className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase ${statusTone(current.status)}`}
+            className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase ${reservationStatusTone(current.status)}`}
           >
             {translate(reservationStatusLabelKey(current.status))}
           </span>

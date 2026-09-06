@@ -21,6 +21,7 @@ import {
   filterReservationsByStatus,
   isLateReservation,
   reservationStatusLabelKey,
+  reservationStatusTone,
   shiftIsoDate,
   weekBoundsForDate,
   type ReservationPeriod,
@@ -510,37 +511,39 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
   const cardClassName = (row: ReservationRecord) =>
     isLateReservation(row)
-      ? "rounded-xl border-2 border-orange-500 bg-orange-50 p-4 shadow-sm animate-pulse dark:border-orange-500 dark:bg-orange-950/40"
-      : "rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800";
+      ? "rounded-xl border-2 border-orange-500 bg-orange-50 p-2.5 shadow-sm animate-pulse dark:border-orange-500 dark:bg-orange-950/40 sm:p-4"
+      : "rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-4";
 
   return (
     <div className="flex h-full flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white px-2.5 py-1.5 sm:px-4 sm:py-2.5 lg:px-6 lg:py-4 dark:border-gray-800 dark:bg-gray-900">
-        <h1 className="text-sm font-semibold sm:text-base lg:text-lg">{translate("reservations")}</h1>
-        <div className="flex flex-wrap items-center gap-2">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-white px-2 py-1.5 dark:border-gray-800 dark:bg-gray-900 sm:gap-3 sm:px-4 sm:py-2 lg:px-6">
+        <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+          <h1 className="shrink-0 text-sm font-semibold sm:text-base lg:text-lg">{translate("reservations")}</h1>
+          <HeaderClockWithStatus />
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <button
             type="button"
             onClick={() => setShowWalkInModal(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium dark:border-gray-700"
+            className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium dark:border-gray-700 sm:gap-1.5 sm:rounded-lg sm:px-2.5 sm:py-1.5 sm:text-xs"
           >
-            <UserPlus className="h-4 w-4" />
-            {translate("walkIn")}
+            <UserPlus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span className="hidden xs:inline sm:inline">{translate("walkIn")}</span>
           </button>
           <button
             type="button"
             onClick={() => setShowNewModal(true)}
-            className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white dark:bg-gray-100 dark:text-gray-900"
+            className="inline-flex items-center gap-1 rounded-md bg-gray-900 px-2 py-1 text-[11px] font-semibold text-white dark:bg-gray-100 dark:text-gray-900 sm:gap-1.5 sm:rounded-lg sm:px-2.5 sm:py-1.5 sm:text-xs"
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             {translate("newReservation")}
           </button>
-          <HeaderClockWithStatus />
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="mx-auto max-w-6xl space-y-6">
-          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+      <div className="flex-1 overflow-auto p-2.5 sm:p-4 lg:p-6">
+        <div className="mx-auto max-w-6xl space-y-3 sm:space-y-4 lg:space-y-6">
+          <section className="rounded-xl border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:p-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
               {translate("resAdvancedStats")}
             </p>
@@ -571,7 +574,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                 <button
                   type="button"
                   onClick={() => shiftAnchor(period === "week" ? -7 : -1)}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800 sm:h-10 sm:w-10"
                   aria-label={translate(period === "week" ? "resPrevWeek" : "resPrevDay")}
                 >
                   <ChevronLeft className="h-5 w-5" />
@@ -597,7 +600,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                 <button
                   type="button"
                   onClick={() => shiftAnchor(period === "week" ? 7 : 1)}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800 sm:h-10 sm:w-10"
                   aria-label={translate(period === "week" ? "resNextWeek" : "resNextDay")}
                 >
                   <ChevronRight className="h-5 w-5" />
@@ -649,12 +652,12 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             ).map(({ label, value }) => (
               <div
                 key={label}
-                className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
+                className="rounded-xl border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:p-3"
               >
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                   {translate(label)}
                 </p>
-                <p className="mt-2 text-2xl font-bold tabular-nums text-gray-900 dark:text-gray-100">{value}</p>
+                <p className="mt-1 text-lg font-bold tabular-nums text-gray-900 dark:text-gray-100 sm:mt-2 sm:text-2xl">{value}</p>
               </div>
             ))}
           </section>
@@ -680,10 +683,10 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="text-sm font-semibold sm:text-base lg:text-lg">{row.guestName}</h2>
                         <span
-                          className={`rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide sm:text-xs ${
                             isLateReservation(row)
-                              ? "bg-orange-200 text-orange-900 dark:bg-orange-900 dark:text-orange-100"
-                              : "bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300"
+                              ? reservationStatusTone("late")
+                              : reservationStatusTone(row.status)
                           }`}
                         >
                           {translate(reservationStatusLabelKey(row.status))}
@@ -747,7 +750,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           type="button"
                           disabled={busyId === row.id}
                           onClick={() => void runAction(row.id, () => confirmReservationWithEmail(row.id))}
-                          className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white"
+                          className="rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-500 sm:rounded-lg sm:px-3 sm:py-1.5 sm:text-xs"
                         >
                           {translate("confirmReservation")}
                         </button>
@@ -760,7 +763,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                             setCheckInTarget(row);
                             setCheckInTableId(row.tableId ?? "");
                           }}
-                          className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white"
+                          className="rounded-md bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-sky-500 sm:rounded-lg sm:px-3 sm:py-1.5 sm:text-xs"
                         >
                           {translate("checkIn")}
                         </button>

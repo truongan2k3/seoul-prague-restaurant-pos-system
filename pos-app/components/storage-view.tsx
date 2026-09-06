@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { CategoryManagerModal } from "@/components/category-manager-modal";
 import { ItemCustomizationLinker } from "@/components/item-customization-linker";
-import { LiveClock } from "@/components/live-clock";
+import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { InventoryManager } from "@/components/inventory-manager";
 import { MenuManager } from "@/components/menu-manager";
 import { NotePresetManager } from "@/components/note-preset-manager";
@@ -98,7 +98,7 @@ export function StorageView({
             {translate("storageSubtitle")}
           </p>
         </div>
-        <LiveClock />
+        <HeaderClockWithStatus />
       </header>
 
       <div className="shrink-0 overflow-x-auto border-b border-gray-200 bg-white px-4 dark:border-gray-800 dark:bg-gray-900 sm:px-6">

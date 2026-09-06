@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Pencil, Plus, Trash2, Users } from "lucide-react";
-import { LiveClock } from "@/components/live-clock";
+import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { StaffFormModal } from "@/components/staff-form-modal";
 import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
@@ -124,7 +124,7 @@ export function StaffView({ onRefresh }: StaffViewProps) {
             {staffList.length} members · synced with Supabase
           </p>
         </div>
-        <LiveClock />
+        <HeaderClockWithStatus />
       </header>
 
       <div className="flex-1 overflow-auto p-6">

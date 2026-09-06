@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { usePathname } from "next/navigation";
 import { AlertTriangle, Printer, Wifi, WifiOff, X } from "lucide-react";
 import {
@@ -9,6 +18,8 @@ import {
 } from "@/lib/connection-status";
 import { useConnectionStatus } from "@/contexts/connection-status-context";
 import { useSettings } from "@/contexts/settings-context";
+import { LiveClock } from "@/components/live-clock";
+import { isPosMainPath, isStationPath } from "@/lib/page-routes";
 import {
   pingPrintBridge,
   validatePrintBridgeUrl,
@@ -30,7 +41,7 @@ const HIDDEN_PATH_PREFIXES = [
   "/admin",
 ] as const;
 
-function shouldHideBadge(pathname: string | null): boolean {
+function shouldHideOnPath(pathname: string | null): boolean {
   if (!pathname) return true;
   if (pathname === "/") return true;
   return HIDDEN_PATH_PREFIXES.some(
@@ -38,24 +49,30 @@ function shouldHideBadge(pathname: string | null): boolean {
   );
 }
 
+/** Customer display and other station screens — no printer chrome. */
+function isClientOrStation(pathname: string | null): boolean {
+  if (!pathname) return false;
+  return isStationPath(pathname);
+}
+
 function networkBadgeClass(status: ConnectionStatus): string {
   if (status === "online") {
-    return "border-emerald-200/80 bg-emerald-50/95 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/90 dark:text-emerald-200";
+    return "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/70 dark:bg-emerald-950 dark:text-emerald-200";
   }
   if (status === "no-network") {
-    return "border-rose-200/80 bg-rose-50/95 text-rose-900 dark:border-rose-800/60 dark:bg-rose-950/90 dark:text-rose-200";
+    return "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-800/70 dark:bg-rose-950 dark:text-rose-200";
   }
-  return "border-amber-200/80 bg-amber-50/95 text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/90 dark:text-amber-200";
+  return "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800/70 dark:bg-amber-950 dark:text-amber-200";
 }
 
 function bridgeBadgeClass(status: BridgeStatus): string {
   if (status === "online") {
-    return "border-sky-200/80 bg-sky-50/95 text-sky-900 dark:border-sky-800/60 dark:bg-sky-950/90 dark:text-sky-200";
+    return "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-800/70 dark:bg-sky-950 dark:text-sky-200";
   }
   if (status === "offline" || status === "invalid") {
-    return "border-rose-200/80 bg-rose-50/95 text-rose-900 dark:border-rose-800/60 dark:bg-rose-950/90 dark:text-rose-200";
+    return "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-800/70 dark:bg-rose-950 dark:text-rose-200";
   }
-  return "border-stone-200/80 bg-white/95 text-stone-600 dark:border-zinc-700 dark:bg-zinc-900/90 dark:text-zinc-300";
+  return "border-stone-200 bg-stone-50 text-stone-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300";
 }
 
 function bridgeLabel(status: BridgeStatus): string {
@@ -73,11 +90,19 @@ function bridgeLabel(status: BridgeStatus): string {
   }
 }
 
+interface PrintBridgeStatusValue {
+  bridgeStatus: BridgeStatus;
+  bridgeDetail: string | null;
+  checkBridge: () => Promise<void>;
+}
+
+const PrintBridgeStatusContext = createContext<PrintBridgeStatusValue | null>(null);
+
 /**
- * Top-right status strip on POS pages — clear of bottom FABs / sticky bars.
- * Online/Offline + Printer bridge; modal when network or bridge fails.
+ * Polls print-bridge + shows network/bridge error modals.
+ * Status chips render in page headers via {@link PosStatusChips}.
  */
-export function ConnectionStatusBadge() {
+export function ConnectionStatusBadge({ children }: { children?: ReactNode }) {
   const pathname = usePathname();
   const { status } = useConnectionStatus();
   const { settings } = useSettings();
@@ -94,7 +119,9 @@ export function ConnectionStatusBadge() {
 
   const silentPrint = settings.silentPrintEnabled;
   const bridgeUrl = settings.printBridgeUrl?.trim() ?? "";
-  const hidden = shouldHideBadge(pathname);
+  const hidden = shouldHideOnPath(pathname);
+  const onMain = Boolean(pathname && isPosMainPath(pathname));
+  const onStation = isClientOrStation(pathname);
 
   const checkBridge = useCallback(async () => {
     if (!silentPrint) {
@@ -126,18 +153,18 @@ export function ConnectionStatusBadge() {
   }, [silentPrint, bridgeUrl]);
 
   useEffect(() => {
-    if (hidden) return;
+    // Only poll bridge on main POS — stations/client don't need printer status.
+    if (hidden || !onMain) return;
     void checkBridge();
     if (!silentPrint) return;
     const id = window.setInterval(() => {
       void checkBridge();
     }, BRIDGE_POLL_MS);
     return () => window.clearInterval(id);
-  }, [checkBridge, silentPrint, hidden]);
+  }, [checkBridge, silentPrint, hidden, onMain]);
 
-  // Network lost → popup (cooldown)
   useEffect(() => {
-    if (hidden) return;
+    if (hidden || onStation) return;
     const prev = prevNetworkStatus.current;
     prevNetworkStatus.current = status;
     if (status !== "no-network") return;
@@ -148,11 +175,11 @@ export function ConnectionStatusBadge() {
     setNetworkAlert(
       "Mất kết nối mạng. Đơn và đồng bộ có thể bị treo — kiểm tra Wi‑Fi / dây mạng.",
     );
-  }, [status, hidden]);
+  }, [status, hidden, onStation]);
 
-  // Bridge config / reachability failure → popup
   useEffect(() => {
-    if (hidden) return;
+    // Bridge popups only on main
+    if (hidden || !onMain) return;
     const prev = prevBridgeStatus.current;
     prevBridgeStatus.current = bridgeStatus;
     if (bridgeStatus !== "offline" && bridgeStatus !== "invalid") return;
@@ -170,40 +197,17 @@ export function ConnectionStatusBadge() {
         ? "URL bridge không hợp lệ hoặc thiếu cấu hình."
         : "Không kết nối được tới máy in / bridge. Kiểm tra print-bridge đang chạy.");
     setBridgeAlert(`${title}: ${body}`);
-  }, [bridgeStatus, bridgeDetail, hidden]);
+  }, [bridgeStatus, bridgeDetail, hidden, onMain]);
 
-  if (hidden) return null;
-
-  const NetworkIcon = status === "online" ? Wifi : WifiOff;
+  const value = useMemo(
+    () => ({ bridgeStatus, bridgeDetail, checkBridge }),
+    [bridgeStatus, bridgeDetail, checkBridge],
+  );
 
   return (
-    <>
-      <div
-        className="pointer-events-none fixed right-3 top-3 z-[80] flex max-w-[min(18rem,calc(100vw-1.5rem))] flex-col items-end gap-1.5 sm:right-4 sm:top-4"
-        role="status"
-        aria-live="polite"
-      >
-        <div
-          className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-semibold shadow-sm backdrop-blur-sm ${networkBadgeClass(status)}`}
-          title={CONNECTION_STATUS_LABELS[status]}
-        >
-          <NetworkIcon className="size-3.5 shrink-0" aria-hidden />
-          <span>{CONNECTION_STATUS_LABELS[status]}</span>
-        </div>
-
-        <div
-          className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-semibold shadow-sm backdrop-blur-sm ${bridgeBadgeClass(bridgeStatus)}`}
-          title={bridgeDetail ?? `Printer: ${bridgeLabel(bridgeStatus)}`}
-        >
-          <Printer className="size-3.5 shrink-0" aria-hidden />
-          <span>Printer: {bridgeLabel(bridgeStatus)}</span>
-          {(bridgeStatus === "offline" || bridgeStatus === "invalid") && (
-            <span className="size-1.5 shrink-0 rounded-full bg-rose-500" aria-hidden />
-          )}
-        </div>
-      </div>
-
-      {(networkAlert || bridgeAlert) && (
+    <PrintBridgeStatusContext.Provider value={value}>
+      {children}
+      {!hidden && !onStation && (networkAlert || bridgeAlert) ? (
         <div
           className="fixed inset-0 z-[90] flex items-start justify-center bg-black/35 p-4 pt-[max(4.5rem,12vh)] sm:items-center sm:pt-4"
           role="alertdialog"
@@ -263,7 +267,63 @@ export function ConnectionStatusBadge() {
             </div>
           </div>
         </div>
-      )}
-    </>
+      ) : null}
+    </PrintBridgeStatusContext.Provider>
+  );
+}
+
+/** Inline Online (+ Printer on main only) chips for page top bars. */
+export function PosStatusChips({ className = "" }: { className?: string }) {
+  const pathname = usePathname();
+  const { status } = useConnectionStatus();
+  const bridge = useContext(PrintBridgeStatusContext);
+
+  if (shouldHideOnPath(pathname) || !bridge) return null;
+  // Client / station screens: no connection chrome in the header.
+  if (pathname && isStationPath(pathname)) return null;
+
+  const showPrinter = Boolean(pathname && isPosMainPath(pathname));
+  const { bridgeStatus, bridgeDetail } = bridge;
+  const NetworkIcon = status === "online" ? Wifi : WifiOff;
+
+  return (
+    <div
+      className={`flex flex-nowrap items-center gap-1.5 ${className}`}
+      role="status"
+      aria-live="polite"
+    >
+      <span
+        className={`inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-none sm:text-[11px] ${networkBadgeClass(status)}`}
+        title={CONNECTION_STATUS_LABELS[status]}
+      >
+        <NetworkIcon className="size-3 shrink-0" aria-hidden />
+        <span className="whitespace-nowrap">{CONNECTION_STATUS_LABELS[status]}</span>
+      </span>
+      {showPrinter ? (
+        <span
+          className={`inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-none sm:text-[11px] ${bridgeBadgeClass(bridgeStatus)}`}
+          title={bridgeDetail ?? `Printer: ${bridgeLabel(bridgeStatus)}`}
+        >
+          <Printer className="size-3 shrink-0" aria-hidden />
+          <span className="whitespace-nowrap">Printer: {bridgeLabel(bridgeStatus)}</span>
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Clock + status chips for POS page headers (one row, no overlay). */
+export function HeaderClockWithStatus({
+  clockClassName,
+  className = "",
+}: {
+  clockClassName?: string;
+  className?: string;
+}) {
+  return (
+    <div className={`flex flex-wrap items-center justify-end gap-2 ${className}`}>
+      <LiveClock className={clockClassName} />
+      <PosStatusChips />
+    </div>
   );
 }

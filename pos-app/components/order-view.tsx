@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { ElapsedTimer, LiveClock } from "@/components/live-clock";
+import { HeaderClockWithStatus } from "@/components/connection-status-badge";
+import { ElapsedTimer } from "@/components/live-clock";
 import { MapReservationTicker } from "@/components/map-reservation-ticker";
 import { NotificationBell } from "@/components/notification-bell";
 import { OrderItemChecklist } from "@/components/order-item-checklist";
@@ -239,7 +240,7 @@ export function OrderView({
         </div>
         <div className="flex items-center gap-3">
           <NotificationBell />
-          <LiveClock />
+          <HeaderClockWithStatus />
         </div>
       </header>
 

@@ -20,7 +20,7 @@ import { ReceiptBrandingEditor } from "@/components/receipt-branding-editor";
 import { ReceiptPrintPreview } from "@/components/receipt-print-preview";
 import { ReceiptSectionSizesEditor } from "@/components/receipt-section-sizes-editor";
 import { DEFAULT_RECEIPT_SECTION_SIZES } from "@/lib/receipt-section-sizes";
-import { LiveClock } from "@/components/live-clock";
+import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { MenuCustomizationManager } from "@/components/menu-customization-manager";
 import { POS_HOME_PATH } from "@/lib/page-routes";
 import { useApp } from "@/contexts/app-context";
@@ -359,7 +359,7 @@ export function SettingsView({
             <Save className="h-4 w-4" />
             {translate("settingsSaveChanges")}
           </button>
-          <LiveClock />
+          <HeaderClockWithStatus />
         </div>
       </header>
 

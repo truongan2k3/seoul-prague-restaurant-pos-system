@@ -1,7 +1,7 @@
 "use client";
 
 import { BellRing, ConciergeBell, Flame, QrCode, Soup } from "lucide-react";
-import { LiveClock } from "@/components/live-clock";
+import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { NotificationBell } from "@/components/notification-bell";
 import { useApp } from "@/contexts/app-context";
 
@@ -22,7 +22,7 @@ export function DynamicQrServicesView() {
         <h1 className="text-lg font-semibold">{translate("dynamicQrServices")}</h1>
         <div className="flex items-center gap-3">
           <NotificationBell />
-          <LiveClock />
+          <HeaderClockWithStatus />
         </div>
       </header>
 

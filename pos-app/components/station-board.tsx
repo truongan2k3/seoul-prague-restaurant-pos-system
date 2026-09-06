@@ -8,7 +8,7 @@ import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { CancelReasonModal } from "@/components/cancel-reason-modal";
 import { NewOrderNotificationListener } from "@/components/new-order-notification-listener";
 import { LanguageSelector } from "@/components/language-selector";
-import { LiveClock } from "@/components/live-clock";
+import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { OrderItemChecklist } from "@/components/order-item-checklist";
 import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
@@ -442,7 +442,7 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
             <User className="h-4 w-4 text-zinc-400" />
             <span>{currentStaffUser?.name ?? translate("staff")}</span>
           </div>
-          <LiveClock className="text-lg font-bold tabular-nums text-zinc-200" />
+          <HeaderClockWithStatus clockClassName="text-lg font-bold tabular-nums text-zinc-200" />
         </div>
       </header>
 

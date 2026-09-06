@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, Download, Minus, Printer } from "lucide-react";
-import { LiveClock } from "@/components/live-clock";
+import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { DateRangeInputs } from "@/components/date-range-inputs";
 import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
@@ -281,7 +281,7 @@ export function SummaryView({
           >
             Refresh
           </button>
-          <LiveClock />
+          <HeaderClockWithStatus />
         </div>
       </header>
 

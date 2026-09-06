@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LiveClock } from "@/components/live-clock";
+import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { MapReservationTicker } from "@/components/map-reservation-ticker";
 import { NotificationBell } from "@/components/notification-bell";
 import { TableCard } from "@/components/table-card";
@@ -161,7 +161,7 @@ export function MapView({
         </div>
         <div className="flex items-center gap-3">
           <NotificationBell />
-          <LiveClock />
+          <HeaderClockWithStatus />
         </div>
       </header>
 

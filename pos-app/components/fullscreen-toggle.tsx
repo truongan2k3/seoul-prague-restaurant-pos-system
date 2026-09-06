@@ -25,7 +25,7 @@ export function FullscreenToggle({ compact = false, variant = "sidebar" }: Fulls
         onClick={() => void toggle()}
         title={label}
         aria-label={label}
-        className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-3 z-[60] flex h-9 w-9 items-center justify-center rounded-full border border-gray-300/80 bg-white/90 text-gray-700 shadow-md backdrop-blur-sm transition hover:scale-105 hover:bg-white active:scale-95 dark:border-zinc-600 dark:bg-zinc-900/90 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        className="pointer-events-auto fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-3 z-[120] flex h-10 w-10 items-center justify-center rounded-full border border-gray-300/80 bg-white/95 text-gray-700 shadow-lg backdrop-blur-sm transition hover:scale-105 hover:bg-white active:scale-95 dark:border-zinc-600 dark:bg-zinc-900/95 dark:text-zinc-200 dark:hover:bg-zinc-800"
       >
         {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
       </button>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapPin, ChevronLeft, ChevronRight, Pencil, Plus, UserPlus } from "lucide-react";
 import { GuestReturningBadge } from "@/components/guest-returning-badge";
-import { LiveClock } from "@/components/live-clock";
+import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { Modal } from "@/components/modal";
 import { DateRangeInputs } from "@/components/date-range-inputs";
 import { useApp } from "@/contexts/app-context";
@@ -534,7 +534,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             <Plus className="h-4 w-4" />
             {translate("newReservation")}
           </button>
-          <LiveClock />
+          <HeaderClockWithStatus />
         </div>
       </header>
 

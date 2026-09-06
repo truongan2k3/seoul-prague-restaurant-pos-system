@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 import { AlertTriangle, Eye, Pencil, Percent, Trash2 } from "lucide-react";
-import { LiveClock } from "@/components/live-clock";
+import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { DateRangeInputs } from "@/components/date-range-inputs";
 import { OrderHistoryModal } from "@/components/order-history-modal";
 import { usePinGate } from "@/contexts/pin-gate-context";
@@ -287,7 +287,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
           >
             Refresh
           </button>
-          <LiveClock />
+          <HeaderClockWithStatus />
         </div>
       </header>
 

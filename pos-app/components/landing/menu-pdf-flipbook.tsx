@@ -36,14 +36,21 @@ async function getPdfJs(): Promise<PdfJsModule> {
 }
 
 function renderScaleForDevice(): number {
-  if (typeof window === "undefined") return 2;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-  return window.innerWidth >= 1024 ? 2.2 * dpr : 1.6 * dpr;
+  if (typeof window === "undefined") return 1.5;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  // Keep readable without downloading/rendering at near-print resolution.
+  return window.innerWidth >= 1024 ? 1.6 * dpr : 1.25 * dpr;
 }
 
+/** In-tab cache so CS/EN/ZH toggles do not re-download the same PDF. */
+const renderedPdfCache = new Map<string, string[]>();
+
 async function renderPdfToImages(url: string, maxPages = 40): Promise<string[]> {
+  const cached = renderedPdfCache.get(url);
+  if (cached) return cached;
+
   const pdfjs = await getPdfJs();
-  const response = await fetch(url, { cache: "no-store" });
+  const response = await fetch(url, { cache: "force-cache" });
   if (!response.ok) {
     throw new Error(`PDF fetch failed (${response.status})`);
   }
@@ -64,9 +71,10 @@ async function renderPdfToImages(url: string, maxPages = 40): Promise<string[]> 
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = "high";
     await page.render({ canvasContext: context, viewport, canvas }).promise;
-    images.push(canvas.toDataURL("image/jpeg", 0.95));
+    images.push(canvas.toDataURL("image/jpeg", 0.88));
   }
 
+  renderedPdfCache.set(url, images);
   return images;
 }
 

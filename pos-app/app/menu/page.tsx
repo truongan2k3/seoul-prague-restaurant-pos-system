@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { LandingMenuPageView } from "@/components/landing/landing-menu-page";
 import { fetchWebsiteContent } from "@/src/lib/website-public";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+/** ISR — admin saves call revalidatePath("/menu"). */
+export const revalidate = 120;
 
 export async function generateMetadata(): Promise<Metadata> {
   const content = await fetchWebsiteContent();

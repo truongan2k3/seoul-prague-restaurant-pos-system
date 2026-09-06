@@ -27,7 +27,6 @@ import {
   InlinePlusUpload,
   uploadWebsiteGalleryFile,
   uploadWebsiteSlotFile,
-  uploadWebsiteVideoApiFile,
 } from "@/components/admin/website/inline-plus-upload";
 import {
   ADDABLE_SECTION_TYPES,
@@ -55,7 +54,6 @@ import type {
   WebsitePromoSlideshow,
   WebsiteSettings,
   WebsiteSectionType,
-  WebsiteVideo,
 } from "@/lib/website/types";
 import {
   saveWebsiteSettings,
@@ -145,7 +143,7 @@ function DraggableMedia({
   }, [objectPosition, url]);
 
   const accept =
-    slot === "hero_video" ? "video/mp4,video/webm" : "image/png,image/jpeg,image/webp,image/svg+xml";
+    "image/png,image/jpeg,image/webp,image/svg+xml";
 
   const handleUpload = async (file: File) => {
     const result = await uploadWebsiteSlotFile(slot, file, slot.replaceAll("_", " "));
@@ -177,11 +175,8 @@ function DraggableMedia({
 
   return (
     <div ref={frameRef} className={`group relative overflow-hidden ${className}`}>
-      {slot === "hero_video" ? (
-        <video src={url} className="h-full w-full object-cover" muted playsInline autoPlay loop />
-      ) : (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
           src={url}
           alt=""
           className="h-full w-full cursor-grab object-cover active:cursor-grabbing"
@@ -212,7 +207,6 @@ function DraggableMedia({
             onPositionSaved(slot, position);
           }}
         />
-      )}
       <span className="pointer-events-none absolute bottom-2 left-2 inline-flex items-center gap-1 rounded bg-black/55 px-2 py-1 text-[10px] uppercase tracking-wide text-white">
         <Move className="h-3 w-3" /> Drag image
       </span>
@@ -236,7 +230,6 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
   });
   const [media, setMedia] = useState(initial.media);
   const [gallery, setGallery] = useState<WebsiteGalleryItem[]>(initial.gallery);
-  const [videos, setVideos] = useState<WebsiteVideo[]>(initial.videos);
   const [amenities, setAmenities] = useState<WebsiteAmenity[]>(initial.amenities);
   const [menuCategories, setMenuCategories] = useState<WebsiteMenuCategory[]>(
     initial.menuCategories,
@@ -350,28 +343,6 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
     setMessage("Gallery image added.");
   };
 
-  const handleVideoUpload = async (file: File) => {
-    setError(null);
-    const result = await uploadWebsiteVideoApiFile(file, file.name.replace(/\.[^.]+$/, ""), "promo");
-    if (result.error || !result.data) {
-      setError(result.error || "Video upload failed.");
-      return;
-    }
-    setVideos((prev) => [
-      {
-        id: result.data!.id,
-        title: result.data!.title,
-        description: "",
-        videoUrl: result.data!.videoUrl,
-        posterUrl: result.data!.posterUrl || "",
-        slot: "promo",
-        sortOrder: Date.now(),
-        enabled: true,
-      },
-      ...prev,
-    ]);
-    setMessage("Video added.");
-  };
 
   const onDragEnd = (result: DropResult) => {
     if (!result.destination) return;
@@ -416,7 +387,6 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
   useEffect(() => {
     setMedia(initial.media);
     setGallery(initial.gallery);
-    setVideos(initial.videos);
     setAmenities(initial.amenities);
     setMenuCategories(initial.menuCategories);
     setMenuItems(initial.menuItems);
@@ -436,7 +406,7 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">Homepage canvas</p>
           <p className="truncate text-xs text-gray-500">
-            Edit everything here — tap + on any image/video to upload
+            Edit everything here — tap + on any image to upload
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -655,21 +625,6 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
                       onError={setError}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0C] via-[#0B0B0C]/65 to-black/25" />
-                    <div className="absolute right-3 top-3 z-20 flex flex-wrap gap-2">
-                      <InlinePlusUpload
-                        accept="video/mp4,video/webm"
-                        label={media.hero_video ? "Replace video" : "Add video"}
-                        hasMedia={Boolean(media.hero_video)}
-                        onFile={async (file) => {
-                          const result = await uploadWebsiteSlotFile("hero_video", file, "Hero video");
-                          if (result.error || !result.data) {
-                            setError(result.error || "Video upload failed.");
-                            return;
-                          }
-                          handleMediaUploaded("hero_video", result.data);
-                        }}
-                      />
-                    </div>
                     <div className="relative z-10 flex min-h-[70vh] flex-col justify-end px-6 pb-12 pt-20">
                       <EditableText
                         value={settings.restaurantName}
@@ -854,13 +809,6 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
                         onFile={handleGalleryUpload}
                       />
                     ) : null}
-                    {section.type === "video" ? (
-                      <InlinePlusUpload
-                        accept="video/mp4,video/webm"
-                        label="Add video"
-                        onFile={handleVideoUpload}
-                      />
-                    ) : null}
                   </div>
 
                   {section.type === "gallery" ? (
@@ -880,23 +828,6 @@ export function WebsiteVisualDesigner({ initial }: { initial: WebsiteContent }) 
                         <p className="col-span-full text-sm text-white/50">
                           Tap + to add gallery photos here.
                         </p>
-                      ) : null}
-                    </div>
-                  ) : section.type === "video" ? (
-                    <div className="space-y-3">
-                      {videos.filter((v) => v.enabled).slice(0, 2).map((video) => (
-                        <div key={video.id} className="overflow-hidden rounded-xl bg-black/40">
-                          <video
-                            src={video.videoUrl}
-                            poster={video.posterUrl || undefined}
-                            controls
-                            className="max-h-56 w-full"
-                          />
-                          <p className="px-3 py-2 text-sm text-white/70">{video.title}</p>
-                        </div>
-                      ))}
-                      {videos.length === 0 ? (
-                        <p className="text-sm text-white/50">Tap + to add a promo video here.</p>
                       ) : null}
                     </div>
                   ) : section.type === "menu" ? (

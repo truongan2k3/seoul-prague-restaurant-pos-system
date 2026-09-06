@@ -8,7 +8,6 @@ import { nextWebsiteSortOrder } from "@/lib/website/sort-order";
 import type {
   GalleryCategory,
   MenuPdfLanguage,
-  VideoSlot,
   WebsiteAmenity,
   WebsiteGalleryItem,
   WebsiteMediaSlot,
@@ -16,7 +15,6 @@ import type {
   WebsiteMenuItem,
   WebsiteOpeningHour,
   WebsiteSettings,
-  WebsiteVideo,
 } from "@/lib/website/types";
 import { MENU_PDF_LANGUAGES } from "@/lib/website/defaults";
 import { readAuthSession } from "@/src/lib/auth/session";
@@ -31,7 +29,6 @@ import {
   mapMenuItemRow,
   mapMenuPdfRow,
   mapSettingsRow,
-  mapVideoRow,
   parseOpeningHours,
 } from "@/src/lib/website-public";
 
@@ -444,83 +441,8 @@ export async function deleteWebsiteGalleryItem(id: string) {
   return { error: (await admin.from("website_gallery_items").delete().eq("id", id)).error };
 }
 
-export async function upsertWebsiteVideo(input: Omit<WebsiteVideo, "id"> & { id?: string }) {
-  const { error, admin } = await requireWebsiteAdmin();
-  if (error || !admin) return { data: null, error };
 
-  const { data, error: dbError } = await admin
-    .from("website_videos")
-    .upsert({
-      id: input.id,
-      title: input.title,
-      description: input.description,
-      video_url: input.videoUrl,
-      poster_url: input.posterUrl,
-      slot: input.slot,
-      sort_order: input.sortOrder,
-      enabled: input.enabled,
-      updated_at: nowIso(),
-    })
-    .select("*")
-    .single();
 
-  if (dbError) return { data: null, error: dbError };
-  revalidateWebsitePaths();
-  return { data: mapVideoRow(data as Record<string, unknown>), error: null };
-}
-
-export async function uploadWebsiteVideoFile(input: {
-  title: string;
-  description?: string;
-  slot: VideoSlot;
-  fileBase64: string;
-  fileName: string;
-  mimeType: string;
-  posterBase64?: string;
-  posterFileName?: string;
-  posterMimeType?: string;
-}) {
-  const { error, admin } = await requireWebsiteAdmin();
-  if (error || !admin) return { data: null, error };
-
-  const extension = input.fileName.split(".").pop()?.toLowerCase() ?? "mp4";
-  const buffer = Buffer.from(input.fileBase64, "base64");
-  const path = `videos/${Date.now()}.${extension}`;
-  const { error: uploadError } = await admin.storage
-    .from("restaurant_media")
-    .upload(path, buffer, { cacheControl: "31536000", upsert: true, contentType: input.mimeType });
-  if (uploadError) return { data: null, error: uploadError };
-
-  const { data: publicData } = admin.storage.from("restaurant_media").getPublicUrl(path);
-  let posterUrl = "";
-  if (input.posterBase64 && input.posterFileName && input.posterMimeType) {
-    const posterExt = input.posterFileName.split(".").pop()?.toLowerCase() ?? "jpg";
-    const posterPath = `videos/posters/${Date.now()}.${posterExt}`;
-    const posterBuffer = Buffer.from(input.posterBase64, "base64");
-    await admin.storage.from("restaurant_media").upload(posterPath, posterBuffer, {
-      cacheControl: "31536000",
-      upsert: true,
-      contentType: input.posterMimeType,
-    });
-    posterUrl = admin.storage.from("restaurant_media").getPublicUrl(posterPath).data.publicUrl;
-  }
-
-  return upsertWebsiteVideo({
-    title: input.title,
-    description: input.description ?? "",
-    videoUrl: publicData.publicUrl,
-    posterUrl,
-    slot: input.slot,
-    sortOrder: nextWebsiteSortOrder(),
-    enabled: true,
-  });
-}
-
-export async function deleteWebsiteVideo(id: string) {
-  const { error, admin } = await requireWebsiteAdmin();
-  if (error || !admin) return { error };
-  return { error: (await admin.from("website_videos").delete().eq("id", id)).error };
-}
 
 export async function uploadWebsiteMenuPdf(input: {
   language: MenuPdfLanguage;

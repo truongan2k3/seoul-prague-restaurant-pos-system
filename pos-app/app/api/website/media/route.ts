@@ -12,7 +12,6 @@ export const runtime = "nodejs";
 const SLOTS: WebsiteMediaSlot[] = [
   "logo",
   "hero_image",
-  "hero_video",
   "about_image",
   "signature_1",
   "signature_2",

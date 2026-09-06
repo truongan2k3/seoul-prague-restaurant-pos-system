@@ -90,18 +90,19 @@ create table if not exists public.website_gallery_items (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists public.website_videos (
-  id uuid primary key default gen_random_uuid(),
-  title text,
-  description text,
-  video_url text not null,
-  poster_url text,
-  slot text not null default 'promo',
-  sort_order int not null default 0,
-  enabled boolean not null default true,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+-- RETIRED: website videos removed from CMS. See patch-drop-website-videos.sql
+-- create table if not exists public.website_videos (
+--   id uuid primary key default gen_random_uuid(),
+--   title text,
+--   description text,
+--   video_url text not null,
+--   poster_url text,
+--   slot text not null default 'promo',
+--   sort_order int not null default 0,
+--   enabled boolean not null default true,
+--   created_at timestamptz not null default now(),
+--   updated_at timestamptz not null default now()
+-- );
 
 -- Public read for marketing site; writes via service role in server actions.
 alter table public.website_settings enable row level security;
@@ -110,7 +111,6 @@ alter table public.website_amenities enable row level security;
 alter table public.website_menu_categories enable row level security;
 alter table public.website_menu_items enable row level security;
 alter table public.website_gallery_items enable row level security;
-alter table public.website_videos enable row level security;
 
 drop policy if exists "website_settings_public_read" on public.website_settings;
 create policy "website_settings_public_read" on public.website_settings for select using (true);
@@ -129,9 +129,6 @@ create policy "website_menu_items_public_read" on public.website_menu_items for 
 
 drop policy if exists "website_gallery_public_read" on public.website_gallery_items;
 create policy "website_gallery_public_read" on public.website_gallery_items for select using (true);
-
-drop policy if exists "website_videos_public_read" on public.website_videos;
-create policy "website_videos_public_read" on public.website_videos for select using (true);
 
 -- Storage bucket for restaurant marketing media (public read).
 insert into storage.buckets (id, name, public)

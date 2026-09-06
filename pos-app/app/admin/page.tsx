@@ -22,7 +22,6 @@ export default async function AdminDashboardPage() {
         {[
           { label: "Menu items", value: content.menuItems.length },
           { label: "Gallery images", value: content.gallery.length },
-          { label: "Videos", value: content.videos.length },
           { label: "Amenities", value: content.amenities.filter((row) => row.enabled).length },
         ].map((stat) => (
           <div key={stat.label} className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
@@ -35,8 +34,10 @@ export default async function AdminDashboardPage() {
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
         Run SQL if needed:{" "}
         <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">supabase/patch-website-cms.sql</code>,{" "}
-        <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">patch-website-media-position.sql</code>, and{" "}
-        <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">patch-website-page-layout.sql</code>.
+        <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">patch-website-media-position.sql</code>,{" "}
+        <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">patch-website-page-layout.sql</code>, and{" "}
+        <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">patch-drop-website-videos.sql</code>
+        {" "}(removes retired CMS videos).
         Open{" "}
         <Link href="/admin/designer" className="text-blue-600 underline">
           Visual designer

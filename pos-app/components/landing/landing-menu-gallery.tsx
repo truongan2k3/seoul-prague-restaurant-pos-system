@@ -537,7 +537,13 @@ export function LandingContact({ content }: { content: WebsiteContent }) {
   );
 }
 
-export function LandingFooter({ content }: { content: WebsiteContent }) {
+export function LandingFooter({
+  content,
+  showBookCta = true,
+}: {
+  content: WebsiteContent;
+  showBookCta?: boolean;
+}) {
   const { settings } = content;
   const socialLinks = resolveSocialLinks({
     socialLinks: settings.socialLinks,
@@ -547,15 +553,21 @@ export function LandingFooter({ content }: { content: WebsiteContent }) {
   });
 
   return (
-    <footer className="border-t border-white/10 bg-[#080809] pb-24 pt-16 lg:pb-16">
+    <footer
+      className={`border-t border-white/10 bg-[#080809] pt-16 ${
+        showBookCta ? "pb-24 lg:pb-16" : "pb-16"
+      }`}
+    >
       <div className="mx-auto max-w-7xl px-5 lg:px-8">
         <div className="grid gap-10 lg:grid-cols-4">
           <div className="lg:col-span-2">
             <p className="landing-serif text-2xl text-white">{settings.restaurantName}</p>
             <p className="mt-3 max-w-md text-sm text-white/55">{settings.tagline}</p>
-            <div className="mt-6">
-              <BookingCta size="sm" />
-            </div>
+            {showBookCta ? (
+              <div className="mt-6">
+                <BookingCta size="sm" />
+              </div>
+            ) : null}
             {socialLinks.length > 0 ? (
               <ul className="mt-8 flex flex-wrap gap-2">
                 {socialLinks.map((link) => (

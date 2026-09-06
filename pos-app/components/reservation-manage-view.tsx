@@ -11,6 +11,7 @@ import {
   type SlotCapacityRow,
 } from "@/lib/reservation-slots";
 import type { AppSettings, ReservationStatus } from "@/lib/types";
+import type { WebsiteContent } from "@/lib/website/types";
 import { DEFAULT_APP_SETTINGS, fetchAppSettings } from "@/src/lib/settings-actions";
 import { fetchReservationsForDate } from "@/src/lib/reservation-actions";
 
@@ -53,7 +54,7 @@ function formatWhen(iso: string): string {
   }).format(new Date(iso));
 }
 
-export function ReservationManageView() {
+export function ReservationManageView({ website }: { website?: WebsiteContent }) {
   const searchParams = useSearchParams();
   const token = searchParams.get("token")?.trim() ?? "";
 
@@ -256,61 +257,68 @@ export function ReservationManageView() {
     }
   };
 
+  const restaurantName = website?.settings.restaurantName?.trim() || "SEOUL PRAGUE";
+  const logoUrl = website?.media.logo?.fileUrl;
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-zinc-950 via-zinc-900 to-zinc-950 text-zinc-100">
-      <div className="mx-auto max-w-xl px-4 py-10">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="inline-flex rounded-full bg-red-600/20 p-3 text-red-400">
-            <UtensilsCrossed className="h-5 w-5" />
-          </div>
+    <div className="mx-auto max-w-xl px-4 pb-16">
+        <div className="mb-8 flex items-center gap-3">
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoUrl} alt="" className="h-12 w-12 object-contain" />
+          ) : (
+            <div className="inline-flex bg-[#8B1E2D]/25 p-3 text-[#C9A88B]">
+              <UtensilsCrossed className="h-5 w-5" />
+            </div>
+          )}
           <div>
-            <p className="text-xs uppercase tracking-wider text-zinc-500">SEOUL PRAGUE</p>
-            <h1 className="text-2xl font-bold text-white">Manage reservation</h1>
+            <p className="text-xs uppercase tracking-[0.28em] text-[#C9A88B]">{restaurantName}</p>
+            <h1 className="landing-serif text-3xl text-white">Manage reservation</h1>
           </div>
         </div>
 
         {loading ? (
-          <div className="flex items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/80 px-5 py-8 text-sm text-zinc-400">
+          <div className="flex items-center gap-2 rounded-none border border-white/10 bg-[#121214]/90 px-5 py-8 text-sm text-white/55">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading…
           </div>
         ) : error && !reservation ? (
-          <div className="rounded-2xl border border-red-900/60 bg-red-950/40 px-5 py-6 text-sm text-red-200">
+          <div className="rounded-none border border-[#8B1E2D]/50 bg-[#8B1E2D]/20 px-5 py-6 text-sm text-[#E8D5C4]">
             {error}
           </div>
         ) : reservation ? (
-          <div className="space-y-5 rounded-2xl border border-zinc-800 bg-zinc-900/90 p-6 shadow-2xl">
-            <div className="flex items-start gap-3 rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3">
-              <CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
+          <div className="space-y-5 rounded-none border border-white/10 bg-[#121214]/95 p-6 shadow-2xl">
+            <div className="flex items-start gap-3 rounded-none border border-white/10 bg-[#0B0B0C]/60 px-4 py-3">
+              <CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A88B]" />
               <div className="text-sm">
                 <p className="font-semibold text-white">
                   {reservation.bookingCode} · {reservation.status.replace("_", " ")}
                 </p>
-                <p className="mt-1 text-zinc-300">
+                <p className="mt-1 text-white/70">
                   {reservation.guestName} · {reservation.partySize} guests
                 </p>
-                <p className="mt-1 text-zinc-400">{formatWhen(reservation.reservedAt)}</p>
+                <p className="mt-1 text-white/55">{formatWhen(reservation.reservedAt)}</p>
               </div>
             </div>
 
             {message && (
-              <p className="rounded-xl bg-emerald-950/50 px-4 py-3 text-sm text-emerald-200">
+              <p className="rounded-none bg-emerald-950/50 px-4 py-3 text-sm text-emerald-200">
                 {message}
               </p>
             )}
             {error && (
-              <p className="rounded-xl bg-red-950/60 px-4 py-3 text-sm text-red-300">{error}</p>
+              <p className="rounded-none bg-red-950/60 px-4 py-3 text-sm text-red-300">{error}</p>
             )}
 
             {canEdit ? (
               <form onSubmit={(event) => void handleSave(event)} className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-3">
                   <label className="block text-sm sm:col-span-1">
-                    <span className="font-medium text-zinc-200">Guests</span>
+                    <span className="font-medium text-white/90">Guests</span>
                     <select
                       value={guestCount}
                       onChange={(event) => setGuestCount(Number(event.target.value))}
-                      className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-3 text-white"
+                      className="mt-2 w-full rounded-none border border-white/15 bg-[#0B0B0C] px-3 py-3 text-white"
                     >
                       {guestOptions.map((count) => (
                         <option key={count} value={count}>
@@ -320,22 +328,22 @@ export function ReservationManageView() {
                     </select>
                   </label>
                   <label className="block text-sm sm:col-span-1">
-                    <span className="font-medium text-zinc-200">Date</span>
+                    <span className="font-medium text-white/90">Date</span>
                     <input
                       type="date"
                       value={date}
                       min={minDate}
                       onChange={(event) => setDate(event.target.value)}
-                      className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-3 text-white"
+                      className="mt-2 w-full rounded-none border border-white/15 bg-[#0B0B0C] px-3 py-3 text-white"
                       required
                     />
                   </label>
                   <label className="block text-sm sm:col-span-1">
-                    <span className="font-medium text-zinc-200">Time</span>
+                    <span className="font-medium text-white/90">Time</span>
                     <select
                       value={time}
                       onChange={(event) => setTime(event.target.value)}
-                      className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-3 text-white"
+                      className="mt-2 w-full rounded-none border border-white/15 bg-[#0B0B0C] px-3 py-3 text-white"
                       required
                     >
                       {availableTimeSlots.length === 0 ? (
@@ -352,19 +360,19 @@ export function ReservationManageView() {
                 </div>
 
                 <label className="block text-sm">
-                  <span className="font-medium text-zinc-200">Notes</span>
+                  <span className="font-medium text-white/90">Notes</span>
                   <textarea
                     value={notes}
                     onChange={(event) => setNotes(event.target.value)}
                     rows={3}
-                    className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-3 text-white"
+                    className="mt-2 w-full rounded-none border border-white/15 bg-[#0B0B0C] px-3 py-3 text-white"
                   />
                 </label>
 
                 <button
                   type="submit"
                   disabled={saving || availableTimeSlots.length === 0}
-                  className="w-full rounded-xl bg-red-600 py-3.5 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-60"
+                  className="w-full rounded-none bg-[#8B1E2D] py-3.5 text-sm font-semibold text-white hover:bg-[#A02435] disabled:opacity-60"
                 >
                   {saving ? "Saving…" : "Save changes"}
                 </button>
@@ -373,13 +381,13 @@ export function ReservationManageView() {
                   type="button"
                   disabled={cancelling}
                   onClick={() => void handleCancel()}
-                  className="w-full rounded-xl border border-zinc-700 py-3 text-sm font-semibold text-zinc-200 hover:bg-zinc-800 disabled:opacity-60"
+                  className="w-full rounded-none border border-white/15 py-3 text-sm font-semibold text-white/90 hover:bg-white/10 disabled:opacity-60"
                 >
                   {cancelling ? "Cancelling…" : "Cancel reservation"}
                 </button>
               </form>
             ) : (
-              <p className="text-sm text-zinc-400">
+              <p className="text-sm text-white/55">
                 This reservation can no longer be changed online ({reservation.status}).
                 Contact the restaurant if you need help.
               </p>
@@ -387,12 +395,11 @@ export function ReservationManageView() {
           </div>
         ) : null}
 
-        <p className="mt-6 text-center text-xs text-zinc-500">
-          <a href="/reservation" className="text-red-400 hover:text-red-300">
+        <p className="mt-6 text-center text-xs text-white/45">
+          <a href="/reservation" className="text-[#C9A88B] hover:text-[#E8D5C4]">
             ← Book a new table
           </a>
         </p>
-      </div>
     </div>
   );
 }

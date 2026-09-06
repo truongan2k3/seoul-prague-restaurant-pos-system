@@ -23,6 +23,7 @@ import {
   parseGuestReservationLang,
 } from "@/lib/i18n/guest-reservation";
 import type { AppSettings } from "@/lib/types";
+import type { WebsiteContent } from "@/lib/website/types";
 import { DEFAULT_APP_SETTINGS, fetchAppSettings } from "@/src/lib/settings-actions";
 import { fetchReservationsForDate } from "@/src/lib/reservation-actions";
 
@@ -36,10 +37,10 @@ const GUEST_LANG_LABELS: Record<GuestReservationLang, string> = {
 
 function RequiredMark({ show }: { show: boolean }) {
   if (!show) return null;
-  return <span className="text-red-400"> *</span>;
+  return <span className="text-[#C9A88B]"> *</span>;
 }
 
-export function ReservationBookingView() {
+export function ReservationBookingView({ website }: { website?: WebsiteContent }) {
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [reservationsForDate, setReservationsForDate] = useState<SlotCapacityRow[]>([]);
   const [settingsLoading, setSettingsLoading] = useState(true);
@@ -68,9 +69,10 @@ export function ReservationBookingView() {
   const guestTexts = appSettings.reservationGuestTexts;
   const showEventTypeField = eventTypes.length > 0;
   const venue = appSettings.reservationGuestVenue;
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.address)}`;
-  const phoneHref = `tel:${venue.phone.replace(/[^\d+]/g, "")}`;
-  const emailHref = `mailto:${venue.email}`;
+  const mapsQuery = website?.settings.address?.trim() || venue.address;
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`;
+  const phoneHref = `tel:${(website?.settings.phone?.trim() || venue.phone).replace(/[^\d+]/g, "")}`;
+  const emailHref = `mailto:${website?.settings.email?.trim() || venue.email}`;
 
   const minDate = useMemo(() => todayIsoDate(), []);
 
@@ -261,49 +263,63 @@ export function ReservationBookingView() {
   const emailHint = pickLocalizedText(guestTexts.emailHint, lang);
   const gdprText = pickLocalizedText(guestTexts.gdprConsent, lang);
 
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-zinc-950 via-zinc-900 to-zinc-950 text-zinc-100">
-      <header className="sticky top-0 z-40 border-b border-zinc-800/80 bg-zinc-950/95 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-end px-4 py-3">
-          <label className="inline-flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm">
-            <Globe className="h-4 w-4 text-red-400" />
-            <select
-              value={lang}
-              onChange={(event) => setLang(parseGuestReservationLang(event.target.value))}
-              className="bg-transparent text-white outline-none"
-              aria-label="Language"
-            >
-              {GUEST_RESERVATION_LANGS.map((code) => (
-                <option key={code} value={code} className="bg-zinc-900">
-                  {GUEST_LANG_LABELS[code]}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </header>
+  const restaurantName = website?.settings.restaurantName?.trim() || venue.restaurantName;
+  const displayAddress = website?.settings.address?.trim() || venue.address;
+  const displayPhone = website?.settings.phone?.trim() || venue.phone;
+  const displayEmail = website?.settings.email?.trim() || venue.email;
+  const logoUrl = website?.media.logo?.fileUrl;
 
-      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 px-4 py-6 md:py-10 lg:grid-cols-3">
+  return (
+    <div className="mx-auto max-w-6xl px-4 pb-16">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Reservations</p>
+          <h1 className="landing-serif mt-3 text-3xl text-white lg:text-5xl">{copy.makeReservation}</h1>
+          <p className="mt-2 max-w-xl text-sm text-white/55">{copy.reserveSubtitle}</p>
+        </div>
+        <label className="inline-flex items-center gap-2 border border-white/15 bg-[#121214] px-3 py-2 text-sm">
+          <Globe className="h-4 w-4 text-[#C9A88B]" />
+          <select
+            value={lang}
+            onChange={(event) => setLang(parseGuestReservationLang(event.target.value))}
+            className="bg-transparent text-white outline-none"
+            aria-label="Language"
+          >
+            {GUEST_RESERVATION_LANGS.map((code) => (
+              <option key={code} value={code} className="bg-[#121214]">
+                {GUEST_LANG_LABELS[code]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <aside className="space-y-4 lg:col-span-1">
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-6 shadow-xl">
-            <div className="mb-4 inline-flex rounded-full bg-red-600/20 p-3 text-red-400">
-              <UtensilsCrossed className="h-6 w-6" />
-            </div>
-            <h1 className="text-2xl font-bold leading-tight text-white">{venue.restaurantName}</h1>
-            <p className="mt-2 whitespace-pre-line text-sm text-zinc-400">{copy.tagline}</p>
+          <div className="rounded-none border border-white/10 bg-[#121214]/90 p-6 shadow-xl">
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoUrl} alt="" className="mb-4 h-14 w-14 object-contain" />
+            ) : (
+              <div className="mb-4 inline-flex bg-[#8B1E2D]/25 p-3 text-[#C9A88B]">
+                <UtensilsCrossed className="h-6 w-6" />
+              </div>
+            )}
+            <h2 className="landing-serif text-2xl leading-tight text-white">{restaurantName}</h2>
+            <p className="mt-2 whitespace-pre-line text-sm text-white/55">{copy.tagline}</p>
           </div>
 
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5 shadow-xl">
+          <div className="rounded-none border border-white/10 bg-[#121214]/90 p-5 shadow-xl">
             <div className="flex items-start gap-3">
-              <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
+              <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A88B]" />
               <div>
                 <p className="text-sm font-semibold text-white">{copy.location}</p>
-                <p className="mt-1 text-sm text-zinc-300">{venue.address}</p>
+                <p className="mt-1 text-sm text-white/70">{displayAddress}</p>
                 <a
                   href={mapsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-2 inline-block text-sm font-medium text-red-400 hover:text-red-300"
+                  className="mt-2 inline-block text-sm font-medium text-[#C9A88B] hover:text-[#E8D5C4]"
                 >
                   {copy.getDirections}
                 </a>
@@ -311,41 +327,36 @@ export function ReservationBookingView() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5 shadow-xl">
+          <div className="rounded-none border border-white/10 bg-[#121214]/90 p-5 shadow-xl">
             <p className="text-sm font-semibold text-white">{copy.contact}</p>
             <div className="mt-3 space-y-2 text-sm">
-              <a href={phoneHref} className="flex items-center gap-2 text-zinc-300 hover:text-white">
-                <Phone className="h-4 w-4 text-red-400" />
-                {venue.phone}
+              <a href={phoneHref} className="flex items-center gap-2 text-white/70 hover:text-white">
+                <Phone className="h-4 w-4 text-[#C9A88B]" />
+                {displayPhone}
               </a>
-              <a href={emailHref} className="flex items-center gap-2 text-zinc-300 hover:text-white">
-                <Mail className="h-4 w-4 text-red-400" />
-                {venue.email}
+              <a href={emailHref} className="flex items-center gap-2 text-white/70 hover:text-white">
+                <Mail className="h-4 w-4 text-[#C9A88B]" />
+                {displayEmail}
               </a>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5 shadow-xl">
+          <div className="rounded-none border border-white/10 bg-[#121214]/90 p-5 shadow-xl">
             <div className="flex items-start gap-3">
-              <Clock className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
+              <Clock className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A88B]" />
               <div>
                 <p className="text-sm font-semibold text-white">{copy.openingHours}</p>
-                <p className="mt-1 whitespace-pre-line text-sm text-zinc-300">{openingHoursSummary}</p>
+                <p className="mt-1 whitespace-pre-line text-sm text-white/70">{openingHoursSummary}</p>
               </div>
             </div>
           </div>
         </aside>
 
         <section className="lg:col-span-2">
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/90 p-6 shadow-2xl sm:p-8">
-            <div>
-              <h2 className="text-2xl font-bold text-white sm:text-3xl">{copy.makeReservation}</h2>
-              <p className="mt-2 text-sm text-zinc-400">{copy.reserveSubtitle}</p>
-            </div>
-
+          <div className="rounded-none border border-white/10 bg-[#121214]/95 p-6 shadow-2xl sm:p-8">
             <form onSubmit={(event) => void handleSubmit(event)} className="mt-8 space-y-5">
               <label className="block text-sm">
-                <span className="font-medium text-zinc-200">
+                <span className="font-medium text-white/90">
                   {copy.yourName}
                   <RequiredMark show={required.name} />
                 </span>
@@ -353,7 +364,7 @@ export function ReservationBookingView() {
                   type="text"
                   value={guestName}
                   onChange={(event) => setGuestName(event.target.value)}
-                  className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none ring-red-500/0 transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30"
+                  className="mt-2 w-full rounded-none border border-white/15 bg-[#0B0B0C] px-4 py-3 text-white outline-none ring-[#C9A88B]/0 transition focus:border-[#C9A88B] focus:ring-2 focus:ring-[#C9A88B]/30"
                   placeholder={copy.namePlaceholder}
                   required={required.name}
                 />
@@ -361,24 +372,24 @@ export function ReservationBookingView() {
 
               <div className="grid gap-5 sm:grid-cols-2">
                 <label className="block text-sm">
-                  <span className="font-medium text-zinc-200">
+                  <span className="font-medium text-white/90">
                     {copy.emailAddress}
                     <RequiredMark show={required.email} />
                   </span>
                   {emailHint ? (
-                    <span className="mt-1 block text-xs text-zinc-500">{emailHint}</span>
+                    <span className="mt-1 block text-xs text-white/45">{emailHint}</span>
                   ) : null}
                   <input
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30"
+                    className="mt-2 w-full rounded-none border border-white/15 bg-[#0B0B0C] px-4 py-3 text-white outline-none transition focus:border-[#C9A88B] focus:ring-2 focus:ring-[#C9A88B]/30"
                     placeholder={copy.emailPlaceholder}
                     required={required.email}
                   />
                 </label>
                 <label className="block text-sm">
-                  <span className="font-medium text-zinc-200">
+                  <span className="font-medium text-white/90">
                     {copy.phoneNumber}
                     <RequiredMark show={required.phone} />
                   </span>
@@ -386,7 +397,7 @@ export function ReservationBookingView() {
                     type="tel"
                     value={phone}
                     onChange={(event) => setPhone(event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30"
+                    className="mt-2 w-full rounded-none border border-white/15 bg-[#0B0B0C] px-4 py-3 text-white outline-none transition focus:border-[#C9A88B] focus:ring-2 focus:ring-[#C9A88B]/30"
                     placeholder="+420 123 456 789"
                     required={required.phone}
                   />
@@ -395,14 +406,14 @@ export function ReservationBookingView() {
 
               {showEventTypeField ? (
                 <label className="block text-sm">
-                  <span className="font-medium text-zinc-200">
+                  <span className="font-medium text-white/90">
                     {copy.eventType}
                     <RequiredMark show={required.eventType} />
                   </span>
                   <select
                     value={eventType}
                     onChange={(event) => setEventType(event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30"
+                    className="mt-2 w-full rounded-none border border-white/15 bg-[#0B0B0C] px-4 py-3 text-white outline-none transition focus:border-[#C9A88B] focus:ring-2 focus:ring-[#C9A88B]/30"
                     required={required.eventType}
                   >
                     <option value="">{copy.selectEventType}</option>
@@ -415,17 +426,17 @@ export function ReservationBookingView() {
                 </label>
               ) : null}
 
-              <div className="rounded-xl border border-zinc-700 bg-zinc-950 p-4">
-                <p className="text-sm font-medium text-zinc-200">{copy.bbqQuestion}</p>
-                <p className="mt-1 text-xs text-zinc-500">{copy.bbqHint}</p>
+              <div className="rounded-none border border-white/15 bg-[#0B0B0C] p-4">
+                <p className="text-sm font-medium text-white/90">{copy.bbqQuestion}</p>
+                <p className="mt-1 text-xs text-white/45">{copy.bbqHint}</p>
                 <div className="mt-3 grid gap-2 sm:grid-cols-3">
                   <button
                     type="button"
                     onClick={() => setWantsBbq("yes")}
-                    className={`rounded-xl py-3 text-sm font-semibold transition ${
+                    className={`rounded-none py-3 text-sm font-semibold transition ${
                       wantsBbq === "yes"
-                        ? "bg-red-600 text-white"
-                        : "border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                        ? "bg-[#8B1E2D] text-white"
+                        : "border border-white/15 text-white/70 hover:bg-zinc-800"
                     }`}
                   >
                     🔥 {copy.bbqYes}
@@ -433,10 +444,10 @@ export function ReservationBookingView() {
                   <button
                     type="button"
                     onClick={() => setWantsBbq("no")}
-                    className={`rounded-xl py-3 text-sm font-semibold transition ${
+                    className={`rounded-none py-3 text-sm font-semibold transition ${
                       wantsBbq === "no"
                         ? "bg-zinc-700 text-white"
-                        : "border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                        : "border border-white/15 text-white/70 hover:bg-zinc-800"
                     }`}
                   >
                     {copy.bbqNo}
@@ -444,10 +455,10 @@ export function ReservationBookingView() {
                   <button
                     type="button"
                     onClick={() => setWantsBbq("undecided")}
-                    className={`rounded-xl py-3 text-sm font-semibold transition ${
+                    className={`rounded-none py-3 text-sm font-semibold transition ${
                       wantsBbq === "undecided"
                         ? "bg-amber-700 text-white"
-                        : "border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                        : "border border-white/15 text-white/70 hover:bg-zinc-800"
                     }`}
                   >
                     {copy.bbqUndecided}
@@ -457,14 +468,14 @@ export function ReservationBookingView() {
 
               <div className="grid gap-5 sm:grid-cols-3">
                 <label className="block text-sm">
-                  <span className="font-medium text-zinc-200">
+                  <span className="font-medium text-white/90">
                     {copy.numberOfGuests}
                     <RequiredMark show={required.guestCount} />
                   </span>
                   <select
                     value={guestCount}
                     onChange={(event) => setGuestCount(Number(event.target.value))}
-                    className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30"
+                    className="mt-2 w-full rounded-none border border-white/15 bg-[#0B0B0C] px-4 py-3 text-white outline-none transition focus:border-[#C9A88B] focus:ring-2 focus:ring-[#C9A88B]/30"
                     required={required.guestCount}
                   >
                     {guestOptions.map((count) => (
@@ -476,7 +487,7 @@ export function ReservationBookingView() {
                   </select>
                 </label>
                 <label className="block text-sm">
-                  <span className="font-medium text-zinc-200">
+                  <span className="font-medium text-white/90">
                     {copy.selectDate}
                     <RequiredMark show={required.date} />
                   </span>
@@ -485,19 +496,19 @@ export function ReservationBookingView() {
                     value={date}
                     min={minDate}
                     onChange={(event) => setDate(event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30"
+                    className="mt-2 w-full rounded-none border border-white/15 bg-[#0B0B0C] px-4 py-3 text-white outline-none transition focus:border-[#C9A88B] focus:ring-2 focus:ring-[#C9A88B]/30"
                     required={required.date}
                   />
                 </label>
                 <label className="block text-sm">
-                  <span className="font-medium text-zinc-200">
+                  <span className="font-medium text-white/90">
                     {copy.selectTime}
                     <RequiredMark show={required.time} />
                   </span>
                   <select
                     value={time}
                     onChange={(event) => setTime(event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30"
+                    className="mt-2 w-full rounded-none border border-white/15 bg-[#0B0B0C] px-4 py-3 text-white outline-none transition focus:border-[#C9A88B] focus:ring-2 focus:ring-[#C9A88B]/30"
                     required={required.time}
                   >
                     {availableTimeSlots.length === 0 ? (
@@ -516,7 +527,7 @@ export function ReservationBookingView() {
               </div>
 
               <label className="block text-sm">
-                <span className="font-medium text-zinc-200">
+                <span className="font-medium text-white/90">
                   {copy.additionalNotes}
                   <RequiredMark show={required.notes} />
                 </span>
@@ -525,16 +536,16 @@ export function ReservationBookingView() {
                   onChange={(event) => setNotes(event.target.value)}
                   rows={4}
                   placeholder={copy.notesPlaceholder}
-                  className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30"
+                  className="mt-2 w-full rounded-none border border-white/15 bg-[#0B0B0C] px-4 py-3 text-white outline-none transition focus:border-[#C9A88B] focus:ring-2 focus:ring-[#C9A88B]/30"
                   required={required.notes}
                 />
               </label>
 
               <label
-                className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm transition ${
+                className={`flex cursor-pointer items-start gap-3 rounded-none border px-4 py-3 text-sm transition ${
                   gdprError
                     ? "border-red-500 bg-red-950/40 ring-2 ring-red-500/40"
-                    : "border-zinc-700 bg-zinc-950"
+                    : "border-white/15 bg-[#0B0B0C]"
                 }`}
               >
                 <input
@@ -546,20 +557,20 @@ export function ReservationBookingView() {
                   }}
                   className="mt-1 h-4 w-4 shrink-0 rounded border-zinc-600"
                 />
-                <span className="text-zinc-300">{gdprText}</span>
+                <span className="text-white/70">{gdprText}</span>
               </label>
               {gdprError ? (
-                <p className="text-sm text-red-400">{copy.gdprRequired}</p>
+                <p className="text-sm text-[#C9A88B]">{copy.gdprRequired}</p>
               ) : null}
 
               {error ? (
-                <p className="rounded-xl bg-red-950/60 px-4 py-3 text-sm text-red-300">{error}</p>
+                <p className="rounded-none bg-red-950/60 px-4 py-3 text-sm text-[#E8D5C4]">{error}</p>
               ) : null}
 
               <button
                 type="submit"
                 disabled={submitting || availableTimeSlots.length === 0}
-                className="w-full rounded-xl bg-red-600 py-4 text-base font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-none bg-[#8B1E2D] py-4 text-base font-semibold text-white transition hover:bg-[#A02435] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {submitting ? copy.submitting : copy.submitReservation}
               </button>
@@ -570,12 +581,12 @@ export function ReservationBookingView() {
 
       <Modal open={showSuccess} onClose={() => setShowSuccess(false)} title={successTitle}>
         <div className="space-y-4 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-none bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
             <UtensilsCrossed className="h-7 w-7" />
           </div>
           <p className="text-sm text-gray-600 dark:text-gray-300">{successBody}</p>
           {successBookingCode ? (
-            <p className="rounded-xl bg-zinc-100 px-4 py-3 text-sm font-semibold text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100">
+            <p className="rounded-none bg-zinc-100 px-4 py-3 text-sm font-semibold text-zinc-900 dark:bg-zinc-800 dark:text-white">
               {copy.bookingCode}: {successBookingCode}
             </p>
           ) : null}
@@ -592,7 +603,7 @@ export function ReservationBookingView() {
           <button
             type="button"
             onClick={() => setShowSuccess(false)}
-            className="w-full rounded-xl bg-gray-900 py-3 text-sm font-semibold text-white dark:bg-gray-100 dark:text-gray-900"
+            className="w-full rounded-none bg-gray-900 py-3 text-sm font-semibold text-white dark:bg-gray-100 dark:text-gray-900"
           >
             {copy.close}
           </button>

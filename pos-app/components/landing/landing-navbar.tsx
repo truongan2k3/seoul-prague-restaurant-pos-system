@@ -17,9 +17,11 @@ const NAV = [
 
 interface LandingNavbarProps {
   content: WebsiteContent;
+  /** Hide sticky mobile “Book a table” bar (e.g. on /reservation). */
+  hideBookCta?: boolean;
 }
 
-export function LandingNavbar({ content }: LandingNavbarProps) {
+export function LandingNavbar({ content, hideBookCta = false }: LandingNavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const logoUrl = content.media.logo?.fileUrl;
@@ -73,7 +75,7 @@ export function LandingNavbar({ content }: LandingNavbarProps) {
           </nav>
 
           <div className="hidden lg:block">
-            <BookingCta size="sm" />
+            {hideBookCta ? null : <BookingCta size="sm" />}
           </div>
 
           <button
@@ -99,15 +101,17 @@ export function LandingNavbar({ content }: LandingNavbarProps) {
                   {item.label}
                 </Link>
               ))}
-              <BookingCta className="mt-2 w-full" />
+              {hideBookCta ? null : <BookingCta className="mt-2 w-full" />}
             </nav>
           </div>
         ) : null}
       </header>
 
-      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#0B0B0C]/95 p-3 backdrop-blur-md lg:hidden">
-        <BookingCta className="w-full" size="md" />
-      </div>
+      {hideBookCta ? null : (
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#0B0B0C]/95 p-3 backdrop-blur-md lg:hidden">
+          <BookingCta className="w-full" size="md" />
+        </div>
+      )}
     </>
   );
 }

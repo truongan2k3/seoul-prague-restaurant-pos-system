@@ -89,7 +89,7 @@ export function StorageView({
 
   return (
     <div className="flex h-full flex-col bg-background text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900 sm:px-6 sm:py-4">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200/80 bg-background px-4 py-3 dark:border-gray-800 dark:bg-gray-900 sm:px-6 sm:py-4">
         <div>
           <h1 className="text-sm font-semibold sm:text-base lg:text-lg text-gray-900 dark:text-gray-100">
             {translate("storage")}
@@ -101,7 +101,7 @@ export function StorageView({
         <HeaderClockWithStatus />
       </header>
 
-      <div className="shrink-0 overflow-x-auto border-b border-gray-200 bg-white px-4 dark:border-gray-800 dark:bg-gray-900 sm:px-6">
+      <div className="shrink-0 overflow-x-auto border-b border-gray-200/80 bg-background px-4 dark:border-gray-800 dark:bg-gray-900 sm:px-6">
         <nav className="flex gap-1 py-2" aria-label={translate("storage")}>
           {tabs.map((tab) => {
             const Icon = tab.icon;

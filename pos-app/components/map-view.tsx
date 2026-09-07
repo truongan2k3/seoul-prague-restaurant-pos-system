@@ -123,7 +123,7 @@ export function MapView({
 
   return (
     <div className="flex h-full flex-col bg-background text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-white px-2.5 py-1.5 dark:border-gray-800 dark:bg-gray-900 sm:gap-3 sm:px-4 sm:py-2.5 lg:px-6 lg:py-3">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200/80 bg-background px-2.5 py-1.5 dark:border-gray-800 dark:bg-gray-900 sm:gap-3 sm:px-4 sm:py-2.5 lg:px-6 lg:py-3">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2.5">
           <h1 className="shrink-0 text-sm font-semibold text-gray-900 dark:text-gray-100 sm:text-base lg:text-lg">
             {translate("map")}
@@ -172,7 +172,7 @@ export function MapView({
       )}
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-4 md:p-6">
+        <div className="min-h-0 flex-1 overflow-auto p-2 sm:p-3 md:p-4">
         {/* Responsive grid — mobile, tablet, smaller desktops */}
         <div className="xl:hidden">
           {editMode && (
@@ -205,8 +205,8 @@ export function MapView({
         {/* Free-position floor plan — large desktop */}
         <div
           ref={mapRef}
-          className="relative mx-auto hidden rounded-2xl border border-dashed border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900/40 xl:block"
-          style={{ height: mapHeight, width: "100%", maxWidth: 1200 }}
+          className="relative mx-auto hidden h-full min-h-[520px] w-full bg-background dark:bg-gray-950 xl:block"
+          style={{ height: mapHeight, width: "100%" }}
         >
           {tables.map((table) => {
             const pos = positions[table.id] ?? { x: table.posX, y: table.posY };

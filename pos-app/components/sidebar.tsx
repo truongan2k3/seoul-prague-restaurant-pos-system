@@ -128,7 +128,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         }`}
       >
         <aside
-          className={`fixed inset-y-0 left-0 z-40 flex h-full flex-col border-r border-gray-200 bg-white text-gray-900 transition-[width] duration-200 ease-out dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 lg:static lg:z-auto ${asideWidth}`}
+          className={`fixed inset-y-0 left-0 z-40 flex h-full flex-col border-r border-gray-200/80 bg-background text-gray-900 transition-[width] duration-200 ease-out dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 lg:static lg:z-auto ${asideWidth}`}
         >
           <div
             className={`flex items-center border-b border-gray-200 dark:border-zinc-800 ${

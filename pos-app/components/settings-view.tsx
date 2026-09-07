@@ -347,7 +347,7 @@ export function SettingsView({
 
   return (
     <div className="flex h-full flex-col bg-background text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <header className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white px-2.5 py-1.5 sm:px-4 sm:py-2.5 lg:px-6 lg:py-4 dark:border-gray-800 dark:bg-gray-900">
+      <header className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-3 border-b border-gray-200/80 bg-background px-2.5 py-1.5 sm:px-4 sm:py-2.5 lg:px-6 lg:py-4 dark:border-gray-800 dark:bg-gray-900">
         <h1 className="text-sm font-semibold sm:text-base lg:text-lg text-zinc-900 dark:text-zinc-100">{translate("settings")}</h1>
         <div className="flex items-center gap-3">
           {saving && (
@@ -366,7 +366,7 @@ export function SettingsView({
         </div>
       </header>
 
-      <div className="shrink-0 border-b border-gray-200 bg-white px-3 dark:border-gray-800 dark:bg-gray-900 sm:px-6">
+      <div className="shrink-0 border-b border-gray-200/80 bg-background px-3 dark:border-gray-800 dark:bg-gray-900 sm:px-6">
         <nav
           className="-mb-px flex gap-1 overflow-x-auto pb-px pt-1"
           aria-label={translate("settings")}

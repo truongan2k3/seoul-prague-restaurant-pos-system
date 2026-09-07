@@ -47,6 +47,8 @@ function isUuid(value: string | undefined | null): value is string {
 function revalidateWebsitePaths() {
   revalidatePath("/", "layout");
   revalidatePath("/menu");
+  revalidatePath("/reservation");
+  revalidatePath("/reservation/manage");
   revalidatePath("/admin", "layout");
   // Invalidate PDF proxy cache when menu PDFs change.
   revalidatePath("/api/website/menu-pdf/file");

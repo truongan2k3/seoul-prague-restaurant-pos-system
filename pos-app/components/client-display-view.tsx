@@ -269,7 +269,14 @@ function ThankYouView({
   );
 }
 
-function CfdSlideshowPlayer({ items }: { items: CfdSlideshowItem[] }) {
+function CfdSlideshowPlayer({
+  items,
+  active = true,
+}: {
+  items: CfdSlideshowItem[];
+  /** False while CFD shows checkout/thank-you — keep mounted but pause media. */
+  active?: boolean;
+}) {
   const [index, setIndex] = useState(0);
   const item = items[Math.max(0, index % Math.max(items.length, 1))];
   const mediaClass = "max-h-full max-w-full object-contain";
@@ -290,6 +297,7 @@ function CfdSlideshowPlayer({ items }: { items: CfdSlideshowItem[] }) {
   }, [items.length, singleItem]);
 
   useEffect(() => {
+    if (!active) return;
     if (!item || item.type === "video") return;
     // Single still/GIF stays on screen — remounting used to re-download every N seconds.
     if (singleItem) return;
@@ -299,13 +307,13 @@ function CfdSlideshowPlayer({ items }: { items: CfdSlideshowItem[] }) {
       goNext();
     }, ms);
     return () => window.clearTimeout(timer);
-  }, [index, item, goNext, singleItem]);
+  }, [index, item, goNext, singleItem, active]);
 
   // Play active video by URL ref — never index DOM video nodes (sparse when images mix in).
   useEffect(() => {
     const activeUrl = items[index % Math.max(items.length, 1)]?.url;
     for (const [url, node] of videoRefs.current) {
-      if (url === activeUrl) {
+      if (active && url === activeUrl) {
         const play = () => {
           void node.play().catch(() => undefined);
         };
@@ -316,6 +324,7 @@ function CfdSlideshowPlayer({ items }: { items: CfdSlideshowItem[] }) {
         }
       } else {
         node.pause();
+        if (!active) continue;
         try {
           node.currentTime = 0;
         } catch {
@@ -323,7 +332,7 @@ function CfdSlideshowPlayer({ items }: { items: CfdSlideshowItem[] }) {
         }
       }
     }
-  }, [index, items, blobUrls]);
+  }, [index, items, blobUrls, active]);
 
   if (!item) {
     return null;
@@ -384,12 +393,14 @@ function CfdSlideshowPlayer({ items }: { items: CfdSlideshowItem[] }) {
 function IdleDisplayView({
   slides,
   translate,
+  active = true,
 }: {
   slides: CfdSlideshowItem[];
   translate: (key: TranslationKey) => string;
+  active?: boolean;
 }) {
   if (slides.length > 0) {
-    return <CfdSlideshowPlayer items={slides} />;
+    return <CfdSlideshowPlayer items={slides} active={active} />;
   }
 
   return (
@@ -574,7 +585,21 @@ export function ClientDisplayView() {
       <AnnouncementMarquee surface="client" tone="dark" />
       <CfdHeader language={language} onLanguageChange={setLanguage} translate={translate} />
 
-      {clientState === "idle" && <IdleDisplayView slides={slideshow} translate={translate} />}
+      {/* Keep idle slideshow mounted (hidden) so checkout cycles never remount/re-fetch media. */}
+      <div
+        className={
+          clientState === "idle"
+            ? "flex min-h-0 flex-1 flex-col overflow-hidden"
+            : "pointer-events-none invisible absolute h-0 w-0 overflow-hidden"
+        }
+        aria-hidden={clientState !== "idle"}
+      >
+        <IdleDisplayView
+          slides={slideshow}
+          translate={translate}
+          active={clientState === "idle"}
+        />
+      </div>
 
       {clientState === "checkout" && checkout && (
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">

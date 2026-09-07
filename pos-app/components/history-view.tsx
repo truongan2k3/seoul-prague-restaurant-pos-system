@@ -394,6 +394,14 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
             setSales((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
             onSaleUpdated?.(updated);
           }}
+          onDeleted={(deletedId, deletedAt) => {
+            setSales((prev) =>
+              prev.map((row) =>
+                row.id === deletedId ? { ...row, deletedAt: deletedAt ?? new Date() } : row,
+              ),
+            );
+            closeModal();
+          }}
         />
       )}
     </div>

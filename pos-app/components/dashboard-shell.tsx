@@ -229,6 +229,11 @@ export function DashboardShell() {
   const [initAttempt, setInitAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
+  // Re-sync staff from cookie when POS shell mounts (after /staff-login client nav).
+  useEffect(() => {
+    void refreshStaffList();
+  }, [refreshStaffList]);
+
   const retryPosLoad = useCallback(() => {
     setInitAttempt((attempt) => attempt + 1);
   }, []);

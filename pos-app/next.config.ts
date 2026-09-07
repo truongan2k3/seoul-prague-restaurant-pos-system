@@ -20,6 +20,10 @@ const nextConfig: NextConfig = {
   },
   images: {
     // Resize/cache Supabase public media via /_next/image (cuts guest storage egress).
+    // Keep optimized variants on the CDN longer so traffic spikes mostly hit edge cache,
+    // not Supabase Storage (first request per size still origins once).
+    minimumCacheTTL: 60 * 60 * 24 * 30, // 30 days
+    formats: ["image/avif", "image/webp"],
     remotePatterns: [
       ...(supabaseHost
         ? ([

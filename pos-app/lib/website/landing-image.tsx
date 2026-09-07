@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import type { CSSProperties } from "react";
+import { useCallback, useState, type CSSProperties } from "react";
 
 function canOptimize(src: string): boolean {
   try {
@@ -24,14 +24,41 @@ type LandingImageProps = {
   /** Fixed box (thumbs / icons). */
   width?: number;
   height?: number;
-  /** Fill parent — parent must be `position: relative`. */
+  /** Fill parent — parent must be `position: relative` (or absolute/fixed). */
   fill?: boolean;
   draggable?: boolean;
 };
 
+function RawImg({
+  src,
+  alt,
+  className,
+  style,
+  width,
+  height,
+  fill,
+  draggable,
+}: Omit<LandingImageProps, "sizes" | "priority" | "quality">) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={alt}
+      width={fill ? undefined : width}
+      height={fill ? undefined : height}
+      className={fill ? `absolute inset-0 h-full w-full ${className ?? ""}` : className}
+      style={style}
+      draggable={draggable}
+      loading="lazy"
+      decoding="async"
+    />
+  );
+}
+
 /**
  * Landing media via next/image so guests get resized WebP/AVIF from the CDN
- * instead of full-resolution Supabase originals.
+ * instead of full-resolution Supabase originals (Storage egress stays low at scale).
+ * Falls back to a plain <img> if the optimizer fails.
  */
 export function LandingImage({
   src,
@@ -46,16 +73,19 @@ export function LandingImage({
   fill = false,
   draggable = false,
 }: LandingImageProps) {
-  if (!canOptimize(src)) {
+  const [failed, setFailed] = useState(false);
+  const onError = useCallback(() => setFailed(true), []);
+
+  if (!canOptimize(src) || failed) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
+      <RawImg
         src={src}
         alt={alt}
-        width={fill ? undefined : width}
-        height={fill ? undefined : height}
-        className={fill ? `absolute inset-0 h-full w-full ${className ?? ""}` : className}
+        className={className}
         style={style}
+        width={width}
+        height={height}
+        fill={fill}
         draggable={draggable}
       />
     );
@@ -73,6 +103,7 @@ export function LandingImage({
         className={className}
         style={style}
         draggable={draggable}
+        onError={onError}
       />
     );
   }
@@ -89,6 +120,7 @@ export function LandingImage({
       className={className}
       style={style}
       draggable={draggable}
+      onError={onError}
     />
   );
 }

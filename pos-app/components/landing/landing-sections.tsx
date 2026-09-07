@@ -90,7 +90,7 @@ export function LandingSignature({ content }: { content: WebsiteContent }) {
         <div className="grid gap-6 md:grid-cols-3">
           {featured.map((item, index) => (
             <Reveal key={item.id} className="group overflow-hidden border border-white/10 bg-[#121214]">
-              <div className="aspect-square overflow-hidden bg-[#1a1a1c]">
+              <div className="relative aspect-square overflow-hidden bg-[#1a1a1c]">
                 {item.imageUrl || signatureAssets[index]?.fileUrl ? (
                   <LandingImage
                     src={(item.imageUrl || signatureAssets[index]?.fileUrl)!}

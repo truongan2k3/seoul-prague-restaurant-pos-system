@@ -42,7 +42,7 @@ function StaffLoginForm() {
   const searchParams = useSearchParams();
   const nextPath = resolvePostLoginPath(searchParams.get("next"));
   const { session, loading: authLoading, logout } = useAuth();
-  const { translate } = useApp();
+  const { translate, setStaff } = useApp();
 
   const [roster, setRoster] = useState<StaffMember[]>([]);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
@@ -101,6 +101,11 @@ function StaffLoginForm() {
 
     if (result.ok) {
       setAdminPasscodeTarget(null);
+      // AppProvider stays mounted across /staff-login → /app, so push the selected
+      // member into context immediately (reload used to be required otherwise).
+      if (result.member) {
+        setStaff(result.member);
+      }
       router.replace(nextPath);
       router.refresh();
       return;

@@ -48,6 +48,11 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
+/* Light pastel shell — views using bg-background pick up --background. */
+.pos-shell-bg {
+  background-color: var(--background);
+}
+
 /* Block native pull-to-refresh on phones; app uses a guarded custom pull instead. */
 @media (max-width: 767px), (pointer: coarse) {
   html,

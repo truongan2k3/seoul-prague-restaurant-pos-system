@@ -14,6 +14,13 @@ import { DEFAULT_EUR_RATE, DEFAULT_USD_RATE } from "@/lib/currency";
 import { canManageStaff } from "@/lib/staff-roles";
 import type { LanguageCode, StaffMember, ThemeMode } from "@/lib/types";
 import {
+  applyLightBackgroundToDocument,
+  LIGHT_BG_STORAGE_KEY,
+  readStoredLightBackground,
+  serializeLightBackground,
+  type LightBackgroundSelection,
+} from "@/lib/light-theme";
+import {
   getCurrentStaffMemberAction,
   listStaffAction,
   switchStaffAction,
@@ -60,6 +67,9 @@ interface AppContextValue {
   setLanguage: (lang: LanguageCode) => void;
   theme: ThemeMode;
   setTheme: (theme: ThemeMode) => void;
+  /** Light-mode shell background (pastel presets or custom hex). Ignored in dark mode. */
+  lightBackground: LightBackgroundSelection;
+  setLightBackground: (next: LightBackgroundSelection) => void;
   /** @deprecated Use currentStaffUser — kept for existing components */
   staff: StaffMember | null;
   setStaff: (staff: StaffMember | null) => void;
@@ -99,6 +109,10 @@ const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<LanguageCode>("en");
   const [theme, setTheme] = useState<ThemeMode>("light");
+  const [lightBackground, setLightBackgroundState] = useState<LightBackgroundSelection>({
+    kind: "preset",
+    id: "default",
+  });
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [currentStaffUser, setCurrentStaffUser] = useState<StaffMember | null>(null);
   const [staffSwitchOpen, setStaffSwitchOpen] = useState(false);
@@ -135,6 +149,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setLanguageState(readStoredLanguage());
     setTheme(readStoredTheme());
+    setLightBackgroundState(readStoredLightBackground());
     setReceiptShowEurState(readStoredBoolean(RECEIPT_EUR_KEY));
     setReceiptShowUsdState(readStoredBoolean(RECEIPT_USD_KEY));
     setEurRateState(readStoredNumber(EUR_RATE_KEY, DEFAULT_EUR_RATE));
@@ -193,27 +208,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(LANGUAGE_STORAGE_KEY, lang);
   }, []);
 
-  const applyThemeToDocument = useCallback((mode: ThemeMode) => {
-    const root = document.documentElement;
-    if (mode === "dark") {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
-  }, []);
+  const applyThemeToDocument = useCallback(
+    (mode: ThemeMode, lightBg: LightBackgroundSelection) => {
+      const root = document.documentElement;
+      if (mode === "dark") {
+        root.classList.add("dark");
+      } else {
+        root.classList.remove("dark");
+      }
+      applyLightBackgroundToDocument(lightBg, mode);
+    },
+    [],
+  );
 
   const setThemeMode = useCallback(
     (next: ThemeMode) => {
       setTheme(next);
       localStorage.setItem(THEME_STORAGE_KEY, next);
-      applyThemeToDocument(next);
+      applyThemeToDocument(next, lightBackground);
     },
-    [applyThemeToDocument],
+    [applyThemeToDocument, lightBackground],
+  );
+
+  const setLightBackground = useCallback(
+    (next: LightBackgroundSelection) => {
+      setLightBackgroundState(next);
+      localStorage.setItem(LIGHT_BG_STORAGE_KEY, serializeLightBackground(next));
+      applyThemeToDocument(theme, next);
+    },
+    [applyThemeToDocument, theme],
   );
 
   useEffect(() => {
-    applyThemeToDocument(theme);
-  }, [theme, applyThemeToDocument]);
+    applyThemeToDocument(theme, lightBackground);
+  }, [theme, lightBackground, applyThemeToDocument]);
 
   const translate = useCallback((key: TranslationKey) => t(language, key), [language]);
 
@@ -276,6 +304,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLanguage,
       theme,
       setTheme: setThemeMode,
+      lightBackground,
+      setLightBackground,
       staff: currentStaffUser,
       setStaff,
       currentStaffUser,
@@ -310,6 +340,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [
       language,
       theme,
+      lightBackground,
       currentStaffUser,
       staffList,
       refreshStaffList,
@@ -325,6 +356,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setUsdRate,
       setLanguage,
       setThemeMode,
+      setLightBackground,
       setStaff,
       switchStaff,
       staffSwitchOpen,

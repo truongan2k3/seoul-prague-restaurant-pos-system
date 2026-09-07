@@ -515,7 +515,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       : "rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-4";
 
   return (
-    <div className="flex h-full flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+    <div className="flex h-full flex-col bg-background text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <header className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-white px-2 py-1.5 dark:border-gray-800 dark:bg-gray-900 sm:gap-3 sm:px-4 sm:py-2 lg:px-6">
         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
           <h1 className="shrink-0 text-sm font-semibold sm:text-base lg:text-lg">{translate("reservations")}</h1>

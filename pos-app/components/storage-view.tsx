@@ -88,7 +88,7 @@ export function StorageView({
   );
 
   return (
-    <div className="flex h-full flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+    <div className="flex h-full flex-col bg-background text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900 sm:px-6 sm:py-4">
         <div>
           <h1 className="text-sm font-semibold sm:text-base lg:text-lg text-gray-900 dark:text-gray-100">

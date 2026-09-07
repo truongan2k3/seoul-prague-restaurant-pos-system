@@ -24,6 +24,7 @@ import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { MenuCustomizationManager } from "@/components/menu-customization-manager";
 import { POS_HOME_PATH } from "@/lib/page-routes";
 import { useApp } from "@/contexts/app-context";
+import { LIGHT_BG_PRESETS } from "@/lib/light-theme";
 import { useAuth } from "@/contexts/auth-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
@@ -89,6 +90,8 @@ export function SettingsView({
     translate,
     theme,
     setTheme,
+    lightBackground,
+    setLightBackground,
     receiptShowUsd,
     usdRate,
     setReceiptShowUsd,
@@ -343,7 +346,7 @@ export function SettingsView({
   ];
 
   return (
-    <div className="flex h-full flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+    <div className="flex h-full flex-col bg-background text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <header className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white px-2.5 py-1.5 sm:px-4 sm:py-2.5 lg:px-6 lg:py-4 dark:border-gray-800 dark:bg-gray-900">
         <h1 className="text-sm font-semibold sm:text-base lg:text-lg text-zinc-900 dark:text-zinc-100">{translate("settings")}</h1>
         <div className="flex items-center gap-3">
@@ -1845,6 +1848,96 @@ export function SettingsView({
             >
               {theme === "light" ? translate("darkMode") : translate("lightMode")}
             </button>
+
+            {theme === "light" && (
+              <div className="mt-5 border-t border-gray-100 pt-4 dark:border-gray-700">
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                  {translate("lightBgTitle")}
+                </p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {translate("lightBgHint")}
+                </p>
+                <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-4">
+                  {LIGHT_BG_PRESETS.map((preset) => {
+                    const selected =
+                      lightBackground.kind === "preset" && lightBackground.id === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => setLightBackground({ kind: "preset", id: preset.id })}
+                        className={`flex flex-col items-center gap-1.5 rounded-lg border p-2 text-center transition ${
+                          selected
+                            ? "border-gray-900 ring-2 ring-gray-900/20 dark:border-gray-100"
+                            : "border-gray-200 hover:border-gray-400 dark:border-gray-600"
+                        }`}
+                        title={translate(preset.labelKey)}
+                      >
+                        <span
+                          className="h-8 w-full rounded-md border border-black/5"
+                          style={{ backgroundColor: preset.background }}
+                          aria-hidden
+                        />
+                        <span className="w-full truncate text-[10px] font-medium text-gray-700 dark:text-gray-300">
+                          {translate(preset.labelKey)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <span
+                      className={`inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-md border ${
+                        lightBackground.kind === "custom"
+                          ? "border-gray-900 ring-2 ring-gray-900/20"
+                          : "border-gray-200"
+                      }`}
+                      style={{
+                        backgroundColor:
+                          lightBackground.kind === "custom"
+                            ? lightBackground.hex
+                            : "#ffffff",
+                      }}
+                    >
+                      <input
+                        type="color"
+                        aria-label={translate("lightBgCustom")}
+                        value={
+                          lightBackground.kind === "custom"
+                            ? lightBackground.hex
+                            : "#f9fafb"
+                        }
+                        onChange={(event) =>
+                          setLightBackground({
+                            kind: "custom",
+                            hex: event.target.value,
+                          })
+                        }
+                        className="h-10 w-10 cursor-pointer appearance-none border-0 bg-transparent p-0 opacity-0"
+                      />
+                    </span>
+                    {translate("lightBgCustom")}
+                  </label>
+                  {lightBackground.kind === "custom" && (
+                    <input
+                      type="text"
+                      value={lightBackground.hex}
+                      onChange={(event) =>
+                        setLightBackground({
+                          kind: "custom",
+                          hex: event.target.value,
+                        })
+                      }
+                      className="pos-input w-28 font-mono text-sm"
+                      spellCheck={false}
+                      aria-label={translate("lightBgCustomHex")}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="rounded-xl border border-gray-200 bg-white p-6 md:col-span-2 dark:border-gray-700 dark:bg-gray-800">

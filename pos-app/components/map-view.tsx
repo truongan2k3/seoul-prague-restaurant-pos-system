@@ -122,7 +122,7 @@ export function MapView({
   };
 
   return (
-    <div className="flex h-full flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+    <div className="flex h-full flex-col bg-background text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <header className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-white px-2.5 py-1.5 dark:border-gray-800 dark:bg-gray-900 sm:gap-3 sm:px-4 sm:py-2.5 lg:px-6 lg:py-3">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2.5">
           <h1 className="shrink-0 text-sm font-semibold text-gray-900 dark:text-gray-100 sm:text-base lg:text-lg">

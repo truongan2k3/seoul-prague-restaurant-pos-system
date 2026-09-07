@@ -27,6 +27,11 @@ import {
   type PrintBridgePresencePayload,
 } from "@/lib/print-bridge-presence";
 import {
+  isPageOnline,
+  subscribeToPagePresence,
+  type PagePresencePayload,
+} from "@/lib/pos-page-presence";
+import {
   isLoopbackPrintBridgeUrl,
   pingPrintBridge,
   validatePrintBridgeUrl,
@@ -37,7 +42,11 @@ type BridgeStatus = "checking" | "online" | "offline" | "off" | "invalid";
 const BRIDGE_POLL_MS = 12_000;
 const NETWORK_ALERT_COOLDOWN_MS = 60_000;
 const BRIDGE_ALERT_COOLDOWN_MS = 45_000;
+const STATION_ALERT_COOLDOWN_MS = 60_000;
 const SHARED_STALE_CHECK_MS = 5_000;
+/** Wait before warning that Print Station tab is missing (avoid false alarm on boot). */
+const STATION_GRACE_MS = 25_000;
+const PRINT_BRIDGE_PROTOCOL = "pos-print-bridge://start";
 
 const HIDDEN_PATH_PREFIXES = [
   "/login",
@@ -98,6 +107,8 @@ interface PrintBridgeStatusValue {
   /** True when this device is the one that can reach the bridge (PC). */
   isBridgeHost: boolean;
   checkBridge: () => Promise<void>;
+  /** null = not watching / unknown yet */
+  printStationOnline: boolean | null;
 }
 
 const PrintBridgeStatusContext = createContext<PrintBridgeStatusValue | null>(null);
@@ -118,20 +129,27 @@ export function ConnectionStatusBadge({ children }: { children?: ReactNode }) {
     useState<PrintBridgePresencePayload | null>(null);
   const [networkAlert, setNetworkAlert] = useState<string | null>(null);
   const [bridgeAlert, setBridgeAlert] = useState<string | null>(null);
+  const [stationAlert, setStationAlert] = useState<string | null>(null);
+  const [printStationOnline, setPrintStationOnline] = useState<boolean | null>(null);
 
   const lastNetworkAlertAt = useRef(0);
   const lastBridgeAlertAt = useRef(0);
+  const lastStationAlertAt = useRef(0);
   const prevNetworkStatus = useRef<ConnectionStatus | null>(null);
   const prevBridgeStatus = useRef<BridgeStatus | null>(null);
+  const prevStationOnline = useRef<boolean | null>(null);
+  const stationMountedAt = useRef(Date.now());
   const localOnlineRef = useRef(false);
   const localDetailRef = useRef<string | undefined>(undefined);
 
   const silentPrint = settings.silentPrintEnabled;
+  const viaStation = settings.kitchenPrintViaStation;
   const bridgeUrl = settings.printBridgeUrl?.trim() ?? "";
   const hidden = shouldHideOnPath(pathname);
   const onMain = Boolean(pathname && isPosMainPath(pathname));
   const onStation = Boolean(pathname && isStationPath(pathname));
   const loopback = Boolean(bridgeUrl && isLoopbackPrintBridgeUrl(bridgeUrl));
+  const watchPrintStation = onMain && !hidden && viaStation;
 
   const applySharedPresence = useCallback((payload: PrintBridgePresencePayload | null) => {
     if (localOnlineRef.current) return;
@@ -278,24 +296,103 @@ export function ConnectionStatusBadge({ children }: { children?: ReactNode }) {
     const title =
       bridgeStatus === "invalid"
         ? "Print Bridge cấu hình lỗi"
-        : "Print Bridge offline";
+        : "Print Bridge chưa chạy";
     const body =
       bridgeDetail ??
       (bridgeStatus === "invalid"
         ? "URL bridge không hợp lệ hoặc thiếu cấu hình."
-        : "Không kết nối được tới máy in / bridge. Kiểm tra print-bridge đang chạy trên PC.");
+        : "Chưa thấy print-bridge trên PC. Chạy start-bridge.bat (hoặc shortcut Desktop / nút Start bridge).");
     setBridgeAlert(`${title}: ${body}`);
   }, [bridgeStatus, bridgeDetail, hidden, onMain, isBridgeHost]);
 
+  // Print Station tab presence (when kitchen print goes via station).
+  const stationLastSeenRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!watchPrintStation) {
+      setPrintStationOnline(null);
+      stationLastSeenRef.current = null;
+      return;
+    }
+    stationMountedAt.current = Date.now();
+    prevStationOnline.current = null;
+    stationLastSeenRef.current = null;
+    setPrintStationOnline(null);
+
+    const unsub = subscribeToPagePresence((payload: PagePresencePayload) => {
+      if (payload.page !== "print-station") return;
+      stationLastSeenRef.current = payload.at;
+      setPrintStationOnline(isPageOnline(payload.at));
+    });
+
+    const staleTimer = window.setInterval(() => {
+      const at = stationLastSeenRef.current;
+      if (!at) {
+        if (Date.now() - stationMountedAt.current >= STATION_GRACE_MS) {
+          setPrintStationOnline(false);
+        }
+        return;
+      }
+      setPrintStationOnline(isPageOnline(at));
+    }, SHARED_STALE_CHECK_MS);
+
+    const graceTimer = window.setTimeout(() => {
+      setPrintStationOnline((prev) => (prev == null ? false : prev));
+    }, STATION_GRACE_MS);
+
+    return () => {
+      unsub();
+      window.clearInterval(staleTimer);
+      window.clearTimeout(graceTimer);
+    };
+  }, [watchPrintStation]);
+
+  useEffect(() => {
+    if (!watchPrintStation || printStationOnline !== false) return;
+    const prev = prevStationOnline.current;
+    prevStationOnline.current = printStationOnline;
+    if (prev === false) return;
+    const now = Date.now();
+    if (now - lastStationAlertAt.current < STATION_ALERT_COOLDOWN_MS) return;
+    lastStationAlertAt.current = now;
+    setStationAlert(
+      "Tab Print Station chưa mở (hoặc đã đóng) trên PC. Kitchen ticket cần tab /print-station luôn mở.",
+    );
+  }, [watchPrintStation, printStationOnline]);
+
+  const openPrintStation = useCallback(() => {
+    window.open("/print-station", "_blank", "noopener,noreferrer");
+  }, []);
+
+  const startBridgeViaProtocol = useCallback(() => {
+    // Requires register-start-protocol.bat once on the PC.
+    window.location.href = PRINT_BRIDGE_PROTOCOL;
+  }, []);
+
   const value = useMemo(
-    () => ({ bridgeStatus, bridgeDetail, isBridgeHost, checkBridge }),
-    [bridgeStatus, bridgeDetail, isBridgeHost, checkBridge],
+    () => ({
+      bridgeStatus,
+      bridgeDetail,
+      isBridgeHost,
+      checkBridge,
+      printStationOnline,
+    }),
+    [bridgeStatus, bridgeDetail, isBridgeHost, checkBridge, printStationOnline],
   );
+
+  const showAlert = Boolean(!hidden && !onStation && (networkAlert || bridgeAlert || stationAlert));
+  const alertTitle = networkAlert
+    ? "Mất kết nối mạng"
+    : bridgeAlert && stationAlert
+      ? "Print Bridge & Print Station"
+      : bridgeAlert
+        ? "Lỗi Print Bridge"
+        : "Print Station chưa mở";
+  const alertBody = [networkAlert, bridgeAlert, stationAlert].filter(Boolean).join("\n\n");
 
   return (
     <PrintBridgeStatusContext.Provider value={value}>
       {children}
-      {!hidden && !onStation && (networkAlert || bridgeAlert) ? (
+      {showAlert ? (
         <div
           className="fixed inset-0 z-[90] flex items-start justify-center bg-black/35 p-4 pt-[max(4.5rem,12vh)] sm:items-center sm:pt-4"
           role="alertdialog"
@@ -312,25 +409,65 @@ export function ConnectionStatusBadge({ children }: { children?: ReactNode }) {
                   id="pos-status-alert-title"
                   className="text-base font-semibold text-stone-900 dark:text-zinc-50"
                 >
-                  {networkAlert ? "Mất kết nối mạng" : "Lỗi Print Bridge"}
+                  {alertTitle}
                 </h2>
-                <p className="mt-1.5 text-sm leading-relaxed text-stone-600 dark:text-zinc-300">
-                  {networkAlert ?? bridgeAlert}
+                <p className="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-stone-600 dark:text-zinc-300">
+                  {alertBody}
                 </p>
+                {(bridgeAlert || stationAlert) && !networkAlert ? (
+                  <ul className="mt-3 list-disc space-y-1 pl-4 text-xs leading-relaxed text-stone-500 dark:text-zinc-400">
+                    {bridgeAlert ? (
+                      <li>
+                        Bridge: chạy <code className="rounded bg-stone-100 px-1 dark:bg-zinc-800">start-bridge.bat</code>{" "}
+                        (hoặc shortcut Desktop / nút Start bridge bên dưới).
+                      </li>
+                    ) : null}
+                    {stationAlert ? (
+                      <li>Print Station: mở tab trên cùng PC Windows và giữ mở suốt ca.</li>
+                    ) : null}
+                  </ul>
+                ) : null}
               </div>
               <button
                 type="button"
                 className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-stone-500 hover:bg-stone-100 dark:hover:bg-zinc-800"
                 aria-label="Đóng"
                 onClick={() => {
-                  if (networkAlert) setNetworkAlert(null);
-                  else setBridgeAlert(null);
+                  setNetworkAlert(null);
+                  setBridgeAlert(null);
+                  setStationAlert(null);
                 }}
               >
                 <X className="size-4" />
               </button>
             </div>
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              {stationAlert && !networkAlert ? (
+                <button
+                  type="button"
+                  className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-900 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
+                  onClick={() => {
+                    openPrintStation();
+                    setStationAlert(null);
+                  }}
+                >
+                  Mở Print Station
+                </button>
+              ) : null}
+              {bridgeAlert && !networkAlert && isBridgeHost ? (
+                <button
+                  type="button"
+                  className="rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 text-sm font-medium text-sky-900 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-200"
+                  onClick={() => {
+                    startBridgeViaProtocol();
+                    window.setTimeout(() => {
+                      void checkBridge();
+                    }, 1500);
+                  }}
+                >
+                  Start bridge
+                </button>
+              ) : null}
               {bridgeAlert && !networkAlert ? (
                 <button
                   type="button"
@@ -346,8 +483,9 @@ export function ConnectionStatusBadge({ children }: { children?: ReactNode }) {
                 type="button"
                 className="rounded-md bg-stone-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-stone-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
                 onClick={() => {
-                  if (networkAlert) setNetworkAlert(null);
-                  else setBridgeAlert(null);
+                  setNetworkAlert(null);
+                  setBridgeAlert(null);
+                  setStationAlert(null);
                 }}
               >
                 Đã hiểu

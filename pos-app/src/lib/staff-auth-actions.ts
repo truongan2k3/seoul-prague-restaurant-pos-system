@@ -1,6 +1,6 @@
 "use server";
 
-import { ALL_NAV_TABS, normalizeStaffRole } from "@/lib/staff-roles";
+import { normalizeStaffRole } from "@/lib/staff-roles";
 import { verifyManagerPasscodeForBusiness } from "@/src/lib/manager-passcode-actions";
 import type { StaffMember } from "@/lib/types";
 import { readAuthSession } from "@/src/lib/auth/session";
@@ -141,7 +141,7 @@ async function clearStaffForeignKeys(
   await supabase.from("reservations").update({ staff_id: null }).eq("staff_id", staffId);
 }
 
-/** Remove Andy/Kiên, ensure Adam admin exists, set delete passcode default to 8888. */
+/** One-time-style cleanup: remove Andy/Kiên leftovers; never force-recreate staff. */
 export async function ensureStaffRosterCleanup() {
   const businessSession = await requireBusinessSession();
   if (!businessSession) return;
@@ -170,39 +170,7 @@ export async function ensureStaffRosterCleanup() {
     }
   }
 
-  const { data: adamRows } = await supabase
-    .from("staff")
-    .select("id")
-    .eq("business_id", businessId)
-    .ilike("name", "adam");
-
-  if (!adamRows?.length) {
-    await supabase.from("staff").insert({
-      name: "Adam",
-      role: "admin",
-      username: "adam",
-      active: true,
-      business_id: businessId,
-      allowed_nav: ALL_NAV_TABS,
-      pin: null,
-      require_pin_for_actions: false,
-      require_switch_password: false,
-      password_hash: null,
-      password_salt: null,
-    });
-  } else {
-    await supabase
-      .from("staff")
-      .update({
-        role: "admin",
-        active: true,
-        username: "adam",
-        allowed_nav: ALL_NAV_TABS,
-        require_pin_for_actions: false,
-        require_switch_password: false,
-      })
-      .eq("id", adamRows[0].id);
-  }
+  // Do not insert/force-update an "Adam" admin — that made deleted Adam rows reappear.
 
   const { data: settingsRows } = await supabase
     .from("settings")
@@ -220,7 +188,7 @@ export async function ensureStaffRosterCleanup() {
   }
 }
 
-/** Load staff roster for the staff picker — runs cleanup first so Adam/admin always exists. */
+/** Load staff roster for the staff picker. */
 export async function prepareStaffLoginRosterAction(): Promise<{
   data: StaffMember[];
   error?: string;

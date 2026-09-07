@@ -1,14 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Printer, Trash2, X } from "lucide-react";
+import { AlertTriangle, Printer, X } from "lucide-react";
 import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
-import { usePinGate } from "@/contexts/pin-gate-context";
 import { NumericInputField } from "@/components/numeric-input-field";
 import { useApp } from "@/contexts/app-context";
-import { useNotifications } from "@/contexts/notification-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
-import { canManageStaff } from "@/lib/staff-roles";
 import type { CheckoutPaymentRecord } from "@/lib/checkout-calculations";
 import { formatCzk } from "@/lib/currency";
 import {
@@ -23,7 +20,6 @@ import type { MenuItem, PaymentMethod, SaleRecord } from "@/lib/types";
 import { formatHistoryDateTime, resolveGuestSeatedAt } from "@/lib/sale-history";
 import { resolveTipPaymentMethod } from "@/lib/summary-analytics";
 import { updateSaleTipRecord } from "@/src/lib/sale-tip-actions";
-import { deleteSaleRecords } from "@/src/lib/sales-actions";
 import { mapSalesResponse } from "@/src/lib/supabase-data";
 
 function saleToPaymentRecord(sale: SaleRecord): CheckoutPaymentRecord {
@@ -50,7 +46,6 @@ interface OrderHistoryModalProps {
   menuItems: MenuItem[];
   onClose: () => void;
   onUpdated: (sale: SaleRecord) => void;
-  onDeleted?: (saleId: string, deletedAt?: Date) => void;
   /** @deprecated use initialEditTip */
   initialEditMode?: boolean;
   initialEditTip?: boolean;
@@ -61,7 +56,6 @@ export function OrderHistoryModal({
   menuItems,
   onClose,
   onUpdated,
-  onDeleted,
   initialEditMode = false,
   initialEditTip,
 }: OrderHistoryModalProps) {
@@ -69,8 +63,6 @@ export function OrderHistoryModal({
 
   const { translate, currentStaffUser, logAction, language } = useApp();
   const { printReceipt } = useReceiptPrint();
-  const { pushNotification } = useNotifications();
-  const { requestPin } = usePinGate();
   const [editTipMode, setEditTipMode] = useState(resolvedInitialEditTip);
   const [editTip, setEditTip] = useState(sale.tip);
   const [editPaymentMethod, setEditPaymentMethod] = useState<PaymentMethod>(sale.paymentMethod);
@@ -81,7 +73,6 @@ export function OrderHistoryModal({
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const canEditTip = Boolean(currentStaffUser) && !sale.deletedAt;
-  const canDelete = canManageStaff(currentStaffUser?.role) && !sale.deletedAt;
 
   const resetEditState = () => {
     setEditTip(sale.tip);
@@ -148,24 +139,6 @@ export function OrderHistoryModal({
       "edit_sale_tip",
       `Order ${generateOrderNumber(sale.closedAt)} · ${sale.tableLabel} · tip ${sale.tip}→${editTip} · payment ${sale.paymentMethod}→${editPaymentMethod}`,
     );
-  };
-
-  const handleDelete = () => {
-    requestPin(async () => {
-      const { data, error } = await deleteSaleRecords([sale.id]);
-      if (error) {
-        pushNotification({ message: translate("historyDeleteFailed") });
-        return;
-      }
-      if (!data?.length) {
-        pushNotification({ message: translate("historyDeleteFailed") });
-        return;
-      }
-      logAction("delete_sale", `Deleted sale ${generateOrderNumber(sale.closedAt)} · ${sale.tableLabel}`);
-      pushNotification({ message: translate("historyDeleteSuccess") });
-      const deletedAt = data[0]?.deleted_at ? new Date(data[0].deleted_at) : new Date();
-      onDeleted?.(sale.id, deletedAt);
-    }, { force: true });
   };
 
   const alertEntries = (sale.activityLog ?? []).filter((entry) =>
@@ -435,16 +408,6 @@ export function OrderHistoryModal({
                 {translate("editTipAndPayment")}
               </button>
             )
-          )}
-          {canDelete && !editTipMode && (
-            <button
-              type="button"
-              onClick={handleDelete}
-              className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
-            >
-              <Trash2 className="h-4 w-4" />
-              {translate("deleteOrder")}
-            </button>
           )}
         </div>
       </ModalPanel>

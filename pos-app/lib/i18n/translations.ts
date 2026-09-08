@@ -444,7 +444,7 @@ const en = {
   printStationNeedBridge:
     "Cannot reach print bridge — on THIS PC double-click start-bridge.bat (no Node), then refresh",
   printStationBridgeHelp:
-    "Silent print needs the bridge on this Windows PC (no Node): 1) Copy print-bridge folder, double-click start-bridge.bat, keep it open. 2) Open /print-station on the same PC. 3) Bridge URL = http://127.0.0.1:39100.",
+    "Silent print needs the bridge on this Windows PC (no Node): 1) Copy print-bridge folder, double-click POS-Print-Bridge.bat (or Desktop shortcut), keep it open. 2) Open /print-station on the same PC. 3) Bridge URL = http://127.0.0.1:39100.",
   barScreen: "Bar Display",
   searchMenu: "Search by name or ID…",
   customItem: "Custom",
@@ -1485,7 +1485,7 @@ const cs: Record<TranslationKey, string> = {
   printStationNeedBridge:
     "Most nedostupný — na TOMTO PC spusťte start-bridge.bat (bez Node) a obnovte stránku",
   printStationBridgeHelp:
-    "Tichý tisk potřebuje most na tomto Windows PC (bez Node): 1) Zkopírujte složku print-bridge, spusťte start-bridge.bat. 2) Otevřete /print-station na stejném PC. 3) URL = http://127.0.0.1:39100.",
+    "Tichý tisk potřebuje most na tomto Windows PC (bez Node): 1) Zkopírujte složku print-bridge, spusťte POS-Print-Bridge.bat (nebo Desktop shortcut). 2) Otevřete /print-station na stejném PC. 3) URL = http://127.0.0.1:39100.",
   barScreen: "Bar obrazovka",
   searchMenu: "Hledat podle názvu nebo ID…",
   customItem: "Vlastní",
@@ -2521,7 +2521,7 @@ const zh: Record<TranslationKey, string> = {
   printStationNeedViaStation: "请在设置中开启「由打印站标签页打印」",
   printStationNeedBridge: "无法连接打印桥 — 请在本机双击 start-bridge.bat（无需 Node）后刷新",
   printStationBridgeHelp:
-    "静默打印需要本机打印桥（无需 Node）：1) 复制 print-bridge 文件夹，双击 start-bridge.bat 并保持打开。2) 在同一台电脑打开 /print-station。3) 打印桥 URL = http://127.0.0.1:39100。",
+    "静默打印需要本机打印桥（无需 Node）：1) 复制 print-bridge 文件夹，双击 POS-Print-Bridge.bat（或桌面快捷方式）并保持打开。2) 在同一台电脑打开 /print-station。3) 打印桥 URL = http://127.0.0.1:39100。",
   barScreen: "吧台屏幕",
   searchMenu: "按名称或 ID 搜索…",
   customItem: "自定义",

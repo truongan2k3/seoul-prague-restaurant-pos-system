@@ -7,6 +7,16 @@ export type PrintBridgePresencePayload = {
   at: string;
   source?: string;
   detail?: string;
+  /** Host-only diagnostics (optional). */
+  bridgeOnline?: boolean;
+  printStationOnline?: boolean;
+};
+
+export type PrintBridgePresenceSnapshot = {
+  online: boolean;
+  detail?: string;
+  bridgeOnline?: boolean;
+  printStationOnline?: boolean;
 };
 
 const ONLINE_THRESHOLD_MS = 45_000;
@@ -22,10 +32,10 @@ export function isPrintBridgePresenceFresh(
 }
 
 /**
- * Broadcast this device's local bridge health so other POS tablets inherit it.
+ * Broadcast this PC's combined Printer ready state so tablets inherit Printer Online/Offline.
  */
 export function startPrintBridgePresencePublisher(
-  getSnapshot: () => { online: boolean; detail?: string },
+  getSnapshot: () => PrintBridgePresenceSnapshot,
 ): () => void {
   const channel = supabase.channel(PRINT_BRIDGE_PRESENCE_CHANNEL, {
     config: { broadcast: { self: true } },
@@ -43,6 +53,8 @@ export function startPrintBridgePresencePublisher(
           ? navigator.userAgent.slice(0, 80)
           : undefined,
       detail: snap.detail,
+      bridgeOnline: snap.bridgeOnline,
+      printStationOnline: snap.printStationOnline,
     };
     void channel.send({
       type: "broadcast",

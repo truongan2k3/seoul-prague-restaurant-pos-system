@@ -2,25 +2,26 @@
 
 Điện thoại chỉ đặt món. PC Windows chạy **1 file** + mở tab Print Station.
 
-## Cài / chạy trên PC Windows (không cài Node)
+## Chạy trên PC Windows (một click)
 
 1. Copy folder `print-bridge` sang PC (USB / Drive), ví dụ `C:\pos-print-bridge\`
-2. **Một lần:** double-click **`install-desktop-shortcut.bat`**  
-   → tạo shortcut **POS Print Bridge** trên Desktop (không cần vào thư mục nữa)
-3. **Tuỳ chọn một lần:** double-click **`register-start-protocol.bat`**  
-   → POS có thể bấm nút **Start bridge** trong popup cảnh báo
-4. Mỗi ngày: double-click shortcut Desktop (hoặc `start-bridge.bat`)
-5. Giữ cửa sổ đen mở suốt giờ làm  
+2. Double-click **`POS-Print-Bridge.bat`**  
+   → bridge chạy ngay (không cần `cd` vào thư mục)  
+   → lần đầu tự tạo shortcut **POS Print Bridge** trên Desktop
+3. Mỗi ngày sau đó: double-click shortcut trên Desktop (hoặc lại file `.bat` trong folder)
+4. Giữ cửa sổ đen mở suốt giờ làm  
    → dùng **PowerShell có sẵn trên Windows** (`print-bridge.ps1`)
 
 Nếu Windows hỏi quyền chạy script: chọn **Open** / cho phép — bat đã dùng `-ExecutionPolicy Bypass`.
 
+Tuỳ chọn: `install-desktop-shortcut.bat` tạo lại shortcut Desktop nếu cần.
+
 ## Mỗi ngày
 
-1. Shortcut **POS Print Bridge** (hoặc `start-bridge.bat`) đang chạy  
-2. Chrome trên **cùng PC** → mở **`/print-station`**  
-   (POS sẽ popup + nút **Mở Print Station** nếu tab này đóng)  
-3. Để tab đó mở
+1. Shortcut **POS Print Bridge** đang chạy  
+2. Chrome trên **cùng PC** → mở **`/print-station`** và để tab đó mở  
+3. Trên POS: chip **Printer: Online** khi bridge + Print Station sẵn sàng; **Printer: Offline** nếu thiếu một trong hai  
+   (máy phụ / tablet theo heartbeat từ máy PC — không popup)
 
 ## Settings POS
 
@@ -49,7 +50,6 @@ Phải thấy `"ok": true`.
 
 ## Lỗi thường gặp
 
-- Print Station **Not ready / Bridge unreachable** → chưa chạy bridge, hoặc mở `/print-station` trên **điện thoại** (phải mở trên PC).  
+- **Printer: Offline** → chưa chạy bridge, hoặc chưa mở `/print-station` trên **PC** (không mở trên điện thoại).  
 - In ra `OPTIONS /print` → Bridge URL nhầm thành IP máy in `:9100`.  
-- PowerShell bị chặn → chuột phải `print-bridge.ps1` → Properties → Unblock, hoặc chạy lại `start-bridge.bat`.  
-- Nút **Start bridge** trên web không làm gì → chạy lại `register-start-protocol.bat` một lần trên PC.
+- PowerShell bị chặn → chuột phải `print-bridge.ps1` → Properties → Unblock, hoặc chạy lại `POS-Print-Bridge.bat`.

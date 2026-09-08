@@ -5,6 +5,7 @@ import {
   sendReservationEmail,
 } from "@/src/lib/reservation-email";
 import { confirmReservationServer } from "@/src/lib/reservation-guest-server";
+import { reservationPushCopy, sendReservationPush } from "@/src/lib/push-server";
 
 export async function POST(request: Request) {
   const staff = await readStaffSession();
@@ -43,6 +44,16 @@ export async function POST(request: Request) {
     });
     emailSent = emailResult.sent;
   }
+
+  void sendReservationPush(
+    reservationPushCopy({
+      kind: "updated",
+      guestName: data.guestName,
+      partySize: data.partySize,
+      reservedAt: data.reservedAt,
+      bookingCode: data.bookingCode,
+    }),
+  );
 
   return NextResponse.json({
     ok: true,

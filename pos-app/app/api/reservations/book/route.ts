@@ -4,6 +4,7 @@ import {
   sendReservationEmail,
 } from "@/src/lib/reservation-email";
 import { createOnlineReservationServer } from "@/src/lib/reservation-guest-server";
+import { reservationPushCopy, sendReservationPush } from "@/src/lib/push-server";
 
 export async function POST(request: Request) {
   let body: {
@@ -62,6 +63,16 @@ export async function POST(request: Request) {
     });
     emailSent = emailResult.sent;
   }
+
+  void sendReservationPush(
+    reservationPushCopy({
+      kind: "new",
+      guestName: data.guestName,
+      partySize: data.partySize,
+      reservedAt: data.reservedAt,
+      bookingCode: data.bookingCode,
+    }),
+  );
 
   return NextResponse.json({
     reservation: {

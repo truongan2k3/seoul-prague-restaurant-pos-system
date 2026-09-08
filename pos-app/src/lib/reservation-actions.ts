@@ -12,6 +12,8 @@ import {
   type SlotCapacityRow,
   countGuestsInSlot,
 } from "@/lib/reservation-slots";
+import { shouldAlertOnReservationInsert } from "@/lib/reservation-change-alert";
+import { notifyReservationPushEvent } from "@/lib/web-push-client";
 import { fetchAppSettings } from "@/src/lib/settings-actions";
 import { supabase } from "@/src/lib/supabase";
 import {
@@ -75,7 +77,7 @@ export async function createReservation(input: CreateReservationInput) {
   const source = input.source ?? "reservation";
   const withGuestCodes = source === "reservation";
 
-  return supabase
+  const result = await supabase
     .from("reservations")
     .insert({
       guest_name: input.guestName,
@@ -96,6 +98,22 @@ export async function createReservation(input: CreateReservationInput) {
     })
     .select("*, tables(label)")
     .single();
+
+  if (result.data) {
+    const row = mapReservationRow(result.data as Parameters<typeof mapReservationRow>[0]);
+    if (shouldAlertOnReservationInsert(row)) {
+      notifyReservationPushEvent({
+        kind: "new",
+        reservationId: row.id,
+        guestName: row.guestName,
+        partySize: row.partySize,
+        reservedAt: row.reservedAt,
+        bookingCode: row.bookingCode,
+      });
+    }
+  }
+
+  return result;
 }
 
 export async function updateReservationStatus(
@@ -112,12 +130,46 @@ export async function updateReservationStatus(
   if (extra?.checkedInAt) payload.checked_in_at = extra.checkedInAt.toISOString();
   if (extra?.completedAt) payload.completed_at = extra.completedAt.toISOString();
 
-  return supabase
+  const result = await supabase
     .from("reservations")
     .update(payload)
     .eq("id", reservationId)
     .select("*, tables(label)")
     .single();
+
+  if (result.data) {
+    const row = mapReservationRow(result.data as Parameters<typeof mapReservationRow>[0]);
+    if (status === "cancelled") {
+      notifyReservationPushEvent({
+        kind: "cancelled",
+        reservationId: row.id,
+        guestName: row.guestName,
+        partySize: row.partySize,
+        reservedAt: row.reservedAt,
+        bookingCode: row.bookingCode,
+      });
+    } else if (status === "no_show") {
+      notifyReservationPushEvent({
+        kind: "no_show",
+        reservationId: row.id,
+        guestName: row.guestName,
+        partySize: row.partySize,
+        reservedAt: row.reservedAt,
+        bookingCode: row.bookingCode,
+      });
+    } else if (status === "confirmed") {
+      notifyReservationPushEvent({
+        kind: "updated",
+        reservationId: row.id,
+        guestName: row.guestName,
+        partySize: row.partySize,
+        reservedAt: row.reservedAt,
+        bookingCode: row.bookingCode,
+      });
+    }
+  }
+
+  return result;
 }
 
 export async function confirmReservation(reservationId: string) {
@@ -173,12 +225,26 @@ export async function updateReservationDetails(
     payload.table_id = input.tableId || null;
   }
 
-  return supabase
+  const result = await supabase
     .from("reservations")
     .update(payload)
     .eq("id", reservationId)
     .select("*, tables(label)")
     .single();
+
+  if (result.data) {
+    const row = mapReservationRow(result.data as Parameters<typeof mapReservationRow>[0]);
+    notifyReservationPushEvent({
+      kind: "updated",
+      reservationId: row.id,
+      guestName: row.guestName,
+      partySize: row.partySize,
+      reservedAt: row.reservedAt,
+      bookingCode: row.bookingCode,
+    });
+  }
+
+  return result;
 }
 
 export async function markReservationNoShow(reservationId: string) {

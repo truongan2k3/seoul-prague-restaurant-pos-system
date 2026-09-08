@@ -10,6 +10,7 @@ import {
   buildManageUrl,
   sendReservationEmail,
 } from "@/src/lib/reservation-email";
+import { reservationPushCopy, sendReservationPush } from "@/src/lib/push-server";
 
 function publicReservation(data: NonNullable<
   Awaited<ReturnType<typeof fetchReservationByManageToken>>["data"]
@@ -94,6 +95,16 @@ export async function PATCH(request: Request) {
       : undefined,
   });
 
+  void sendReservationPush(
+    reservationPushCopy({
+      kind: "updated",
+      guestName: data.guestName,
+      partySize: data.partySize,
+      reservedAt: data.reservedAt,
+      bookingCode: data.bookingCode,
+    }),
+  );
+
   let emailSent = false;
   if (data.guestEmail) {
     const emailResult = await sendReservationEmail("updated", {
@@ -132,6 +143,16 @@ export async function DELETE(request: Request) {
     kind: "cancelled",
     reservation: alertReservation(data),
   });
+
+  void sendReservationPush(
+    reservationPushCopy({
+      kind: "cancelled",
+      guestName: data.guestName,
+      partySize: data.partySize,
+      reservedAt: data.reservedAt,
+      bookingCode: data.bookingCode,
+    }),
+  );
 
   let emailSent = false;
   if (data.guestEmail) {

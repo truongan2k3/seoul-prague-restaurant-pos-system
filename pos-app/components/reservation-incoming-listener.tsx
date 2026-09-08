@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/modal";
 import { GuestReturningBadge } from "@/components/guest-returning-badge";
 import { useApp } from "@/contexts/app-context";
+import { useNotifications } from "@/contexts/notification-context";
 import { useSettings } from "@/contexts/settings-context";
 import {
   ensureBrowserNotificationPermission,
@@ -43,15 +44,24 @@ type ScreenAlert =
   | { kind: "no_show"; reservation: ReservationRecord };
 
 const DEDUPE_MS = 8_000;
+/** Phones often suspend realtime while locked — poll + resume catch-up. */
+const RESUME_POLL_MS = 25_000;
 
 function toScreenKind(kind: ReservationChangeAlertKind): ScreenAlert["kind"] {
   return kind;
 }
 
-/** Popup + sound + browser notification for reservation changes (not check-in). */
+function lookbackSince(): Date {
+  const since = new Date();
+  since.setDate(since.getDate() - 1);
+  return since;
+}
+
+/** Popup + sound + in-app toast + browser notification for reservation changes (not check-in). */
 export function ReservationIncomingListener() {
   const { translate, language, soundMainEnabled } = useApp();
   const { settings } = useSettings();
+  const { pushNotification } = useNotifications();
   const [alert, setAlert] = useState<ScreenAlert | null>(null);
   const [visitProfile, setVisitProfile] = useState<GuestVisitProfile | null>(null);
   const [busy, setBusy] = useState(false);
@@ -62,6 +72,7 @@ export function ReservationIncomingListener() {
   const alertRef = useRef<ScreenAlert | null>(null);
   const recentAlertAtRef = useRef<Map<string, number>>(new Map());
   const suppressUntilRef = useRef<Map<string, number>>(new Map());
+  const syncingRef = useRef(false);
 
   const formatDateTime = useCallback(
     (date: Date | string) =>
@@ -161,11 +172,26 @@ export function ReservationIncomingListener() {
       markDeduped(dedupeKind, next.reservation.id);
 
       const title = titleFor(next);
+      const body = browserBodyFor(next);
+
       showBrowserNotification({
         title,
-        body: browserBodyFor(next),
+        body,
         tag: `reservation-${dedupeKind}-${next.reservation.id}`,
       });
+
+      // In-app toast — reliable on phones even when OS notifications are blocked.
+      pushNotification({
+        id: `reservation-${dedupeKind}-${next.reservation.id}-${Date.now()}`,
+        message: `${title}: ${body}`,
+        playSound: false,
+      });
+
+      try {
+        navigator.vibrate?.([120, 60, 120]);
+      } catch {
+        /* ignore */
+      }
 
       if (!alertRef.current) {
         showNext(next);
@@ -180,10 +206,62 @@ export function ReservationIncomingListener() {
       isSuppressed,
       markDeduped,
       playAlertSound,
+      pushNotification,
       showNext,
       titleFor,
       wasRecentlyAlerted,
     ],
+  );
+
+  const applyRemoteRow = useCallback(
+    (reservation: ReservationRecord, opts?: { alert: boolean }) => {
+      const previous = cacheRef.current.get(reservation.id);
+      cacheRef.current.set(reservation.id, reservation);
+      if (!opts?.alert || !readyRef.current) return;
+
+      if (!previous) {
+        if (shouldAlertOnReservationInsert(reservation)) {
+          enqueueAlert({ kind: "new", reservation });
+        }
+        return;
+      }
+
+      if (previous.updatedAt.getTime() === reservation.updatedAt.getTime()) return;
+
+      const kind = classifyReservationUpdate(previous, reservation);
+      if (!kind) return;
+      if (kind === "updated") {
+        enqueueAlert({
+          kind: "updated",
+          reservation,
+          previous: {
+            partySize: previous.partySize,
+            reservedAt: previous.reservedAt.toISOString(),
+            notes: previous.notes ?? null,
+          },
+        });
+        return;
+      }
+      enqueueAlert({ kind: toScreenKind(kind), reservation } as ScreenAlert);
+    },
+    [enqueueAlert],
+  );
+
+  const syncFromServer = useCallback(
+    async (opts?: { alert: boolean }) => {
+      if (syncingRef.current) return;
+      syncingRef.current = true;
+      try {
+        const { data } = await fetchReservations(lookbackSince());
+        const rows = mapReservationsResponse(data);
+        for (const row of rows) {
+          applyRemoteRow(row, { alert: Boolean(opts?.alert) });
+        }
+      } finally {
+        syncingRef.current = false;
+      }
+    },
+    [applyRemoteRow],
   );
 
   const dismissAlert = useCallback(() => {
@@ -201,20 +279,46 @@ export function ReservationIncomingListener() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const since = new Date();
-      since.setDate(since.getDate() - 1);
-      const { data } = await fetchReservations(since);
+      await syncFromServer({ alert: false });
       if (cancelled) return;
-      const rows = mapReservationsResponse(data);
-      const next = new Map<string, ReservationRecord>();
-      rows.forEach((row) => next.set(row.id, row));
-      cacheRef.current = next;
       readyRef.current = true;
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [syncFromServer]);
+
+  // Catch up after phone lock / tab background (realtime often pauses on mobile).
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") return;
+      ensureBrowserNotificationPermission();
+      if (!readyRef.current) return;
+      void syncFromServer({ alert: true });
+    };
+    const onResume = () => {
+      if (!readyRef.current) return;
+      void syncFromServer({ alert: true });
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pageshow", onResume);
+    window.addEventListener("focus", onResume);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pageshow", onResume);
+      window.removeEventListener("focus", onResume);
+    };
+  }, [syncFromServer]);
+
+  // Safety poll while the POS tab is open (helps flaky mobile websockets).
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      if (!readyRef.current) return;
+      void syncFromServer({ alert: true });
+    }, RESUME_POLL_MS);
+    return () => window.clearInterval(id);
+  }, [syncFromServer]);
 
   useEffect(() => {
     const holdingMinutes = settings.reservationTableHoldingTime || 30;
@@ -229,32 +333,10 @@ export function ReservationIncomingListener() {
   useEffect(() => {
     return subscribeToReservationChanges({
       onInsert: (reservation) => {
-        cacheRef.current.set(reservation.id, reservation);
-        if (!readyRef.current) return;
-        if (!shouldAlertOnReservationInsert(reservation)) return;
-        enqueueAlert({ kind: "new", reservation });
+        applyRemoteRow(reservation, { alert: true });
       },
       onUpdate: (reservation) => {
-        const previous = cacheRef.current.get(reservation.id);
-        cacheRef.current.set(reservation.id, reservation);
-        if (!readyRef.current) return;
-        const kind = classifyReservationUpdate(previous, reservation);
-        if (!kind) return;
-        if (kind === "updated") {
-          enqueueAlert({
-            kind: "updated",
-            reservation,
-            previous: previous
-              ? {
-                  partySize: previous.partySize,
-                  reservedAt: previous.reservedAt.toISOString(),
-                  notes: previous.notes ?? null,
-                }
-              : undefined,
-          });
-          return;
-        }
-        enqueueAlert({ kind: toScreenKind(kind), reservation } as ScreenAlert);
+        applyRemoteRow(reservation, { alert: true });
       },
       onDelete: (reservationId) => {
         const previous = cacheRef.current.get(reservationId);
@@ -264,20 +346,22 @@ export function ReservationIncomingListener() {
         enqueueAlert({ kind: "cancelled", reservation: { ...previous, status: "cancelled" } });
       },
     });
-  }, [enqueueAlert]);
+  }, [applyRemoteRow, enqueueAlert]);
 
   useEffect(() => {
     return subscribeToGuestReservationAlerts((payload) => {
       const reservation = guestAlertToReservationRecord(payload);
-      cacheRef.current.set(reservation.id, {
+      const merged: ReservationRecord = {
         ...(cacheRef.current.get(reservation.id) ?? reservation),
         ...reservation,
-      });
+        updatedAt: new Date(),
+      };
+      cacheRef.current.set(reservation.id, merged);
       if (payload.kind === "cancelled") {
-        enqueueAlert({ kind: "cancelled", reservation });
+        enqueueAlert({ kind: "cancelled", reservation: merged });
         return;
       }
-      enqueueAlert({ kind: "updated", reservation, previous: payload.previous });
+      enqueueAlert({ kind: "updated", reservation: merged, previous: payload.previous });
     });
   }, [enqueueAlert]);
 
@@ -308,7 +392,6 @@ export function ReservationIncomingListener() {
     }
     setBusy(true);
     setError(null);
-    // Suppress the follow-up "updated" alert from our own confirm.
     suppressUntilRef.current.set(alert.reservation.id, Date.now() + DEDUPE_MS);
     markDeduped("updated", alert.reservation.id);
     const result = await confirmReservationWithEmail(alert.reservation.id);
@@ -372,6 +455,7 @@ export function ReservationIncomingListener() {
         if (!busy) dismissAlert();
       }}
       title={title}
+      zIndexClass="z-[110]"
     >
       {reservation ? (
         <div className="space-y-4">

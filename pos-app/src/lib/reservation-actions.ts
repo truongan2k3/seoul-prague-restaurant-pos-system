@@ -478,20 +478,16 @@ export async function assignReservationTable(
     return { data: null, error: new Error("Table is not available") };
   }
 
-  const { data: existing } = await supabase
+  // Assign table only — do not check in. Check-in stays a separate action.
+  return supabase
     .from("reservations")
-    .select("status")
+    .update({
+      table_id: tableId,
+      updated_at: nowIso(),
+    })
     .eq("id", reservationId)
+    .select("*, tables(label)")
     .single();
-
-  const status = (existing?.status as ReservationStatus | undefined) ?? "checked_in";
-  const nextStatus: ReservationStatus =
-    status === "confirmed" ? "checked_in" : status;
-
-  return updateReservationStatus(reservationId, nextStatus, {
-    tableId,
-    checkedInAt: nextStatus === "checked_in" ? new Date() : undefined,
-  });
 }
 
 export async function findActiveReservationForTable(tableId: string) {

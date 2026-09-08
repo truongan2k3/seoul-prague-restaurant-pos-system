@@ -63,6 +63,14 @@ export function classifyReservationUpdate(
     if (!isSilentReservationStatus(next.status)) return "updated";
   }
 
+  // Assign table (or any tableId-only tweak) — no popup / browser / push alert.
+  if (
+    (previous.tableId ?? "") !== (next.tableId ?? "") &&
+    !hasMeaningfulReservationFieldChange(previous, next)
+  ) {
+    return null;
+  }
+
   if (hasMeaningfulReservationFieldChange(previous, next)) return "updated";
   return null;
 }
@@ -76,7 +84,7 @@ export function hasMeaningfulReservationFieldChange(
   if ((previous.guestPhone ?? "") !== (next.guestPhone ?? "")) return true;
   if ((previous.guestEmail ?? "") !== (next.guestEmail ?? "")) return true;
   if ((previous.notes ?? "") !== (next.notes ?? "")) return true;
-  if ((previous.tableId ?? "") !== (next.tableId ?? "")) return true;
+  // tableId-only changes (Assign table) are silent — no popup / push.
   if ((previous.eventType ?? "") !== (next.eventType ?? "")) return true;
   if (previous.reservedAt.getTime() !== next.reservedAt.getTime()) return true;
   return false;

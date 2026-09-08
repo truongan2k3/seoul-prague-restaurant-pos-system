@@ -472,6 +472,8 @@ export async function createWalkIn(input: {
 interface ReservationChangeHandlers {
   onChange?: () => void;
   onInsert?: (reservation: ReservationRecord) => void;
+  onUpdate?: (reservation: ReservationRecord) => void;
+  onDelete?: (reservationId: string) => void;
 }
 
 export function subscribeToReservationChanges(handlers: ReservationChangeHandlers | (() => void)) {
@@ -494,12 +496,23 @@ export function subscribeToReservationChanges(handlers: ReservationChangeHandler
     .on(
       "postgres_changes",
       { event: "UPDATE", schema: "public", table: "reservations" },
-      () => normalized.onChange?.(),
+      (payload) => {
+        if (payload.new) {
+          normalized.onUpdate?.(
+            mapReservationRow(payload.new as Parameters<typeof mapReservationRow>[0]),
+          );
+        }
+        normalized.onChange?.();
+      },
     )
     .on(
       "postgres_changes",
       { event: "DELETE", schema: "public", table: "reservations" },
-      () => normalized.onChange?.(),
+      (payload) => {
+        const id = (payload.old as { id?: string } | null)?.id;
+        if (id) normalized.onDelete?.(id);
+        normalized.onChange?.();
+      },
     )
     .subscribe();
 

@@ -5,7 +5,17 @@ import { Modal } from "@/components/modal";
 import { GuestReturningBadge } from "@/components/guest-returning-badge";
 import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
+import {
+  ensureBrowserNotificationPermission,
+  showBrowserNotification,
+} from "@/lib/browser-notification";
 import { playCustomAlertSound } from "@/lib/notification-sound";
+import {
+  classifyReservationUpdate,
+  reservationAlertDedupeKey,
+  shouldAlertOnReservationInsert,
+  type ReservationChangeAlertKind,
+} from "@/lib/reservation-change-alert";
 import { pickEventTypeLabel } from "@/lib/reservation-guest-form";
 import {
   guestAlertToReservationRecord,
@@ -29,22 +39,16 @@ type ScreenAlert =
       reservation: ReservationRecord;
       previous?: GuestReservationAlertPayload["previous"];
     }
-  | { kind: "cancelled"; reservation: ReservationRecord };
+  | { kind: "cancelled"; reservation: ReservationRecord }
+  | { kind: "no_show"; reservation: ReservationRecord };
 
-async function confirmReservationWithEmail(reservationId: string) {
-  const response = await fetch("/api/reservations/confirm", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id: reservationId }),
-  });
-  const payload = (await response.json().catch(() => ({}))) as { error?: string };
-  if (!response.ok) {
-    return { error: payload.error || "Failed to confirm reservation" };
-  }
-  return { error: null };
+const DEDUPE_MS = 8_000;
+
+function toScreenKind(kind: ReservationChangeAlertKind): ScreenAlert["kind"] {
+  return kind;
 }
 
-/** Popup on main POS when a guest books, updates, or cancels online. */
+/** Popup + sound + browser notification for reservation changes (not check-in). */
 export function ReservationIncomingListener() {
   const { translate, language, soundMainEnabled } = useApp();
   const { settings } = useSettings();
@@ -52,10 +56,12 @@ export function ReservationIncomingListener() {
   const [visitProfile, setVisitProfile] = useState<GuestVisitProfile | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const seenIdsRef = useRef<Set<string>>(new Set());
+  const cacheRef = useRef<Map<string, ReservationRecord>>(new Map());
   const readyRef = useRef(false);
   const queueRef = useRef<ScreenAlert[]>([]);
   const alertRef = useRef<ScreenAlert | null>(null);
+  const recentAlertAtRef = useRef<Map<string, number>>(new Map());
+  const suppressUntilRef = useRef<Map<string, number>>(new Map());
 
   const formatDateTime = useCallback(
     (date: Date | string) =>
@@ -75,9 +81,17 @@ export function ReservationIncomingListener() {
 
   const playAlertSound = useCallback(() => {
     if (!soundMainEnabled) return;
-    const soundUrl = settings.soundConfigs.newOrder || settings.soundConfigs.mainNewOrder;
+    const soundUrl =
+      settings.soundConfigs.reservationReminder ||
+      settings.soundConfigs.newOrder ||
+      settings.soundConfigs.mainNewOrder;
     playCustomAlertSound(soundUrl, "newOrder");
-  }, [settings.soundConfigs.mainNewOrder, settings.soundConfigs.newOrder, soundMainEnabled]);
+  }, [
+    settings.soundConfigs.mainNewOrder,
+    settings.soundConfigs.newOrder,
+    settings.soundConfigs.reservationReminder,
+    soundMainEnabled,
+  ]);
 
   const showNext = useCallback((next: ScreenAlert | null) => {
     alertRef.current = next;
@@ -86,8 +100,73 @@ export function ReservationIncomingListener() {
     setVisitProfile(null);
   }, []);
 
+  const markDeduped = useCallback((kind: ReservationChangeAlertKind, id: string) => {
+    recentAlertAtRef.current.set(reservationAlertDedupeKey(kind, id), Date.now());
+  }, []);
+
+  const wasRecentlyAlerted = useCallback((kind: ReservationChangeAlertKind, id: string) => {
+    const at = recentAlertAtRef.current.get(reservationAlertDedupeKey(kind, id));
+    if (at == null) return false;
+    return Date.now() - at < DEDUPE_MS;
+  }, []);
+
+  const isSuppressed = useCallback((id: string) => {
+    const until = suppressUntilRef.current.get(id);
+    if (until == null) return false;
+    if (Date.now() > until) {
+      suppressUntilRef.current.delete(id);
+      return false;
+    }
+    return true;
+  }, []);
+
+  const browserBodyFor = useCallback(
+    (next: ScreenAlert) => {
+      const r = next.reservation;
+      const when = formatDateTime(r.reservedAt);
+      const code = r.bookingCode ? ` · ${r.bookingCode}` : "";
+      return `${r.guestName} · ${r.partySize} pax · ${when}${code}`;
+    },
+    [formatDateTime],
+  );
+
+  const titleFor = useCallback(
+    (next: ScreenAlert) => {
+      switch (next.kind) {
+        case "cancelled":
+          return translate("resChangeCancelledTitle");
+        case "no_show":
+          return translate("resChangeNoShowTitle");
+        case "updated":
+          return translate("resChangeUpdatedTitle");
+        default:
+          return translate("resIncomingTitle");
+      }
+    },
+    [translate],
+  );
+
   const enqueueAlert = useCallback(
     (next: ScreenAlert) => {
+      if (isSuppressed(next.reservation.id)) return;
+      const dedupeKind: ReservationChangeAlertKind =
+        next.kind === "new"
+          ? "new"
+          : next.kind === "cancelled"
+            ? "cancelled"
+            : next.kind === "no_show"
+              ? "no_show"
+              : "updated";
+      if (wasRecentlyAlerted(dedupeKind, next.reservation.id)) return;
+      markDeduped(dedupeKind, next.reservation.id);
+
+      const title = titleFor(next);
+      showBrowserNotification({
+        title,
+        body: browserBodyFor(next),
+        tag: `reservation-${dedupeKind}-${next.reservation.id}`,
+      });
+
       if (!alertRef.current) {
         showNext(next);
         playAlertSound();
@@ -96,7 +175,15 @@ export function ReservationIncomingListener() {
       queueRef.current.push(next);
       playAlertSound();
     },
-    [playAlertSound, showNext],
+    [
+      browserBodyFor,
+      isSuppressed,
+      markDeduped,
+      playAlertSound,
+      showNext,
+      titleFor,
+      wasRecentlyAlerted,
+    ],
   );
 
   const dismissAlert = useCallback(() => {
@@ -105,13 +192,23 @@ export function ReservationIncomingListener() {
   }, [showNext]);
 
   useEffect(() => {
+    ensureBrowserNotificationPermission();
+    const onInteract = () => ensureBrowserNotificationPermission();
+    window.addEventListener("pointerdown", onInteract, { once: true });
+    return () => window.removeEventListener("pointerdown", onInteract);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     void (async () => {
       const since = new Date();
       since.setDate(since.getDate() - 1);
       const { data } = await fetchReservations(since);
       if (cancelled) return;
-      mapReservationsResponse(data).forEach((row) => seenIdsRef.current.add(row.id));
+      const rows = mapReservationsResponse(data);
+      const next = new Map<string, ReservationRecord>();
+      rows.forEach((row) => next.set(row.id, row));
+      cacheRef.current = next;
       readyRef.current = true;
     })();
     return () => {
@@ -132,11 +229,39 @@ export function ReservationIncomingListener() {
   useEffect(() => {
     return subscribeToReservationChanges({
       onInsert: (reservation) => {
-        if (seenIdsRef.current.has(reservation.id)) return;
-        seenIdsRef.current.add(reservation.id);
+        cacheRef.current.set(reservation.id, reservation);
         if (!readyRef.current) return;
-        if (reservation.source !== "reservation" || reservation.status !== "pending") return;
+        if (!shouldAlertOnReservationInsert(reservation)) return;
         enqueueAlert({ kind: "new", reservation });
+      },
+      onUpdate: (reservation) => {
+        const previous = cacheRef.current.get(reservation.id);
+        cacheRef.current.set(reservation.id, reservation);
+        if (!readyRef.current) return;
+        const kind = classifyReservationUpdate(previous, reservation);
+        if (!kind) return;
+        if (kind === "updated") {
+          enqueueAlert({
+            kind: "updated",
+            reservation,
+            previous: previous
+              ? {
+                  partySize: previous.partySize,
+                  reservedAt: previous.reservedAt.toISOString(),
+                  notes: previous.notes ?? null,
+                }
+              : undefined,
+          });
+          return;
+        }
+        enqueueAlert({ kind: toScreenKind(kind), reservation } as ScreenAlert);
+      },
+      onDelete: (reservationId) => {
+        const previous = cacheRef.current.get(reservationId);
+        cacheRef.current.delete(reservationId);
+        if (!readyRef.current || !previous) return;
+        if (previous.status === "checked_in" || previous.status === "completed") return;
+        enqueueAlert({ kind: "cancelled", reservation: { ...previous, status: "cancelled" } });
       },
     });
   }, [enqueueAlert]);
@@ -144,7 +269,10 @@ export function ReservationIncomingListener() {
   useEffect(() => {
     return subscribeToGuestReservationAlerts((payload) => {
       const reservation = guestAlertToReservationRecord(payload);
-      seenIdsRef.current.add(reservation.id);
+      cacheRef.current.set(reservation.id, {
+        ...(cacheRef.current.get(reservation.id) ?? reservation),
+        ...reservation,
+      });
       if (payload.kind === "cancelled") {
         enqueueAlert({ kind: "cancelled", reservation });
         return;
@@ -154,7 +282,7 @@ export function ReservationIncomingListener() {
   }, [enqueueAlert]);
 
   useEffect(() => {
-    if (!alert || alert.kind === "cancelled") {
+    if (!alert || alert.kind === "cancelled" || alert.kind === "no_show") {
       setVisitProfile(null);
       return;
     }
@@ -180,9 +308,13 @@ export function ReservationIncomingListener() {
     }
     setBusy(true);
     setError(null);
+    // Suppress the follow-up "updated" alert from our own confirm.
+    suppressUntilRef.current.set(alert.reservation.id, Date.now() + DEDUPE_MS);
+    markDeduped("updated", alert.reservation.id);
     const result = await confirmReservationWithEmail(alert.reservation.id);
     setBusy(false);
     if (result.error) {
+      suppressUntilRef.current.delete(alert.reservation.id);
       setError(result.error);
       return;
     }
@@ -206,19 +338,16 @@ export function ReservationIncomingListener() {
       "en",
     );
 
-  const title =
-    alert?.kind === "cancelled"
-      ? translate("resGuestCancelledTitle")
-      : alert?.kind === "updated"
-        ? translate("resGuestUpdatedTitle")
-        : translate("resIncomingTitle");
+  const title = alert ? titleFor(alert) : "";
 
   const hint =
     alert?.kind === "cancelled"
-      ? translate("resGuestCancelledHint")
-      : alert?.kind === "updated"
-        ? translate("resGuestUpdatedHint")
-        : translate("resIncomingHint");
+      ? translate("resChangeCancelledHint")
+      : alert?.kind === "no_show"
+        ? translate("resChangeNoShowHint")
+        : alert?.kind === "updated"
+          ? translate("resChangeUpdatedHint")
+          : translate("resIncomingHint");
 
   const previous = alert?.kind === "updated" ? alert.previous : undefined;
   const showPreviousTime =
@@ -229,8 +358,12 @@ export function ReservationIncomingListener() {
     previous?.partySize != null && reservation && previous.partySize !== reservation.partySize;
 
   const canConfirm = Boolean(
-    reservation && (alert?.kind === "new" || alert?.kind === "updated") && reservation.status === "pending",
+    reservation &&
+      (alert?.kind === "new" || alert?.kind === "updated") &&
+      reservation.status === "pending",
   );
+
+  const toneCancelled = alert?.kind === "cancelled" || alert?.kind === "no_show";
 
   return (
     <Modal
@@ -244,14 +377,14 @@ export function ReservationIncomingListener() {
         <div className="space-y-4">
           <p
             className={`text-sm ${
-              alert?.kind === "cancelled"
+              toneCancelled
                 ? "font-medium text-red-700 dark:text-red-300"
                 : "text-gray-600 dark:text-gray-300"
             }`}
           >
             {hint}
           </p>
-          {visitProfile?.isReturning && alert?.kind !== "cancelled" ? (
+          {visitProfile?.isReturning && !toneCancelled ? (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/50">
               <GuestReturningBadge
                 profile={visitProfile}
@@ -263,7 +396,7 @@ export function ReservationIncomingListener() {
           ) : null}
           <dl
             className={`space-y-2 rounded-xl px-4 py-3 text-sm ${
-              alert?.kind === "cancelled"
+              toneCancelled
                 ? "bg-red-50 dark:bg-red-950/40"
                 : "bg-zinc-100 dark:bg-zinc-800"
             }`}
@@ -344,7 +477,7 @@ export function ReservationIncomingListener() {
               className={`flex-1 rounded-xl py-3 text-sm font-semibold ${
                 canConfirm
                   ? "border border-gray-200 text-gray-800 dark:border-gray-600 dark:text-gray-100"
-                  : alert?.kind === "cancelled"
+                  : toneCancelled
                     ? "bg-red-600 text-white"
                     : "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
               }`}
@@ -356,4 +489,17 @@ export function ReservationIncomingListener() {
       ) : null}
     </Modal>
   );
+}
+
+async function confirmReservationWithEmail(reservationId: string) {
+  const response = await fetch("/api/reservations/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: reservationId }),
+  });
+  const payload = (await response.json().catch(() => ({}))) as { error?: string };
+  if (!response.ok) {
+    return { error: payload.error || "Failed to confirm reservation" };
+  }
+  return { error: null };
 }

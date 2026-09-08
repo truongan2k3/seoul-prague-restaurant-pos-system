@@ -13,6 +13,7 @@ interface ModalProps {
   size?: "default" | "md" | "lg" | "xl";
   bodyClassName?: string;
   scrollBody?: boolean;
+  zIndexClass?: string;
 }
 
 export function Modal({
@@ -24,9 +25,15 @@ export function Modal({
   size = "default",
   bodyClassName = "",
   scrollBody = true,
+  zIndexClass,
 }: ModalProps) {
   return (
-    <ModalOverlay open={open} onClose={onClose} ariaLabelledBy="modal-title">
+    <ModalOverlay
+      open={open}
+      onClose={onClose}
+      ariaLabelledBy="modal-title"
+      zIndexClass={zIndexClass}
+    >
       <ModalPanel
         className={`flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800 sm:max-h-[92vh] sm:rounded-xl ${
           size === "xl"

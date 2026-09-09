@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { BookingCta } from "@/components/landing/booking-cta";
+import { TomatoMakerCredit } from "@/components/tomato-maker-credit";
 import { LandingImage } from "@/lib/website/landing-image";
 import { formatOpeningHoursOneLine } from "@/lib/website/opening-hours-display";
 import { resolveSocialLinks, socialPlatformLabel } from "@/lib/website/social-links";
@@ -591,6 +592,9 @@ export function LandingFooter({
           </div>
         </div>
         <p className="mt-12 text-xs text-white/35">© {new Date().getFullYear()} {settings.restaurantName}</p>
+        <div className="mt-10 border-t border-white/10 pt-10">
+          <TomatoMakerCredit variant="dark" />
+        </div>
       </div>
     </footer>
   );

@@ -34,7 +34,8 @@ export type NavId =
   | "storage"
   | "dynamicQr"
   | "staff"
-  | "settings";
+  | "settings"
+  | "about";
 
 export type WeekdayKey =
   | "monday"

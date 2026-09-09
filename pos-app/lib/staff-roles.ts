@@ -67,6 +67,8 @@ export function canAccessNavTabForMember(
   member: StaffMember | null | undefined,
   tab: NavId,
 ): boolean {
+  // Credits page — always available under Settings for any signed-in staff.
+  if (tab === "about") return Boolean(member);
   // Admin always gets staff management + settings regardless of custom allowedNav.
   if (tab === "staff" && canManageStaff(member?.role)) return true;
   if (tab === "settings" && member?.role === "admin") return true;

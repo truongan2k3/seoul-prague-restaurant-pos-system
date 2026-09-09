@@ -15,6 +15,7 @@ import {
   QrCode,
   Settings,
   Sun,
+  Info,
   User,
   Users,
 } from "lucide-react";
@@ -42,6 +43,7 @@ export const navItems = [
   { id: "dynamicQr" as const, labelKey: "dynamicQrServices" as const, icon: QrCode },
   { id: "staff" as const, labelKey: "staffManagement" as const, icon: Users },
   { id: "settings" as const, labelKey: "settings" as const, icon: Settings },
+  { id: "about" as const, labelKey: "about" as const, icon: Info },
 ] as const;
 
 interface SidebarProps {

@@ -9,6 +9,7 @@ import { SummaryView } from "@/components/summary-view";
 import { StorageView } from "@/components/storage-view";
 import { StaffView } from "@/components/staff-view";
 import { SettingsView } from "@/components/settings-view";
+import { AboutView } from "@/components/about-view";
 import { DynamicQrServicesView } from "@/components/dynamic-qr-services-view";
 import { ReadyNotificationListener } from "@/components/ready-notification-listener";
 import { MainNewOrderNotificationListener } from "@/components/main-new-order-notification-listener";
@@ -637,6 +638,8 @@ export function DashboardShell() {
             }}
           />
         );
+      case "about":
+        return <AboutView />;
       default:
         return null;
     }

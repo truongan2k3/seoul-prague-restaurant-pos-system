@@ -308,3 +308,55 @@ export function parseGuestReservationLang(value: string | null | undefined): Gue
   }
   return "en";
 }
+
+/**
+ * Map a BCP-47 tag (e.g. `vi-VN`, `cs`) to a supported guest reservation language.
+ * Unknown languages fall back to English.
+ */
+export function matchGuestReservationLang(tag: string | null | undefined): GuestReservationLang | null {
+  if (!tag) return null;
+  const normalized = tag.trim().toLowerCase().replace(/_/g, "-");
+  if (!normalized) return null;
+
+  const primary = normalized.split("-")[0] ?? "";
+  if (
+    primary === "cs" ||
+    primary === "vi" ||
+    primary === "de" ||
+    primary === "ko" ||
+    primary === "en"
+  ) {
+    return primary;
+  }
+
+  // Occasional browser tags that still map cleanly.
+  if (normalized.startsWith("cz")) return "cs";
+  if (normalized.startsWith("vn")) return "vi";
+  return null;
+}
+
+/** Prefer session choice; otherwise detect from the device / browser; default English. */
+export function resolveInitialGuestReservationLang(
+  stored: string | null | undefined,
+  languages: readonly string[] = [],
+): GuestReservationLang {
+  if (stored) return parseGuestReservationLang(stored);
+
+  for (const tag of languages) {
+    const matched = matchGuestReservationLang(tag);
+    if (matched) return matched;
+  }
+  return "en";
+}
+
+/** Read navigator language list when available (browser only). */
+export function detectGuestReservationLangFromNavigator(): GuestReservationLang {
+  if (typeof navigator === "undefined") return "en";
+  const list: string[] = [];
+  if (Array.isArray(navigator.languages)) {
+    list.push(...navigator.languages);
+  }
+  if (navigator.language) list.push(navigator.language);
+  return resolveInitialGuestReservationLang(null, list);
+}
+

@@ -19,8 +19,10 @@ import {
 } from "@/lib/reservation-guest-form";
 import {
   GUEST_LANG_SESSION_KEY,
+  detectGuestReservationLangFromNavigator,
   guestReservationCopy,
   parseGuestReservationLang,
+  resolveInitialGuestReservationLang,
 } from "@/lib/i18n/guest-reservation";
 import type { AppSettings } from "@/lib/types";
 import type { WebsiteContent } from "@/lib/website/types";
@@ -84,9 +86,14 @@ export function ReservationBookingView({ website }: { website?: WebsiteContent }
       /* ignore */
     }
     const stored = sessionStorage.getItem(GUEST_LANG_SESSION_KEY);
-    if (stored) {
-      setLang(parseGuestReservationLang(stored));
-    }
+    const navigatorLangs =
+      typeof navigator !== "undefined"
+        ? [
+            ...(Array.isArray(navigator.languages) ? navigator.languages : []),
+            navigator.language,
+          ].filter(Boolean)
+        : [];
+    setLang(resolveInitialGuestReservationLang(stored, navigatorLangs));
   }, []);
 
   useEffect(() => {

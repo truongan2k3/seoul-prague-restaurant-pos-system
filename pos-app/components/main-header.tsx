@@ -16,6 +16,7 @@ const TAB_LABEL_KEYS: Record<NavId, TranslationKey> = {
   dynamicQr: "dynamicQrServices",
   staff: "staffManagement",
   settings: "settings",
+  about: "about",
 };
 
 interface MainHeaderProps {

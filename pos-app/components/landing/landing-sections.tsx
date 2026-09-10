@@ -2,7 +2,10 @@
 
 import { motion, useReducedMotion } from "framer-motion";
 import { BookingCta } from "@/components/landing/booking-cta";
-import { LandingContentBlocks } from "@/components/landing/landing-content-block";
+import {
+  LandingContentBlocks,
+  SignatureDishCollection,
+} from "@/components/landing/landing-content-block";
 import { LandingImage } from "@/lib/website/landing-image";
 import {
   createBlockImage,
@@ -11,7 +14,13 @@ import {
   responsiveBodyClass,
   responsiveHeadlineClass,
 } from "@/lib/website/page-layout";
-import type { WebsiteContent, WebsiteContentBlock, WebsitePageSection } from "@/lib/website/types";
+import type {
+  WebsiteBlockImage,
+  WebsiteContent,
+  WebsiteContentBlock,
+  WebsiteContentLayout,
+  WebsitePageSection,
+} from "@/lib/website/types";
 
 function Reveal({
   children,
@@ -131,16 +140,30 @@ export function LandingAbout({
   );
 }
 
-function signatureFallbackBlocks(content: WebsiteContent): WebsiteContentBlock[] {
-  const featured = content.menuItems.filter((item) => item.featured && item.available).slice(0, 6);
+function formatMenuPrice(price: number | null, currency: string): string | undefined {
+  if (price == null || Number.isNaN(price)) return undefined;
+  try {
+    return new Intl.NumberFormat("cs-CZ", {
+      style: "currency",
+      currency: currency || "CZK",
+      maximumFractionDigits: 0,
+    }).format(price);
+  } catch {
+    return `${price} ${currency || "CZK"}`;
+  }
+}
+
+function signatureFallbackDishes(content: WebsiteContent): WebsiteBlockImage[] {
+  const featured = content.menuItems
+    .filter((item) => item.featured && item.available)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .slice(0, 6);
   const signatureAssets = [
     content.media.signature_1,
     content.media.signature_2,
     content.media.signature_3,
   ];
-  if (featured.length === 0) return [];
-
-  const images = featured.map((item, index) => {
+  return featured.map((item, index) => {
     const asset = signatureAssets[index % signatureAssets.length];
     return createBlockImage({
       id: `sig-${item.id}`,
@@ -148,20 +171,66 @@ function signatureFallbackBlocks(content: WebsiteContent): WebsiteContentBlock[]
       alt: item.name,
       title: item.name,
       body: item.description,
-      objectPosition: asset?.objectPosition ?? "50% 50%",
+      badge: item.badge || undefined,
+      price: formatMenuPrice(item.price, item.currency),
+      objectPosition: item.imageUrl ? "50% 50%" : (asset?.objectPosition ?? "50% 50%"),
       sortOrder: index,
+      enabled: true,
     });
   });
+}
 
-  return [
-    createContentBlock("featured_support", {
-      id: "signature-legacy",
-      eyebrow: "",
-      title: "",
-      body: "",
-      images,
-    }),
-  ];
+/** Resolve dishes + layout from Signature section blocks or featured menu fallback. */
+function resolveSignatureCollection(
+  content: WebsiteContent,
+  section?: WebsitePageSection,
+): { dishes: WebsiteBlockImage[]; layout: WebsiteContentLayout } {
+  const configured = enabledContentBlocks(section);
+  const defaultLayout = (section?.props?.defaultLayout ?? "cards_3") as WebsiteContentLayout;
+
+  if (configured.length === 1 && configured[0].images.length > 0) {
+    return {
+      dishes: configured[0].images,
+      layout: configured[0].layout || defaultLayout,
+    };
+  }
+
+  if (configured.length > 1) {
+    const dishes = configured.flatMap((block, index) => {
+      if (block.images.length > 0) {
+        return block.images.map((img, imgIndex) =>
+          createBlockImage({
+            ...img,
+            title: img.title || block.title,
+            body: img.body || block.body,
+            badge: img.badge || block.eyebrow,
+            price: img.price,
+            ctaLabel: img.ctaLabel || block.ctaLabel,
+            ctaHref: img.ctaHref || block.ctaHref,
+            sortOrder: index * 100 + imgIndex,
+          }),
+        );
+      }
+      return [
+        createBlockImage({
+          id: `block-dish-${block.id}`,
+          url: "",
+          title: block.title,
+          body: block.body,
+          badge: block.eyebrow,
+          ctaLabel: block.ctaLabel,
+          ctaHref: block.ctaHref,
+          sortOrder: index,
+        }),
+      ];
+    });
+    return { dishes, layout: defaultLayout };
+  }
+
+  return {
+    dishes: signatureFallbackDishes(content),
+    layout: defaultLayout,
+  };
 }
 
 export function LandingSignature({
@@ -171,8 +240,7 @@ export function LandingSignature({
   content: WebsiteContent;
   section?: WebsitePageSection;
 }) {
-  const configured = enabledContentBlocks(section);
-  const blocks = configured.length > 0 ? configured : signatureFallbackBlocks(content);
+  const { dishes, layout } = resolveSignatureCollection(content, section);
   const eyebrow = section?.props?.eyebrow || "Signature";
   const headline = section?.props?.headline || "Fire & flavour";
   const body =
@@ -180,7 +248,7 @@ export function LandingSignature({
     "Premium cuts and Korean classics — grilled at your table in an immersive setting.";
 
   return (
-    <section className="bg-[#0B0B0C] py-24 lg:py-32">
+    <section id="signature" className="bg-[#0B0B0C] py-24 lg:py-32">
       <div className="mx-auto max-w-7xl px-5 lg:px-8">
         <SectionIntro
           eyebrow={eyebrow}
@@ -189,11 +257,13 @@ export function LandingSignature({
           headlineClass={section ? responsiveHeadlineClass(section) : "text-3xl lg:text-5xl"}
           bodyClass={section ? responsiveBodyClass(section) : undefined}
         />
-        {blocks.length > 0 ? (
-          <LandingContentBlocks blocks={blocks} />
+        {dishes.length > 0 ? (
+          <div className="mt-12 lg:mt-16">
+            <SignatureDishCollection dishes={dishes} layout={layout} />
+          </div>
         ) : (
-          <p className="text-sm text-white/40">
-            Add Signature components in Admin → Sections, or mark menu items as featured.
+          <p className="mt-10 text-sm text-white/40">
+            Add Signature dishes in Admin → Signature, or mark menu items as featured.
           </p>
         )}
       </div>

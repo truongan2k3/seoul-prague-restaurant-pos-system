@@ -9,8 +9,11 @@ export default async function AdminMenuPage() {
       <header>
         <h1 className="text-2xl font-semibold">Menu</h1>
         <p className="mt-2 text-sm text-gray-500">
-          Manage featured dishes for the Signature section and digital menu PDFs. Control homepage
-          Menu section visibility from{" "}
+          Manage featured dishes for Signature at{" "}
+          <a href="/admin/signature" className="text-[#8B6914] underline">
+            Signature dishes
+          </a>
+          , and digital menu PDFs below. Control homepage Menu section visibility from{" "}
           <a href="/admin/sections" className="text-[#8B6914] underline">
             Sections
           </a>

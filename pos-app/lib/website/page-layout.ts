@@ -58,52 +58,73 @@ export const CONTENT_LAYOUTS: {
   id: WebsiteContentLayout;
   label: string;
   hint: string;
+  /** Compact visual glyph for admin layout picker (rows of cells). */
+  preview: "split-ltr" | "split-rtl" | "stack-itb" | "stack-tib" | "overlay" | "grid" | "cards-2" | "cards-3" | "featured";
 }[] = [
   {
     id: "image_left_text_right",
     label: "Image left · Text right",
     hint: "Classic split — photo beside copy",
+    preview: "split-ltr",
   },
   {
     id: "text_left_image_right",
     label: "Text left · Image right",
     hint: "Copy first, photo second",
+    preview: "split-rtl",
   },
   {
     id: "image_top_text_bottom",
     label: "Image top · Text bottom",
     hint: "Stacked editorial card",
+    preview: "stack-itb",
   },
   {
     id: "text_top_image_bottom",
     label: "Text top · Image bottom",
     hint: "Headline first, then media",
+    preview: "stack-tib",
   },
   {
     id: "full_width_overlay",
     label: "Full-width image + overlay",
     hint: "Bleed photo with text on top",
+    preview: "overlay",
   },
   {
     id: "image_grid",
     label: "Image grid",
     hint: "Multiple photos in a responsive grid",
+    preview: "grid",
   },
   {
     id: "cards_2",
     label: "2-column cards",
     hint: "Two equal cards with image + text",
+    preview: "cards-2",
   },
   {
     id: "cards_3",
     label: "3-column cards",
     hint: "Three equal cards with image + text",
+    preview: "cards-3",
   },
   {
     id: "featured_support",
-    label: "Featured + supporting",
-    hint: "One hero piece with supporting items",
+    label: "Featured large card",
+    hint: "One hero dish with supporting cards beside it",
+    preview: "featured",
   },
+];
+
+/** Layouts that arrange multiple dishes in one grid (Signature collection). */
+export const SIGNATURE_COLLECTION_LAYOUTS: WebsiteContentLayout[] = [
+  "cards_2",
+  "cards_3",
+  "featured_support",
+  "image_left_text_right",
+  "text_left_image_right",
+  "image_top_text_bottom",
 ];
 
 export const CONTENT_LAYOUT_LABELS: Record<WebsiteContentLayout, string> = Object.fromEntries(
@@ -183,6 +204,11 @@ export function createBlockImage(partial?: Partial<WebsiteBlockImage>): WebsiteB
     alt: partial?.alt,
     title: partial?.title,
     body: partial?.body,
+    badge: partial?.badge,
+    price: partial?.price,
+    ctaLabel: partial?.ctaLabel,
+    ctaHref: partial?.ctaHref,
+    enabled: partial?.enabled !== false,
     objectPosition: partial?.objectPosition ?? "50% 50%",
     sortOrder: partial?.sortOrder ?? 0,
   };
@@ -213,13 +239,21 @@ export function normalizeBlockImages(value: unknown): WebsiteBlockImage[] {
     if (!row || typeof row !== "object") continue;
     const entry = row as Record<string, unknown>;
     const url = typeof entry.url === "string" ? entry.url : "";
-    if (!url) continue;
+    const title = typeof entry.title === "string" ? entry.title : undefined;
+    const body = typeof entry.body === "string" ? entry.body : undefined;
+    // Keep draft dishes that have copy but no image yet (admin editor).
+    if (!url && !title && !body) continue;
     parsed.push({
       id: typeof entry.id === "string" ? entry.id : newId("img"),
       url,
       alt: typeof entry.alt === "string" ? entry.alt : undefined,
-      title: typeof entry.title === "string" ? entry.title : undefined,
-      body: typeof entry.body === "string" ? entry.body : undefined,
+      title,
+      body,
+      badge: typeof entry.badge === "string" ? entry.badge : undefined,
+      price: typeof entry.price === "string" ? entry.price : undefined,
+      ctaLabel: typeof entry.ctaLabel === "string" ? entry.ctaLabel : undefined,
+      ctaHref: typeof entry.ctaHref === "string" ? entry.ctaHref : undefined,
+      enabled: entry.enabled !== false,
       objectPosition:
         typeof entry.objectPosition === "string" ? entry.objectPosition : "50% 50%",
       sortOrder: typeof entry.sortOrder === "number" ? entry.sortOrder : parsed.length,
@@ -316,7 +350,7 @@ export function createDefaultPageLayout(): WebsitePageSection[] {
                 eyebrow: "Signature",
                 headline: "Fire & flavour",
                 body: "Premium cuts and Korean classics — grilled at your table in an immersive setting.",
-                defaultLayout: "featured_support",
+                defaultLayout: "cards_3",
               }
             : type === "about"
               ? { defaultLayout: "image_left_text_right" }
@@ -385,7 +419,7 @@ export function createPageSection(type: WebsiteSectionType): WebsitePageSection 
                       eyebrow: "Signature",
                       headline: "Fire & flavour",
                       body: "Premium cuts and Korean classics.",
-                      defaultLayout: "featured_support",
+                      defaultLayout: "cards_3",
                     }
                   : undefined,
   };

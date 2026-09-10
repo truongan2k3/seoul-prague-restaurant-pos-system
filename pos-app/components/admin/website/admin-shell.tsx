@@ -6,6 +6,7 @@ import {
   Building2,
   CalendarDays,
   Clock,
+  Flame,
   ImageIcon,
   LayoutDashboard,
   LayoutList,
@@ -17,6 +18,7 @@ import {
 const LINKS = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/sections", label: "Sections", icon: LayoutList },
+  { href: "/admin/signature", label: "Signature dishes", icon: Flame },
   { href: "/admin/reservation", label: "Reservation page", icon: CalendarDays },
   { href: "/admin/media", label: "Media", icon: ImageIcon },
   { href: "/admin/restaurant", label: "Restaurant", icon: Building2 },

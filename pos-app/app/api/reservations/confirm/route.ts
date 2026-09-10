@@ -44,15 +44,7 @@ export async function POST(request: Request) {
     emailSent = emailResult.sent;
   }
 
-  void sendReservationPush(
-    reservationPushCopy({
-      kind: "updated",
-      guestName: data.guestName,
-      partySize: data.partySize,
-      reservedAt: data.reservedAt,
-      bookingCode: data.bookingCode,
-    }),
-  );
+  // No staff push on confirm — already notified as "New reservation".
 
   return NextResponse.json({
     ok: true,

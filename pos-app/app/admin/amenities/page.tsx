@@ -11,11 +11,11 @@ export default async function AdminAmenitiesPage() {
       <header>
         <h1 className="text-2xl font-semibold">Amenities</h1>
         <p className="mt-2 text-sm text-gray-500">
-          Prefer editing inside{" "}
-          <a href="/admin/designer" className="text-[#8B6914] underline">
-            Visual designer
-          </a>{" "}
-          — select the Amenities section to preview and upload icons on the canvas.
+          Manage amenity labels and icons. Toggle the Amenities section on the homepage from{" "}
+          <a href="/admin/sections" className="text-[#8B6914] underline">
+            Sections
+          </a>
+          .
         </p>
       </header>
       <AmenitiesManager initial={content.amenities} />

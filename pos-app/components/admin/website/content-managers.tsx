@@ -439,7 +439,7 @@ export function GalleryManager({ initial }: { initial: WebsiteContent["gallery"]
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
       <h2 className="text-lg font-semibold">Gallery</h2>
-      <p className="mt-1 text-sm text-gray-500">Prefer uploading inside Visual designer (tap + on Gallery).</p>
+      <p className="mt-1 text-sm text-gray-500">Upload gallery images here or manage landing sections in Admin → Sections.</p>
       <input
         type="file"
         accept="image/*"

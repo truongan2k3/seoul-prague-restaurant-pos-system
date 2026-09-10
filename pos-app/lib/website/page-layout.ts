@@ -1,4 +1,7 @@
 import type {
+  WebsiteContentBlock,
+  WebsiteContentLayout,
+  WebsiteBlockImage,
   WebsitePageSection,
   WebsitePromoSlideshow,
   WebsiteSectionType,
@@ -20,9 +23,19 @@ export const BUILTIN_SECTION_TYPES: WebsiteSectionType[] = [
 
 export const ADDABLE_SECTION_TYPES: WebsiteSectionType[] = [
   "promo_slideshow",
+  "content",
   "custom_text",
   "custom_cta",
   "spacer",
+];
+
+/** Sections that support nested content blocks / components. */
+export const BLOCK_CAPABLE_SECTION_TYPES: WebsiteSectionType[] = [
+  "about",
+  "signature",
+  "experience",
+  "content",
+  "custom_text",
 ];
 
 export const SECTION_LABELS: Record<WebsiteSectionType, string> = {
@@ -35,10 +48,67 @@ export const SECTION_LABELS: Record<WebsiteSectionType, string> = {
   gallery: "Gallery",
   amenities: "Amenities",
   contact: "Contact",
+  content: "Content section",
   custom_text: "Text block",
   custom_cta: "Call to action",
   spacer: "Spacer",
 };
+
+export const CONTENT_LAYOUTS: {
+  id: WebsiteContentLayout;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    id: "image_left_text_right",
+    label: "Image left · Text right",
+    hint: "Classic split — photo beside copy",
+  },
+  {
+    id: "text_left_image_right",
+    label: "Text left · Image right",
+    hint: "Copy first, photo second",
+  },
+  {
+    id: "image_top_text_bottom",
+    label: "Image top · Text bottom",
+    hint: "Stacked editorial card",
+  },
+  {
+    id: "text_top_image_bottom",
+    label: "Text top · Image bottom",
+    hint: "Headline first, then media",
+  },
+  {
+    id: "full_width_overlay",
+    label: "Full-width image + overlay",
+    hint: "Bleed photo with text on top",
+  },
+  {
+    id: "image_grid",
+    label: "Image grid",
+    hint: "Multiple photos in a responsive grid",
+  },
+  {
+    id: "cards_2",
+    label: "2-column cards",
+    hint: "Two equal cards with image + text",
+  },
+  {
+    id: "cards_3",
+    label: "3-column cards",
+    hint: "Three equal cards with image + text",
+  },
+  {
+    id: "featured_support",
+    label: "Featured + supporting",
+    hint: "One hero piece with supporting items",
+  },
+];
+
+export const CONTENT_LAYOUT_LABELS: Record<WebsiteContentLayout, string> = Object.fromEntries(
+  CONTENT_LAYOUTS.map((row) => [row.id, row.label]),
+) as Record<WebsiteContentLayout, string>;
 
 export const HEADLINE_SIZE: Record<
   WebsiteTypeScaleSize,
@@ -106,6 +176,113 @@ function newId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+export function createBlockImage(partial?: Partial<WebsiteBlockImage>): WebsiteBlockImage {
+  return {
+    id: partial?.id ?? newId("img"),
+    url: partial?.url ?? "",
+    alt: partial?.alt,
+    title: partial?.title,
+    body: partial?.body,
+    objectPosition: partial?.objectPosition ?? "50% 50%",
+    sortOrder: partial?.sortOrder ?? 0,
+  };
+}
+
+export function createContentBlock(
+  layout: WebsiteContentLayout = "image_left_text_right",
+  partial?: Partial<WebsiteContentBlock>,
+): WebsiteContentBlock {
+  return {
+    id: partial?.id ?? newId("block"),
+    enabled: partial?.enabled !== false,
+    sortOrder: partial?.sortOrder ?? 0,
+    layout,
+    eyebrow: partial?.eyebrow ?? "",
+    title: partial?.title ?? "New component",
+    body: partial?.body ?? "Add your story, dish, or experience details here.",
+    ctaLabel: partial?.ctaLabel,
+    ctaHref: partial?.ctaHref,
+    images: normalizeBlockImages(partial?.images),
+  };
+}
+
+export function normalizeBlockImages(value: unknown): WebsiteBlockImage[] {
+  if (!Array.isArray(value)) return [];
+  const parsed: WebsiteBlockImage[] = [];
+  for (const row of value) {
+    if (!row || typeof row !== "object") continue;
+    const entry = row as Record<string, unknown>;
+    const url = typeof entry.url === "string" ? entry.url : "";
+    if (!url) continue;
+    parsed.push({
+      id: typeof entry.id === "string" ? entry.id : newId("img"),
+      url,
+      alt: typeof entry.alt === "string" ? entry.alt : undefined,
+      title: typeof entry.title === "string" ? entry.title : undefined,
+      body: typeof entry.body === "string" ? entry.body : undefined,
+      objectPosition:
+        typeof entry.objectPosition === "string" ? entry.objectPosition : "50% 50%",
+      sortOrder: typeof entry.sortOrder === "number" ? entry.sortOrder : parsed.length,
+    });
+  }
+  return parsed.sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+export function normalizeContentBlocks(value: unknown): WebsiteContentBlock[] {
+  if (!Array.isArray(value)) return [];
+  const validLayouts = new Set(CONTENT_LAYOUTS.map((row) => row.id));
+  const parsed: WebsiteContentBlock[] = [];
+  for (const row of value) {
+    if (!row || typeof row !== "object") continue;
+    const entry = row as Record<string, unknown>;
+    const layout = entry.layout as WebsiteContentLayout;
+    if (!layout || !validLayouts.has(layout)) continue;
+    parsed.push({
+      id: typeof entry.id === "string" ? entry.id : newId("block"),
+      enabled: entry.enabled !== false,
+      sortOrder: typeof entry.sortOrder === "number" ? entry.sortOrder : parsed.length,
+      layout,
+      eyebrow: typeof entry.eyebrow === "string" ? entry.eyebrow : undefined,
+      title: typeof entry.title === "string" ? entry.title : undefined,
+      body: typeof entry.body === "string" ? entry.body : undefined,
+      ctaLabel: typeof entry.ctaLabel === "string" ? entry.ctaLabel : undefined,
+      ctaHref: typeof entry.ctaHref === "string" ? entry.ctaHref : undefined,
+      images: normalizeBlockImages(entry.images),
+    });
+  }
+  return parsed.sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+function normalizeSectionProps(
+  type: WebsiteSectionType,
+  props: unknown,
+): WebsitePageSection["props"] {
+  if (!props || typeof props !== "object") {
+    return type === "promo_slideshow"
+      ? { slideshowId: "promo-main", eyebrow: "Events" }
+      : undefined;
+  }
+  const entry = props as Record<string, unknown>;
+  const blocks = normalizeContentBlocks(entry.blocks);
+  const defaultLayout = entry.defaultLayout as WebsiteContentLayout | undefined;
+  const validLayouts = new Set(CONTENT_LAYOUTS.map((row) => row.id));
+  return {
+    eyebrow: typeof entry.eyebrow === "string" ? entry.eyebrow : undefined,
+    headline: typeof entry.headline === "string" ? entry.headline : undefined,
+    body: typeof entry.body === "string" ? entry.body : undefined,
+    ctaLabel: typeof entry.ctaLabel === "string" ? entry.ctaLabel : undefined,
+    ctaHref: typeof entry.ctaHref === "string" ? entry.ctaHref : undefined,
+    slideshowId: typeof entry.slideshowId === "string" ? entry.slideshowId : undefined,
+    background:
+      entry.background === "dark" || entry.background === "charcoal" || entry.background === "warm"
+        ? entry.background
+        : undefined,
+    defaultLayout:
+      defaultLayout && validLayouts.has(defaultLayout) ? defaultLayout : undefined,
+    blocks: blocks.length > 0 ? blocks : undefined,
+  };
+}
+
 export function createDefaultPageLayout(): WebsitePageSection[] {
   const types: WebsiteSectionType[] = [
     "hero",
@@ -115,7 +292,7 @@ export function createDefaultPageLayout(): WebsitePageSection[] {
     "experience",
     "menu",
     "gallery",
-      "amenities",
+    "amenities",
     "contact",
   ];
   return types.map((type, index) => ({
@@ -134,7 +311,16 @@ export function createDefaultPageLayout(): WebsitePageSection[] {
               headline: "An evening at the grill",
               body: "Charcoal heat, shared plates, and the rhythm of Korean barbecue.",
             }
-          : undefined,
+          : type === "signature"
+            ? {
+                eyebrow: "Signature",
+                headline: "Fire & flavour",
+                body: "Premium cuts and Korean classics — grilled at your table in an immersive setting.",
+                defaultLayout: "featured_support",
+              }
+            : type === "about"
+              ? { defaultLayout: "image_left_text_right" }
+              : undefined,
   }));
 }
 
@@ -144,7 +330,6 @@ export function createDefaultPromoSlideshows(): WebsitePromoSlideshow[] {
       id: "promo-main",
       name: "Homepage events",
       // Slides feed the hero fade + optional Event slideshow section.
-      // Add poster images in /admin designer for promos / discounts.
       enabled: true,
       autoplayMs: 5600,
       slides: [],
@@ -163,25 +348,46 @@ export function createPageSection(type: WebsiteSectionType): WebsitePageSection 
     props:
       type === "promo_slideshow"
         ? { slideshowId: "promo-main", eyebrow: "Events" }
-        : type === "custom_text"
+        : type === "content"
           ? {
               eyebrow: "Spotlight",
-              headline: "New headline",
-              body: "Tell your guests about a special evening, seasonal menu, or celebration.",
-              background: "charcoal",
+              headline: "New section",
+              body: "Add components below to build this section.",
+              defaultLayout: "image_left_text_right",
+              blocks: [
+                createContentBlock("image_left_text_right", {
+                  title: "First component",
+                  body: "Upload images and edit copy for this component.",
+                }),
+              ],
             }
-          : type === "custom_cta"
+          : type === "custom_text"
             ? {
-                eyebrow: "Reserve",
-                headline: "Book your table",
-                body: "Private dining and weekend evenings fill quickly.",
-                ctaLabel: "Make a reservation",
-                ctaHref: "/reservation",
-                background: "warm",
+                eyebrow: "Spotlight",
+                headline: "New headline",
+                body: "Tell your guests about a special evening, seasonal menu, or celebration.",
+                background: "charcoal",
+                defaultLayout: "text_top_image_bottom",
               }
-            : type === "spacer"
-              ? { background: "dark" }
-              : undefined,
+            : type === "custom_cta"
+              ? {
+                  eyebrow: "Reserve",
+                  headline: "Book your table",
+                  body: "Private dining and weekend evenings fill quickly.",
+                  ctaLabel: "Make a reservation",
+                  ctaHref: "/reservation",
+                  background: "warm",
+                }
+              : type === "spacer"
+                ? { background: "dark" }
+                : type === "signature"
+                  ? {
+                      eyebrow: "Signature",
+                      headline: "Fire & flavour",
+                      body: "Premium cuts and Korean classics.",
+                      defaultLayout: "featured_support",
+                    }
+                  : undefined,
   };
 }
 
@@ -206,7 +412,7 @@ export function normalizePageLayout(value: unknown): WebsitePageSection[] {
         typeScale: { headline: "md", body: "md" },
         padding: "normal",
       },
-      props: (entry.props as WebsitePageSection["props"]) ?? undefined,
+      props: normalizeSectionProps(type, entry.props),
     });
   }
   if (parsed.length === 0) return createDefaultPageLayout();
@@ -309,4 +515,9 @@ export function sectionVisibilityClass(section: WebsitePageSection) {
 export function isSectionVisible(section: WebsitePageSection, device: WebsiteDevice) {
   if (!section.enabled) return false;
   return !sectionDeviceStyle(section, device)?.hidden;
+}
+
+export function enabledContentBlocks(section?: WebsitePageSection | null): WebsiteContentBlock[] {
+  if (!section?.props?.blocks?.length) return [];
+  return section.props.blocks.filter((block) => block.enabled);
 }

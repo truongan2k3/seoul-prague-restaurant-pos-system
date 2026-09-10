@@ -1,10 +1,6 @@
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+import { redirect } from "next/navigation";
 
-import { WebsiteVisualDesigner } from "@/components/admin/website/visual-designer";
-import { fetchWebsiteContent } from "@/src/lib/website-public";
-
-export default async function AdminDesignerPage() {
-  const content = await fetchWebsiteContent();
-  return <WebsiteVisualDesigner initial={content} />;
+/** Visual Designer removed — redirect to Section Builder. */
+export default function AdminDesignerRedirectPage() {
+  redirect("/admin/sections");
 }

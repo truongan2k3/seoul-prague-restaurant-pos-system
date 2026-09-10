@@ -3,28 +3,37 @@
 import { Globe, Phone } from "lucide-react";
 import type { VisitSource } from "@/lib/types";
 
-export type StaffBookingSource = "phone_call" | "online";
+/** Sources staff can set when creating a booking in POS. */
+export type StaffBookingSource = "reservation" | "phone_call";
 
-export function normalizeDisplaySource(source: VisitSource): "phone_call" | "online" {
+/**
+ * How to present a source badge.
+ * - `null` = in-house / POS booking — no mark
+ * - phone_call / online = show badge
+ */
+export function normalizeDisplaySource(
+  source: VisitSource,
+): "phone_call" | "online" | null {
   if (source === "phone_call") return "phone_call";
-  // Legacy `reservation` / `walk_in` and explicit `online` all show as Online.
-  return "online";
+  if (source === "online") return "online";
+  // `reservation` (and legacy walk_in if any) → no badge
+  return null;
 }
 
 export function ReservationSourcePicker({
   value,
   onChange,
+  posLabel,
   phoneLabel,
-  onlineLabel,
 }: {
   value: StaffBookingSource;
   onChange: (next: StaffBookingSource) => void;
+  posLabel: string;
   phoneLabel: string;
-  onlineLabel: string;
 }) {
-  const options: { id: StaffBookingSource; label: string; icon: typeof Phone }[] = [
+  const options: { id: StaffBookingSource; label: string; icon: typeof Phone | null }[] = [
+    { id: "reservation", label: posLabel, icon: null },
     { id: "phone_call", label: phoneLabel, icon: Phone },
-    { id: "online", label: onlineLabel, icon: Globe },
   ];
 
   return (
@@ -42,7 +51,7 @@ export function ReservationSourcePicker({
                 : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200"
             }`}
           >
-            <Icon className="h-4 w-4" aria-hidden />
+            {Icon ? <Icon className="h-4 w-4" aria-hidden /> : null}
             {label}
           </button>
         );
@@ -61,6 +70,7 @@ export function ReservationSourceBadge({
   onlineLabel: string;
 }) {
   const kind = normalizeDisplaySource(source);
+  if (!kind) return null;
   if (kind === "phone_call") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-900 dark:bg-sky-950 dark:text-sky-200">

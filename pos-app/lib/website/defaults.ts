@@ -57,6 +57,15 @@ export const DEFAULT_WEBSITE_SETTINGS: WebsiteSettings = {
   openingHours: DEFAULT_OPENING_HOURS,
   pageLayout: createDefaultPageLayout(),
   promoSlideshows: createDefaultPromoSlideshows(),
+  reservationBackground: {
+    enabled: false,
+    videoUrl: "",
+    videoUrlMobile: "",
+    posterUrl: "",
+    overlayOpacity: 58,
+    objectPosition: "50% 50%",
+    objectPositionMobile: "50% 40%",
+  },
 };
 
 export const DEFAULT_AMENITIES: WebsiteAmenity[] = [

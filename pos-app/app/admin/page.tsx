@@ -32,11 +32,19 @@ export default async function AdminDashboardPage() {
       </div>
 
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
-        Edit homepage sections, components, layouts, and images in{" "}
+        Edit homepage sections in{" "}
         <Link href="/admin/sections" className="text-blue-600 underline">
           Sections
         </Link>
-        . Media slots, gallery, menu, and SEO stay on their dedicated pages.
+        . Configure the guest booking cinematic background in{" "}
+        <Link href="/admin/reservation" className="text-blue-600 underline">
+          Reservation page
+        </Link>
+        . If needed run{" "}
+        <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">
+          supabase/patch-reservation-background.sql
+        </code>
+        .
       </section>
     </div>
   );

@@ -394,7 +394,6 @@ function pickInitialMenuLanguage(
 }
 
 export function MenuPdfFlipbook({ pdfs, initialLanguage = "en" }: MenuPdfFlipbookProps) {
-  const rootRef = useRef<HTMLDivElement>(null);
   const bookRef = useRef<{
     pageFlip: () => {
       flipNext: () => void;
@@ -468,27 +467,6 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "en" }: MenuPdfFlipboo
     },
     [resetView],
   );
-
-  // Defer PDF download until the menu viewer is near the viewport (egress-friendly).
-  useEffect(() => {
-    if (shouldLoadPdf) return;
-    const node = rootRef.current;
-    if (!node || typeof IntersectionObserver === "undefined") {
-      setShouldLoadPdf(true);
-      return;
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setShouldLoadPdf(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "280px 0px", threshold: 0.01 },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [shouldLoadPdf]);
 
   useEffect(() => {
     if (!shouldLoadPdf || !activePdf) return;
@@ -836,8 +814,8 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "en" }: MenuPdfFlipboo
     );
 
   return (
-    <div ref={rootRef} className="space-y-6">
-      <div className="flex flex-wrap gap-2">
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-2">
         {MENU_PDF_LANGUAGES.map(({ code, label }) => {
           const available = availableLanguages.some((row) => row.code === code);
           const active = language === code;
@@ -846,10 +824,7 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "en" }: MenuPdfFlipboo
               key={code}
               type="button"
               disabled={!available}
-              onClick={() => {
-                setLanguage(code);
-                setShouldLoadPdf(true);
-              }}
+              onClick={() => setLanguage(code)}
               className={`rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition ${
                 active
                   ? "bg-[#8B1E2D] text-white"
@@ -864,16 +839,24 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "en" }: MenuPdfFlipboo
         })}
       </div>
 
-      {!shouldLoadPdf || loading ? (
+      {!shouldLoadPdf ? (
+        <div className="flex min-h-[320px] flex-col items-center justify-center gap-5 border border-dashed border-white/15 bg-[#0B0B0C]/60 px-6 py-16 text-center lg:min-h-[420px]">
+          <p className="max-w-sm text-sm text-white/55">
+            Choose a language, then open the menu book. The PDF loads only when you ask for it.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShouldLoadPdf(true)}
+            disabled={!activePdf}
+            className="inline-flex items-center justify-center bg-[#8B1E2D] px-8 py-3.5 text-sm font-semibold uppercase tracking-[0.14em] text-white transition hover:bg-[#A02435] disabled:opacity-40"
+          >
+            Open menu
+          </button>
+        </div>
+      ) : loading ? (
         <div className="flex min-h-[420px] items-center justify-center text-white/60 lg:min-h-[640px]">
-          {shouldLoadPdf ? (
-            <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Opening menu book…
-            </>
-          ) : (
-            <span className="text-sm text-white/45">Scroll to load menu…</span>
-          )}
+          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+          Opening menu book…
         </div>
       ) : expanded ? (
         <div className="fixed inset-0 z-[80] flex flex-col bg-[#0B0B0C]/95 p-4 backdrop-blur-sm lg:p-8">

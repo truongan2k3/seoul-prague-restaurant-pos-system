@@ -59,6 +59,14 @@ export function classifyReservationUpdate(
   }
 
   if (previous.status !== next.status) {
+    // Staff Confirm (pending → confirmed) — already notified on "New reservation".
+    if (
+      previous.status === "pending" &&
+      next.status === "confirmed" &&
+      !hasMeaningfulReservationFieldChange(previous, next)
+    ) {
+      return null;
+    }
     // pending → confirmed etc. still counts as a change staff may want.
     if (!isSilentReservationStatus(next.status)) return "updated";
   }

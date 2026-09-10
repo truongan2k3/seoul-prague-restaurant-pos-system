@@ -38,7 +38,7 @@ export function LandingMenuPreview({ content }: { content: WebsiteContent }) {
 
         {hasPdfs ? (
           <div className="min-h-[480px] rounded-2xl border border-white/10 bg-[#121214] p-4 sm:p-6 lg:min-h-[640px] lg:p-10">
-            <MenuPdfFlipbook pdfs={content.menuPdfs} />
+            <MenuPdfFlipbook pdfs={content.menuPdfs} initialLanguage="en" />
           </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-white/15 bg-[#121214] px-6 py-16 text-center">

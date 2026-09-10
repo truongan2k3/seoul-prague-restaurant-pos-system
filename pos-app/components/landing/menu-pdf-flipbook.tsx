@@ -384,7 +384,17 @@ interface MenuPdfFlipbookProps {
   initialLanguage?: MenuPdfLanguage;
 }
 
-export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipbookProps) {
+function pickInitialMenuLanguage(
+  pdfs: WebsiteMenuPdf[],
+  preferred: MenuPdfLanguage,
+): MenuPdfLanguage {
+  if (pdfs.some((row) => row.language === preferred)) return preferred;
+  if (pdfs.some((row) => row.language === "en")) return "en";
+  return pdfs[0]?.language ?? "en";
+}
+
+export function MenuPdfFlipbook({ pdfs, initialLanguage = "en" }: MenuPdfFlipbookProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const bookRef = useRef<{
     pageFlip: () => {
       flipNext: () => void;
@@ -403,10 +413,10 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
     [pdfs],
   );
 
-  const [language, setLanguage] = useState<MenuPdfLanguage>(() => {
-    if (pdfs.some((row) => row.language === initialLanguage)) return initialLanguage;
-    return pdfs[0]?.language ?? "cs";
-  });
+  const [language, setLanguage] = useState<MenuPdfLanguage>(() =>
+    pickInitialMenuLanguage(pdfs, initialLanguage),
+  );
+  const [shouldLoadPdf, setShouldLoadPdf] = useState(false);
   const [pages, setPages] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -459,9 +469,31 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
     [resetView],
   );
 
+  // Defer PDF download until the menu viewer is near the viewport (egress-friendly).
   useEffect(() => {
-    if (activePdf) void loadPdf(activePdf);
-  }, [activePdf, loadPdf]);
+    if (shouldLoadPdf) return;
+    const node = rootRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") {
+      setShouldLoadPdf(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShouldLoadPdf(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "280px 0px", threshold: 0.01 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [shouldLoadPdf]);
+
+  useEffect(() => {
+    if (!shouldLoadPdf || !activePdf) return;
+    void loadPdf(activePdf);
+  }, [shouldLoadPdf, activePdf, loadPdf]);
 
   useEffect(() => {
     if (!expanded) return;
@@ -804,7 +836,7 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
     );
 
   return (
-    <div className="space-y-6">
+    <div ref={rootRef} className="space-y-6">
       <div className="flex flex-wrap gap-2">
         {MENU_PDF_LANGUAGES.map(({ code, label }) => {
           const available = availableLanguages.some((row) => row.code === code);
@@ -814,7 +846,10 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
               key={code}
               type="button"
               disabled={!available}
-              onClick={() => setLanguage(code)}
+              onClick={() => {
+                setLanguage(code);
+                setShouldLoadPdf(true);
+              }}
               className={`rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition ${
                 active
                   ? "bg-[#8B1E2D] text-white"
@@ -829,10 +864,16 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
         })}
       </div>
 
-      {loading ? (
+      {!shouldLoadPdf || loading ? (
         <div className="flex min-h-[420px] items-center justify-center text-white/60 lg:min-h-[640px]">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-          Opening menu book…
+          {shouldLoadPdf ? (
+            <>
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Opening menu book…
+            </>
+          ) : (
+            <span className="text-sm text-white/45">Scroll to load menu…</span>
+          )}
         </div>
       ) : expanded ? (
         <div className="fixed inset-0 z-[80] flex flex-col bg-[#0B0B0C]/95 p-4 backdrop-blur-sm lg:p-8">

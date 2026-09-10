@@ -146,8 +146,8 @@ export function emptyWebsiteMedia(): WebsiteContent["media"] {
 }
 
 export const MENU_PDF_LANGUAGES: { code: MenuPdfLanguage; label: string }[] = [
-  { code: "cs", label: "Čeština" },
   { code: "en", label: "English" },
+  { code: "cs", label: "Čeština" },
   { code: "zh", label: "中文" },
 ];
 

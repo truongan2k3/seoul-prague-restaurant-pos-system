@@ -31,7 +31,7 @@ export function LandingMenuPageView({ content }: { content: WebsiteContent }) {
           </p>
 
           <div className="mt-12">
-            <MenuPdfFlipbook pdfs={content.menuPdfs} />
+            <MenuPdfFlipbook pdfs={content.menuPdfs} initialLanguage="en" />
           </div>
 
           {!hasPdfs ? (

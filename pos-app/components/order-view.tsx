@@ -90,7 +90,7 @@ function OrderCard({
           onOpen();
         }
       }}
-      className={`flex w-[min(85vw,320px)] shrink-0 snap-start cursor-pointer flex-col rounded-xl border p-4 shadow-sm transition-opacity hover:opacity-95 ${
+      className={`flex w-full cursor-pointer flex-col rounded-xl border p-3 shadow-sm transition-opacity hover:opacity-95 sm:p-4 lg:w-[min(85vw,320px)] lg:shrink-0 lg:snap-start ${
         isPaidInProgress
           ? "border-emerald-300 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/40"
           : isReady
@@ -250,13 +250,13 @@ export function OrderView({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+      <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6">
         {tableBundles.length === 0 ? (
           <div className="flex h-full min-h-[320px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
             {translate("noOrders")}
           </div>
         ) : (
-          <div className="-mx-1 flex items-start snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain px-1 pb-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:items-start lg:gap-4 lg:overflow-x-auto lg:overscroll-x-contain lg:pb-2 lg:snap-x lg:snap-mandatory">
             {tableBundles.map((bundle) => (
               <OrderCard
                 key={bundle.table.id}

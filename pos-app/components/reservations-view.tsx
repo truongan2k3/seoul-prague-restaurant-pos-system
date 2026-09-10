@@ -105,7 +105,7 @@ function toDateTimeLocalValue(date: Date): string {
   return copy.toISOString().slice(0, 16);
 }
 
-const PERIOD_OPTIONS: ReservationPeriod[] = ["day", "week", "range", "upcoming", "all"];
+const PERIOD_OPTIONS: ReservationPeriod[] = ["day", "upcoming", "range"];
 
 const PERIOD_LABEL_KEYS = {
   day: "resPeriodDay",
@@ -256,16 +256,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     });
   }, [anchorDate, dateNavLocale]);
 
-  const weekLabel = useMemo(() => {
-    const bounds = weekBoundsForDate(anchorDate);
-    const from = new Date(`${bounds.from}T12:00:00`);
-    const to = new Date(`${bounds.to}T12:00:00`);
-    const fmt = (d: Date) =>
-      d.toLocaleDateString(dateNavLocale, { day: "numeric", month: "short" });
-    return `${fmt(from)} – ${fmt(to)}`;
-  }, [anchorDate, dateNavLocale]);
-
-  const showDayNav = period === "day" || period === "week";
+  const showDayNav = period === "day";
   const isTodayAnchor = anchorDate === toDateInputValue(new Date());
 
   const emptyTables = useMemo(
@@ -488,6 +479,14 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     void loadReservations();
   };
 
+  const handleMarkNoShow = async (row: ReservationRecord) => {
+    const confirmed = window.confirm(
+      translate("confirmMarkNoShow").replace("{name}", row.guestName),
+    );
+    if (!confirmed) return;
+    await runAction(row.id, () => markReservationNoShow(row.id));
+  };
+
   const formatDateTime = (date: Date) =>
     date.toLocaleString(language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB", {
       weekday: "short",
@@ -527,88 +526,87 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
       <div className="flex-1 overflow-auto p-2.5 sm:p-4 lg:p-6">
         <div className="mx-auto max-w-6xl space-y-3 sm:space-y-4 lg:space-y-6">
-          <section className="rounded-xl border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:p-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {translate("resAdvancedStats")}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {PERIOD_OPTIONS.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => {
-                    setPeriod(option);
-                    if (option === "day" || option === "week") {
-                      setAnchorDate((prev) => prev || toDateInputValue(new Date()));
-                    }
-                    if (option === "range") {
-                      setCustomFrom(anchorDate);
-                      setCustomTo(anchorDate);
-                    }
-                  }}
-                  className={filterButtonClass(period === option)}
-                >
-                  {translate(PERIOD_LABEL_KEYS[option])}
-                </button>
-              ))}
-            </div>
+          <section className="rounded-xl border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">
+                {translate("resAdvancedStats")}
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {PERIOD_OPTIONS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => {
+                      setPeriod(option);
+                      if (option === "day") {
+                        setAnchorDate((prev) => prev || toDateInputValue(new Date()));
+                      }
+                      if (option === "range") {
+                        setCustomFrom(anchorDate);
+                        setCustomTo(anchorDate);
+                      }
+                    }}
+                    className={filterButtonClass(period === option)}
+                  >
+                    {translate(PERIOD_LABEL_KEYS[option])}
+                  </button>
+                ))}
+              </div>
 
-            {showDayNav ? (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => shiftAnchor(period === "week" ? -7 : -1)}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800 sm:h-10 sm:w-10"
-                  aria-label={translate(period === "week" ? "resPrevWeek" : "resPrevDay")}
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </button>
-                {period === "day" ? (
-                  <label className="relative inline-flex min-w-[11rem] flex-1 cursor-pointer items-center justify-center sm:flex-none">
-                    <span className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-center text-sm font-semibold tabular-nums text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
+              {showDayNav ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => shiftAnchor(-1)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                    aria-label={translate("resPrevDay")}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <label className="relative inline-flex min-w-[9.5rem] cursor-pointer items-center justify-center">
+                    <span className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-center text-xs font-semibold tabular-nums text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:text-sm">
                       {dayLabel}
                     </span>
                     <input
                       type="date"
                       value={anchorDate}
                       onChange={(event) => setAnchorDate(event.target.value)}
-                      className="absolute inset-0 cursor-pointer opacity-0"
+                      className="absolute inset-0 z-10 cursor-pointer opacity-0"
                       aria-label={translate("resPeriodDay")}
                     />
                   </label>
-                ) : (
-                  <span className="min-w-[11rem] flex-1 rounded-xl border border-gray-200 bg-white px-4 py-2 text-center text-sm font-semibold tabular-nums text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:flex-none">
-                    {weekLabel}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => shiftAnchor(period === "week" ? 7 : 1)}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800 sm:h-10 sm:w-10"
-                  aria-label={translate(period === "week" ? "resNextWeek" : "resNextDay")}
-                >
-                  <ChevronRight className="h-5 w-5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={jumpToToday}
-                  disabled={isTodayAnchor}
-                  className={filterButtonClass(isTodayAnchor)}
-                >
-                  {translate("resTodayJump")}
-                </button>
-              </div>
-            ) : null}
+                  <button
+                    type="button"
+                    onClick={() => shiftAnchor(1)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                    aria-label={translate("resNextDay")}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={jumpToToday}
+                    disabled={isTodayAnchor}
+                    className={filterButtonClass(isTodayAnchor)}
+                  >
+                    {translate("resTodayJump")}
+                  </button>
+                </div>
+              ) : null}
 
-            {period === "range" && (
-              <DateRangeInputs
-                from={customFrom}
-                to={customTo}
-                onFromChange={setCustomFrom}
-                onToChange={setCustomTo}
-              />
-            )}
-            <div className="mt-4 flex flex-wrap gap-2">
+              {period === "range" ? (
+                <div className="min-w-0 flex-1 sm:max-w-md">
+                  <DateRangeInputs
+                    from={customFrom}
+                    to={customTo}
+                    onFromChange={setCustomFrom}
+                    onToChange={setCustomTo}
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
               {STATUS_FILTER_OPTIONS.map(({ value, labelKey }) => (
                 <button
                   key={value}
@@ -724,10 +722,11 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           type="button"
                           disabled={busyId === row.id}
                           onClick={() => openEditModal(row)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200"
+                          aria-label={translate("editReservation")}
+                          title={translate("editReservation")}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200 dark:hover:bg-blue-900"
                         >
                           <Pencil className="h-3.5 w-3.5" />
-                          {translate("editReservation")}
                         </button>
                       )}
                       {canConfirmReservation(row.status) && (
@@ -770,7 +769,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                         <button
                           type="button"
                           disabled={busyId === row.id}
-                          onClick={() => void runAction(row.id, () => markReservationNoShow(row.id))}
+                          onClick={() => void handleMarkNoShow(row)}
                           className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-amber-950"
                         >
                           {translate("markNoShow")}

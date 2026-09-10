@@ -460,6 +460,7 @@ export function LandingFooter({
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-white/50">Links</p>
             <ul className="mt-4 space-y-2 text-sm text-white/70">
+              <li><Link href="/special-event" className="hover:text-white">Special Event</Link></li>
               <li><Link href="/menu" className="hover:text-white">Menu</Link></li>
               <li><Link href="/reservation" className="hover:text-white">Reservations</Link></li>
               <li><Link href="/admin" className="hover:text-white">Website admin</Link></li>

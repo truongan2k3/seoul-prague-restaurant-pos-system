@@ -47,6 +47,7 @@ function isUuid(value: string | undefined | null): value is string {
 function revalidateWebsitePaths() {
   revalidatePath("/", "layout");
   revalidatePath("/menu");
+  revalidatePath("/special-event");
   revalidatePath("/reservation");
   revalidatePath("/reservation/manage");
   revalidatePath("/admin", "layout");

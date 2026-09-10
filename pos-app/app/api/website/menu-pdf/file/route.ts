@@ -4,7 +4,7 @@ import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 
 export const runtime = "nodejs";
 /** Cache PDF responses so repeat flipbook loads skip Supabase. */
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 const ALLOWED: MenuPdfLanguage[] = ["cs", "en", "zh"];
 

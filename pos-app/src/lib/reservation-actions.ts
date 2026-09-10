@@ -75,7 +75,7 @@ export async function fetchReservations(since?: Date) {
 export async function createReservation(input: CreateReservationInput) {
   const status = input.status ?? (input.source === "walk_in" ? "checked_in" : "pending");
   const source = input.source ?? "reservation";
-  const withGuestCodes = source === "reservation";
+  const withGuestCodes = source === "reservation" || source === "online" || source === "phone_call";
 
   const result = await supabase
     .from("reservations")
@@ -456,7 +456,7 @@ export async function createOnlineReservation(input: {
     partySize: guestCount,
     reservedAt,
     notes: input.notes?.trim() || undefined,
-    source: "reservation",
+    source: "online",
     status: "pending",
   });
 }

@@ -466,7 +466,7 @@ export interface StaffMember {
   allowedNav?: NavId[];
 }
 
-export type VisitSource = "reservation" | "walk_in";
+export type VisitSource = "reservation" | "walk_in" | "phone_call" | "online";
 
 export type ReservationStatus =
   | "pending"

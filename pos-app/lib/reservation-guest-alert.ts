@@ -18,7 +18,7 @@ export interface GuestReservationAlertPayload {
     notes?: string | null;
     bookingCode?: string | null;
     eventType?: string | null;
-    source?: "reservation" | "walk_in";
+    source?: "reservation" | "walk_in" | "phone_call" | "online";
   };
   previous?: {
     partySize?: number;

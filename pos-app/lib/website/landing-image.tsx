@@ -38,7 +38,13 @@ function RawImg({
   height,
   fill,
   draggable,
-}: Omit<LandingImageProps, "sizes" | "priority" | "quality">) {
+  sizes,
+  priority = false,
+}: Omit<LandingImageProps, "quality">) {
+  const sizesAttr =
+    sizes ??
+    (width != null && !fill ? `${width}px` : undefined);
+
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
@@ -46,10 +52,12 @@ function RawImg({
       alt={alt}
       width={fill ? undefined : width}
       height={fill ? undefined : height}
+      sizes={sizesAttr}
       className={fill ? `absolute inset-0 h-full w-full ${className ?? ""}` : className}
       style={style}
       draggable={draggable}
-      loading="lazy"
+      loading={priority ? "eager" : "lazy"}
+      fetchPriority={priority ? "high" : "low"}
       decoding="async"
     />
   );
@@ -67,7 +75,7 @@ export function LandingImage({
   style,
   sizes,
   priority = false,
-  quality = 75,
+  quality = 72,
   width,
   height,
   fill = false,
@@ -87,6 +95,8 @@ export function LandingImage({
         height={height}
         fill={fill}
         draggable={draggable}
+        sizes={sizes}
+        priority={priority}
       />
     );
   }

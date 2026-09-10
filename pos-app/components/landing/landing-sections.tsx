@@ -70,7 +70,7 @@ export function LandingAbout({ content }: { content: WebsiteContent }) {
 }
 
 export function LandingSignature({ content }: { content: WebsiteContent }) {
-  const featured = content.menuItems.filter((item) => item.featured && item.available).slice(0, 3);
+  const featured = content.menuItems.filter((item) => item.featured && item.available).slice(0, 6);
   const signatureAssets = [
     content.media.signature_1,
     content.media.signature_2,
@@ -87,35 +87,66 @@ export function LandingSignature({ content }: { content: WebsiteContent }) {
             Premium cuts and Korean classics — grilled at your table in an immersive setting.
           </p>
         </Reveal>
-        <div className="grid gap-6 md:grid-cols-3">
-          {featured.map((item, index) => (
-            <Reveal key={item.id} className="group overflow-hidden border border-white/10 bg-[#121214]">
-              <div className="relative aspect-square overflow-hidden bg-[#1a1a1c]">
-                {item.imageUrl || signatureAssets[index]?.fileUrl ? (
-                  <LandingImage
-                    src={(item.imageUrl || signatureAssets[index]?.fileUrl)!}
-                    alt={item.name}
-                    fill
-                    sizes="(max-width: 768px) 100vw, 33vw"
-                    quality={72}
-                    className="object-cover transition duration-700 group-hover:scale-105"
-                    style={{
-                      objectPosition: signatureAssets[index]?.objectPosition ?? "50% 50%",
-                    }}
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-sm text-white/30">Photo coming soon</div>
-                )}
-              </div>
-              <div className="p-6">
-                {item.badge ? (
-                  <span className="text-[10px] uppercase tracking-[0.2em] text-[#C9A88B]">{item.badge}</span>
-                ) : null}
-                <h3 className="landing-serif mt-2 text-2xl text-white">{item.name}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-white/60">{item.description}</p>
-              </div>
-            </Reveal>
-          ))}
+        <div className="grid auto-rows-fr gap-6 md:grid-cols-3">
+          {featured.map((item, index) => {
+            const layout = index % 3;
+            const asset = signatureAssets[index % signatureAssets.length];
+            const imageSrc = item.imageUrl || asset?.fileUrl;
+            const isHero = layout === 0;
+            const isPortrait = layout === 1;
+
+            return (
+              <Reveal
+                key={item.id}
+                className={`group overflow-hidden border border-white/10 bg-[#121214] ${
+                  isHero
+                    ? "md:col-span-2 md:grid md:grid-cols-2 md:items-stretch"
+                    : ""
+                }`}
+              >
+                <div
+                  className={`relative overflow-hidden bg-[#1a1a1c] ${
+                    isHero
+                      ? "aspect-[4/3] md:aspect-auto md:min-h-[320px]"
+                      : isPortrait
+                        ? "aspect-[3/4]"
+                        : "aspect-[16/10]"
+                  }`}
+                >
+                  {imageSrc ? (
+                    <LandingImage
+                      src={imageSrc}
+                      alt={item.name}
+                      fill
+                      sizes={
+                        isHero
+                          ? "(max-width: 768px) 100vw, 50vw"
+                          : "(max-width: 768px) 100vw, 33vw"
+                      }
+                      quality={72}
+                      className="object-cover transition duration-700 group-hover:scale-105"
+                      style={{
+                        objectPosition: asset?.objectPosition ?? "50% 50%",
+                      }}
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-sm text-white/30">
+                      Photo coming soon
+                    </div>
+                  )}
+                </div>
+                <div className={`p-6 ${isHero ? "md:flex md:flex-col md:justify-center md:p-8" : ""}`}>
+                  {item.badge ? (
+                    <span className="text-[10px] uppercase tracking-[0.2em] text-[#C9A88B]">
+                      {item.badge}
+                    </span>
+                  ) : null}
+                  <h3 className="landing-serif mt-2 text-2xl text-white">{item.name}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-white/60">{item.description}</p>
+                </div>
+              </Reveal>
+            );
+          })}
         </div>
       </div>
     </section>

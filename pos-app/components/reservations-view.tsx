@@ -37,6 +37,13 @@ import { pickEventTypeLabel } from "@/lib/reservation-guest-form";
 import type { ReservationRecord, RestaurantTable } from "@/lib/types";
 import { ReservationTableSelect, isOccupiedTable } from "@/components/reservation-table-select";
 import { ReservationUndoBar } from "@/components/reservation-undo-bar";
+import { PartySizeStepper } from "@/components/reservation-party-size-stepper";
+import { ReservationDateTimeFields } from "@/components/reservation-datetime-fields";
+import {
+  ReservationSourceBadge,
+  ReservationSourcePicker,
+  type StaffBookingSource,
+} from "@/components/reservation-source-ui";
 import {
   assignReservationTable,
   cancelReservation,
@@ -155,6 +162,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const [formNotes, setFormNotes] = useState("");
   const [formTableId, setFormTableId] = useState("");
   const [formEventType, setFormEventType] = useState("");
+  const [formSource, setFormSource] = useState<StaffBookingSource>("phone_call");
   const [walkInPartySize, setWalkInPartySize] = useState(2);
   const [walkInName, setWalkInName] = useState("");
   const [walkInTableId, setWalkInTableId] = useState("");
@@ -338,6 +346,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       tableId: formTableId || undefined,
       staffId: currentStaffUser?.id,
       staffName: currentStaffUser?.name,
+      source: formSource,
     });
     setBusyId(null);
     if (createError) {
@@ -350,6 +359,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     setFormEmail("");
     setFormNotes("");
     setFormTableId("");
+    setFormSource("phone_call");
     void loadReservations();
   };
 
@@ -532,7 +542,10 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           </button>
           <button
             type="button"
-            onClick={() => setShowNewModal(true)}
+            onClick={() => {
+              setFormSource("phone_call");
+              setShowNewModal(true);
+            }}
             className="inline-flex items-center gap-1 rounded-md bg-gray-900 px-2 py-1 text-[11px] font-semibold text-white dark:bg-gray-100 dark:text-gray-900 sm:gap-1.5 sm:rounded-lg sm:px-2.5 sm:py-1.5 sm:text-xs"
           >
             <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -691,9 +704,12 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                         >
                           {translate(reservationStatusLabelKey(row.status))}
                         </span>
-                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-950 dark:text-blue-200">
-                          {translate(row.source === "walk_in" ? "resSourceWalkIn" : "resSourceReservation")}
-                        </span>
+                        <ReservationSourceBadge
+                          source={row.source}
+                          phoneLabel={translate("resSourcePhoneCall")}
+                          onlineLabel={translate("resSourceOnline")}
+                          walkInLabel={translate("resSourceWalkIn")}
+                        />
                       </div>
                       <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
                         {formatDateTime(row.reservedAt)} · {row.partySize} {translate("partySize").toLowerCase()}
@@ -810,30 +826,53 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
         </div>
       </div>
 
-      <Modal open={showNewModal} onClose={() => setShowNewModal(false)} title={translate("newReservation")}>
+      <Modal
+        open={showNewModal}
+        onClose={() => {
+          setFormSource("phone_call");
+          setShowNewModal(false);
+        }}
+        title={translate("newReservation")}
+      >
         <div className="space-y-3">
           <label className="block text-sm">
             <span className="text-gray-500">{translate("guestName")}</span>
             <input value={formGuestName} onChange={(e) => setFormGuestName(e.target.value)} className="pos-input mt-1" />
           </label>
+          <div className="block text-sm">
+            <span className="text-gray-500">{translate("reservationSource")}</span>
+            <div className="mt-1">
+              <ReservationSourcePicker
+                value={formSource}
+                onChange={setFormSource}
+                phoneLabel={translate("resSourcePhoneCall")}
+                onlineLabel={translate("resSourceOnline")}
+              />
+            </div>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
               <span className="text-gray-500">{translate("guestPhone")}</span>
               <input value={formPhone} onChange={(e) => setFormPhone(e.target.value)} className="pos-input mt-1" />
             </label>
-            <label className="block text-sm">
-              <span className="text-gray-500">{translate("partySize")}</span>
-              <input type="number" min={1} value={formPartySize} onChange={(e) => setFormPartySize(Number(e.target.value))} className="pos-input mt-1" />
-            </label>
+            <PartySizeStepper
+              value={formPartySize}
+              onChange={setFormPartySize}
+              max={settings.reservationMaxGuestsPerSlot || 50}
+              label={translate("partySize")}
+            />
           </div>
           <label className="block text-sm">
             <span className="text-gray-500">{translate("guestEmail")}</span>
             <input type="email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} className="pos-input mt-1" />
           </label>
-          <label className="block text-sm">
-            <span className="text-gray-500">{translate("reservedAt")}</span>
-            <input type="datetime-local" value={formDateTime} onChange={(e) => setFormDateTime(e.target.value)} className="pos-input mt-1" />
-          </label>
+          <ReservationDateTimeFields
+            value={formDateTime}
+            onChange={setFormDateTime}
+            settings={settings}
+            dateLabel={translate("reservedDate")}
+            timeLabel={translate("reservedTime")}
+          />
           <label className="block text-sm">
             <span className="text-gray-500">{translate("selectTable")}</span>
             <select value={formTableId} onChange={(e) => setFormTableId(e.target.value)} className="pos-input mt-1">
@@ -873,19 +912,24 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                 <span className="text-gray-500">{translate("guestPhone")}</span>
                 <input value={formPhone} onChange={(e) => setFormPhone(e.target.value)} className="pos-input mt-1" />
               </label>
-              <label className="block text-sm">
-                <span className="text-gray-500">{translate("partySize")}</span>
-                <input type="number" min={1} value={formPartySize} onChange={(e) => setFormPartySize(Number(e.target.value))} className="pos-input mt-1" />
-              </label>
+              <PartySizeStepper
+                value={formPartySize}
+                onChange={setFormPartySize}
+                max={settings.reservationMaxGuestsPerSlot || 50}
+                label={translate("partySize")}
+              />
             </div>
             <label className="block text-sm">
               <span className="text-gray-500">{translate("guestEmail")}</span>
               <input type="email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} className="pos-input mt-1" />
             </label>
-            <label className="block text-sm">
-              <span className="text-gray-500">{translate("reservedAt")}</span>
-              <input type="datetime-local" value={formDateTime} onChange={(e) => setFormDateTime(e.target.value)} className="pos-input mt-1" />
-            </label>
+            <ReservationDateTimeFields
+              value={formDateTime}
+              onChange={setFormDateTime}
+              settings={settings}
+              dateLabel={translate("reservedDate")}
+              timeLabel={translate("reservedTime")}
+            />
             {editTarget.status !== "checked_in" ? (
               <label className="block text-sm">
                 <span className="text-gray-500">{translate("selectTable")}</span>
@@ -937,10 +981,12 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             <span className="text-gray-500">{translate("guestName")}</span>
             <input value={walkInName} onChange={(e) => setWalkInName(e.target.value)} placeholder="Walk-in" className="pos-input mt-1" />
           </label>
-          <label className="block text-sm">
-            <span className="text-gray-500">{translate("partySize")}</span>
-            <input type="number" min={1} value={walkInPartySize} onChange={(e) => setWalkInPartySize(Number(e.target.value))} className="pos-input mt-1" />
-          </label>
+          <PartySizeStepper
+            value={walkInPartySize}
+            onChange={setWalkInPartySize}
+            max={settings.reservationMaxGuestsPerSlot || 50}
+            label={translate("partySize")}
+          />
           <label className="block text-sm">
             <span className="text-gray-500">{translate("selectTable")}</span>
             <select value={walkInTableId} onChange={(e) => setWalkInTableId(e.target.value)} className="pos-input mt-1">

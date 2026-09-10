@@ -1,24 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { useMemo, useState } from "react";
 import { BookingCta } from "@/components/landing/booking-cta";
+import { MenuPdfFlipbook } from "@/components/landing/menu-pdf-flipbook";
 import { TomatoMakerCredit } from "@/components/tomato-maker-credit";
 import { LandingImage } from "@/lib/website/landing-image";
 import { formatOpeningHoursOneLine } from "@/lib/website/opening-hours-display";
 import { resolveSocialLinks, socialPlatformLabel } from "@/lib/website/social-links";
 import type { WebsiteContent, WebsiteSocialLink } from "@/lib/website/types";
 
-function formatPrice(price: number | null, currency: string): string {
-  if (price == null) return "Price on request";
-  return new Intl.NumberFormat("cs-CZ", { style: "currency", currency }).format(price);
-}
-
 export function LandingMenuPreview({ content }: { content: WebsiteContent }) {
-  const reduceMotion = useReducedMotion();
-  const categories = content.menuCategories.filter((cat) => cat.enabled);
-  const items = content.menuItems.filter((item) => item.available);
+  const hasPdfs = content.menuPdfs.length > 0;
 
   return (
     <section id="menu" className="bg-[#0B0B0C] py-24 lg:py-32">
@@ -27,9 +20,9 @@ export function LandingMenuPreview({ content }: { content: WebsiteContent }) {
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Menu</p>
             <h2 className="landing-serif mt-4 text-3xl text-white lg:text-5xl">
-              {content.menuPdfs.length > 0 ? "Browse our menu" : "Curated selections"}
+              Browse our menu
             </h2>
-            {content.menuPdfs.length > 0 ? (
+            {hasPdfs ? (
               <p className="mt-3 text-sm text-white/55">
                 Flip through Czech, English, and Chinese menu books.
               </p>
@@ -42,65 +35,27 @@ export function LandingMenuPreview({ content }: { content: WebsiteContent }) {
             Full menu →
           </Link>
         </div>
-        <div className="space-y-12">
-          {content.menuPdfs.length > 0 ? (
-            <div className="rounded-xl border border-white/10 bg-[#121214] p-6 text-center">
-              <p className="text-white/70">Digital menu books ready — Czech, English & Chinese</p>
-              <Link
-                href="/menu"
-                className="mt-4 inline-block text-sm uppercase tracking-[0.16em] text-[#C9A88B] hover:text-white"
-              >
-                Open menu book →
+
+        {hasPdfs ? (
+          <div className="min-h-[480px] rounded-2xl border border-white/10 bg-[#121214] p-4 sm:p-6 lg:min-h-[640px] lg:p-10">
+            <MenuPdfFlipbook pdfs={content.menuPdfs} />
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-white/15 bg-[#121214] px-6 py-16 text-center">
+            <p className="text-white/60">
+              Menu books are not uploaded yet. Visit the{" "}
+              <Link href="/menu" className="text-[#C9A88B] hover:text-white">
+                full menu
+              </Link>{" "}
+              or add PDFs in{" "}
+              <Link href="/admin" className="text-[#C9A88B] hover:text-white">
+                /admin
               </Link>
-            </div>
-          ) : null}
-          {categories.slice(0, 3).map((category) => {
-            const categoryItems = items.filter((item) => item.categoryId === category.id).slice(0, 4);
-            if (categoryItems.length === 0) return null;
-            return (
-              <div key={category.id}>
-                <h3 className="mb-6 border-b border-white/10 pb-3 text-sm uppercase tracking-[0.22em] text-white/80">
-                  {category.name}
-                </h3>
-                <div className="grid gap-4 md:grid-cols-2">
-                  {categoryItems.map((item, index) => (
-                    <motion.article
-                      key={item.id}
-                      initial={reduceMotion ? false : { opacity: 0, y: 12 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ delay: index * 0.05 }}
-                      className="flex gap-4 border border-white/8 bg-[#121214] p-4"
-                    >
-                      {item.imageUrl ? (
-                        <LandingImage
-                          src={item.imageUrl}
-                          alt={item.name}
-                          width={80}
-                          height={80}
-                          sizes="80px"
-                          quality={70}
-                          className="h-20 w-20 shrink-0 object-cover"
-                        />
-                      ) : (
-                        <div className="h-20 w-20 shrink-0 bg-[#1f1f22]" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-3">
-                          <h4 className="font-medium text-white">{item.name}</h4>
-                          <span className="shrink-0 text-sm text-[#C9A88B]">
-                            {formatPrice(item.price, item.currency)}
-                          </span>
-                        </div>
-                        <p className="mt-1 line-clamp-2 text-sm text-white/55">{item.description}</p>
-                      </div>
-                    </motion.article>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              .
+            </p>
+          </div>
+        )}
+
         <div className="mt-14 text-center">
           <BookingCta />
         </div>
@@ -109,74 +64,20 @@ export function LandingMenuPreview({ content }: { content: WebsiteContent }) {
   );
 }
 
-/** Varied sizes / offsets / tilts — messy collage while drifting sideways. */
+/** Varied aspect ratios for a static gallery mosaic. */
 const GALLERY_FRAME_STYLES = [
-  { width: "w-[200px] sm:w-[240px] lg:w-[280px]", height: "h-[260px] sm:h-[300px] lg:h-[340px]", offset: "mt-10", rotate: "-rotate-2" },
-  { width: "w-[150px] sm:w-[190px] lg:w-[210px]", height: "h-[200px] sm:h-[240px] lg:h-[260px]", offset: "mt-0", rotate: "rotate-3" },
-  { width: "w-[230px] sm:w-[270px] lg:w-[310px]", height: "h-[170px] sm:h-[210px] lg:h-[230px]", offset: "mt-16", rotate: "-rotate-1" },
-  { width: "w-[170px] sm:w-[200px] lg:w-[230px]", height: "h-[250px] sm:h-[290px] lg:h-[330px]", offset: "mt-3", rotate: "rotate-2" },
-  { width: "w-[210px] sm:w-[240px] lg:w-[270px]", height: "h-[150px] sm:h-[190px] lg:h-[210px]", offset: "mt-20", rotate: "-rotate-3" },
-  { width: "w-[160px] sm:w-[195px] lg:w-[225px]", height: "h-[230px] sm:h-[270px] lg:h-[310px]", offset: "mt-6", rotate: "rotate-1" },
+  { aspect: "aspect-[3/4]", span: "md:col-span-1 md:row-span-2", rotate: "-rotate-1" },
+  { aspect: "aspect-square", span: "md:col-span-1", rotate: "rotate-1" },
+  { aspect: "aspect-[4/3]", span: "md:col-span-1", rotate: "-rotate-1" },
+  { aspect: "aspect-[3/4]", span: "md:col-span-1 md:row-span-2", rotate: "rotate-2" },
+  { aspect: "aspect-[5/4]", span: "md:col-span-1", rotate: "-rotate-2" },
+  { aspect: "aspect-square", span: "md:col-span-1", rotate: "rotate-1" },
 ] as const;
 
 export function LandingGallery({ content }: { content: WebsiteContent }) {
-  const reduceMotion = useReducedMotion();
   const items = content.gallery.filter((item) => item.imageUrl);
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const pausedRef = useRef(false);
-  const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const loopItems = useMemo(
-    () => (items.length >= 2 ? [...items, ...items] : items),
-    [items],
-  );
-
-  const pauseDrift = () => {
-    pausedRef.current = true;
-    if (resumeTimerRef.current) {
-      clearTimeout(resumeTimerRef.current);
-      resumeTimerRef.current = null;
-    }
-  };
-
-  const scheduleResume = (delayMs = 900) => {
-    if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
-    resumeTimerRef.current = setTimeout(() => {
-      pausedRef.current = false;
-      resumeTimerRef.current = null;
-    }, delayMs);
-  };
-
-  useEffect(() => {
-    if (reduceMotion || items.length < 2) return;
-    const el = scrollerRef.current;
-    if (!el) return;
-
-    let raf = 0;
-    let last = performance.now();
-    const speedPx = 32; // slow floating drift
-
-    const tick = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      if (!pausedRef.current) {
-        const half = el.scrollWidth / 2;
-        if (half > 0) {
-          el.scrollLeft += speedPx * dt;
-          if (el.scrollLeft >= half) {
-            el.scrollLeft -= half;
-          }
-        }
-      }
-      raf = requestAnimationFrame(tick);
-    };
-
-    raf = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(raf);
-      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
-    };
-  }, [reduceMotion, items.length]);
+  const [expanded, setExpanded] = useState(false);
+  const visibleItems = expanded ? items : items.slice(0, 5);
 
   if (items.length === 0) {
     return (
@@ -191,71 +92,45 @@ export function LandingGallery({ content }: { content: WebsiteContent }) {
   }
 
   return (
-    <section id="gallery" className="overflow-hidden bg-[#0F0F10] py-24 lg:py-32">
+    <section id="gallery" className="bg-[#0F0F10] py-24 lg:py-32">
       <div className="mx-auto max-w-7xl px-5 lg:px-8">
         <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Gallery</p>
         <h2 className="landing-serif mt-4 text-3xl text-white lg:text-5xl">Atmosphere & plates</h2>
-      </div>
 
-      <div className="relative mt-10">
-        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-[#0F0F10] to-transparent sm:w-16" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-[#0F0F10] to-transparent sm:w-16" />
-
-        <div
-          ref={scrollerRef}
-          className="landing-gallery-drift-mask overflow-x-auto overflow-y-hidden pb-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          style={{ WebkitOverflowScrolling: "touch" }}
-          onPointerEnter={pauseDrift}
-          onPointerLeave={() => scheduleResume(400)}
-          onPointerDown={pauseDrift}
-          onPointerUp={() => scheduleResume(700)}
-          onTouchStart={pauseDrift}
-          onTouchEnd={() => scheduleResume(900)}
-          onWheel={() => {
-            pauseDrift();
-            scheduleResume(1200);
-          }}
-          onScroll={() => {
-            const el = scrollerRef.current;
-            if (!el || items.length < 2) return;
-            const half = el.scrollWidth / 2;
-            if (half > 0 && el.scrollLeft >= half) {
-              el.scrollLeft -= half;
-            }
-          }}
-        >
-          <div className="landing-gallery-drift flex w-max items-start gap-2 px-5 sm:gap-3 sm:px-8 lg:gap-4">
-            {loopItems.map((item, index) => {
-              const sourceIndex = index % items.length;
-              const frame = GALLERY_FRAME_STYLES[sourceIndex % GALLERY_FRAME_STYLES.length];
-              const bobDelay = `${(sourceIndex % 6) * 0.35}s`;
-              return (
-                <figure
-                  key={`${item.id}-${index}`}
-                  className={`landing-gallery-frame relative shrink-0 overflow-hidden border border-white/10 bg-[#121214] shadow-[0_12px_40px_rgba(0,0,0,0.35)] ${frame.width} ${frame.height} ${frame.offset} ${frame.rotate} ${
-                    reduceMotion ? "" : "landing-gallery-frame-bob"
-                  }`}
-                  style={
-                    reduceMotion
-                      ? undefined
-                      : ({ ["--gallery-bob-delay" as string]: bobDelay } as React.CSSProperties)
-                  }
-                >
-                  <LandingImage
-                    src={item.imageUrl}
-                    alt={item.title || "Gallery"}
-                    fill
-                    sizes="(max-width: 640px) 70vw, (max-width: 1024px) 40vw, 280px"
-                    quality={65}
-                    className="object-cover"
-                    draggable={false}
-                    priority={index < 2}
-                  />
-                </figure>
-              );
-            })}
-          </div>
+        <div className="mt-10 grid grid-cols-2 gap-3 md:grid-cols-5 md:gap-4">
+          {visibleItems.map((item, index) => {
+            const frame = GALLERY_FRAME_STYLES[index % GALLERY_FRAME_STYLES.length];
+            return (
+              <figure
+                key={item.id}
+                className={`relative overflow-hidden border border-white/10 bg-[#121214] shadow-[0_12px_40px_rgba(0,0,0,0.35)] ${frame.aspect} ${frame.span} ${frame.rotate}`}
+              >
+                <LandingImage
+                  src={item.imageUrl}
+                  alt={item.title || "Gallery"}
+                  fill
+                  sizes="(max-width: 768px) 50vw, 20vw"
+                  quality={70}
+                  className="object-cover"
+                  draggable={false}
+                  priority={index === 0}
+                />
+              </figure>
+            );
+          })}
         </div>
+
+        {items.length > 5 ? (
+          <div className="mt-8 text-center">
+            <button
+              type="button"
+              onClick={() => setExpanded((value) => !value)}
+              className="text-sm text-white/55 underline decoration-white/25 underline-offset-4 transition hover:text-[#C9A88B] hover:decoration-[#C9A88B]/50"
+            >
+              {expanded ? "Show less" : "Show more"}
+            </button>
+          </div>
+        ) : null}
       </div>
     </section>
   );

@@ -314,7 +314,7 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
       notes: input.notes?.trim() || null,
       event_type: eventType,
       gdpr_consent_at: nowIso,
-      source: "reservation",
+      source: "online",
       status: "pending",
       booking_code: bookingCode,
       manage_token: manageToken,

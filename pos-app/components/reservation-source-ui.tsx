@@ -1,14 +1,13 @@
 "use client";
 
-import { Globe, Phone, UserRound } from "lucide-react";
+import { Globe, Phone } from "lucide-react";
 import type { VisitSource } from "@/lib/types";
 
 export type StaffBookingSource = "phone_call" | "online";
 
-export function normalizeDisplaySource(source: VisitSource): "phone_call" | "online" | "walk_in" {
-  if (source === "walk_in") return "walk_in";
+export function normalizeDisplaySource(source: VisitSource): "phone_call" | "online" {
   if (source === "phone_call") return "phone_call";
-  // Legacy `reservation` and explicit `online` both show as Online.
+  // Legacy `reservation` / `walk_in` and explicit `online` all show as Online.
   return "online";
 }
 
@@ -56,22 +55,12 @@ export function ReservationSourceBadge({
   source,
   phoneLabel,
   onlineLabel,
-  walkInLabel,
 }: {
   source: VisitSource;
   phoneLabel: string;
   onlineLabel: string;
-  walkInLabel: string;
 }) {
   const kind = normalizeDisplaySource(source);
-  if (kind === "walk_in") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-        <UserRound className="h-3 w-3" aria-hidden />
-        {walkInLabel}
-      </span>
-    );
-  }
   if (kind === "phone_call") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-900 dark:bg-sky-950 dark:text-sky-200">

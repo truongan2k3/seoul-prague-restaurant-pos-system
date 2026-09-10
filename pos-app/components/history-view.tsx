@@ -309,7 +309,11 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                           {sale.guestName && (
                             <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
                               {sale.guestName}
-                              {sale.visitSource === "walk_in" ? " · Walk-in" : sale.visitSource === "reservation" ? " · Booking" : ""}
+                              {sale.visitSource === "phone_call"
+                                ? " · Phone"
+                                : sale.visitSource
+                                  ? " · Online"
+                                  : ""}
                             </p>
                           )}
                         </td>

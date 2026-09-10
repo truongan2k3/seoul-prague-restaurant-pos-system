@@ -27,6 +27,7 @@ export function ReservationReminderModal({
   const locale = language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB";
   const timeLabel = reservation
     ? reservation.reservedAt.toLocaleString(locale, {
+        timeZone: "Europe/Prague",
         weekday: "short",
         day: "2-digit",
         month: "short",

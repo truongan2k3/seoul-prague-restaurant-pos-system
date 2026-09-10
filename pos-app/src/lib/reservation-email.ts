@@ -29,6 +29,7 @@ export function buildManageUrl(manageToken: string): string {
 
 function formatWhen(date: Date): string {
   return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Prague",
     weekday: "short",
     day: "numeric",
     month: "short",

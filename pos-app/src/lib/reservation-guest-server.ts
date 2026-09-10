@@ -2,7 +2,7 @@ import {
   buildTimeSlotsForDate,
   countGuestsInSlot,
   DEFAULT_RESERVATION_OPERATING_HOURS,
-  getWeekdayKey,
+  getWeekdayKeyForDateIso,
   type SlotCapacityRow,
 } from "@/lib/reservation-slots";
 import { generateBookingCode, generateManageToken } from "@/lib/reservation-codes";
@@ -14,6 +14,7 @@ import {
 } from "@/lib/reservation-guest-form";
 import { guestReservationCopy, parseGuestReservationLang } from "@/lib/i18n/guest-reservation";
 import type { AppSettings, ReservationOperatingHours, ReservationStatus } from "@/lib/types";
+import { venueDayRangeUtc, venueWallTimeToUtc } from "@/lib/venue-timezone";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 
 export interface OnlineBookInput {
@@ -181,8 +182,8 @@ async function validateSlotCapacity(params: {
   excludeReservationId?: string;
 }): Promise<{ ok: true; guestCount: number } | { ok: false; error: string }> {
   const { settings, date, time, excludeReservationId } = params;
-  const reservedAt = new Date(`${date}T${time}:00`);
-  const dayKey = getWeekdayKey(reservedAt);
+  const reservedAt = venueWallTimeToUtc(date, time);
+  const dayKey = getWeekdayKeyForDateIso(date);
   const dayConfig = settings.reservationOperatingHours[dayKey];
 
   if (!dayConfig.enabled) {
@@ -203,14 +204,13 @@ async function validateSlotCapacity(params: {
     Math.min(settings.reservationMaxGuestsPerSlot, params.guestCount),
   );
 
-  const start = `${date}T00:00:00`;
-  const end = `${date}T23:59:59`;
+  const { startIso, endExclusiveIso } = venueDayRangeUtc(date);
   const admin = createSupabaseAdmin();
   const { data: existingRows, error: fetchError } = await admin
     .from("reservations")
     .select("id, party_size, reserved_at, status")
-    .gte("reserved_at", start)
-    .lte("reserved_at", end);
+    .gte("reserved_at", startIso)
+    .lt("reserved_at", endExclusiveIso);
 
   if (fetchError) return { ok: false, error: fetchError.message };
 
@@ -299,7 +299,7 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
 
   const bookingCode = generateBookingCode();
   const manageToken = generateManageToken();
-  const reservedAt = new Date(`${input.date}T${input.time}:00`);
+  const reservedAt = venueWallTimeToUtc(input.date, input.time);
   const admin = createSupabaseAdmin();
   const nowIso = new Date().toISOString();
 
@@ -384,7 +384,7 @@ export async function updateReservationByManageToken(input: {
   });
   if (!capacity.ok) return { data: null, error: capacity.error };
 
-  const reservedAt = new Date(`${input.date}T${input.time}:00`);
+  const reservedAt = venueWallTimeToUtc(input.date, input.time);
   const admin = createSupabaseAdmin();
   const { data, error } = await admin
     .from("reservations")

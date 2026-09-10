@@ -141,7 +141,7 @@ function AmenitiesBlock({
   if (compact) {
     return (
       <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Amenities</p>
+        <p className="text-sm uppercase tracking-[0.22em] text-[#C9A88B] sm:text-base">Amenities</p>
         <ul className="mt-5 grid gap-3 sm:grid-cols-2">
           {amenities.map((item) => (
             <li
@@ -210,9 +210,9 @@ function AmenitiesBlock({
   );
 }
 
-function SocialIcon({ platform }: { platform: string }) {
+function SocialIcon({ platform, large = false }: { platform: string; large?: boolean }) {
   const key = platform.toLowerCase();
-  const className = "h-5 w-5";
+  const className = large ? "h-8 w-8" : "h-5 w-5";
   if (key === "instagram") {
     return (
       <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
@@ -261,10 +261,16 @@ function SocialLinksRow({
   if (links.length === 0) return null;
   return (
     <div className={embedded ? "" : "mt-14 border-t border-white/10 pt-12"}>
-      <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">
+      <p
+        className={
+          embedded
+            ? "text-sm uppercase tracking-[0.22em] text-[#C9A88B] sm:text-base"
+            : "text-xs uppercase tracking-[0.3em] text-[#C9A88B]"
+        }
+      >
         {embedded ? "Social media" : "Follow us"}
       </p>
-      <ul className="mt-5 flex flex-wrap gap-3">
+      <ul className={`mt-5 flex flex-wrap ${embedded ? "gap-4" : "gap-3"}`}>
         {links.map((link) => (
           <li key={link.id}>
             <a
@@ -272,15 +278,59 @@ function SocialLinksRow({
               target="_blank"
               rel="noopener noreferrer"
               aria-label={socialPlatformLabel(link.platform)}
-              className="inline-flex h-12 w-12 items-center justify-center border border-white/15 text-white/80 transition hover:border-[#C9A88B]/60 hover:text-[#C9A88B]"
+              className={
+                embedded
+                  ? "inline-flex h-16 w-16 items-center justify-center border border-white/15 text-white/85 transition hover:border-[#C9A88B]/60 hover:text-[#C9A88B] sm:h-[4.5rem] sm:w-[4.5rem]"
+                  : "inline-flex h-12 w-12 items-center justify-center border border-white/15 text-white/80 transition hover:border-[#C9A88B]/60 hover:text-[#C9A88B]"
+              }
             >
-              <SocialIcon platform={link.platform} />
+              <SocialIcon platform={link.platform} large={embedded} />
             </a>
           </li>
         ))}
       </ul>
     </div>
   );
+}
+
+/** Best-effort embed src from a share/search Maps URL (no Maps Embed API key). */
+function toGoogleMapsEmbedSrc(mapsUrl: string, addressFallback?: string): string {
+  const fallbackQuery = addressFallback?.trim();
+  try {
+    const u = new URL(mapsUrl);
+    if (u.pathname.includes("/embed")) return mapsUrl;
+
+    const q = u.searchParams.get("q") || u.searchParams.get("query");
+    if (q) {
+      return `https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=15&output=embed`;
+    }
+
+    const placeMatch = u.pathname.match(/\/maps\/place\/([^/@]+)/);
+    if (placeMatch) {
+      const place = decodeURIComponent(placeMatch[1].replace(/\+/g, " "));
+      return `https://maps.google.com/maps?q=${encodeURIComponent(place)}&z=15&output=embed`;
+    }
+
+    const coordMatch = mapsUrl.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+    if (coordMatch) {
+      return `https://maps.google.com/maps?q=${coordMatch[1]},${coordMatch[2]}&z=15&output=embed`;
+    }
+
+    if (fallbackQuery) {
+      return `https://maps.google.com/maps?q=${encodeURIComponent(fallbackQuery)}&z=15&output=embed`;
+    }
+
+    return `https://maps.google.com/maps?q=${encodeURIComponent(mapsUrl)}&z=15&output=embed`;
+  } catch {
+    const query = fallbackQuery || mapsUrl;
+    return `https://maps.google.com/maps?q=${encodeURIComponent(query)}&z=15&output=embed`;
+  }
+}
+
+function isConfiguredGoogleMapsUrl(url: string | undefined | null): boolean {
+  const trimmed = url?.trim() ?? "";
+  if (!trimmed) return false;
+  return trimmed !== "https://maps.google.com" && trimmed !== "https://maps.google.com/";
 }
 
 /** Standalone amenities — hidden when Visit Us already embeds amenities. */
@@ -322,6 +372,17 @@ export function LandingContact({ content }: { content: WebsiteContent }) {
     [settings],
   );
 
+  const hasMapsUrl = isConfiguredGoogleMapsUrl(settings.googleMapsUrl);
+  const addressQuery = settings.address?.trim() ?? "";
+  const openMapsHref = hasMapsUrl
+    ? settings.googleMapsUrl.trim()
+    : addressQuery
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressQuery)}`
+      : null;
+  const mapsEmbedSrc = openMapsHref
+    ? toGoogleMapsEmbedSrc(hasMapsUrl ? settings.googleMapsUrl.trim() : openMapsHref, addressQuery)
+    : null;
+
   return (
     <section id="contact" className="bg-[#0B0B0C] py-24 lg:py-32">
       <div className="mx-auto max-w-7xl px-5 lg:px-8">
@@ -330,7 +391,7 @@ export function LandingContact({ content }: { content: WebsiteContent }) {
           {settings.restaurantName}
         </h2>
 
-        {/* Info left | amenities + social + opening hours right */}
+        {/* Info + map left | opening hours → amenities → social right */}
         <div className="grid border border-white/10 lg:grid-cols-2">
           <div className="border-b border-white/10 p-6 sm:p-8 lg:border-b-0 lg:border-r lg:p-10">
             <p className="text-xs uppercase tracking-[0.28em] text-[#C9A88B]">Info</p>
@@ -353,9 +414,9 @@ export function LandingContact({ content }: { content: WebsiteContent }) {
                 </p>
               ) : null}
             </div>
-            {settings.googleMapsUrl ? (
+            {openMapsHref ? (
               <a
-                href={settings.googleMapsUrl}
+                href={openMapsHref}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mt-5 inline-block text-sm uppercase tracking-[0.14em] text-[#C9A88B] hover:text-white"
@@ -363,28 +424,51 @@ export function LandingContact({ content }: { content: WebsiteContent }) {
                 Open in Google Maps →
               </a>
             ) : null}
-            <div className="mt-8">
-              <BookingCta size="lg" />
-            </div>
+            {mapsEmbedSrc ? (
+              <div className="mt-5 overflow-hidden border border-white/10 bg-[#141416]">
+                <iframe
+                  title="Restaurant location on Google Maps"
+                  src={mapsEmbedSrc}
+                  className="aspect-[4/3] w-full border-0 sm:aspect-video"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  allowFullScreen
+                />
+              </div>
+            ) : null}
           </div>
 
           <div className="flex min-w-0 flex-col">
+            <div
+              className={
+                amenities.length > 0 || socialLinks.length > 0
+                  ? "border-b border-white/10 p-6 sm:p-8 lg:p-10"
+                  : "p-6 sm:p-8 lg:p-10"
+              }
+            >
+              <h3 className="text-sm uppercase tracking-[0.22em] text-[#C9A88B] sm:text-base">
+                Opening hours
+              </h3>
+              <p className="mt-5 text-lg leading-relaxed text-white/85 sm:text-xl">{hoursLine}</p>
+            </div>
+
             {amenities.length > 0 ? (
-              <div className="border-b border-white/10 p-6 sm:p-8 lg:p-10">
+              <div
+                className={
+                  socialLinks.length > 0
+                    ? "border-b border-white/10 p-6 sm:p-8 lg:p-10"
+                    : "p-6 sm:p-8 lg:p-10"
+                }
+              >
                 <AmenitiesBlock content={content} compact />
               </div>
             ) : null}
 
             {socialLinks.length > 0 ? (
-              <div className="border-b border-white/10 p-6 sm:p-8 lg:p-10">
+              <div className="p-6 sm:p-8 lg:p-10">
                 <SocialLinksRow links={socialLinks} embedded />
               </div>
             ) : null}
-
-            <div className="p-6 sm:p-8 lg:p-10">
-              <h3 className="text-xs uppercase tracking-[0.28em] text-[#C9A88B]">Opening hours</h3>
-              <p className="mt-5 text-lg leading-relaxed text-white/85 sm:text-xl">{hoursLine}</p>
-            </div>
           </div>
         </div>
       </div>

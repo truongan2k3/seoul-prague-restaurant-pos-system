@@ -478,7 +478,7 @@ export function mapSalesResponse(
     guest_name?: string | null;
     guest_phone?: string | null;
     party_size?: number | null;
-    visit_source?: "reservation" | "walk_in" | null;
+    visit_source?: "reservation" | "walk_in" | "phone_call" | "online" | null;
     service_channel?: "dine_in" | "takeaway" | null;
   }[] | null,
 ): SaleRecord[] {

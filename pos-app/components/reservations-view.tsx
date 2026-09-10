@@ -479,6 +479,14 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     void loadReservations();
   };
 
+  const handleMarkNoShow = async (row: ReservationRecord) => {
+    const confirmed = window.confirm(
+      translate("confirmMarkNoShow").replace("{name}", row.guestName),
+    );
+    if (!confirmed) return;
+    await runAction(row.id, () => markReservationNoShow(row.id));
+  };
+
   const formatDateTime = (date: Date) =>
     date.toLocaleString(language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB", {
       weekday: "short",
@@ -714,10 +722,11 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           type="button"
                           disabled={busyId === row.id}
                           onClick={() => openEditModal(row)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200"
+                          aria-label={translate("editReservation")}
+                          title={translate("editReservation")}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200 dark:hover:bg-blue-900"
                         >
                           <Pencil className="h-3.5 w-3.5" />
-                          {translate("editReservation")}
                         </button>
                       )}
                       {canConfirmReservation(row.status) && (
@@ -760,7 +769,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                         <button
                           type="button"
                           disabled={busyId === row.id}
-                          onClick={() => void runAction(row.id, () => markReservationNoShow(row.id))}
+                          onClick={() => void handleMarkNoShow(row)}
                           className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-amber-950"
                         >
                           {translate("markNoShow")}

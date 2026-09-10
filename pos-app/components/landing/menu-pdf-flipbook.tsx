@@ -123,6 +123,7 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
   const panRef = useRef({ x: 0, y: 0 });
   const pinchRef = useRef<{ distance: number; zoom: number } | null>(null);
   const dragRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  const lastClickAt = useRef(0);
   const bookSize = useBookSize();
 
   const availableLanguages = useMemo(
@@ -442,7 +443,7 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
               maxHeight={bookSize.maxHeight}
               showCover
               mobileScrollSupport={!zoomed}
-              disableFlipByClick={zoomed}
+              disableFlipByClick={true}
               className={`menu-flipbook mx-auto shadow-2xl shadow-black/60 ${
                 zoomed ? "pointer-events-none" : ""
               }`}
@@ -452,12 +453,19 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
                 <div key={`${language}-page-${index}`} className="menu-book-page bg-[#f5f0ea]">
                   <button
                     type="button"
-                    className="h-full w-full cursor-zoom-in"
+                    className="h-full w-full cursor-pointer"
                     onClick={() => {
                       if (zoomed) return;
-                      setLightboxPage(index);
+                      const now = Date.now();
+                      if (now - lastClickAt.current < 900) {
+                        lastClickAt.current = 0;
+                        setLightboxPage(index);
+                        return;
+                      }
+                      lastClickAt.current = now;
+                      flipNext();
                     }}
-                    aria-label={`Enlarge page ${index + 1}`}
+                    aria-label={`Turn or enlarge page ${index + 1}`}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -502,7 +510,7 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
         <p className="text-center text-xs text-white/40">
           {zoomed
             ? "Zoomed — drag or swipe to pan · pinch / scroll to zoom"
-            : "Scroll or pinch to zoom · click a thumbnail to jump · click a page to enlarge"}
+            : "Click to turn the page · click again to enlarge · zoom / pan in viewer"}
         </p>
       </div>
     ) : (

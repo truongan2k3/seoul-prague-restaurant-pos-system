@@ -13,6 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { uploadFileDirectToStorage } from "@/lib/website/direct-upload";
+import { ContentLayoutPicker } from "@/components/admin/website/content-layout-picker";
 import {
   CONTENT_LAYOUTS,
   createBlockImage,
@@ -241,22 +242,10 @@ function BlockEditorCard({
       {open ? (
         <div className="space-y-4 p-4">
           <Field label="Layout">
-            <select
-              className={inputClass}
+            <ContentLayoutPicker
               value={block.layout}
-              onChange={(e) =>
-                onChange({ ...block, layout: e.target.value as WebsiteContentLayout })
-              }
-            >
-              {CONTENT_LAYOUTS.map((layout) => (
-                <option key={layout.id} value={layout.id}>
-                  {layout.label}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-gray-500">
-              {CONTENT_LAYOUTS.find((row) => row.id === block.layout)?.hint}
-            </p>
+              onChange={(layout) => onChange({ ...block, layout })}
+            />
           </Field>
 
           <div className="grid gap-3 sm:grid-cols-2">

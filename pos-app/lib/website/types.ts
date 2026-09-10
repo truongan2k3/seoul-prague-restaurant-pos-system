@@ -77,6 +77,14 @@ export interface WebsiteBlockImage {
   title?: string;
   /** Optional card body when used in grid / cards layouts. */
   body?: string;
+  /** Badge / tag shown above the dish title (e.g. Signature, Chef's pick). */
+  badge?: string;
+  /** Display price string (e.g. "420 Kč" or "from 890"). */
+  price?: string;
+  ctaLabel?: string;
+  ctaHref?: string;
+  /** When false, dish is hidden on the landing page. Defaults to true. */
+  enabled?: boolean;
   objectPosition?: string;
   sortOrder: number;
 }

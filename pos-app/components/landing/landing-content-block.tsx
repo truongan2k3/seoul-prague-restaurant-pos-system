@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { LandingImage } from "@/lib/website/landing-image";
-import type { WebsiteBlockImage, WebsiteContentBlock } from "@/lib/website/types";
+import type { WebsiteBlockImage, WebsiteContentBlock, WebsiteContentLayout } from "@/lib/website/types";
 
 function Reveal({
   children,
@@ -34,8 +34,7 @@ function BlockCopy({
   block: WebsiteContentBlock;
   tone?: "default" | "overlay";
 }) {
-  const eyebrowClass =
-    tone === "overlay" ? "text-[#E8D5C4]" : "text-[#C9A88B]";
+  const eyebrowClass = tone === "overlay" ? "text-[#E8D5C4]" : "text-[#C9A88B]";
   const titleClass = tone === "overlay" ? "text-white" : "text-white";
   const bodyClass = tone === "overlay" ? "text-white/85" : "text-white/65";
 
@@ -97,29 +96,81 @@ function MediaFrame({
   );
 }
 
-function CardFromImage({
+function DishCopy({
   image,
-  className = "",
+  fallback,
+  compact = false,
 }: {
   image: WebsiteBlockImage;
-  className?: string;
+  fallback?: Pick<WebsiteContentBlock, "eyebrow" | "title" | "body" | "ctaLabel" | "ctaHref">;
+  compact?: boolean;
 }) {
+  const badge = image.badge || fallback?.eyebrow;
+  const title = image.title || image.alt || fallback?.title || "Featured";
+  const body = image.body || fallback?.body;
+  const price = image.price;
+  const ctaLabel = image.ctaLabel || fallback?.ctaLabel;
+  const ctaHref = image.ctaHref || fallback?.ctaHref;
+
   return (
-    <div className={`overflow-hidden border border-white/10 bg-[#121214] ${className}`}>
-      <MediaFrame image={image} sizes="(max-width: 768px) 100vw, 33vw" />
-      {(image.title || image.body || image.alt) && (
-        <div className="p-5">
-          {image.title ? (
-            <h4 className="landing-serif text-xl text-white">{image.title}</h4>
-          ) : image.alt ? (
-            <h4 className="landing-serif text-xl text-white">{image.alt}</h4>
-          ) : null}
-          {image.body ? (
-            <p className="mt-2 text-sm leading-relaxed text-white/60">{image.body}</p>
+    <div className={compact ? "flex min-h-0 flex-1 flex-col" : ""}>
+      {badge ? (
+        <p className="text-[11px] uppercase tracking-[0.28em] text-[#C9A88B]">{badge}</p>
+      ) : null}
+      <h3
+        className={`landing-serif text-white ${
+          compact ? "mt-2 text-xl lg:text-2xl" : "mt-2 text-2xl lg:text-3xl"
+        }`}
+      >
+        {title}
+      </h3>
+      {body ? (
+        <p
+          className={`mt-3 leading-relaxed text-white/60 ${
+            compact ? "line-clamp-4 text-sm" : "text-sm sm:text-base"
+          }`}
+        >
+          {body}
+        </p>
+      ) : null}
+      {(price || (ctaLabel && ctaHref)) && (
+        <div className={`mt-auto flex flex-wrap items-center gap-4 ${compact ? "pt-4" : "pt-5"}`}>
+          {price ? <p className="text-sm font-medium tracking-wide text-[#E8D5C4]">{price}</p> : null}
+          {ctaLabel && ctaHref ? (
+            <Link
+              href={ctaHref}
+              className="inline-flex border border-white/25 px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-white/90 transition hover:border-[#C9A88B] hover:text-[#C9A88B]"
+            >
+              {ctaLabel}
+            </Link>
           ) : null}
         </div>
       )}
     </div>
+  );
+}
+
+/** Equal-height dish card — image top, copy bottom. Stable on all breakpoints. */
+export function SignatureDishCard({
+  image,
+  fallback,
+  className = "",
+  sizes = "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw",
+}: {
+  image: WebsiteBlockImage;
+  fallback?: Pick<WebsiteContentBlock, "eyebrow" | "title" | "body" | "ctaLabel" | "ctaHref">;
+  className?: string;
+  sizes?: string;
+}) {
+  return (
+    <article
+      className={`flex h-full min-w-0 flex-col overflow-hidden border border-white/10 bg-[#121214] ${className}`}
+    >
+      <MediaFrame image={image} className="aspect-[4/3] w-full shrink-0" sizes={sizes} />
+      <div className="flex flex-1 flex-col p-5 sm:p-6">
+        <DishCopy image={image} fallback={fallback} compact />
+      </div>
+    </article>
   );
 }
 
@@ -132,11 +183,20 @@ function SplitLayout({
 }) {
   const image = block.images[0];
   const media = (
-    <MediaFrame image={image} className="aspect-[3/4] lg:aspect-[4/5]" sizes="(max-width: 1024px) 100vw, 50vw" />
+    <MediaFrame
+      image={image}
+      className="aspect-[4/5] w-full lg:aspect-[4/5]"
+      sizes="(max-width: 1024px) 100vw, 50vw"
+    />
   );
-  const copy = <BlockCopy block={block} />;
+  const copy =
+    image && (image.title || image.body || image.badge || image.price) ? (
+      <DishCopy image={image} fallback={block} />
+    ) : (
+      <BlockCopy block={block} />
+    );
   return (
-    <Reveal className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
+    <Reveal className="grid items-center gap-8 lg:grid-cols-2 lg:gap-14">
       {imageFirst ? (
         <>
           {media}
@@ -161,7 +221,12 @@ function StackLayout({
 }) {
   const image = block.images[0];
   const media = <MediaFrame image={image} className="aspect-[16/10]" sizes="100vw" />;
-  const copy = <BlockCopy block={block} />;
+  const copy =
+    image && (image.title || image.body || image.badge || image.price) ? (
+      <DishCopy image={image} fallback={block} />
+    ) : (
+      <BlockCopy block={block} />
+    );
   return (
     <Reveal className="mx-auto max-w-4xl space-y-8">
       {imageFirst ? (
@@ -191,7 +256,11 @@ function OverlayLayout({ block }: { block: WebsiteContentBlock }) {
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-black/20" />
       <div className="relative z-10 flex min-h-[420px] items-end p-8 lg:min-h-[560px] lg:p-14">
         <div className="max-w-2xl">
-          <BlockCopy block={block} tone="overlay" />
+          {image && (image.title || image.badge) ? (
+            <DishCopy image={image} fallback={block} />
+          ) : (
+            <BlockCopy block={block} tone="overlay" />
+          )}
         </div>
       </div>
     </Reveal>
@@ -199,7 +268,7 @@ function OverlayLayout({ block }: { block: WebsiteContentBlock }) {
 }
 
 function ImageGridLayout({ block }: { block: WebsiteContentBlock }) {
-  const images = block.images.length > 0 ? block.images : [];
+  const images = block.images.filter((img) => img.enabled !== false);
   return (
     <Reveal className="space-y-8">
       {(block.eyebrow || block.title || block.body) && (
@@ -228,86 +297,211 @@ function CardsLayout({
   block: WebsiteContentBlock;
   columns: 2 | 3;
 }) {
-  const images = block.images;
+  const images = block.images.filter((img) => img.enabled !== false);
   return (
     <Reveal className="space-y-10">
-      {(block.eyebrow || block.title || block.body) && (
+      {(block.eyebrow || block.title || block.body) &&
+      !(images.length > 0 && images.some((img) => img.title)) ? (
         <div className="max-w-2xl">
           <BlockCopy block={block} />
         </div>
-      )}
+      ) : null}
       <div
-        className={`grid gap-6 ${
-          columns === 2 ? "md:grid-cols-2" : "md:grid-cols-2 lg:grid-cols-3"
+        className={`grid auto-rows-fr gap-5 sm:gap-6 ${
+          columns === 2
+            ? "sm:grid-cols-2"
+            : "sm:grid-cols-2 lg:grid-cols-3"
         }`}
       >
         {images.map((image) => (
-          <CardFromImage key={image.id} image={image} />
+          <SignatureDishCard
+            key={image.id}
+            image={image}
+            fallback={block}
+            sizes={
+              columns === 2
+                ? "(max-width: 640px) 100vw, 50vw"
+                : "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            }
+          />
         ))}
       </div>
     </Reveal>
   );
 }
 
+/**
+ * Featured large dish + supporting cards.
+ * Desktop: featured spans 2 cols / 2 rows so height matches the first two support cards.
+ * Extra dishes wrap into an equal card row below. Mobile: uniform stacked cards.
+ */
 function FeaturedSupportLayout({ block }: { block: WebsiteContentBlock }) {
-  const [featured, ...rest] = block.images;
+  const images = block.images.filter((img) => img.enabled !== false);
+  const [featured, ...rest] = images;
+  const side = rest.slice(0, 2);
+  const overflow = rest.slice(2);
+
+  if (!featured) {
+    return (
+      <Reveal>
+        <BlockCopy block={block} />
+      </Reveal>
+    );
+  }
+
+  // Mobile / tablet: equal cards — avoids the broken desktop asymmetry when scaled down.
   return (
-    <Reveal className="space-y-8">
-      {(block.eyebrow || block.title || block.body) && !featured?.title ? (
+    <Reveal className="space-y-6">
+      {(block.eyebrow || block.title || block.body) && !featured.title ? (
         <div className="max-w-2xl">
           <BlockCopy block={block} />
         </div>
       ) : null}
-      <div className="grid gap-6 md:grid-cols-3 md:items-start">
-        {featured ? (
-          <div className="overflow-hidden border border-white/10 bg-[#121214] md:col-span-2 md:grid md:grid-cols-2">
+
+      {/* < lg: equal card stack / 2-col */}
+      <div className="grid auto-rows-fr gap-5 sm:grid-cols-2 sm:gap-6 lg:hidden">
+        {images.map((image) => (
+          <SignatureDishCard key={image.id} image={image} fallback={block} />
+        ))}
+      </div>
+
+      {/* lg+: featured + up to 2 support, stretched */}
+      <div
+        className={`hidden lg:grid lg:gap-6 ${
+          side.length === 0
+            ? "lg:grid-cols-1"
+            : "lg:grid-cols-3 lg:grid-rows-2"
+        }`}
+      >
+        <article
+          className={`flex min-h-0 flex-col overflow-hidden border border-white/10 bg-[#121214] lg:flex-row ${
+            side.length === 0 ? "min-h-[320px]" : "lg:col-span-2 lg:row-span-2"
+          }`}
+        >
+          <div
+            className={`relative min-h-[280px] w-full shrink-0 ${
+              side.length === 0 ? "lg:w-[48%]" : "lg:h-full lg:w-[52%]"
+            }`}
+          >
             <MediaFrame
               image={featured}
-              className="aspect-[4/3] md:aspect-auto md:min-h-[280px] md:h-full"
-              sizes="(max-width: 768px) 100vw, 50vw"
+              className="absolute inset-0 aspect-auto h-full w-full"
+              sizes="(max-width: 1280px) 55vw, 40vw"
             />
-            <div className="flex flex-col justify-center p-6 md:p-8">
-              {block.eyebrow ? (
-                <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">{block.eyebrow}</p>
-              ) : null}
-              <h3 className="landing-serif mt-2 text-2xl text-white lg:text-3xl">
-                {featured.title || block.title || "Featured"}
-              </h3>
-              <p className="mt-3 text-sm leading-relaxed text-white/60">
-                {featured.body || block.body}
-              </p>
-            </div>
           </div>
-        ) : (
-          <div className="md:col-span-2">
-            <BlockCopy block={block} />
+          <div className="flex flex-1 flex-col justify-center p-7 xl:p-10">
+            <DishCopy image={featured} fallback={block} />
           </div>
-        )}
-        <div className="grid gap-6">
-          {rest.map((image) => (
-            <CardFromImage key={image.id} image={image} />
+        </article>
+        {side.map((image) => (
+          <SignatureDishCard
+            key={image.id}
+            image={image}
+            fallback={block}
+            className="min-h-0"
+            sizes="(max-width: 1280px) 30vw, 22vw"
+          />
+        ))}
+        {side.length === 1 ? <div className="hidden min-h-0 lg:block" aria-hidden /> : null}
+      </div>
+
+      {overflow.length > 0 ? (
+        <div className="hidden auto-rows-fr gap-6 sm:grid-cols-2 lg:grid lg:grid-cols-3">
+          {overflow.map((image) => (
+            <SignatureDishCard key={image.id} image={image} fallback={block} />
           ))}
         </div>
-      </div>
+      ) : null}
     </Reveal>
   );
 }
 
-/** Renders one reusable content component with its chosen layout. */
-export function LandingContentBlock({ block }: { block: WebsiteContentBlock }) {
-  if (!block.enabled) return null;
+/** Renders a Signature dish collection with a chosen layout. */
+export function SignatureDishCollection({
+  dishes,
+  layout,
+  fallback,
+}: {
+  dishes: WebsiteBlockImage[];
+  layout: WebsiteContentLayout;
+  fallback?: Pick<WebsiteContentBlock, "eyebrow" | "title" | "body" | "ctaLabel" | "ctaHref">;
+}) {
+  const visible = dishes.filter((d) => d.enabled !== false);
+  if (visible.length === 0) return null;
 
-  switch (block.layout) {
+  const block: WebsiteContentBlock = {
+    id: "signature-collection",
+    enabled: true,
+    sortOrder: 0,
+    layout,
+    eyebrow: fallback?.eyebrow,
+    title: fallback?.title,
+    body: fallback?.body,
+    ctaLabel: fallback?.ctaLabel,
+    ctaHref: fallback?.ctaHref,
+    images: visible,
+  };
+
+  switch (layout) {
     case "image_left_text_right":
-      return <SplitLayout block={block} imageFirst />;
+      return (
+        <div className="space-y-14 lg:space-y-20">
+          {visible.map((image) => (
+            <SplitLayout
+              key={image.id}
+              block={{ ...block, images: [image], title: image.title, body: image.body, eyebrow: image.badge }}
+              imageFirst
+            />
+          ))}
+        </div>
+      );
     case "text_left_image_right":
-      return <SplitLayout block={block} imageFirst={false} />;
+      return (
+        <div className="space-y-14 lg:space-y-20">
+          {visible.map((image) => (
+            <SplitLayout
+              key={image.id}
+              block={{ ...block, images: [image], title: image.title, body: image.body, eyebrow: image.badge }}
+              imageFirst={false}
+            />
+          ))}
+        </div>
+      );
     case "image_top_text_bottom":
-      return <StackLayout block={block} imageFirst />;
+      return (
+        <div className="space-y-12 lg:space-y-16">
+          {visible.map((image) => (
+            <StackLayout
+              key={image.id}
+              block={{ ...block, images: [image], title: image.title, body: image.body, eyebrow: image.badge }}
+              imageFirst
+            />
+          ))}
+        </div>
+      );
     case "text_top_image_bottom":
-      return <StackLayout block={block} imageFirst={false} />;
+      return (
+        <div className="space-y-12 lg:space-y-16">
+          {visible.map((image) => (
+            <StackLayout
+              key={image.id}
+              block={{ ...block, images: [image], title: image.title, body: image.body, eyebrow: image.badge }}
+              imageFirst={false}
+            />
+          ))}
+        </div>
+      );
     case "full_width_overlay":
-      return <OverlayLayout block={block} />;
+      return (
+        <div className="space-y-8">
+          {visible.map((image) => (
+            <OverlayLayout
+              key={image.id}
+              block={{ ...block, images: [image], title: image.title, body: image.body, eyebrow: image.badge }}
+            />
+          ))}
+        </div>
+      );
     case "image_grid":
       return <ImageGridLayout block={block} />;
     case "cards_2":
@@ -316,6 +510,42 @@ export function LandingContentBlock({ block }: { block: WebsiteContentBlock }) {
       return <CardsLayout block={block} columns={3} />;
     case "featured_support":
       return <FeaturedSupportLayout block={block} />;
+    default:
+      return <CardsLayout block={block} columns={3} />;
+  }
+}
+
+/** Renders one reusable content component with its chosen layout. */
+export function LandingContentBlock({ block }: { block: WebsiteContentBlock }) {
+  if (!block.enabled) return null;
+
+  const images = block.images.filter((img) => img.enabled !== false);
+  const dishLike =
+    images.length > 1 ||
+    Boolean(images[0]?.badge || images[0]?.price || images[0]?.title);
+
+  // Multi-image blocks always use the collection renderer for stable grids.
+  if (images.length > 1 || block.layout === "cards_2" || block.layout === "cards_3" || block.layout === "featured_support") {
+    return <SignatureDishCollection dishes={images} layout={block.layout} fallback={block} />;
+  }
+
+  switch (block.layout) {
+    case "image_left_text_right":
+      return <SplitLayout block={block} imageFirst />;
+    case "text_left_image_right":
+      return <SplitLayout block={block} imageFirst={false} />;
+    case "image_top_text_bottom":
+      return dishLike && images[0] ? (
+        <SignatureDishCollection dishes={images} layout={block.layout} fallback={block} />
+      ) : (
+        <StackLayout block={block} imageFirst />
+      );
+    case "text_top_image_bottom":
+      return <StackLayout block={block} imageFirst={false} />;
+    case "full_width_overlay":
+      return <OverlayLayout block={block} />;
+    case "image_grid":
+      return <ImageGridLayout block={block} />;
     default:
       return <SplitLayout block={block} imageFirst />;
   }

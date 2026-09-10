@@ -15,6 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { SectionBlocksEditor } from "@/components/admin/website/section-blocks-editor";
+import { SignatureDishesEditor } from "@/components/admin/website/signature-dishes-editor";
 import { InlinePlusUpload, uploadWebsiteSlotFile } from "@/components/admin/website/inline-plus-upload";
 import { uploadFileDirectToStorage } from "@/lib/website/direct-upload";
 import {
@@ -480,8 +481,7 @@ export function WebsiteSectionBuilder({ initial }: { initial: WebsiteContent }) 
                 </div>
               ) : null}
 
-              {(selected.type === "signature" ||
-                selected.type === "experience" ||
+              {(selected.type === "experience" ||
                 selected.type === "content" ||
                 selected.type === "custom_text" ||
                 selected.type === "custom_cta" ||
@@ -579,12 +579,15 @@ export function WebsiteSectionBuilder({ initial }: { initial: WebsiteContent }) 
               )}
 
               {selected.type === "signature" ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
-                  Without components, Signature shows featured menu items. Manage featured dishes in{" "}
-                  <Link href="/admin/menu" className="underline">
-                    Menu
-                  </Link>
-                  , or add components below for full layout control.
+                <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+                  <SignatureDishesEditor
+                    content={initial}
+                    embedded
+                    section={selected}
+                    onSectionChange={(next) => {
+                      patchSection(selected.id, { props: next.props });
+                    }}
+                  />
                 </div>
               ) : null}
 
@@ -628,15 +631,13 @@ export function WebsiteSectionBuilder({ initial }: { initial: WebsiteContent }) 
                 </div>
               )}
 
-              {BLOCK_CAPABLE_SECTION_TYPES.includes(selected.type) ? (
+              {BLOCK_CAPABLE_SECTION_TYPES.includes(selected.type) &&
+              selected.type !== "signature" ? (
                 <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
                   <SectionBlocksEditor
                     blocks={selected.props?.blocks ?? []}
                     defaultLayout={
-                      selected.props?.defaultLayout ??
-                      (selected.type === "signature"
-                        ? "featured_support"
-                        : "image_left_text_right")
+                      selected.props?.defaultLayout ?? "image_left_text_right"
                     }
                     onChange={(blocks) => patchSectionProps(selected.id, { blocks })}
                   />

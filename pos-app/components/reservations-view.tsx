@@ -460,6 +460,11 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   };
 
   const handleCancelReservation = async (row: ReservationRecord) => {
+    const confirmed = window.confirm(
+      translate("confirmCancelReservation").replace("{name}", row.guestName),
+    );
+    if (!confirmed) return;
+
     const snapshot = await fetchReservationSnapshot(row.id);
     if (!snapshot) {
       setError(translate("resUndoFailed"));

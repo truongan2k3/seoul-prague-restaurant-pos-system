@@ -43,7 +43,7 @@ type ScreenAlert =
   | { kind: "cancelled"; reservation: ReservationRecord }
   | { kind: "no_show"; reservation: ReservationRecord };
 
-const DEDUPE_MS = 8_000;
+const DEDUPE_MS = 12_000;
 /** Phones often suspend realtime while locked — poll + resume catch-up. */
 const RESUME_POLL_MS = 25_000;
 
@@ -230,6 +230,9 @@ export function ReservationIncomingListener() {
 
       const kind = classifyReservationUpdate(previous, reservation);
       if (!kind) return;
+      // Staff "+ New reservation" often emits INSERT then a quick UPDATE echo —
+      // keep only the "new" alert, not a second "updated" popup.
+      if (kind === "updated" && wasRecentlyAlerted("new", reservation.id)) return;
       if (kind === "updated") {
         enqueueAlert({
           kind: "updated",
@@ -244,7 +247,7 @@ export function ReservationIncomingListener() {
       }
       enqueueAlert({ kind: toScreenKind(kind), reservation } as ScreenAlert);
     },
-    [enqueueAlert],
+    [enqueueAlert, wasRecentlyAlerted],
   );
 
   const syncFromServer = useCallback(

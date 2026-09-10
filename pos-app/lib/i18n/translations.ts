@@ -246,6 +246,7 @@ const en = {
   walkIn: "Walk-in",
   confirmReservation: "Confirm",
   cancelReservation: "Cancel booking",
+  confirmCancelReservation: "Cancel booking for {name}? This cannot be undone easily.",
   markNoShow: "No show",
   checkIn: "Check in",
   assignTable: "Assign table",

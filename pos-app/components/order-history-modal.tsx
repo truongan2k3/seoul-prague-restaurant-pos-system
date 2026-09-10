@@ -208,7 +208,7 @@ export function OrderHistoryModal({
                 {translate("guestInfo")}: {sale.guestName}
                 {sale.partySize ? ` · ${sale.partySize} pax` : ""}
                 {sale.visitSource
-                  ? ` · ${translate(sale.visitSource === "walk_in" ? "resSourceWalkIn" : "resSourceReservation")}`
+                  ? ` · ${translate(sale.visitSource === "phone_call" ? "resSourcePhoneCall" : "resSourceOnline")}`
                   : ""}
                 {sale.guestPhone ? ` · ${sale.guestPhone}` : ""}
               </p>

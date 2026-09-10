@@ -512,25 +512,6 @@ export async function completeReservationForTable(tableId: string, reservationId
   });
 }
 
-export async function createWalkIn(input: {
-  partySize: number;
-  tableId: string;
-  guestName?: string;
-  staffId?: string;
-  staffName?: string;
-}) {
-  return createReservation({
-    guestName: input.guestName?.trim() || "Walk-in",
-    partySize: input.partySize,
-    reservedAt: new Date(),
-    source: "walk_in",
-    tableId: input.tableId,
-    status: "checked_in",
-    staffId: input.staffId,
-    staffName: input.staffName,
-  });
-}
-
 interface ReservationChangeHandlers {
   onChange?: () => void;
   onInsert?: (reservation: ReservationRecord) => void;

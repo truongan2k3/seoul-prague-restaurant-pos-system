@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapPin, ChevronLeft, ChevronRight, Pencil, Plus, UserPlus } from "lucide-react";
+import { MapPin, ChevronLeft, ChevronRight, Pencil, Plus } from "lucide-react";
 import { GuestReturningBadge } from "@/components/guest-returning-badge";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { Modal } from "@/components/modal";
@@ -49,7 +49,6 @@ import {
   cancelReservation,
   checkInReservationWithTable,
   createReservation,
-  createWalkIn,
   fetchReservationSnapshot,
   fetchReservations,
   fetchTableSnapshot,
@@ -147,7 +146,6 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showNewModal, setShowNewModal] = useState(false);
-  const [showWalkInModal, setShowWalkInModal] = useState(false);
   const [assignTarget, setAssignTarget] = useState<ReservationRecord | null>(null);
   const [checkInTarget, setCheckInTarget] = useState<ReservationRecord | null>(null);
   const [editTarget, setEditTarget] = useState<ReservationRecord | null>(null);
@@ -163,9 +161,6 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const [formTableId, setFormTableId] = useState("");
   const [formEventType, setFormEventType] = useState("");
   const [formSource, setFormSource] = useState<StaffBookingSource>("phone_call");
-  const [walkInPartySize, setWalkInPartySize] = useState(2);
-  const [walkInName, setWalkInName] = useState("");
-  const [walkInTableId, setWalkInTableId] = useState("");
   const [assignTableId, setAssignTableId] = useState("");
   const [checkInTableId, setCheckInTableId] = useState("");
   const [undoEntry, setUndoEntry] = useState<ReservationUndoEntry | null>(null);
@@ -363,27 +358,6 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     void loadReservations();
   };
 
-  const handleWalkIn = async () => {
-    if (!walkInTableId) return;
-    setBusyId("walkin");
-    const { error: createError } = await createWalkIn({
-      partySize: Math.max(1, walkInPartySize),
-      tableId: walkInTableId,
-      guestName: walkInName.trim() || undefined,
-      staffId: currentStaffUser?.id,
-      staffName: currentStaffUser?.name,
-    });
-    setBusyId(null);
-    if (createError) {
-      setError(createError.message);
-      return;
-    }
-    setShowWalkInModal(false);
-    setWalkInName("");
-    setWalkInTableId("");
-    void loadReservations();
-  };
-
   const openEditModal = (row: ReservationRecord) => {
     setEditTarget(row);
     setFormGuestName(row.guestName);
@@ -534,14 +508,6 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <button
             type="button"
-            onClick={() => setShowWalkInModal(true)}
-            className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium dark:border-gray-700 sm:gap-1.5 sm:rounded-lg sm:px-2.5 sm:py-1.5 sm:text-xs"
-          >
-            <UserPlus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            <span className="hidden xs:inline sm:inline">{translate("walkIn")}</span>
-          </button>
-          <button
-            type="button"
             onClick={() => {
               setFormSource("phone_call");
               setShowNewModal(true);
@@ -651,7 +617,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             </div>
           </section>
 
-          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
+          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {(
               [
                 { label: "resTotalGuests" as const, value: stats.totalGuests },
@@ -659,7 +625,6 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                 { label: "resPending" as const, value: stats.pendingConfirmation },
                 { label: "resLate" as const, value: stats.late },
                 { label: "resCheckedIn" as const, value: stats.checkedIn },
-                { label: "resWalkIns" as const, value: stats.walkIns },
                 { label: "resNoShows" as const, value: stats.noShows },
               ] as const
             ).map(({ label, value }) => (
@@ -708,7 +673,6 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           source={row.source}
                           phoneLabel={translate("resSourcePhoneCall")}
                           onlineLabel={translate("resSourceOnline")}
-                          walkInLabel={translate("resSourceWalkIn")}
                         />
                       </div>
                       <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
@@ -972,34 +936,6 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             </button>
           </div>
         ) : null}
-      </Modal>
-
-      <Modal open={showWalkInModal} onClose={() => setShowWalkInModal(false)} title={translate("walkIn")}>
-        <div className="space-y-3">
-          <p className="text-sm text-gray-500">{translate("visitSource")}: {translate("resSourceWalkIn")}</p>
-          <label className="block text-sm">
-            <span className="text-gray-500">{translate("guestName")}</span>
-            <input value={walkInName} onChange={(e) => setWalkInName(e.target.value)} placeholder="Walk-in" className="pos-input mt-1" />
-          </label>
-          <PartySizeStepper
-            value={walkInPartySize}
-            onChange={setWalkInPartySize}
-            max={settings.reservationMaxGuestsPerSlot || 50}
-            label={translate("partySize")}
-          />
-          <label className="block text-sm">
-            <span className="text-gray-500">{translate("selectTable")}</span>
-            <select value={walkInTableId} onChange={(e) => setWalkInTableId(e.target.value)} className="pos-input mt-1">
-              <option value="">{translate("selectEmptyTable")}</option>
-              {emptyTables.map((table) => (
-                <option key={table.id} value={table.id}>{translate("table")} {table.label}</option>
-              ))}
-            </select>
-          </label>
-          <button type="button" disabled={busyId === "walkin" || !walkInTableId} onClick={() => void handleWalkIn()} className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white disabled:opacity-50">
-            {translate("checkIn")}
-          </button>
-        </div>
       </Modal>
 
       <Modal open={assignTarget !== null} onClose={() => setAssignTarget(null)} title={translate("assignTable")}>

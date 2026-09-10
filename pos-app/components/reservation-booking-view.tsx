@@ -377,15 +377,15 @@ export function ReservationBookingView({ website }: { website?: WebsiteContent }
                 />
               </label>
 
-              <div className="grid gap-5 sm:grid-cols-2">
-                <label className="block text-sm">
+              <div className="grid gap-5 sm:grid-cols-2 sm:items-end">
+                <label className="flex flex-col text-sm">
                   <span className="font-medium text-white/90">
                     {copy.emailAddress}
                     <RequiredMark show={required.email} />
                   </span>
-                  {emailHint ? (
-                    <span className="mt-1 block text-xs text-white/45">{emailHint}</span>
-                  ) : null}
+                  <span className="mt-1 min-h-[1.25rem] text-xs text-white/45">
+                    {emailHint || "\u00A0"}
+                  </span>
                   <input
                     type="email"
                     value={email}
@@ -395,10 +395,13 @@ export function ReservationBookingView({ website }: { website?: WebsiteContent }
                     required={required.email}
                   />
                 </label>
-                <label className="block text-sm">
+                <label className="flex flex-col text-sm">
                   <span className="font-medium text-white/90">
                     {copy.phoneNumber}
                     <RequiredMark show={required.phone} />
+                  </span>
+                  <span className="mt-1 min-h-[1.25rem] text-xs text-white/45" aria-hidden>
+                    {"\u00A0"}
                   </span>
                   <input
                     type="tel"

@@ -20,6 +20,7 @@ let pdfWorkerReady = false;
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
+const LIGHTBOX_MAX_ZOOM = 5;
 const ZOOM_STEP = 0.15;
 
 function proxyPdfUrl(language: MenuPdfLanguage): string {
@@ -102,8 +103,280 @@ function useBookSize() {
   return size;
 }
 
-function clampZoom(value: number) {
-  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
+function clampZoom(value: number, max = MAX_ZOOM) {
+  return Math.min(max, Math.max(MIN_ZOOM, value));
+}
+
+/** Fullscreen page detail: free zoom/pan + prev/next. */
+function MenuPageLightbox({
+  pages,
+  pageIndex,
+  onClose,
+  onChangePage,
+  label,
+}: {
+  pages: string[];
+  pageIndex: number;
+  onClose: () => void;
+  onChangePage: (index: number) => void;
+  label?: string;
+}) {
+  const stageRef = useRef<HTMLDivElement>(null);
+  const panRef = useRef({ x: 0, y: 0 });
+  const pinchRef = useRef<{ distance: number; zoom: number } | null>(null);
+  const dragRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const zoomed = zoom > 1.02;
+  const src = pages[pageIndex];
+
+  const resetView = useCallback(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+    panRef.current = { x: 0, y: 0 };
+  }, []);
+
+  useEffect(() => {
+    resetView();
+  }, [pageIndex, resetView]);
+
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+      if (event.key === "ArrowLeft") onChangePage(Math.max(0, pageIndex - 1));
+      if (event.key === "ArrowRight") onChangePage(Math.min(pages.length - 1, pageIndex + 1));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, onChangePage, pageIndex, pages.length]);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const delta = event.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+      setZoom((current) => {
+        const next = clampZoom(Number((current + delta).toFixed(2)), LIGHTBOX_MAX_ZOOM);
+        if (next <= 1) {
+          setPan({ x: 0, y: 0 });
+          panRef.current = { x: 0, y: 0 };
+        }
+        return next;
+      });
+    };
+
+    stage.addEventListener("wheel", onWheel, { passive: false });
+    return () => stage.removeEventListener("wheel", onWheel);
+  }, []);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    const distance = (touches: TouchList) => {
+      const [a, b] = [touches[0], touches[1]];
+      return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    };
+
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length === 2) {
+        pinchRef.current = { distance: distance(event.touches), zoom };
+        dragRef.current = null;
+        return;
+      }
+      if (event.touches.length === 1 && zoom > 1.02) {
+        const touch = event.touches[0];
+        dragRef.current = {
+          x: touch.clientX,
+          y: touch.clientY,
+          panX: panRef.current.x,
+          panY: panRef.current.y,
+        };
+      }
+    };
+
+    const onTouchMove = (event: TouchEvent) => {
+      if (event.touches.length === 2 && pinchRef.current) {
+        event.preventDefault();
+        const ratio = distance(event.touches) / pinchRef.current.distance;
+        const next = clampZoom(pinchRef.current.zoom * ratio, LIGHTBOX_MAX_ZOOM);
+        setZoom(next);
+        if (next <= 1) {
+          setPan({ x: 0, y: 0 });
+          panRef.current = { x: 0, y: 0 };
+        }
+        return;
+      }
+      if (event.touches.length === 1 && dragRef.current && zoom > 1.02) {
+        event.preventDefault();
+        const touch = event.touches[0];
+        const next = {
+          x: dragRef.current.panX + (touch.clientX - dragRef.current.x),
+          y: dragRef.current.panY + (touch.clientY - dragRef.current.y),
+        };
+        panRef.current = next;
+        setPan(next);
+      }
+    };
+
+    const onTouchEnd = () => {
+      pinchRef.current = null;
+      dragRef.current = null;
+    };
+
+    stage.addEventListener("touchstart", onTouchStart, { passive: true });
+    stage.addEventListener("touchmove", onTouchMove, { passive: false });
+    stage.addEventListener("touchend", onTouchEnd);
+    stage.addEventListener("touchcancel", onTouchEnd);
+    return () => {
+      stage.removeEventListener("touchstart", onTouchStart);
+      stage.removeEventListener("touchmove", onTouchMove);
+      stage.removeEventListener("touchend", onTouchEnd);
+      stage.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, [zoom]);
+
+  if (!src) return null;
+
+  const zoomIn = () =>
+    setZoom((value) => clampZoom(Number((value + ZOOM_STEP).toFixed(2)), LIGHTBOX_MAX_ZOOM));
+  const zoomOut = () =>
+    setZoom((value) => {
+      const next = clampZoom(Number((value - ZOOM_STEP).toFixed(2)), LIGHTBOX_MAX_ZOOM);
+      if (next <= 1) {
+        setPan({ x: 0, y: 0 });
+        panRef.current = { x: 0, y: 0 };
+      }
+      return next;
+    });
+
+  return (
+    <div className="fixed inset-0 z-[90] flex flex-col bg-black/95" role="dialog" aria-modal="true">
+      <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 sm:px-6">
+        <p className="truncate text-sm text-white/70">
+          {label ? `${label} · ` : ""}
+          {pageIndex + 1} / {pages.length}
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-label="Zoom out"
+            disabled={zoom <= MIN_ZOOM}
+            onClick={zoomOut}
+            className="rounded-full border border-white/25 p-2.5 text-white hover:bg-white/10 disabled:opacity-40"
+          >
+            <ZoomOut className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={resetView}
+            className="min-w-[4rem] rounded-full border border-white/25 px-3 py-2 text-xs font-semibold tabular-nums text-white/85 hover:bg-white/10"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <button
+            type="button"
+            aria-label="Zoom in"
+            disabled={zoom >= LIGHTBOX_MAX_ZOOM}
+            onClick={zoomIn}
+            className="rounded-full border border-white/25 p-2.5 text-white hover:bg-white/10 disabled:opacity-40"
+          >
+            <ZoomIn className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-white/30 px-4 py-2 text-xs uppercase tracking-[0.14em] text-white hover:bg-white/10"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+
+      <div
+        ref={stageRef}
+        className={`relative min-h-0 flex-1 touch-none overflow-hidden ${
+          zoomed ? "cursor-grab active:cursor-grabbing" : "cursor-default"
+        }`}
+        onPointerDown={(event) => {
+          if (!zoomed || event.pointerType === "touch") return;
+          dragRef.current = {
+            x: event.clientX,
+            y: event.clientY,
+            panX: panRef.current.x,
+            panY: panRef.current.y,
+          };
+          (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          if (!dragRef.current || !zoomed || event.pointerType === "touch") return;
+          const next = {
+            x: dragRef.current.panX + (event.clientX - dragRef.current.x),
+            y: dragRef.current.panY + (event.clientY - dragRef.current.y),
+          };
+          panRef.current = next;
+          setPan(next);
+        }}
+        onPointerUp={() => {
+          dragRef.current = null;
+        }}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) onClose();
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={`Menu page ${pageIndex + 1} enlarged`}
+          className="absolute left-1/2 top-1/2 max-h-[min(92vh,100%)] max-w-[min(96vw,100%)] origin-center object-contain shadow-2xl will-change-transform select-none"
+          style={{
+            transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${zoom})`,
+            transition: dragRef.current ? undefined : "transform 160ms ease-out",
+          }}
+          draggable={false}
+        />
+
+        <button
+          type="button"
+          aria-label="Previous page"
+          disabled={pageIndex <= 0}
+          onClick={(event) => {
+            event.stopPropagation();
+            onChangePage(pageIndex - 1);
+          }}
+          className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/30 bg-black/50 p-3 text-white backdrop-blur-sm hover:bg-black/70 disabled:opacity-30 sm:left-4 sm:p-3.5"
+        >
+          <ChevronLeft className="h-6 w-6" />
+        </button>
+        <button
+          type="button"
+          aria-label="Next page"
+          disabled={pageIndex >= pages.length - 1}
+          onClick={(event) => {
+            event.stopPropagation();
+            onChangePage(pageIndex + 1);
+          }}
+          className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/30 bg-black/50 p-3 text-white backdrop-blur-sm hover:bg-black/70 disabled:opacity-30 sm:right-4 sm:p-3.5"
+        >
+          <ChevronRight className="h-6 w-6" />
+        </button>
+      </div>
+
+      <p className="shrink-0 px-4 py-3 text-center text-xs text-white/45">
+        Pinch or scroll to zoom · drag to pan · arrows change page
+      </p>
+    </div>
+  );
 }
 
 interface MenuPdfFlipbookProps {
@@ -123,7 +396,6 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
   const panRef = useRef({ x: 0, y: 0 });
   const pinchRef = useRef<{ distance: number; zoom: number } | null>(null);
   const dragRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
-  const lastClickAt = useRef(0);
   const bookSize = useBookSize();
 
   const availableLanguages = useMemo(
@@ -302,6 +574,12 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
       return next;
     });
 
+  const openLightbox = (index: number) => {
+    if (index < 0 || index >= pages.length) return;
+    setPageIndex(index);
+    setLightboxPage(index);
+  };
+
   const goToPage = (index: number) => {
     if (index < 0 || index >= pages.length) return;
     try {
@@ -310,6 +588,7 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
       // ignore when flipbook is not ready
     }
     setPageIndex(index);
+    setLightboxPage((current) => (current == null ? current : index));
   };
 
   const flipPrev = () => {
@@ -358,12 +637,12 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
       </button>
       <button
         type="button"
-        aria-label={expanded ? "Exit large view" : "Large view"}
-        onClick={() => setExpanded((value) => !value)}
+        aria-label="Open enlarged page"
+        onClick={() => openLightbox(pageIndex)}
         className="inline-flex items-center gap-2 rounded-full border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/85 hover:bg-white/10"
       >
-        {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-        {expanded ? "Exit" : "Large view"}
+        <Maximize2 className="h-4 w-4" />
+        Enlarge
       </button>
     </div>
   );
@@ -453,19 +732,12 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
                 <div key={`${language}-page-${index}`} className="menu-book-page bg-[#f5f0ea]">
                   <button
                     type="button"
-                    className="h-full w-full cursor-pointer"
+                    className="h-full w-full cursor-zoom-in"
                     onClick={() => {
                       if (zoomed) return;
-                      const now = Date.now();
-                      if (now - lastClickAt.current < 900) {
-                        lastClickAt.current = 0;
-                        setLightboxPage(index);
-                        return;
-                      }
-                      lastClickAt.current = now;
-                      flipNext();
+                      openLightbox(index);
                     }}
-                    aria-label={`Turn or enlarge page ${index + 1}`}
+                    aria-label={`Enlarge page ${index + 1}`}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -510,7 +782,7 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
         <p className="text-center text-xs text-white/40">
           {zoomed
             ? "Zoomed — drag or swipe to pan · pinch / scroll to zoom"
-            : "Click to turn the page · click again to enlarge · zoom / pan in viewer"}
+            : "Click a page to enlarge · use arrows to flip · pinch / scroll to zoom"}
         </p>
       </div>
     ) : (
@@ -582,26 +854,13 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
       )}
 
       {lightboxPage != null && pages[lightboxPage] ? (
-        <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/90 p-4"
-          onClick={() => setLightboxPage(null)}
-          role="presentation"
-        >
-          <button
-            type="button"
-            className="absolute right-4 top-4 rounded-full border border-white/30 px-4 py-2 text-xs uppercase tracking-[0.14em] text-white"
-            onClick={() => setLightboxPage(null)}
-          >
-            Close
-          </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={pages[lightboxPage]}
-            alt={`Menu page ${lightboxPage + 1} enlarged`}
-            className="max-h-[92vh] max-w-[96vw] object-contain shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          />
-        </div>
+        <MenuPageLightbox
+          pages={pages}
+          pageIndex={lightboxPage}
+          label={activePdf?.label}
+          onClose={() => setLightboxPage(null)}
+          onChangePage={goToPage}
+        />
       ) : null}
 
       {activePdf ? (

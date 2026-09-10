@@ -186,7 +186,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const [formNotes, setFormNotes] = useState("");
   const [formTableId, setFormTableId] = useState("");
   const [formEventType, setFormEventType] = useState("");
-  const [formSource, setFormSource] = useState<StaffBookingSource>("phone_call");
+  const [formSource, setFormSource] = useState<StaffBookingSource>("reservation");
   const [assignTableId, setAssignTableId] = useState("");
   const [checkInTableId, setCheckInTableId] = useState("");
   const [undoEntry, setUndoEntry] = useState<ReservationUndoEntry | null>(null);
@@ -371,7 +371,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     setFormEmail("");
     setFormNotes("");
     setFormTableId("");
-    setFormSource("phone_call");
+    setFormSource("reservation");
     void loadReservations();
   };
 
@@ -544,7 +544,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           <button
             type="button"
             onClick={() => {
-              setFormSource("phone_call");
+              setFormSource("reservation");
               setShowNewModal(true);
             }}
             className="inline-flex items-center gap-1 rounded-md bg-gray-900 px-2 py-1 text-[11px] font-semibold text-white dark:bg-gray-100 dark:text-gray-900 sm:gap-1.5 sm:rounded-lg sm:px-2.5 sm:py-1.5 sm:text-xs"
@@ -828,7 +828,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       <Modal
         open={showNewModal}
         onClose={() => {
-          setFormSource("phone_call");
+          setFormSource("reservation");
           setShowNewModal(false);
         }}
         title={translate("newReservation")}
@@ -844,8 +844,8 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
               <ReservationSourcePicker
                 value={formSource}
                 onChange={setFormSource}
+                posLabel={translate("resSourceReservation")}
                 phoneLabel={translate("resSourcePhoneCall")}
-                onlineLabel={translate("resSourceOnline")}
               />
             </div>
           </div>

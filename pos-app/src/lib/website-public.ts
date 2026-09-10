@@ -12,6 +12,7 @@ import {
   normalizePageLayout,
   normalizePromoSlideshows,
 } from "@/lib/website/page-layout";
+import { normalizeReservationBackground } from "@/lib/website/reservation-background";
 import { sortMenuPdfs } from "@/lib/website/menu-pdf-order";
 import { normalizeSocialLinks, socialLinksFromLegacy } from "@/lib/website/social-links";
 import type {
@@ -94,6 +95,7 @@ function mapSettingsRow(row: Record<string, unknown> | null): WebsiteSettings {
     openingHours: parseOpeningHours(row.opening_hours),
     pageLayout: normalizePageLayout(row.page_layout),
     promoSlideshows: normalizePromoSlideshows(row.promo_slideshows),
+    reservationBackground: normalizeReservationBackground(row.reservation_background),
     updatedAt: row.updated_at ? new Date(row.updated_at as string) : undefined,
   };
 }

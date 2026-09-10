@@ -113,6 +113,9 @@ export async function saveWebsiteSettings(input: Partial<WebsiteSettings>) {
   if (input.openingHours !== undefined) payload.opening_hours = input.openingHours;
   if (input.pageLayout !== undefined) payload.page_layout = input.pageLayout;
   if (input.promoSlideshows !== undefined) payload.promo_slideshows = input.promoSlideshows;
+  if (input.reservationBackground !== undefined) {
+    payload.reservation_background = input.reservationBackground;
+  }
 
   const { data, error: dbError } = await admin
     .from("website_settings")
@@ -122,8 +125,8 @@ export async function saveWebsiteSettings(input: Partial<WebsiteSettings>) {
 
   if (dbError) {
     const hint =
-      /page_layout|promo_slideshows|social_links/i.test(dbError.message)
-        ? " Run supabase/patch-website-page-layout.sql and supabase/patch-website-social-menu-pdf-order.sql if columns are missing."
+      /page_layout|promo_slideshows|social_links|reservation_background/i.test(dbError.message)
+        ? " Run supabase/patch-website-page-layout.sql, patch-website-social-menu-pdf-order.sql, and patch-reservation-background.sql if columns are missing."
         : "";
     return { data: null, error: new Error(`${dbError.message}${hint}`) };
   }
@@ -555,6 +558,7 @@ export async function seedWebsiteDefaultsIfEmpty() {
       opening_hours: parseOpeningHours(DEFAULT_OPENING_HOURS),
       page_layout: DEFAULT_WEBSITE_SETTINGS.pageLayout,
       promo_slideshows: DEFAULT_WEBSITE_SETTINGS.promoSlideshows,
+      reservation_background: DEFAULT_WEBSITE_SETTINGS.reservationBackground,
       updated_at: nowIso(),
     });
   }

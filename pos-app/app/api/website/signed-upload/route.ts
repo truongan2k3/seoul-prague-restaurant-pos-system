@@ -18,9 +18,10 @@ const FOLDERS = new Set([
   "amenities",
   "menu-pdfs",
   "misc",
+  "reservation-bg",
 ]);
 
-/** 50 MB — images / PDFs; signed PUT bypasses Next/Vercel body limits. */
+/** 50 MB — images / short video loops; signed PUT bypasses Next/Vercel body limits. */
 const FILE_SIZE_LIMIT = 50 * 1024 * 1024;
 
 function errorMessage(error: unknown): string {

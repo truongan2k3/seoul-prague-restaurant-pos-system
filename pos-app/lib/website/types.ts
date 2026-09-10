@@ -171,7 +171,26 @@ export interface WebsiteSettings {
   pageLayout: WebsitePageSection[];
   /** Event / promo carousels referenced by promo_slideshow sections. */
   promoSlideshows: WebsitePromoSlideshow[];
+  /** Cinematic background for guest /reservation pages. */
+  reservationBackground: WebsiteReservationBackground;
   updatedAt?: Date;
+}
+
+/** Guest reservation page full-bleed background media. */
+export interface WebsiteReservationBackground {
+  enabled: boolean;
+  /** Primary loop (WebM/MP4 preferred). Served on desktop / as fallback. */
+  videoUrl: string;
+  /** Optional lighter mobile loop to cut bandwidth. */
+  videoUrlMobile: string;
+  /** Poster / still fallback (also used under video & when autoplay fails). */
+  posterUrl: string;
+  /** Dark overlay strength 0–90 so form text stays readable. */
+  overlayOpacity: number;
+  /** CSS object-position for desktop crop. */
+  objectPosition: string;
+  /** CSS object-position for mobile portrait crop. */
+  objectPositionMobile: string;
 }
 
 export interface WebsiteMediaAsset {

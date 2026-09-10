@@ -85,12 +85,38 @@ async function cancelReservationWithEmail(reservationId: string) {
   return result;
 }
 
+/** Staff note-only edits should not email the guest. */
+function isStaffNotesOnlyChange(
+  previous: ReservationRecord,
+  input: Parameters<typeof updateReservationDetails>[1],
+): boolean {
+  const nextNotes = input.notes?.trim() || "";
+  const prevNotes = previous.notes?.trim() || "";
+  if (nextNotes === prevNotes) return false;
+
+  const sameName = previous.guestName.trim() === input.guestName.trim();
+  const samePhone = (previous.guestPhone ?? "").trim() === (input.guestPhone?.trim() || "");
+  const sameEmail = (previous.guestEmail ?? "").trim() === (input.guestEmail?.trim() || "");
+  const sameParty = previous.partySize === Math.max(1, input.partySize);
+  const sameWhen = previous.reservedAt.getTime() === input.reservedAt.getTime();
+  const sameEvent = (previous.eventType ?? "").trim() === (input.eventType?.trim() || "");
+  const sameTable =
+    input.tableId === undefined ||
+    (previous.tableId ?? "") === (input.tableId || "");
+
+  return sameName && samePhone && sameEmail && sameParty && sameWhen && sameEvent && sameTable;
+}
+
 async function updateReservationWithEmail(
   reservationId: string,
   input: Parameters<typeof updateReservationDetails>[1],
+  previous?: ReservationRecord,
 ) {
   const result = await updateReservationDetails(reservationId, input);
   if (result.error) return result;
+  if (previous && isStaffNotesOnlyChange(previous, input)) {
+    return result;
+  }
   void fetch("/api/reservations/notify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -365,16 +391,20 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const handleUpdateReservation = async () => {
     if (!editTarget || !formGuestName.trim() || !formDateTime) return;
     setBusyId(editTarget.id);
-    const { error: updateError } = await updateReservationWithEmail(editTarget.id, {
-      guestName: formGuestName.trim(),
-      guestPhone: formPhone.trim() || undefined,
-      guestEmail: formEmail.trim() || undefined,
-      partySize: Math.max(1, formPartySize),
-      reservedAt: new Date(formDateTime),
-      notes: formNotes.trim() || undefined,
-      tableId: editTarget.status === "checked_in" ? undefined : formTableId || null,
-      eventType: formEventType || null,
-    });
+    const { error: updateError } = await updateReservationWithEmail(
+      editTarget.id,
+      {
+        guestName: formGuestName.trim(),
+        guestPhone: formPhone.trim() || undefined,
+        guestEmail: formEmail.trim() || undefined,
+        partySize: Math.max(1, formPartySize),
+        reservedAt: new Date(formDateTime),
+        notes: formNotes.trim() || undefined,
+        tableId: editTarget.status === "checked_in" ? undefined : formTableId || null,
+        eventType: formEventType || null,
+      },
+      editTarget,
+    );
     setBusyId(null);
     if (updateError) {
       setError(updateError instanceof Error ? updateError.message : String(updateError));

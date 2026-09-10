@@ -5,7 +5,6 @@ import {
   sendReservationEmail,
 } from "@/src/lib/reservation-email";
 import { confirmReservationServer } from "@/src/lib/reservation-guest-server";
-import { reservationPushCopy, sendReservationPush } from "@/src/lib/push-server";
 
 export async function POST(request: Request) {
   const staff = await readStaffSession();

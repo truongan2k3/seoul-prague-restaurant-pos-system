@@ -158,16 +158,8 @@ export async function updateReservationStatus(
         reservedAt: row.reservedAt,
         bookingCode: row.bookingCode,
       });
-    } else if (status === "confirmed") {
-      notifyReservationPushEvent({
-        kind: "updated",
-        reservationId: row.id,
-        guestName: row.guestName,
-        partySize: row.partySize,
-        reservedAt: row.reservedAt,
-        bookingCode: row.bookingCode,
-      });
     }
+    // pending → confirmed: no second staff push (already notified on "New reservation").
   }
 
   return result;

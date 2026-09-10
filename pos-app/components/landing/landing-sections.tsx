@@ -87,30 +87,23 @@ export function LandingSignature({ content }: { content: WebsiteContent }) {
             Premium cuts and Korean classics — grilled at your table in an immersive setting.
           </p>
         </Reveal>
-        <div className="grid auto-rows-fr gap-6 md:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-3 md:items-start">
           {featured.map((item, index) => {
             const layout = index % 3;
             const asset = signatureAssets[index % signatureAssets.length];
             const imageSrc = item.imageUrl || asset?.fileUrl;
             const isHero = layout === 0;
-            const isPortrait = layout === 1;
 
             return (
               <Reveal
                 key={item.id}
-                className={`group overflow-hidden border border-white/10 bg-[#121214] ${
-                  isHero
-                    ? "md:col-span-2 md:grid md:grid-cols-2 md:items-stretch"
-                    : ""
+                className={`group flex flex-col overflow-hidden border border-white/10 bg-[#121214] ${
+                  isHero ? "md:col-span-2 md:grid md:grid-cols-2 md:items-stretch" : ""
                 }`}
               >
                 <div
-                  className={`relative overflow-hidden bg-[#1a1a1c] ${
-                    isHero
-                      ? "aspect-[4/3] md:aspect-auto md:min-h-[320px]"
-                      : isPortrait
-                        ? "aspect-[3/4]"
-                        : "aspect-[16/10]"
+                  className={`relative w-full shrink-0 overflow-hidden bg-[#1a1a1c] aspect-[4/3] ${
+                    isHero ? "md:aspect-auto md:min-h-[280px] md:h-full" : ""
                   }`}
                 >
                   {imageSrc ? (
@@ -123,7 +116,7 @@ export function LandingSignature({ content }: { content: WebsiteContent }) {
                           ? "(max-width: 768px) 100vw, 50vw"
                           : "(max-width: 768px) 100vw, 33vw"
                       }
-                      quality={72}
+                      quality={70}
                       className="object-cover transition duration-700 group-hover:scale-105"
                       style={{
                         objectPosition: asset?.objectPosition ?? "50% 50%",
@@ -135,7 +128,11 @@ export function LandingSignature({ content }: { content: WebsiteContent }) {
                     </div>
                   )}
                 </div>
-                <div className={`p-6 ${isHero ? "md:flex md:flex-col md:justify-center md:p-8" : ""}`}>
+                <div
+                  className={`flex flex-1 flex-col p-5 sm:p-6 ${
+                    isHero ? "md:justify-center md:p-8" : ""
+                  }`}
+                >
                   {item.badge ? (
                     <span className="text-[10px] uppercase tracking-[0.2em] text-[#C9A88B]">
                       {item.badge}

@@ -143,8 +143,10 @@ export function createDefaultPromoSlideshows(): WebsitePromoSlideshow[] {
     {
       id: "promo-main",
       name: "Homepage events",
+      // Slides feed the hero fade + optional Event slideshow section.
+      // Add poster images in /admin designer for promos / discounts.
       enabled: true,
-      autoplayMs: 5200,
+      autoplayMs: 5600,
       slides: [],
     },
   ];

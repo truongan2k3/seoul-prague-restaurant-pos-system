@@ -72,7 +72,11 @@ export function ReservationBookingView({ website }: { website?: WebsiteContent }
   const showEventTypeField = eventTypes.length > 0;
   const venue = appSettings.reservationGuestVenue;
   const mapsQuery = website?.settings.address?.trim() || venue.address;
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`;
+  const configuredMapsUrl = website?.settings.googleMapsUrl?.trim() ?? "";
+  const mapsUrl =
+    configuredMapsUrl && configuredMapsUrl !== "https://maps.google.com"
+      ? configuredMapsUrl
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`;
   const phoneHref = `tel:${(website?.settings.phone?.trim() || venue.phone).replace(/[^\d+]/g, "")}`;
   const emailHref = `mailto:${website?.settings.email?.trim() || venue.email}`;
 

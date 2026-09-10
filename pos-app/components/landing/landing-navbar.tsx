@@ -9,6 +9,7 @@ import type { WebsiteContent } from "@/lib/website/types";
 
 const NAV = [
   { href: "/#home", label: "Home" },
+  { href: "/special-event", label: "Special Event" },
   { href: "/#about", label: "About" },
   { href: "/menu", label: "Menu" },
   { href: "/#gallery", label: "Gallery" },

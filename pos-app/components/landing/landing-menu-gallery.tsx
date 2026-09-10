@@ -38,7 +38,7 @@ export function LandingMenuPreview({ content }: { content: WebsiteContent }) {
 
         {hasPdfs ? (
           <div className="min-h-[480px] rounded-2xl border border-white/10 bg-[#121214] p-4 sm:p-6 lg:min-h-[640px] lg:p-10">
-            <MenuPdfFlipbook pdfs={content.menuPdfs} />
+            <MenuPdfFlipbook pdfs={content.menuPdfs} initialLanguage="en" />
           </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-white/15 bg-[#121214] px-6 py-16 text-center">
@@ -64,16 +64,6 @@ export function LandingMenuPreview({ content }: { content: WebsiteContent }) {
   );
 }
 
-/** Varied aspect ratios for a static gallery mosaic. */
-const GALLERY_FRAME_STYLES = [
-  { aspect: "aspect-[3/4]", span: "md:col-span-1 md:row-span-2", rotate: "-rotate-1" },
-  { aspect: "aspect-square", span: "md:col-span-1", rotate: "rotate-1" },
-  { aspect: "aspect-[4/3]", span: "md:col-span-1", rotate: "-rotate-1" },
-  { aspect: "aspect-[3/4]", span: "md:col-span-1 md:row-span-2", rotate: "rotate-2" },
-  { aspect: "aspect-[5/4]", span: "md:col-span-1", rotate: "-rotate-2" },
-  { aspect: "aspect-square", span: "md:col-span-1", rotate: "rotate-1" },
-] as const;
-
 export function LandingGallery({ content }: { content: WebsiteContent }) {
   const items = content.gallery.filter((item) => item.imageUrl);
   const [expanded, setExpanded] = useState(false);
@@ -97,27 +87,26 @@ export function LandingGallery({ content }: { content: WebsiteContent }) {
         <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Gallery</p>
         <h2 className="landing-serif mt-4 text-3xl text-white lg:text-5xl">Atmosphere & plates</h2>
 
-        <div className="mt-10 grid grid-cols-2 gap-3 md:grid-cols-5 md:gap-4">
-          {visibleItems.map((item, index) => {
-            const frame = GALLERY_FRAME_STYLES[index % GALLERY_FRAME_STYLES.length];
-            return (
-              <figure
-                key={item.id}
-                className={`relative overflow-hidden border border-white/10 bg-[#121214] shadow-[0_12px_40px_rgba(0,0,0,0.35)] ${frame.aspect} ${frame.span} ${frame.rotate}`}
-              >
-                <LandingImage
-                  src={item.imageUrl}
-                  alt={item.title || "Gallery"}
-                  fill
-                  sizes="(max-width: 768px) 50vw, 20vw"
-                  quality={70}
-                  className="object-cover"
-                  draggable={false}
-                  priority={index === 0}
-                />
-              </figure>
-            );
-          })}
+        {/* Natural aspect ratios — no forced crop frames */}
+        <div className="mt-10 columns-2 gap-3 md:columns-3 md:gap-4 lg:columns-4">
+          {visibleItems.map((item, index) => (
+            <figure
+              key={item.id}
+              className="mb-3 break-inside-avoid border border-white/10 bg-[#121214] shadow-[0_12px_40px_rgba(0,0,0,0.35)] md:mb-4"
+            >
+              <LandingImage
+                src={item.imageUrl}
+                alt={item.title || "Gallery"}
+                width={1200}
+                height={1600}
+                sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                quality={70}
+                className="h-auto w-full"
+                draggable={false}
+                priority={index === 0}
+              />
+            </figure>
+          ))}
         </div>
 
         {items.length > 5 ? (
@@ -460,6 +449,7 @@ export function LandingFooter({
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-white/50">Links</p>
             <ul className="mt-4 space-y-2 text-sm text-white/70">
+              <li><Link href="/special-event" className="hover:text-white">Special Event</Link></li>
               <li><Link href="/menu" className="hover:text-white">Menu</Link></li>
               <li><Link href="/reservation" className="hover:text-white">Reservations</Link></li>
               <li><Link href="/admin" className="hover:text-white">Website admin</Link></li>

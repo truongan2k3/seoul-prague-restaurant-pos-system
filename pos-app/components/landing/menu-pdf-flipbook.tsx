@@ -384,7 +384,16 @@ interface MenuPdfFlipbookProps {
   initialLanguage?: MenuPdfLanguage;
 }
 
-export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipbookProps) {
+function pickInitialMenuLanguage(
+  pdfs: WebsiteMenuPdf[],
+  preferred: MenuPdfLanguage,
+): MenuPdfLanguage {
+  if (pdfs.some((row) => row.language === preferred)) return preferred;
+  if (pdfs.some((row) => row.language === "en")) return "en";
+  return pdfs[0]?.language ?? "en";
+}
+
+export function MenuPdfFlipbook({ pdfs, initialLanguage = "en" }: MenuPdfFlipbookProps) {
   const bookRef = useRef<{
     pageFlip: () => {
       flipNext: () => void;
@@ -403,10 +412,10 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
     [pdfs],
   );
 
-  const [language, setLanguage] = useState<MenuPdfLanguage>(() => {
-    if (pdfs.some((row) => row.language === initialLanguage)) return initialLanguage;
-    return pdfs[0]?.language ?? "cs";
-  });
+  const [language, setLanguage] = useState<MenuPdfLanguage>(() =>
+    pickInitialMenuLanguage(pdfs, initialLanguage),
+  );
+  const [shouldLoadPdf, setShouldLoadPdf] = useState(false);
   const [pages, setPages] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -460,8 +469,9 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
   );
 
   useEffect(() => {
-    if (activePdf) void loadPdf(activePdf);
-  }, [activePdf, loadPdf]);
+    if (!shouldLoadPdf || !activePdf) return;
+    void loadPdf(activePdf);
+  }, [shouldLoadPdf, activePdf, loadPdf]);
 
   useEffect(() => {
     if (!expanded) return;
@@ -805,7 +815,7 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {MENU_PDF_LANGUAGES.map(({ code, label }) => {
           const available = availableLanguages.some((row) => row.code === code);
           const active = language === code;
@@ -829,7 +839,21 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "cs" }: MenuPdfFlipboo
         })}
       </div>
 
-      {loading ? (
+      {!shouldLoadPdf ? (
+        <div className="flex min-h-[320px] flex-col items-center justify-center gap-5 border border-dashed border-white/15 bg-[#0B0B0C]/60 px-6 py-16 text-center lg:min-h-[420px]">
+          <p className="max-w-sm text-sm text-white/55">
+            Choose a language, then open the menu book. The PDF loads only when you ask for it.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShouldLoadPdf(true)}
+            disabled={!activePdf}
+            className="inline-flex items-center justify-center bg-[#8B1E2D] px-8 py-3.5 text-sm font-semibold uppercase tracking-[0.14em] text-white transition hover:bg-[#A02435] disabled:opacity-40"
+          >
+            Open menu
+          </button>
+        </div>
+      ) : loading ? (
         <div className="flex min-h-[420px] items-center justify-center text-white/60 lg:min-h-[640px]">
           <Loader2 className="mr-2 h-5 w-5 animate-spin" />
           Opening menu book…

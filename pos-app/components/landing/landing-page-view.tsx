@@ -2,6 +2,7 @@ import { LandingNavbar } from "@/components/landing/landing-navbar";
 import { LandingHero } from "@/components/landing/landing-hero";
 import {
   LandingAbout,
+  LandingContentSection,
   LandingExperience,
   LandingSignature,
 } from "@/components/landing/landing-sections";
@@ -55,19 +56,25 @@ function renderSection(content: WebsiteContent, section: WebsitePageSection) {
     case "about":
       return (
         <SectionShell key={section.id} section={section}>
-          <LandingAbout content={content} />
+          <LandingAbout content={content} section={section} />
         </SectionShell>
       );
     case "signature":
       return (
         <SectionShell key={section.id} section={section}>
-          <LandingSignature content={content} />
+          <LandingSignature content={content} section={section} />
         </SectionShell>
       );
     case "experience":
       return (
         <SectionShell key={section.id} section={section}>
           <LandingExperience section={section} />
+        </SectionShell>
+      );
+    case "content":
+      return (
+        <SectionShell key={section.id} section={section}>
+          <LandingContentSection section={section} />
         </SectionShell>
       );
     case "menu":

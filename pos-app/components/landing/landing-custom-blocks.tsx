@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { LandingContentBlocks } from "@/components/landing/landing-content-block";
 import type { WebsitePageSection } from "@/lib/website/types";
 import {
+  enabledContentBlocks,
   responsiveBodyClass,
   responsiveHeadlineClass,
   responsivePaddingClass,
@@ -17,11 +19,12 @@ const BG: Record<"dark" | "charcoal" | "warm", string> = {
 
 export function LandingCustomText({ section }: { section: WebsitePageSection }) {
   const bg = BG[section.props?.background ?? "charcoal"];
+  const blocks = enabledContentBlocks(section);
   return (
     <section
       className={`${bg} ${responsivePaddingClass(section)} ${sectionVisibilityClass(section)}`}
     >
-      <div className="mx-auto max-w-3xl px-5 text-center lg:px-8">
+      <div className={`mx-auto px-5 lg:px-8 ${blocks.length > 0 ? "max-w-7xl" : "max-w-3xl text-center"}`}>
         {section.props?.eyebrow ? (
           <p className="text-xs uppercase tracking-[0.35em] text-[#C9A88B]">{section.props.eyebrow}</p>
         ) : null}
@@ -30,6 +33,11 @@ export function LandingCustomText({ section }: { section: WebsitePageSection }) 
         </h2>
         {section.props?.body ? (
           <p className={`mt-5 text-white/70 ${responsiveBodyClass(section)}`}>{section.props.body}</p>
+        ) : null}
+        {blocks.length > 0 ? (
+          <div className="mt-12 text-left">
+            <LandingContentBlocks blocks={blocks} />
+          </div>
         ) : null}
       </div>
     </section>

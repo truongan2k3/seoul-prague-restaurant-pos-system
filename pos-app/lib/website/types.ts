@@ -36,9 +36,22 @@ export type WebsiteSectionType =
   | "gallery"
   | "amenities"
   | "contact"
+  | "content"
   | "custom_text"
   | "custom_cta"
   | "spacer";
+
+/** Layout variants for reusable content components inside a section. */
+export type WebsiteContentLayout =
+  | "image_left_text_right"
+  | "text_left_image_right"
+  | "image_top_text_bottom"
+  | "text_top_image_bottom"
+  | "full_width_overlay"
+  | "image_grid"
+  | "cards_2"
+  | "cards_3"
+  | "featured_support";
 
 export type WebsiteTypeScaleSize = "sm" | "md" | "lg" | "xl" | "2xl";
 export type WebsiteBodyScaleSize = "sm" | "md" | "lg";
@@ -53,6 +66,36 @@ export interface WebsiteSectionDeviceStyle {
   hidden?: boolean;
   typeScale?: WebsiteTypeScale;
   padding?: "compact" | "normal" | "spacious";
+}
+
+/** One image inside a content block (admin can reorder / preview). */
+export interface WebsiteBlockImage {
+  id: string;
+  url: string;
+  alt?: string;
+  /** Optional card title when used in grid / cards layouts. */
+  title?: string;
+  /** Optional card body when used in grid / cards layouts. */
+  body?: string;
+  objectPosition?: string;
+  sortOrder: number;
+}
+
+/**
+ * Reusable content component inside a page section.
+ * Sections may contain many blocks with different layouts.
+ */
+export interface WebsiteContentBlock {
+  id: string;
+  enabled: boolean;
+  sortOrder: number;
+  layout: WebsiteContentLayout;
+  eyebrow?: string;
+  title?: string;
+  body?: string;
+  ctaLabel?: string;
+  ctaHref?: string;
+  images: WebsiteBlockImage[];
 }
 
 export interface WebsitePageSection {
@@ -70,6 +113,10 @@ export interface WebsitePageSection {
     ctaHref?: string;
     slideshowId?: string;
     background?: "dark" | "charcoal" | "warm";
+    /** Default layout when adding a new block in this section. */
+    defaultLayout?: WebsiteContentLayout;
+    /** Flexible content components (text + images + layout). */
+    blocks?: WebsiteContentBlock[];
   };
 }
 
@@ -120,7 +167,7 @@ export interface WebsiteSettings {
   seoDescription: string;
   seoOgImageUrl: string;
   openingHours: WebsiteOpeningHour[];
-  /** Ordered homepage sections for the visual designer. */
+  /** Ordered homepage sections for the section builder. */
   pageLayout: WebsitePageSection[];
   /** Event / promo carousels referenced by promo_slideshow sections. */
   promoSlideshows: WebsitePromoSlideshow[];

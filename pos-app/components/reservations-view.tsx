@@ -489,6 +489,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
   const formatDateTime = (date: Date) =>
     date.toLocaleString(language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB", {
+      timeZone: "Europe/Prague",
       weekday: "short",
       day: "numeric",
       month: "short",

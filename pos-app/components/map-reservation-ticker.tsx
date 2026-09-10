@@ -34,6 +34,7 @@ function clampTickerSeconds(value: number | undefined): number {
 
 function formatTime(date: Date, language: string): string {
   return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : language === "cs" ? "cs-CZ" : "en-GB", {
+    timeZone: "Europe/Prague",
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);

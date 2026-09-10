@@ -8,11 +8,12 @@ import type { ReservationSnapshot, TableSnapshot } from "@/lib/reservation-undo"
 import { generateBookingCode, generateManageToken } from "@/lib/reservation-codes";
 import {
   buildTimeSlotsForDate,
-  getWeekdayKey,
+  getWeekdayKeyForDateIso,
   type SlotCapacityRow,
   countGuestsInSlot,
 } from "@/lib/reservation-slots";
 import { shouldAlertOnReservationInsert } from "@/lib/reservation-change-alert";
+import { venueDayRangeUtc, venueWallTimeToUtc } from "@/lib/venue-timezone";
 import { notifyReservationPushEvent } from "@/lib/web-push-client";
 import { fetchAppSettings } from "@/src/lib/settings-actions";
 import { supabase } from "@/src/lib/supabase";
@@ -363,14 +364,13 @@ export async function checkInReservationWithTable(
 const DEFAULT_LATE_GRACE_MINUTES = 30;
 
 export async function fetchReservationsForDate(dateIso: string) {
-  const start = `${dateIso}T00:00:00`;
-  const end = `${dateIso}T23:59:59`;
+  const { startIso, endExclusiveIso } = venueDayRangeUtc(dateIso);
 
   return supabase
     .from("reservations")
     .select("party_size, reserved_at, status")
-    .gte("reserved_at", start)
-    .lte("reserved_at", end);
+    .gte("reserved_at", startIso)
+    .lt("reserved_at", endExclusiveIso);
 }
 
 export async function markLateReservations(holdingMinutes = DEFAULT_LATE_GRACE_MINUTES) {
@@ -411,8 +411,8 @@ export async function createOnlineReservation(input: {
   notes?: string;
 }) {
   const { data: settings } = await fetchAppSettings();
-  const reservedAt = new Date(`${input.date}T${input.time}:00`);
-  const dayKey = getWeekdayKey(reservedAt);
+  const reservedAt = venueWallTimeToUtc(input.date, input.time);
+  const dayKey = getWeekdayKeyForDateIso(input.date);
   const dayConfig = settings.reservationOperatingHours[dayKey];
 
   if (!dayConfig.enabled) {

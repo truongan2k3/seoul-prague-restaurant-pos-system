@@ -143,6 +143,7 @@ export function reservationPushCopy(input: {
   bookingCode?: string | null;
 }): Omit<ReservationPushPayload, "kind"> & { kind: ReservationPushKind } {
   const when = new Date(input.reservedAt).toLocaleString("en-GB", {
+    timeZone: "Europe/Prague",
     weekday: "short",
     day: "numeric",
     month: "short",

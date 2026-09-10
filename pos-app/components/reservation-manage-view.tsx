@@ -12,6 +12,7 @@ import {
 } from "@/lib/reservation-slots";
 import type { AppSettings, ReservationStatus } from "@/lib/types";
 import type { WebsiteContent } from "@/lib/website/types";
+import { formatInVenueTz, splitVenueWallTime } from "@/lib/venue-timezone";
 import { DEFAULT_APP_SETTINGS, fetchAppSettings } from "@/src/lib/settings-actions";
 import { fetchReservationsForDate } from "@/src/lib/reservation-actions";
 
@@ -30,28 +31,18 @@ interface ManagedReservation {
 const MANAGEABLE: ReservationStatus[] = ["pending", "confirmed", "late"];
 
 function splitReservedAt(iso: string): { date: string; time: string } {
-  const local = new Date(iso);
-  const date = [
-    local.getFullYear(),
-    String(local.getMonth() + 1).padStart(2, "0"),
-    String(local.getDate()).padStart(2, "0"),
-  ].join("-");
-  const time = [
-    String(local.getHours()).padStart(2, "0"),
-    String(local.getMinutes()).padStart(2, "0"),
-  ].join(":");
-  return { date, time };
+  return splitVenueWallTime(iso);
 }
 
 function formatWhen(iso: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
+  return formatInVenueTz(iso, "en-GB", {
     weekday: "short",
     day: "numeric",
     month: "short",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(iso));
+  });
 }
 
 export function ReservationManageView({ website }: { website?: WebsiteContent }) {

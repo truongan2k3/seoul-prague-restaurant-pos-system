@@ -739,14 +739,13 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                       ) : null}
                       {(() => {
                         const { bbq, noteText } = parseReservationBbqNotes(row.notes);
+                        // BBQ / Casual only — no badge when guest answered "I don't know".
                         const bbqLabel =
                           bbq === "yes"
                             ? translate("mapResTickerBbqYes")
                             : bbq === "no"
                               ? translate("mapResTickerBbqNo")
-                              : bbq === "undecided"
-                                ? translate("mapResTickerBbqUndecided")
-                                : null;
+                              : null;
                         return (
                           <>
                             {bbq && bbqLabel ? (

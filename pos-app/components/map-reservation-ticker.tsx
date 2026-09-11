@@ -121,14 +121,13 @@ export function MapReservationTicker() {
 
   const entering = phase === "in";
   const { bbq, noteText } = parseReservationBbqNotes(current.notes);
+  // Only show a badge for BBQ or Casual — hide when guest chose "I don't know".
   const bbqLabel =
     bbq === "yes"
       ? translate("mapResTickerBbqYes")
       : bbq === "no"
         ? translate("mapResTickerBbqNo")
-        : bbq === "undecided"
-          ? translate("mapResTickerBbqUndecided")
-          : null;
+        : null;
 
   return (
     <aside className="flex shrink-0 flex-col gap-1 border-t border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-900 sm:min-h-14 sm:flex-row sm:items-center sm:gap-3.5 sm:px-5 sm:py-1.5">

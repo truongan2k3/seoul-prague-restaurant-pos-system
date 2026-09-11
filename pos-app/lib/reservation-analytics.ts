@@ -116,6 +116,42 @@ export function filterReservationsByStatus(
   return reservations.filter((row) => row.status === statusFilter);
 }
 
+/**
+ * Day / today list order: actionable bookings first, finished ones last.
+ * Within the same priority group, keep chronological reservedAt order.
+ */
+export function reservationDayListPriority(status: ReservationStatus): number {
+  switch (status) {
+    case "pending":
+      return 0;
+    case "confirmed":
+      return 1;
+    case "late":
+      return 2;
+    case "checked_in":
+      return 3;
+    case "completed":
+      return 8;
+    case "cancelled":
+      return 9;
+    case "no_show":
+      return 10;
+    default:
+      return 5;
+  }
+}
+
+export function sortReservationsForDayList(
+  reservations: ReservationRecord[],
+): ReservationRecord[] {
+  return [...reservations].sort((a, b) => {
+    const byStatus =
+      reservationDayListPriority(a.status) - reservationDayListPriority(b.status);
+    if (byStatus !== 0) return byStatus;
+    return a.reservedAt.getTime() - b.reservedAt.getTime();
+  });
+}
+
 export function computeReservationStats(rows: ReservationRecord[]): ReservationStats {
   const active = rows.filter((row) => row.status !== "cancelled");
 

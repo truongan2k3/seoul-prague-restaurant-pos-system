@@ -9,6 +9,10 @@ import {
   reservationStatusLabelKey,
   reservationStatusTone,
 } from "@/lib/reservation-analytics";
+import {
+  parseReservationBbqNotes,
+  type ReservationBbqPreference,
+} from "@/lib/reservation-guest-form";
 import type { ReservationRecord, ReservationStatus } from "@/lib/types";
 import {
   fetchReservations,
@@ -38,6 +42,16 @@ function formatTime(date: Date, language: string): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function bbqBadgeClass(bbq: ReservationBbqPreference): string {
+  if (bbq === "yes") {
+    return "bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-200";
+  }
+  if (bbq === "no") {
+    return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+  }
+  return "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200";
 }
 
 export function MapReservationTicker() {
@@ -106,9 +120,18 @@ export function MapReservationTicker() {
   if (!current) return null;
 
   const entering = phase === "in";
+  const { bbq, noteText } = parseReservationBbqNotes(current.notes);
+  const bbqLabel =
+    bbq === "yes"
+      ? translate("mapResTickerBbqYes")
+      : bbq === "no"
+        ? translate("mapResTickerBbqNo")
+        : bbq === "undecided"
+          ? translate("mapResTickerBbqUndecided")
+          : null;
 
   return (
-    <aside className="flex shrink-0 flex-col gap-1 border-t border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-900 sm:h-14 sm:flex-row sm:items-center sm:gap-3.5 sm:px-5 sm:py-0">
+    <aside className="flex shrink-0 flex-col gap-1 border-t border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-900 sm:min-h-14 sm:flex-row sm:items-center sm:gap-3.5 sm:px-5 sm:py-1.5">
       <div className="flex shrink-0 items-center gap-2 text-gray-500 dark:text-gray-400">
         <CalendarClock className="h-4 w-4 text-red-500" />
         <span className="text-[10px] font-semibold uppercase tracking-wide sm:text-xs">
@@ -119,41 +142,58 @@ export function MapReservationTicker() {
         </span>
       </div>
 
-      <div className="relative min-h-[2.5rem] min-w-0 flex-1 overflow-hidden sm:min-h-[1.75rem]">
+      <div className="relative min-h-[3.25rem] min-w-0 flex-1 overflow-hidden sm:min-h-[2.75rem]">
         <div
           key={current.id + String(index)}
-          className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-3.5"
+          className="flex min-w-0 flex-col gap-1"
           style={{
             transition: `opacity ${FADE_MS}ms ${EASE}, transform ${FADE_MS}ms ${EASE}`,
             opacity: entering ? 1 : 0,
             transform: entering ? "translateY(0)" : "translateY(10px)",
           }}
         >
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="shrink-0 font-mono text-base font-bold tabular-nums text-gray-900 dark:text-gray-100">
-              {formatTime(current.reservedAt, language)}
-            </span>
-            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900 sm:text-[15px] dark:text-gray-100">
-              {current.guestName}
-              <span className="font-normal text-gray-500 dark:text-gray-400">
-                {" "}
-                · {current.partySize}
+          <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-3.5">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="shrink-0 font-mono text-base font-bold tabular-nums text-gray-900 dark:text-gray-100">
+                {formatTime(current.reservedAt, language)}
               </span>
-            </span>
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900 sm:text-[15px] dark:text-gray-100">
+                {current.guestName}
+                <span className="font-normal text-gray-500 dark:text-gray-400">
+                  {" "}
+                  · {current.partySize}
+                </span>
+              </span>
+            </div>
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5 pl-[0.15rem] sm:pl-0">
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase sm:px-2.5 sm:text-[11px] ${reservationStatusTone(current.status)}`}
+              >
+                {translate(reservationStatusLabelKey(current.status))}
+              </span>
+              {bbq && bbqLabel ? (
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase sm:text-[11px] ${bbqBadgeClass(bbq)}`}
+                >
+                  {bbqLabel}
+                </span>
+              ) : null}
+              <span className="min-w-0 truncate text-xs text-gray-500 sm:text-sm dark:text-gray-400">
+                {current.tableLabel
+                  ? `${translate("table")} ${current.tableLabel}`
+                  : translate("mapResTickerNoTable")}
+                {current.bookingCode ? ` · ${current.bookingCode}` : ""}
+              </span>
+            </div>
           </div>
-          <div className="flex min-w-0 items-center gap-2 pl-[0.15rem] sm:pl-0">
-            <span
-              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase sm:px-2.5 sm:text-[11px] ${reservationStatusTone(current.status)}`}
+          {noteText ? (
+            <p
+              className="truncate pl-[0.15rem] text-xs italic text-gray-500 sm:pl-0 dark:text-gray-400"
+              title={noteText}
             >
-              {translate(reservationStatusLabelKey(current.status))}
-            </span>
-            <span className="min-w-0 truncate text-xs text-gray-500 sm:text-sm dark:text-gray-400">
-              {current.tableLabel
-                ? `${translate("table")} ${current.tableLabel}`
-                : translate("mapResTickerNoTable")}
-              {current.bookingCode ? ` · ${current.bookingCode}` : ""}
-            </span>
-          </div>
+              {translate("mapResTickerNotes")}: {noteText}
+            </p>
+          ) : null}
         </div>
       </div>
     </aside>

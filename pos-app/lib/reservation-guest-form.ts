@@ -306,3 +306,29 @@ export function pickEventTypeLabel(
 ): string {
   return pickLocalizedText(option.labels, lang) || option.id;
 }
+
+/** BBQ preference stored as a prefix tag inside reservation.notes from the guest form. */
+export type ReservationBbqPreference = "yes" | "no" | "undecided";
+
+const BBQ_NOTE_TAG_RE = /\[BBQ:\s*(Yes|No|Undecided)\]/i;
+
+export function parseReservationBbqNotes(notes?: string | null): {
+  bbq: ReservationBbqPreference | null;
+  /** Guest note with the BBQ tag removed. */
+  noteText: string;
+} {
+  const raw = (notes ?? "").trim();
+  if (!raw) return { bbq: null, noteText: "" };
+
+  const match = raw.match(BBQ_NOTE_TAG_RE);
+  let bbq: ReservationBbqPreference | null = null;
+  if (match) {
+    const value = match[1].toLowerCase();
+    if (value === "yes" || value === "no" || value === "undecided") {
+      bbq = value;
+    }
+  }
+
+  const noteText = raw.replace(BBQ_NOTE_TAG_RE, "").replace(/\s{2,}/g, " ").trim();
+  return { bbq, noteText };
+}

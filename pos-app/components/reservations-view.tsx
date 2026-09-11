@@ -33,7 +33,7 @@ import {
   RESERVATION_UNDO_MS,
   type ReservationUndoEntry,
 } from "@/lib/reservation-undo";
-import { pickEventTypeLabel } from "@/lib/reservation-guest-form";
+import { pickEventTypeLabel, parseReservationBbqNotes } from "@/lib/reservation-guest-form";
 import type { ReservationRecord, RestaurantTable } from "@/lib/types";
 import { ReservationTableSelect, isOccupiedTable } from "@/components/reservation-table-select";
 import { ReservationUndoBar } from "@/components/reservation-undo-bar";
@@ -737,9 +737,39 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           )}
                         </p>
                       ) : null}
-                      {row.notes && (
-                        <p className="mt-1 text-sm italic text-gray-500">{row.notes}</p>
-                      )}
+                      {(() => {
+                        const { bbq, noteText } = parseReservationBbqNotes(row.notes);
+                        const bbqLabel =
+                          bbq === "yes"
+                            ? translate("mapResTickerBbqYes")
+                            : bbq === "no"
+                              ? translate("mapResTickerBbqNo")
+                              : bbq === "undecided"
+                                ? translate("mapResTickerBbqUndecided")
+                                : null;
+                        return (
+                          <>
+                            {bbq && bbqLabel ? (
+                              <p className="mt-1">
+                                <span
+                                  className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${
+                                    bbq === "yes"
+                                      ? "bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-200"
+                                      : bbq === "no"
+                                        ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                                        : "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200"
+                                  }`}
+                                >
+                                  {bbqLabel}
+                                </span>
+                              </p>
+                            ) : null}
+                            {noteText ? (
+                              <p className="mt-1 text-sm italic text-gray-500">{noteText}</p>
+                            ) : null}
+                          </>
+                        );
+                      })()}
                       <GuestReturningBadge
                         email={row.guestEmail}
                         phone={row.guestPhone}

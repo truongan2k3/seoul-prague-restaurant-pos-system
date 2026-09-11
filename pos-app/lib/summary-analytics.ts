@@ -2,7 +2,7 @@ import { resolveOriginalUnitPrice } from "@/lib/order-line-pricing";
 import { menuItemDisplayName, resolveMenuItemForOrder } from "@/lib/menu-display";
 import type { LanguageCode, MenuItem, OrderItem, PaymentMethod, SaleRecord } from "@/lib/types";
 
-export type SummaryPeriod = "today" | "yesterday" | "week" | "month" | "custom";
+export type SummaryPeriod = "today" | "yesterday" | "day" | "week" | "month" | "custom";
 
 export type TopSellerGroup = "all" | "food" | "drink" | "category";
 
@@ -100,6 +100,13 @@ export function getPeriodRange(
     const day = new Date(now);
     day.setDate(day.getDate() - 1);
     return { start: startOfDay(day), end: endOfDay(day) };
+  }
+
+  if (period === "day") {
+    const dayRaw = customRange?.from?.trim();
+    const day = dayRaw ? new Date(`${dayRaw}T12:00:00`) : now;
+    const safe = Number.isNaN(day.getTime()) ? now : day;
+    return { start: startOfDay(safe), end: endOfDay(safe) };
   }
 
   if (period === "week") {

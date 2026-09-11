@@ -28,7 +28,7 @@ import { printTaxSummaryReport } from "@/src/lib/printTaxSummary";
 import { filterButtonClass, segmentButtonClass } from "@/lib/theme-classes";
 import type { MenuItem, SaleRecord } from "@/lib/types";
 
-const PERIOD_OPTIONS: SummaryPeriod[] = ["today", "yesterday", "week", "month", "custom"];
+const PERIOD_OPTIONS = ["today", "yesterday", "week", "month", "custom"] as const;
 
 const PERIOD_LABEL_KEYS = {
   today: "summaryToday",

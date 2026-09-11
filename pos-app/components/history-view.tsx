@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
-import { AlertTriangle, Eye, Pencil, Percent } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Eye, Pencil, Percent } from "lucide-react";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { DateRangeInputs } from "@/components/date-range-inputs";
 import { OrderHistoryModal } from "@/components/order-history-modal";
@@ -9,6 +9,7 @@ import { useApp } from "@/contexts/app-context";
 import { formatCzk } from "@/lib/currency";
 import { saleHasHistoryAlert } from "@/lib/order-activity";
 import { generateOrderNumber } from "@/lib/receipt-calculations";
+import { shiftIsoDate } from "@/lib/reservation-analytics";
 import {
   computeRevenueStats,
   filterHistorySales,
@@ -30,15 +31,15 @@ interface HistoryViewProps {
   onSaleUpdated?: (sale: SaleRecord) => void;
 }
 
-const PERIOD_OPTIONS: SummaryPeriod[] = ["today", "yesterday", "week", "month", "custom"];
+const PERIOD_OPTIONS = ["day", "week", "month", "custom"] as const;
+type HistoryPeriodOption = (typeof PERIOD_OPTIONS)[number];
 
-const PERIOD_LABEL_KEYS = {
-  today: "summaryToday",
-  yesterday: "summaryYesterday",
+const PERIOD_LABEL_KEYS: Record<HistoryPeriodOption, "resPeriodDay" | "summaryWeek" | "summaryMonth" | "summaryPickRange"> = {
+  day: "resPeriodDay",
   week: "summaryWeek",
   month: "summaryMonth",
   custom: "summaryPickRange",
-} as const;
+};
 
 const PAYMENT_OPTIONS: HistoryPaymentFilter[] = ["all", "cash", "card"];
 
@@ -64,7 +65,8 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState<SummaryPeriod>("today");
+  const [period, setPeriod] = useState<HistoryPeriodOption>("day");
+  const [anchorDate, setAnchorDate] = useState(() => toDateInputValue(new Date()));
   const [customFrom, setCustomFrom] = useState(() => toDateInputValue(new Date()));
   const [customTo, setCustomTo] = useState(() => toDateInputValue(new Date()));
   const [paymentFilter, setPaymentFilter] = useState<HistoryPaymentFilter>("all");
@@ -72,6 +74,12 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   const [openEditTip, setOpenEditTip] = useState(false);
 
   const canEditTip = Boolean(currentStaffUser);
+
+  const rangeOptions = useMemo(() => {
+    if (period === "day") return { from: anchorDate, to: anchorDate };
+    if (period === "custom") return { from: customFrom, to: customTo };
+    return undefined;
+  }, [period, anchorDate, customFrom, customTo]);
 
   const loadSales = useCallback(async () => {
     setLoading(true);
@@ -94,35 +102,41 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   }, [loadSales]);
 
   const filteredSales = useMemo(
-    () =>
-      filterHistorySales(
-        sales,
-        period,
-        paymentFilter,
-        period === "custom" ? { from: customFrom, to: customTo } : undefined,
-      ),
-    [sales, period, paymentFilter, customFrom, customTo],
+    () => filterHistorySales(sales, period, paymentFilter, rangeOptions),
+    [sales, period, paymentFilter, rangeOptions],
   );
 
   const stats = useMemo(() => computeRevenueStats(filteredSales), [filteredSales]);
 
   const activeRange = useMemo(
-    () =>
-      getPeriodRange(
-        period,
-        period === "custom" ? { from: customFrom, to: customTo } : undefined,
-      ),
-    [period, customFrom, customTo],
+    () => getPeriodRange(period, rangeOptions),
+    [period, rangeOptions],
   );
 
+  const dateNavLocale = language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB";
+
+  const dayLabel = useMemo(() => {
+    const date = new Date(`${anchorDate}T12:00:00`);
+    return date.toLocaleDateString(dateNavLocale, {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  }, [anchorDate, dateNavLocale]);
+
+  const showDayNav = period === "day";
+  const isTodayAnchor = anchorDate === toDateInputValue(new Date());
+
+  const jumpToToday = () => setAnchorDate(toDateInputValue(new Date()));
+  const shiftAnchor = (days: number) => {
+    setAnchorDate((prev) => shiftIsoDate(prev, days));
+  };
+
   const periodLabel =
-    period === "custom"
+    period === "custom" || period === "week" || period === "month"
       ? `${formatSummaryDate(activeRange.start, language)} – ${formatSummaryDate(activeRange.end, language)}`
-      : `${formatSummaryDate(activeRange.start, language)}${
-          period === "week" || period === "month"
-            ? ` – ${formatSummaryDate(activeRange.end, language)}`
-            : ""
-        }`;
+      : formatSummaryDate(activeRange.start, language);
 
   const openSale = (sale: SaleRecord, editTip = false) => {
     setSelectedSale(sale);
@@ -157,47 +171,102 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
 
       <div className="flex-1 overflow-auto p-6">
         <div className="mx-auto max-w-6xl space-y-6">
-          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {translate("date")}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {PERIOD_OPTIONS.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setPeriod(option)}
-                  className={filterButtonClass(period === option)}
-                >
-                  {translate(PERIOD_LABEL_KEYS[option])}
-                </button>
-              ))}
-            </div>
-            {period === "custom" && (
-              <DateRangeInputs
-                from={customFrom}
-                to={customTo}
-                onFromChange={setCustomFrom}
-                onToChange={setCustomTo}
-              />
-            )}
-          </section>
+          <section className="rounded-xl border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">
+                {translate("date")}
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {PERIOD_OPTIONS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => {
+                      setPeriod(option);
+                      if (option === "day") {
+                        setAnchorDate((prev) => prev || toDateInputValue(new Date()));
+                      }
+                      if (option === "custom") {
+                        setCustomFrom(anchorDate);
+                        setCustomTo(anchorDate);
+                      }
+                    }}
+                    className={filterButtonClass(period === option)}
+                  >
+                    {translate(PERIOD_LABEL_KEYS[option])}
+                  </button>
+                ))}
+              </div>
 
-          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {translate("paymentMethod")}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {PAYMENT_OPTIONS.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setPaymentFilter(option)}
-                  className={paymentFilterClass(paymentFilter === option, option)}
-                >
-                  {translate(PAYMENT_LABEL_KEYS[option])}
-                </button>
-              ))}
+              {showDayNav ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => shiftAnchor(-1)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                    aria-label={translate("resPrevDay")}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <label className="relative inline-flex min-w-[9.5rem] cursor-pointer items-center justify-center">
+                    <span className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-center text-xs font-semibold tabular-nums text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:text-sm">
+                      {dayLabel}
+                    </span>
+                    <input
+                      type="date"
+                      value={anchorDate}
+                      onChange={(event) => setAnchorDate(event.target.value)}
+                      className="absolute inset-0 z-10 cursor-pointer opacity-0"
+                      aria-label={translate("resPeriodDay")}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => shiftAnchor(1)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                    aria-label={translate("resNextDay")}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={jumpToToday}
+                    disabled={isTodayAnchor}
+                    className={filterButtonClass(isTodayAnchor)}
+                  >
+                    {translate("resTodayJump")}
+                  </button>
+                </div>
+              ) : null}
+
+              {period === "custom" ? (
+                <div className="min-w-0 flex-1 sm:max-w-md">
+                  <DateRangeInputs
+                    from={customFrom}
+                    to={customTo}
+                    onFromChange={setCustomFrom}
+                    onToChange={setCustomTo}
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">
+                {translate("paymentMethod")}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {PAYMENT_OPTIONS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setPaymentFilter(option)}
+                    className={paymentFilterClass(paymentFilter === option, option)}
+                  >
+                    {translate(PAYMENT_LABEL_KEYS[option])}
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
 

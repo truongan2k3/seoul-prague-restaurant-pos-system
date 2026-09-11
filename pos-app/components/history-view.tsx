@@ -51,6 +51,8 @@ const PAYMENT_LABEL_KEYS: Record<HistoryPaymentFilter, "allPayments" | "cash" | 
   card: "card",
 };
 
+const HISTORY_PAGE_SIZE = 50;
+
 function itemCount(sale: SaleRecord): number {
   return sale.items.reduce((sum, item) => sum + item.quantity, 0);
 }
@@ -72,6 +74,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   const [customFrom, setCustomFrom] = useState(() => toDateInputValue(new Date()));
   const [customTo, setCustomTo] = useState(() => toDateInputValue(new Date()));
   const [paymentFilter, setPaymentFilter] = useState<HistoryPaymentFilter>("all");
+  const [page, setPage] = useState(1);
   const [selectedSale, setSelectedSale] = useState<SaleRecord | null>(null);
   const [openEditTip, setOpenEditTip] = useState(false);
 
@@ -107,6 +110,18 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
     () => filterHistorySales(sales, period, paymentFilter, rangeOptions),
     [sales, period, paymentFilter, rangeOptions],
   );
+
+  useEffect(() => {
+    setPage(1);
+  }, [period, paymentFilter, rangeOptions]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredSales.length / HISTORY_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+
+  const pagedSales = useMemo(() => {
+    const start = (currentPage - 1) * HISTORY_PAGE_SIZE;
+    return filteredSales.slice(start, start + HISTORY_PAGE_SIZE);
+  }, [filteredSales, currentPage]);
 
   const stats = useMemo(() => computeRevenueStats(filteredSales), [filteredSales]);
 
@@ -314,6 +329,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
               {sales.length === 0 ? translate("noHistory") : translate("historyNoResults")}
             </p>
           ) : (
+            <div className="space-y-3">
             <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
               <table className="w-full min-w-[1120px] text-left text-sm">
                 <thead>
@@ -332,7 +348,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSales.map((sale) => {
+                  {pagedSales.map((sale) => {
                     const orderId = generateOrderNumber(sale.closedAt);
                     const isDeleted = Boolean(sale.deletedAt);
                     const colCount = 11;
@@ -454,6 +470,47 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {filteredSales.length > HISTORY_PAGE_SIZE ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  {translate("historyPageOf")
+                    .replace("{page}", String(currentPage))
+                    .replace("{total}", String(totalPages))}
+                  <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                    ({translate("historyPageShowing")
+                      .replace("{from}", String((currentPage - 1) * HISTORY_PAGE_SIZE + 1))
+                      .replace(
+                        "{to}",
+                        String(Math.min(currentPage * HISTORY_PAGE_SIZE, filteredSales.length)),
+                      )
+                      .replace("{count}", String(filteredSales.length))}
+                    )
+                  </span>
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPage((prev) => Math.max(1, Math.min(prev, totalPages) - 1))}
+                    disabled={currentPage <= 1}
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 enabled:hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:text-gray-200 dark:enabled:hover:bg-gray-700"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    {translate("historyPrevPage")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPage((prev) => Math.min(totalPages, Math.min(prev, totalPages) + 1))}
+                    disabled={currentPage >= totalPages}
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 enabled:hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:text-gray-200 dark:enabled:hover:bg-gray-700"
+                  >
+                    {translate("historyNextPage")}
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ) : null}
             </div>
           )}
         </div>

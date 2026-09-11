@@ -31,15 +31,16 @@ interface HistoryViewProps {
   onSaleUpdated?: (sale: SaleRecord) => void;
 }
 
-const PERIOD_OPTIONS = ["day", "week", "custom"] as const;
+const PERIOD_OPTIONS = ["day", "week", "month", "custom"] as const;
 type HistoryPeriodOption = (typeof PERIOD_OPTIONS)[number];
 
 const PERIOD_LABEL_KEYS: Record<
   HistoryPeriodOption,
-  "resPeriodDay" | "summaryWeek" | "summaryPickRange"
+  "resPeriodDay" | "summaryWeek" | "summaryMonth" | "summaryPickRange"
 > = {
   day: "resPeriodDay",
   week: "summaryWeek",
+  month: "summaryMonth",
   custom: "summaryPickRange",
 };
 
@@ -151,7 +152,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   };
 
   const periodLabel =
-    period === "custom" || period === "week"
+    period === "custom" || period === "week" || period === "month"
       ? `${formatSummaryDate(activeRange.start, language)} – ${formatSummaryDate(activeRange.end, language)}`
       : formatSummaryDate(activeRange.start, language);
 

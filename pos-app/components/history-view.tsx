@@ -31,13 +31,15 @@ interface HistoryViewProps {
   onSaleUpdated?: (sale: SaleRecord) => void;
 }
 
-const PERIOD_OPTIONS = ["day", "week", "month", "custom"] as const;
+const PERIOD_OPTIONS = ["day", "week", "custom"] as const;
 type HistoryPeriodOption = (typeof PERIOD_OPTIONS)[number];
 
-const PERIOD_LABEL_KEYS: Record<HistoryPeriodOption, "resPeriodDay" | "summaryWeek" | "summaryMonth" | "summaryPickRange"> = {
+const PERIOD_LABEL_KEYS: Record<
+  HistoryPeriodOption,
+  "resPeriodDay" | "summaryWeek" | "summaryPickRange"
+> = {
   day: "resPeriodDay",
   week: "summaryWeek",
-  month: "summaryMonth",
   custom: "summaryPickRange",
 };
 
@@ -134,7 +136,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   };
 
   const periodLabel =
-    period === "custom" || period === "week" || period === "month"
+    period === "custom" || period === "week"
       ? `${formatSummaryDate(activeRange.start, language)} – ${formatSummaryDate(activeRange.end, language)}`
       : formatSummaryDate(activeRange.start, language);
 
@@ -209,14 +211,14 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                     <ChevronLeft className="h-4 w-4" />
                   </button>
                   <label className="relative inline-flex min-w-[9.5rem] cursor-pointer items-center justify-center">
-                    <span className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-center text-xs font-semibold tabular-nums text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:text-sm">
+                    <span className="pointer-events-none rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-center text-xs font-semibold tabular-nums text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:text-sm">
                       {dayLabel}
                     </span>
                     <input
                       type="date"
                       value={anchorDate}
                       onChange={(event) => setAnchorDate(event.target.value)}
-                      className="absolute inset-0 z-10 cursor-pointer opacity-0"
+                      className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0"
                       aria-label={translate("resPeriodDay")}
                     />
                   </label>

@@ -19,6 +19,7 @@ import {
   computeReservationStats,
   filterReservationsByPeriod,
   filterReservationsByStatus,
+  sortReservationsForDayList,
   isLateReservation,
   reservationStatusLabelKey,
   reservationStatusTone,
@@ -256,7 +257,12 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
   const filtered = useMemo(() => {
     const byPeriod = filterReservationsByPeriod(reservations, period, periodOptions);
-    return filterReservationsByStatus(byPeriod, statusFilter);
+    const byStatus = filterReservationsByStatus(byPeriod, statusFilter);
+    // Today / day view: pending & confirmed first; completed / cancelled at the bottom.
+    if (period === "day" || period === "today") {
+      return sortReservationsForDayList(byStatus);
+    }
+    return [...byStatus].sort((a, b) => a.reservedAt.getTime() - b.reservedAt.getTime());
   }, [reservations, period, statusFilter, periodOptions]);
 
   const stats = useMemo(

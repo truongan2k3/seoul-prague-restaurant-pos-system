@@ -9,6 +9,7 @@ import {
   type TableGuestRequestPayload,
   type TableGuestRequestRecord,
 } from "@/lib/table-guest";
+import type { MenuOptionChoice } from "@/lib/types";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 import { broadcastTableGuestRequestAlert } from "@/src/lib/table-guest-alert-server";
 
@@ -116,6 +117,163 @@ export async function loadBanchanOptions(): Promise<BanchanOption[]> {
   const allowed = new Set(enabledIds);
   return catalog.filter((option) => allowed.has(option.id));
 }
+
+export type BanchanAdminOption = BanchanOption & { enabled: boolean };
+
+export type BanchanAdminPayload = {
+  groupId: string | null;
+  options: BanchanAdminOption[];
+  /** null = all enabled */
+  enabledIds: string[] | null;
+};
+
+function mapCatalogOptions(raw: unknown): BanchanOption[] {
+  const list = Array.isArray(raw) ? raw : [];
+  const mapped: BanchanOption[] = list
+    .map((option: { id?: string; nameEn?: string; nameCz?: string }, index: number) => {
+      const labelEn = String(option?.nameEn ?? "").trim();
+      if (!labelEn) return null;
+      const id = String(option?.id ?? "").trim() || `banchan-${index}`;
+      return {
+        id,
+        labelEn,
+        labelCs: String(option?.nameCz ?? "").trim() || labelEn,
+      } satisfies BanchanOption;
+    })
+    .filter((row): row is BanchanOption => Boolean(row));
+  return mapped.length > 0 ? mapped : BANCHAN_OPTIONS;
+}
+
+function toMenuOptions(options: BanchanOption[]): MenuOptionChoice[] {
+  return options.map((option, index) => ({
+    id: option.id.trim() || `banchan-${index}`,
+    nameEn: option.labelEn.trim(),
+    nameCz: option.labelCs.trim() || option.labelEn.trim(),
+    nameZh: option.labelEn.trim(),
+    priceDelta: 0,
+    default: option.id === "all" || option.labelEn.trim().toLowerCase() === "all",
+  }));
+}
+
+/** Admin Dynamic QR — Banchan group + enable flags. */
+export async function loadBanchanAdminPayload(): Promise<BanchanAdminPayload> {
+  const enabledIds = await loadEnabledBanchanIds();
+  try {
+    const admin = createSupabaseAdmin();
+    const { data, error } = await admin
+      .from("option_group_library")
+      .select("id, name_en, options, active")
+      .ilike("name_en", "banchan")
+      .eq("active", true)
+      .order("display_order", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    const catalog = error || !data ? BANCHAN_OPTIONS : mapCatalogOptions(data.options);
+    const options: BanchanAdminOption[] = catalog.map((option) => ({
+      ...option,
+      enabled: enabledIds == null ? true : enabledIds.includes(option.id),
+    }));
+    return {
+      groupId: data && !error ? String((data as { id: string }).id) : null,
+      options,
+      enabledIds,
+    };
+  } catch {
+    return {
+      groupId: null,
+      options: BANCHAN_OPTIONS.map((option) => ({
+        ...option,
+        enabled: enabledIds == null ? true : enabledIds.includes(option.id),
+      })),
+      enabledIds,
+    };
+  }
+}
+
+/** Save Banchan catalog labels + which ones appear on table QR. */
+export async function saveBanchanAdminPayload(input: {
+  options: BanchanOption[];
+  enabledIds: string[] | null;
+}): Promise<{ ok: true; groupId: string } | { ok: false; error: string }> {
+  const cleaned = input.options
+    .map((option, index) => ({
+      id: option.id.trim() || `banchan-${Date.now().toString(36)}-${index}`,
+      labelEn: option.labelEn.trim(),
+      labelCs: (option.labelCs || option.labelEn).trim(),
+    }))
+    .filter((option) => option.labelEn.length > 0);
+
+  if (cleaned.length === 0) {
+    return { ok: false, error: "Add at least one banchan option." };
+  }
+
+  const menuOptions = toMenuOptions(cleaned);
+  const admin = createSupabaseAdmin();
+
+  const { data: existing } = await admin
+    .from("option_group_library")
+    .select("id, name_en, name_cz, name_zh, required, multi, display_order, active")
+    .ilike("name_en", "banchan")
+    .order("display_order", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  let groupId: string;
+  if (existing?.id) {
+    const { data, error } = await admin
+      .from("option_group_library")
+      .update({
+        options: menuOptions,
+        active: true,
+      })
+      .eq("id", existing.id)
+      .select("id")
+      .single();
+    if (error || !data) {
+      return { ok: false, error: error?.message || "Failed to update Banchan group." };
+    }
+    groupId = String(data.id);
+  } else {
+    const { data, error } = await admin
+      .from("option_group_library")
+      .insert({
+        name_en: "Banchan",
+        name_cz: "Banchan",
+        name_zh: "小菜",
+        required: true,
+        multi: true,
+        options: menuOptions,
+        display_order: 0,
+        active: true,
+      })
+      .select("id")
+      .single();
+    if (error || !data) {
+      return { ok: false, error: error?.message || "Failed to create Banchan group." };
+    }
+    groupId = String(data.id);
+  }
+
+  const validIds = new Set(cleaned.map((option) => option.id));
+  let enabledIds = input.enabledIds;
+  if (enabledIds != null) {
+    enabledIds = enabledIds.filter((id) => validIds.has(id));
+    if (enabledIds.length === cleaned.length) enabledIds = null;
+  }
+
+  const { error: settingsError } = await admin
+    .from("settings")
+    .update({ table_qr_enabled_banchan_ids: enabledIds })
+    .eq("id", 1);
+  if (settingsError) {
+    return { ok: false, error: settingsError.message || "Failed to save enable flags." };
+  }
+
+  return { ok: true, groupId };
+}
+
+
 
 function mapRequestRow(row: Record<string, unknown>): TableGuestRequestRecord {
   return {

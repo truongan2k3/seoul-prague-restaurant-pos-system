@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Download, QrCode, RefreshCw } from "lucide-react";
+import { Check, Download, Plus, QrCode, RefreshCw, Trash2 } from "lucide-react";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { NotificationBell } from "@/components/notification-bell";
 import { useApp } from "@/contexts/app-context";
@@ -15,18 +15,24 @@ import {
 } from "@/lib/table-guest";
 import type { RestaurantTable } from "@/lib/types";
 
+type BanchanDraft = BanchanOption & { enabled: boolean };
+
+function newBanchanId() {
+  return `banchan-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
 type Props = {
   tables: RestaurantTable[];
 };
 
 export function DynamicQrServicesView({ tables }: Props) {
   const { translate, currentStaffUser } = useApp();
-  const { settings, saveSettings } = useSettings();
+  const { refreshSettings } = useSettings();
   const [selectedId, setSelectedId] = useState("");
   const [pending, setPending] = useState<TableGuestRequestRecord[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [banchanCatalog, setBanchanCatalog] = useState<BanchanOption[]>([]);
+  const [banchanDraft, setBanchanDraft] = useState<BanchanDraft[]>([]);
   const [banchanBusy, setBanchanBusy] = useState(false);
   const [banchanMessage, setBanchanMessage] = useState<string | null>(null);
 
@@ -68,41 +74,92 @@ export function DynamicQrServicesView({ tables }: Props) {
   const loadBanchanCatalog = useCallback(async () => {
     const response = await fetch("/api/table-guest/banchan-options", { cache: "no-store" });
     const payload = (await response.json().catch(() => ({}))) as {
-      options?: BanchanOption[];
+      options?: BanchanDraft[];
     };
-    if (response.ok) setBanchanCatalog(payload.options ?? []);
+    if (!response.ok) return;
+    const options = payload.options ?? [];
+    setBanchanDraft(
+      options.map((option) => ({
+        id: option.id,
+        labelEn: option.labelEn,
+        labelCs: option.labelCs,
+        enabled: option.enabled !== false,
+      })),
+    );
   }, []);
 
   useEffect(() => {
     void loadBanchanCatalog();
   }, [loadBanchanCatalog]);
 
-  const enabledBanchanIds = settings.tableQrEnabledBanchanIds;
-
-  function isBanchanEnabled(id: string) {
-    if (enabledBanchanIds == null) return true;
-    return enabledBanchanIds.includes(id);
+  function updateBanchanDraft(id: string, patch: Partial<BanchanDraft>) {
+    setBanchanDraft((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, ...patch } : row)),
+    );
   }
 
-  async function toggleBanchan(id: string, enabled: boolean) {
-    const allIds = banchanCatalog.map((option) => option.id);
-    const current =
-      enabledBanchanIds == null ? allIds : enabledBanchanIds.filter((item) => allIds.includes(item));
-    const next = enabled
-      ? Array.from(new Set([...current, id]))
-      : current.filter((item) => item !== id);
-    const allEnabled =
-      allIds.length > 0 && allIds.every((item) => next.includes(item)) && next.length === allIds.length;
+  function addBanchanRow() {
+    setBanchanDraft((prev) => [
+      ...prev,
+      { id: newBanchanId(), labelEn: "", labelCs: "", enabled: true },
+    ]);
+  }
+
+  function removeBanchanRow(id: string) {
+    setBanchanDraft((prev) => prev.filter((row) => row.id !== id));
+  }
+
+  async function saveBanchanDraft() {
+    const cleaned = banchanDraft
+      .map((row) => ({
+        id: row.id,
+        labelEn: row.labelEn.trim(),
+        labelCs: row.labelCs.trim() || row.labelEn.trim(),
+        enabled: row.enabled,
+      }))
+      .filter((row) => row.labelEn.length > 0);
+
+    if (cleaned.length === 0) {
+      setBanchanMessage(translate("tableQrBanchanEmptySave"));
+      return;
+    }
+
+    const enabledIds = cleaned.every((row) => row.enabled)
+      ? null
+      : cleaned.filter((row) => row.enabled).map((row) => row.id);
 
     setBanchanBusy(true);
     setBanchanMessage(null);
     try {
-      const ok = await saveSettings({
-        tableQrEnabledBanchanIds: allEnabled ? null : next,
+      const response = await fetch("/api/table-guest/banchan-options", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          options: cleaned.map(({ id, labelEn, labelCs }) => ({ id, labelEn, labelCs })),
+          enabledIds,
+        }),
       });
-      setBanchanMessage(
-        ok ? translate("tableQrBanchanSaved") : translate("tableQrBanchanSaveFailed"),
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        options?: BanchanDraft[];
+      };
+      if (!response.ok) {
+        setBanchanMessage(payload.error || translate("tableQrBanchanSaveFailed"));
+        return;
+      }
+      const options = payload.options ?? cleaned;
+      setBanchanDraft(
+        options.map((option) => ({
+          id: option.id,
+          labelEn: option.labelEn,
+          labelCs: option.labelCs,
+          enabled: option.enabled !== false,
+        })),
       );
+      await refreshSettings();
+      setBanchanMessage(translate("tableQrBanchanSaved"));
+    } catch {
+      setBanchanMessage(translate("tableQrBanchanSaveFailed"));
     } finally {
       setBanchanBusy(false);
     }
@@ -318,14 +375,33 @@ export function DynamicQrServicesView({ tables }: Props) {
                   {translate("tableQrBanchanHint")}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => void loadBanchanCatalog()}
-                className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium dark:border-gray-700"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                Reload
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void loadBanchanCatalog()}
+                  className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium dark:border-gray-700"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Reload
+                </button>
+                <button
+                  type="button"
+                  onClick={addBanchanRow}
+                  className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium dark:border-gray-700"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {translate("tableQrBanchanAdd")}
+                </button>
+                <button
+                  type="button"
+                  disabled={banchanBusy}
+                  onClick={() => void saveBanchanDraft()}
+                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  {banchanBusy ? "…" : translate("tableQrBanchanSave")}
+                </button>
+              </div>
             </div>
 
             {banchanMessage ? (
@@ -334,31 +410,56 @@ export function DynamicQrServicesView({ tables }: Props) {
               </p>
             ) : null}
 
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {banchanCatalog.map((option) => {
-                const enabled = isBanchanEnabled(option.id);
-                return (
-                  <label
-                    key={option.id}
-                    className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3 py-3 text-sm ${
-                      enabled
-                        ? "border-emerald-300 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/30"
-                        : "border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-950/40"
-                    }`}
-                  >
-                    <span className="font-medium">{option.labelEn}</span>
+            <div className="mt-4 space-y-2">
+              {banchanDraft.map((option) => (
+                <div
+                  key={option.id}
+                  className={`grid gap-2 rounded-xl border px-3 py-3 sm:grid-cols-[auto_1fr_1fr_auto] sm:items-center ${
+                    option.enabled
+                      ? "border-emerald-300 bg-emerald-50/60 dark:border-emerald-800 dark:bg-emerald-950/25"
+                      : "border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-950/40"
+                  }`}
+                >
+                  <label className="inline-flex items-center gap-2 text-xs font-medium">
                     <input
                       type="checkbox"
                       className="h-4 w-4 accent-emerald-600"
-                      checked={enabled}
+                      checked={option.enabled}
                       disabled={banchanBusy}
-                      onChange={(event) => void toggleBanchan(option.id, event.target.checked)}
+                      onChange={(event) =>
+                        updateBanchanDraft(option.id, { enabled: event.target.checked })
+                      }
                     />
+                    QR
                   </label>
-                );
-              })}
-              {banchanCatalog.length === 0 ? (
-                <p className="sm:col-span-2 lg:col-span-3 rounded-xl border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500 dark:border-gray-700">
+                  <input
+                    value={option.labelEn}
+                    onChange={(event) =>
+                      updateBanchanDraft(option.id, { labelEn: event.target.value })
+                    }
+                    placeholder={translate("tableQrBanchanNameEn")}
+                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 dark:border-gray-700 dark:bg-gray-900"
+                  />
+                  <input
+                    value={option.labelCs}
+                    onChange={(event) =>
+                      updateBanchanDraft(option.id, { labelCs: event.target.value })
+                    }
+                    placeholder={translate("tableQrBanchanNameCs")}
+                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 dark:border-gray-700 dark:bg-gray-900"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeBanchanRow(option.id)}
+                    className="inline-flex items-center justify-center rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-white dark:border-gray-700"
+                    aria-label="Remove"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+              {banchanDraft.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500 dark:border-gray-700">
                   {translate("tableQrBanchanEmpty")}
                 </p>
               ) : null}

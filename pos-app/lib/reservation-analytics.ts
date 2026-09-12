@@ -94,6 +94,9 @@ export interface ReservationStats {
   late: number;
 }
 
+/** Upcoming list only — still waiting / expected guests. */
+const UPCOMING_STATUSES = new Set<ReservationStatus>(["pending", "confirmed", "late"]);
+
 export function filterReservationsByPeriod(
   reservations: ReservationRecord[],
   period: ReservationPeriod,
@@ -104,6 +107,8 @@ export function filterReservationsByPeriod(
     const time = row.reservedAt.getTime();
     if (range.start && time < range.start.getTime()) return false;
     if (range.end && time > range.end.getTime()) return false;
+    // Upcoming = actionable bookings only (not completed / cancelled / seated / no-show).
+    if (period === "upcoming" && !UPCOMING_STATUSES.has(row.status)) return false;
     return true;
   });
 }

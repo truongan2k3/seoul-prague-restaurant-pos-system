@@ -2,6 +2,7 @@ import { summarizeGuestRequest } from "@/lib/table-guest-alert";
 import {
   BANCHAN_OPTIONS,
   isTableQrEligible,
+  type BanchanOption,
   type BanchanSelection,
   type TableGuestPaymentMethod,
   type TableGuestRequestKind,
@@ -40,12 +41,49 @@ export type TableGuestSnapshot = {
     lines: TableGuestBillLine[];
     total: number;
   };
+  banchanOptions: BanchanOption[];
   reviewUrl: string;
   websiteUrl: string;
 };
 
 function asOrderLines(orders: unknown): OrderLine[] {
   return Array.isArray(orders) ? (orders as OrderLine[]) : [];
+}
+
+
+/** Live Banchan choices from Storage option group — same list POS uses when ordering Banchan. */
+export async function loadBanchanOptions(): Promise<BanchanOption[]> {
+  try {
+    const admin = createSupabaseAdmin();
+    const { data, error } = await admin
+      .from("option_group_library")
+      .select("name_en, options, active")
+      .ilike("name_en", "banchan")
+      .eq("active", true)
+      .order("display_order", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) return BANCHAN_OPTIONS;
+
+    const raw = Array.isArray(data.options) ? data.options : [];
+    const mapped: BanchanOption[] = raw
+      .map((option: { id?: string; nameEn?: string; nameCz?: string }, index: number) => {
+        const labelEn = String(option?.nameEn ?? "").trim();
+        if (!labelEn) return null;
+        const id = String(option?.id ?? "").trim() || `banchan-${index}`;
+        return {
+          id,
+          labelEn,
+          labelCs: String(option?.nameCz ?? "").trim() || labelEn,
+        } satisfies BanchanOption;
+      })
+      .filter((row): row is BanchanOption => Boolean(row));
+
+    return mapped.length > 0 ? mapped : BANCHAN_OPTIONS;
+  } catch {
+    return BANCHAN_OPTIONS;
+  }
 }
 
 function mapRequestRow(row: Record<string, unknown>): TableGuestRequestRecord {
@@ -106,11 +144,14 @@ export async function loadTableGuestSnapshot(tableId: string): Promise<TableGues
     (settings as { cfd_review_url?: string | null } | null)?.cfd_review_url?.trim() ||
     "https://www.google.com/maps";
 
+  const banchanOptions = await loadBanchanOptions();
+
   return {
     tableId: table.id,
     tableLabel: table.label,
     status: table.status,
     bill: { lines, total },
+    banchanOptions,
     reviewUrl,
     websiteUrl: "/",
   };
@@ -119,6 +160,7 @@ export async function loadTableGuestSnapshot(tableId: string): Promise<TableGues
 function normalizePayload(
   kind: TableGuestRequestKind,
   payload: TableGuestRequestPayload | undefined,
+  banchanOptions: BanchanOption[] = BANCHAN_OPTIONS,
 ): TableGuestRequestPayload {
   if (kind === "payment") {
     const method: TableGuestPaymentMethod =
@@ -128,7 +170,7 @@ function normalizePayload(
   if (kind === "banchan") {
     const selected = (payload?.banchan ?? [])
       .map((item) => {
-        const option = BANCHAN_OPTIONS.find((row) => row.id === item.id);
+        const option = banchanOptions.find((row) => row.id === item.id);
         if (!option) return null;
         const quantity = Math.max(1, Math.min(20, Math.round(Number(item.quantity) || 1)));
         return {
@@ -155,10 +197,15 @@ export async function createTableGuestRequest(input: {
   const kind = input.kind;
   if (!VALID_KINDS.includes(kind)) return { error: "Invalid request kind." };
 
-  const payload = normalizePayload(kind, {
-    ...(input.payload ?? {}),
-    note: input.note ?? input.payload?.note,
-  });
+  const banchanOptions = kind === "banchan" ? await loadBanchanOptions() : BANCHAN_OPTIONS;
+  const payload = normalizePayload(
+    kind,
+    {
+      ...(input.payload ?? {}),
+      note: input.note ?? input.payload?.note,
+    },
+    banchanOptions,
+  );
 
   if (kind === "banchan" && (!payload.banchan || payload.banchan.length === 0)) {
     return { error: "Select at least one banchan." };

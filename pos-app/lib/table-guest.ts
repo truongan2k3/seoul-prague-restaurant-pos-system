@@ -52,17 +52,27 @@ export function isTableQrEligible(table: Pick<RestaurantTable, "label">): boolea
   return true;
 }
 
-export const BANCHAN_OPTIONS: { id: string; labelEn: string; labelCs: string }[] = [
+export type BanchanOption = {
+  id: string;
+  labelEn: string;
+  labelCs: string;
+};
+
+/**
+ * Fallback Banchan list — must match POS Storage option group "Banchan"
+ * (All, Kimchi, Radish, Cucumber, Seaweed, Salad, Peanuts, Wakame, Edamame).
+ * Prefer live options from option_group_library when available.
+ */
+export const BANCHAN_OPTIONS: BanchanOption[] = [
+  { id: "all", labelEn: "All", labelCs: "All" },
   { id: "kimchi", labelEn: "Kimchi", labelCs: "Kimchi" },
-  { id: "radish", labelEn: "Pickled radish", labelCs: "Nakládaná ředkev" },
-  { id: "bean_sprouts", labelEn: "Bean sprouts", labelCs: "Mungo klíčky" },
-  { id: "spinach", labelEn: "Seasoned spinach", labelCs: "Špenát" },
-  { id: "potato", labelEn: "Potato salad", labelCs: "Bramborový salát" },
-  { id: "lettuce", labelEn: "Lettuce wraps", labelCs: "Salátové listy" },
-  { id: "garlic", labelEn: "Garlic", labelCs: "Česnek" },
-  { id: "ssamjang", labelEn: "Ssamjang", labelCs: "Ssamjang" },
-  { id: "rice", labelEn: "Rice", labelCs: "Rýže" },
-  { id: "egg_soup", labelEn: "Egg soup", labelCs: "Vaječná polévka" },
+  { id: "radish", labelEn: "Radish", labelCs: "Redkev" },
+  { id: "cucumber", labelEn: "Cucumber", labelCs: "Okurka" },
+  { id: "seaweed", labelEn: "Seaweed", labelCs: "Rasy" },
+  { id: "salad", labelEn: "Salad", labelCs: "Salad" },
+  { id: "peanuts", labelEn: "Peanuts", labelCs: "Arasidy" },
+  { id: "wakame", labelEn: "Wakame", labelCs: "Wakame" },
+  { id: "edamame", labelEn: "Edamame", labelCs: "Edamame" },
 ];
 
 export function requestKindLabel(kind: TableGuestRequestKind): string {

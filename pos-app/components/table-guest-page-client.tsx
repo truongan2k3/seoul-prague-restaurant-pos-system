@@ -22,6 +22,7 @@ import {
 } from "@/lib/i18n/guest-table";
 import {
   BANCHAN_OPTIONS,
+  type BanchanOption,
   type TableGuestPaymentMethod,
   type TableGuestRequestKind,
 } from "@/lib/table-guest";
@@ -37,6 +38,7 @@ type Snapshot = {
   tableId: string;
   tableLabel: string;
   bill: { lines: BillLine[]; total: number };
+  banchanOptions?: BanchanOption[];
   reviewUrl: string;
   websiteUrl: string;
 };
@@ -64,6 +66,9 @@ export function TableGuestPageClient({
   const [note, setNote] = useState("");
 
   const copy = useMemo(() => guestTableCopy(lang), [lang]);
+  const banchanOptions = snapshot?.banchanOptions?.length
+    ? snapshot.banchanOptions
+    : BANCHAN_OPTIONS;
 
   useEffect(() => {
     setLang(detectGuestTableLang());
@@ -282,7 +287,7 @@ export function TableGuestPageClient({
             {panel === "banchan" ? (
               <div className="space-y-3">
                 <p className="text-sm text-white/55">{copy.selectBanchan}</p>
-                {BANCHAN_OPTIONS.map((option) => {
+                {banchanOptions.map((option) => {
                   const qty = banchanQty[option.id] ?? 0;
                   return (
                     <div
@@ -333,7 +338,7 @@ export function TableGuestPageClient({
                   type="button"
                   disabled={sending}
                   onClick={() => {
-                    const banchan = BANCHAN_OPTIONS
+                    const banchan = banchanOptions
                       .filter((option) => (banchanQty[option.id] ?? 0) > 0)
                       .map((option) => ({
                         id: option.id,

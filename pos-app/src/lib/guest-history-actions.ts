@@ -80,11 +80,17 @@ function mapSaleVisit(row: {
 /**
  * Look up prior visits for a guest by email and/or phone.
  * Matches reservations + closed sales; dedupes sale↔reservation links.
+ *
+ * When viewing a specific reservation, pass `excludeReservationId` + `beforeAt`
+ * (that booking's reserved_at) so the same-night bill / later activity is not
+ * counted as a previous visit.
  */
 export async function fetchGuestVisitProfile(input: {
   email?: string | null;
   phone?: string | null;
   excludeReservationId?: string | null;
+  /** Only count visits strictly before this instant (ISO / Date). */
+  beforeAt?: string | Date | null;
 }): Promise<{ data: GuestVisitProfile; error: string | null }> {
   const email = normalizeEmail(input.email);
   const phoneTail = phoneLookupTail(input.phone);
@@ -92,6 +98,12 @@ export async function fetchGuestVisitProfile(input: {
   if (!email && !phoneTail) {
     return { data: EMPTY_PROFILE, error: null };
   }
+
+  const beforeMs =
+    input.beforeAt != null && input.beforeAt !== ""
+      ? new Date(input.beforeAt).getTime()
+      : null;
+  const beforeValid = beforeMs != null && Number.isFinite(beforeMs);
 
   const orParts: string[] = [];
   if (email) orParts.push(`guest_email.eq."${email.replace(/"/g, "")}"`);
@@ -131,15 +143,21 @@ export async function fetchGuestVisitProfile(input: {
   const reservations = (reservationResult.data ?? []).filter((row) => {
     if (input.excludeReservationId && row.id === input.excludeReservationId) return false;
     if (SKIP_RESERVATION_STATUSES.has(row.status as ReservationStatus)) return false;
+    if (beforeValid && new Date(row.reserved_at).getTime() >= beforeMs!) return false;
     return guestIdentityMatches(identity, {
       email: row.guest_email,
       phone: row.guest_phone,
     });
   });
 
-  const sales = (saleResult.data ?? []).filter((row) =>
-    guestIdentityMatches(identity, { phone: row.guest_phone }),
-  );
+  const sales = (saleResult.data ?? []).filter((row) => {
+    // Same booking's bill must not count as a "prior" visit.
+    if (input.excludeReservationId && row.reservation_id === input.excludeReservationId) {
+      return false;
+    }
+    if (beforeValid && new Date(row.closed_at).getTime() >= beforeMs!) return false;
+    return guestIdentityMatches(identity, { phone: row.guest_phone });
+  });
 
   const reservationIdsCoveredBySales = new Set(
     sales.map((row) => row.reservation_id).filter((id): id is string => Boolean(id)),

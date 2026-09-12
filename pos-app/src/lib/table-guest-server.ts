@@ -52,7 +52,8 @@ function asOrderLines(orders: unknown): OrderLine[] {
 
 
 /** Live Banchan choices from Storage option group — same list POS uses when ordering Banchan. */
-export async function loadBanchanOptions(): Promise<BanchanOption[]> {
+/** Full Banchan catalog from Storage option group (no QR enable filter). */
+export async function loadAllBanchanCatalogOptions(): Promise<BanchanOption[]> {
   try {
     const admin = createSupabaseAdmin();
     const { data, error } = await admin
@@ -84,6 +85,36 @@ export async function loadBanchanOptions(): Promise<BanchanOption[]> {
   } catch {
     return BANCHAN_OPTIONS;
   }
+}
+
+/** null = all catalog options enabled on table QR. */
+export async function loadEnabledBanchanIds(): Promise<string[] | null> {
+  try {
+    const admin = createSupabaseAdmin();
+    const { data, error } = await admin
+      .from("settings")
+      .select("table_qr_enabled_banchan_ids")
+      .eq("id", 1)
+      .maybeSingle();
+    if (error || !data) return null;
+    const raw = (data as { table_qr_enabled_banchan_ids?: unknown }).table_qr_enabled_banchan_ids;
+    if (raw == null) return null;
+    if (!Array.isArray(raw)) return null;
+    return raw
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
+/** Banchan options exposed on the guest table QR (respects POS enable toggles). */
+export async function loadBanchanOptions(): Promise<BanchanOption[]> {
+  const catalog = await loadAllBanchanCatalogOptions();
+  const enabledIds = await loadEnabledBanchanIds();
+  if (enabledIds == null) return catalog;
+  const allowed = new Set(enabledIds);
+  return catalog.filter((option) => allowed.has(option.id));
 }
 
 function mapRequestRow(row: Record<string, unknown>): TableGuestRequestRecord {

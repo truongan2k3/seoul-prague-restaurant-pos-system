@@ -70,10 +70,11 @@ export function MapReservationTicker() {
     since.setHours(0, 0, 0, 0);
     const { data, error } = await fetchReservations(since);
     if (error || !data) return;
+    // Include online + phone + unmarked reservations; skip walk-ins only.
     const today = filterReservationsByPeriod(mapReservationsResponse(data), "today")
       .filter(
         (row) =>
-          row.source === "reservation" && UPCOMING_STATUSES.includes(row.status),
+          row.source !== "walk_in" && UPCOMING_STATUSES.includes(row.status),
       )
       .sort((a, b) => a.reservedAt.getTime() - b.reservedAt.getTime());
     setRows(today);

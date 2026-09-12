@@ -86,6 +86,17 @@ async function cancelReservationWithEmail(reservationId: string) {
   return result;
 }
 
+async function markNoShowWithEmail(reservationId: string) {
+  const result = await markReservationNoShow(reservationId);
+  if (result.error) return result;
+  void fetch("/api/reservations/notify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: reservationId, type: "no_show" }),
+  }).catch(() => undefined);
+  return result;
+}
+
 /** Staff note-only edits should not email the guest. */
 function isStaffNotesOnlyChange(
   previous: ReservationRecord,
@@ -529,7 +540,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       translate("confirmMarkNoShow").replace("{name}", row.guestName),
     );
     if (!confirmed) return;
-    await runAction(row.id, () => markReservationNoShow(row.id));
+    await runAction(row.id, () => markNoShowWithEmail(row.id));
   };
 
   const formatDateTime = (date: Date) =>

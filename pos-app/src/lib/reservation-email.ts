@@ -2,7 +2,12 @@ import type { ReservationStatus } from "@/lib/types";
 
 const BRAND_NAME = "SEOUL PRAGUE";
 
-export type ReservationEmailKind = "received" | "confirmed" | "updated" | "cancelled";
+export type ReservationEmailKind =
+  | "received"
+  | "confirmed"
+  | "updated"
+  | "cancelled"
+  | "no_show";
 
 export interface ReservationEmailPayload {
   guestName: string;
@@ -49,6 +54,8 @@ function headingFor(kind: ReservationEmailKind): string {
       return "Reservation updated";
     case "cancelled":
       return "Reservation cancelled";
+    case "no_show":
+      return "Reservation cancelled — no-show";
   }
 }
 
@@ -62,6 +69,8 @@ function subjectFor(kind: ReservationEmailKind, bookingCode: string): string {
       return `Reservation updated · ${bookingCode}`;
     case "cancelled":
       return `Reservation cancelled · ${bookingCode}`;
+    case "no_show":
+      return `Reservation cancelled (no-show) · ${bookingCode}`;
   }
 }
 
@@ -82,13 +91,15 @@ function introFor(kind: ReservationEmailKind): string {
       return "Your reservation has been updated. Please review the new details below.";
     case "cancelled":
       return "Your reservation has been cancelled. You can book again anytime.";
+    case "no_show":
+      return "Your reservation was cancelled because you did not arrive on time. You are welcome to book again anytime.";
   }
 }
 
 function buildHtml(kind: ReservationEmailKind, payload: ReservationEmailPayload): string {
   const when = formatWhen(payload.reservedAt);
   const manageBlock =
-    kind === "cancelled"
+    kind === "cancelled" || kind === "no_show"
       ? ""
       : `<p style="margin:24px 0 8px">
           <a href="${payload.manageUrl}" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:600">
@@ -135,7 +146,7 @@ function buildText(kind: ReservationEmailKind, payload: ReservationEmailPayload)
     `Party: ${payload.partySize}`,
   ];
   if (payload.notes) lines.push(`Notes: ${payload.notes}`);
-  if (kind !== "cancelled") {
+  if (kind !== "cancelled" && kind !== "no_show") {
     lines.push("", `Manage: ${payload.manageUrl}`);
   }
   return lines.join("\n");

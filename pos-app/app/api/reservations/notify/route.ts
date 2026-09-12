@@ -7,9 +7,9 @@ import {
 } from "@/src/lib/reservation-email";
 import { fetchReservationEmailContext } from "@/src/lib/reservation-guest-server";
 
-const ALLOWED: ReservationEmailKind[] = ["cancelled", "updated"];
+const ALLOWED: ReservationEmailKind[] = ["received", "cancelled", "updated"];
 
-/** Staff-triggered guest emails after a client-side status change (e.g. cancel). */
+/** Staff-triggered guest emails (POS create → received, update, cancel). */
 export async function POST(request: Request) {
   const staff = await readStaffSession();
   if (!staff) {

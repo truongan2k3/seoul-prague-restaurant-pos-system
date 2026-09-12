@@ -380,6 +380,7 @@ export function ReservationIncomingListener() {
       email: incoming.guestEmail,
       phone: incoming.guestPhone,
       excludeReservationId: incoming.id,
+      beforeAt: incoming.reservedAt,
     }).then(({ data }) => {
       if (!cancelled) setVisitProfile(data.isReturning ? data : null);
     });

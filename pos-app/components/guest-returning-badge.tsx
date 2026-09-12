@@ -11,6 +11,8 @@ type GuestReturningBadgeProps = {
   email?: string | null;
   phone?: string | null;
   excludeReservationId?: string | null;
+  /** Only count history before this booking time (avoids same-night bill as "return"). */
+  beforeAt?: string | Date | null;
   /** Compact badge only (no expandable history). */
   compact?: boolean;
   /** Start with visit history expanded. */
@@ -32,6 +34,7 @@ export function GuestReturningBadge({
   email,
   phone,
   excludeReservationId,
+  beforeAt,
   compact = false,
   defaultOpen = false,
   profile: externalProfile,
@@ -50,13 +53,13 @@ export function GuestReturningBadge({
       return;
     }
     let cancelled = false;
-    void fetchGuestVisitProfile({ email, phone, excludeReservationId }).then(({ data }) => {
+    void fetchGuestVisitProfile({ email, phone, excludeReservationId, beforeAt }).then(({ data }) => {
       if (!cancelled) setProfile(data.isReturning ? data : null);
     });
     return () => {
       cancelled = true;
     };
-  }, [email, phone, excludeReservationId, externalProfile]);
+  }, [email, phone, excludeReservationId, beforeAt, externalProfile]);
 
   if (!profile?.isReturning) return null;
 

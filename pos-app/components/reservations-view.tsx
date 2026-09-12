@@ -788,6 +788,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                         email={row.guestEmail}
                         phone={row.guestPhone}
                         excludeReservationId={row.id}
+                        beforeAt={row.reservedAt}
                       />
                     </div>
 

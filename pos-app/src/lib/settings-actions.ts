@@ -154,6 +154,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   menuItemSortMode: "custom",
   cfdReviewUrl:
     "https://www.google.com/maps/search/?api=1&query=Seoul+Prague+Restaurant",
+  tableQrEnabledBanchanIds: null,
   cfdReviewQrImageUrl: "",
   marqueeEnabled: false,
   marqueeText: "",
@@ -230,6 +231,7 @@ type SettingsRow = {
   menu_category_sort_mode?: string | null;
   menu_item_sort_mode?: string | null;
   cfd_review_url?: string | null;
+  table_qr_enabled_banchan_ids?: unknown;
   cfd_review_qr_image_url?: string | null;
   marquee_enabled?: boolean | null;
   marquee_text?: string | null;
@@ -379,6 +381,15 @@ function parseCfdSlideshow(value: unknown): CfdSlideshowItem[] {
   return items;
 }
 
+
+function parseStringIdList(value: unknown): string[] | null {
+  if (value == null) return null;
+  if (!Array.isArray(value)) return null;
+  const ids = value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean);
+  return ids;
+}
 function mapSettingsRow(row: SettingsRow): AppSettings {
   const printerIp = row.printer_ip || DEFAULT_APP_SETTINGS.printerIp;
   const printerPort = row.printer_port || DEFAULT_APP_SETTINGS.printerPort;
@@ -452,6 +463,7 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     menuCategorySortMode: parseMenuSortMode(row.menu_category_sort_mode),
     menuItemSortMode: parseMenuSortMode(row.menu_item_sort_mode),
     cfdReviewUrl: row.cfd_review_url ?? DEFAULT_APP_SETTINGS.cfdReviewUrl,
+    tableQrEnabledBanchanIds: parseStringIdList(row.table_qr_enabled_banchan_ids),
     cfdReviewQrImageUrl: row.cfd_review_qr_image_url ?? DEFAULT_APP_SETTINGS.cfdReviewQrImageUrl,
     ...(() => {
       const marqueeConfigs = resolveMarqueeConfigs({
@@ -613,6 +625,9 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   }
   if (partial.menuItemSortMode !== undefined) payload.menu_item_sort_mode = partial.menuItemSortMode;
   if (partial.cfdReviewUrl !== undefined) payload.cfd_review_url = partial.cfdReviewUrl;
+  if (partial.tableQrEnabledBanchanIds !== undefined) {
+    payload.table_qr_enabled_banchan_ids = partial.tableQrEnabledBanchanIds;
+  }
   if (partial.cfdReviewQrImageUrl !== undefined) {
     payload.cfd_review_qr_image_url = partial.cfdReviewQrImageUrl;
   }

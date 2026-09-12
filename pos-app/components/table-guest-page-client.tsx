@@ -66,9 +66,8 @@ export function TableGuestPageClient({
   const [note, setNote] = useState("");
 
   const copy = useMemo(() => guestTableCopy(lang), [lang]);
-  const banchanOptions = snapshot?.banchanOptions?.length
-    ? snapshot.banchanOptions
-    : BANCHAN_OPTIONS;
+  // Prefer snapshot list as-is (including empty = all toggled off in POS).
+  const banchanOptions = snapshot?.banchanOptions ?? BANCHAN_OPTIONS;
 
   useEffect(() => {
     setLang(detectGuestTableLang());
@@ -204,7 +203,9 @@ export function TableGuestPageClient({
             disabled={sending}
             onClick={() => void sendRequest("call_staff")}
           />
-          <ActionButton icon={<Soup className="h-5 w-5" />} label={copy.requestBanchan} onClick={() => setPanel("banchan")} />
+          {banchanOptions.length > 0 ? (
+            <ActionButton icon={<Soup className="h-5 w-5" />} label={copy.requestBanchan} onClick={() => setPanel("banchan")} />
+          ) : null}
           <ActionButton icon={<Flame className="h-5 w-5" />} label={copy.requestGrill} onClick={() => setPanel("grill")} />
           <ActionButton
             icon={<CreditCard className="h-5 w-5" />}

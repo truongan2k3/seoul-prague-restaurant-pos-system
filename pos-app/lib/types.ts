@@ -239,6 +239,11 @@ export interface AppSettings {
   menuItemSortMode: MenuSortMode;
   /** Link encoded in review QR when no custom QR image is set */
   cfdReviewUrl: string;
+  /**
+   * Banchan option ids shown on table guest QR.
+   * null = all options from the Banchan library group; [] = none.
+   */
+  tableQrEnabledBanchanIds: string[] | null;
   /** Optional uploaded QR image override */
   cfdReviewQrImageUrl: string;
   /** Scrolling announcement banner — per-screen configs */

@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Download, QrCode, RefreshCw } from "lucide-react";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { NotificationBell } from "@/components/notification-bell";
 import { useApp } from "@/contexts/app-context";
+import { useSettings } from "@/contexts/settings-context";
 import {
   buildTableGuestUrl,
   isTableQrEligible,
   requestKindLabel,
+  type BanchanOption,
   type TableGuestRequestRecord,
 } from "@/lib/table-guest";
 import type { RestaurantTable } from "@/lib/types";
@@ -19,10 +21,14 @@ type Props = {
 
 export function DynamicQrServicesView({ tables }: Props) {
   const { translate, currentStaffUser } = useApp();
+  const { settings, saveSettings } = useSettings();
   const [selectedId, setSelectedId] = useState("");
   const [pending, setPending] = useState<TableGuestRequestRecord[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [banchanCatalog, setBanchanCatalog] = useState<BanchanOption[]>([]);
+  const [banchanBusy, setBanchanBusy] = useState(false);
+  const [banchanMessage, setBanchanMessage] = useState<string | null>(null);
 
   const eligibleTables = useMemo(
     () =>
@@ -58,6 +64,49 @@ export function DynamicQrServicesView({ tables }: Props) {
     const timer = window.setInterval(() => void loadPending(), 12_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  const loadBanchanCatalog = useCallback(async () => {
+    const response = await fetch("/api/table-guest/banchan-options", { cache: "no-store" });
+    const payload = (await response.json().catch(() => ({}))) as {
+      options?: BanchanOption[];
+    };
+    if (response.ok) setBanchanCatalog(payload.options ?? []);
+  }, []);
+
+  useEffect(() => {
+    void loadBanchanCatalog();
+  }, [loadBanchanCatalog]);
+
+  const enabledBanchanIds = settings.tableQrEnabledBanchanIds;
+
+  function isBanchanEnabled(id: string) {
+    if (enabledBanchanIds == null) return true;
+    return enabledBanchanIds.includes(id);
+  }
+
+  async function toggleBanchan(id: string, enabled: boolean) {
+    const allIds = banchanCatalog.map((option) => option.id);
+    const current =
+      enabledBanchanIds == null ? allIds : enabledBanchanIds.filter((item) => allIds.includes(item));
+    const next = enabled
+      ? Array.from(new Set([...current, id]))
+      : current.filter((item) => item !== id);
+    const allEnabled =
+      allIds.length > 0 && allIds.every((item) => next.includes(item)) && next.length === allIds.length;
+
+    setBanchanBusy(true);
+    setBanchanMessage(null);
+    try {
+      const ok = await saveSettings({
+        tableQrEnabledBanchanIds: allEnabled ? null : next,
+      });
+      setBanchanMessage(
+        ok ? translate("tableQrBanchanSaved") : translate("tableQrBanchanSaveFailed"),
+      );
+    } finally {
+      setBanchanBusy(false);
+    }
+  }
 
   async function completeRequest(id: string) {
     setBusyId(id);
@@ -259,6 +308,61 @@ export function DynamicQrServicesView({ tables }: Props) {
                 </li>
               ) : null}
             </ul>
+          </section>
+
+          <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900 sm:p-5 lg:col-span-2">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">{translate("tableQrBanchanTitle")}</h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  {translate("tableQrBanchanHint")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void loadBanchanCatalog()}
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium dark:border-gray-700"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Reload
+              </button>
+            </div>
+
+            {banchanMessage ? (
+              <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+                {banchanMessage}
+              </p>
+            ) : null}
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {banchanCatalog.map((option) => {
+                const enabled = isBanchanEnabled(option.id);
+                return (
+                  <label
+                    key={option.id}
+                    className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3 py-3 text-sm ${
+                      enabled
+                        ? "border-emerald-300 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/30"
+                        : "border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-950/40"
+                    }`}
+                  >
+                    <span className="font-medium">{option.labelEn}</span>
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-emerald-600"
+                      checked={enabled}
+                      disabled={banchanBusy}
+                      onChange={(event) => void toggleBanchan(option.id, event.target.checked)}
+                    />
+                  </label>
+                );
+              })}
+              {banchanCatalog.length === 0 ? (
+                <p className="sm:col-span-2 lg:col-span-3 rounded-xl border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500 dark:border-gray-700">
+                  {translate("tableQrBanchanEmpty")}
+                </p>
+              ) : null}
+            </div>
           </section>
         </div>
       </div>

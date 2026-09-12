@@ -11,6 +11,8 @@ import {
 } from "@/lib/reservation-analytics";
 import {
   parseReservationBbqNotes,
+  pickEventTypeLabel,
+  type GuestReservationLang,
   type ReservationBbqPreference,
 } from "@/lib/reservation-guest-form";
 import type { ReservationRecord, ReservationStatus } from "@/lib/types";
@@ -130,6 +132,23 @@ export function MapReservationTicker() {
         ? translate("mapResTickerBbqNo")
         : null;
 
+  const eventTypeLang: GuestReservationLang = language === "cs" ? "cs" : "en";
+  const eventTypeLabel = current.eventType
+    ? pickEventTypeLabel(
+        settings.reservationEventTypes.find((option) => option.id === current.eventType) ?? {
+          id: current.eventType,
+          labels: {
+            en: current.eventType,
+            cs: current.eventType,
+            vi: current.eventType,
+            de: current.eventType,
+            ko: current.eventType,
+          },
+        },
+        eventTypeLang,
+      )
+    : null;
+
   return (
     <aside className="flex shrink-0 flex-col gap-1 border-t border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-900 sm:h-14 sm:flex-row sm:items-center sm:gap-3.5 sm:px-5 sm:py-0">
       <div className="flex shrink-0 items-center gap-2 text-gray-500 dark:text-gray-400">
@@ -170,6 +189,11 @@ export function MapReservationTicker() {
             >
               {translate(reservationStatusLabelKey(current.status))}
             </span>
+            {eventTypeLabel ? (
+              <span className="shrink-0 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-sky-800 sm:text-[11px] dark:bg-sky-950/50 dark:text-sky-200">
+                {eventTypeLabel}
+              </span>
+            ) : null}
             {bbq && bbqLabel ? (
               <span
                 className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase sm:text-[11px] ${bbqBadgeClass(bbq)}`}

@@ -7,9 +7,9 @@ import {
 } from "@/src/lib/reservation-email";
 import { fetchReservationEmailContext } from "@/src/lib/reservation-guest-server";
 
-const ALLOWED: ReservationEmailKind[] = ["received", "cancelled", "updated"];
+const ALLOWED: ReservationEmailKind[] = ["received", "cancelled", "updated", "no_show"];
 
-/** Staff-triggered guest emails (POS create → received, update, cancel). */
+/** Staff-triggered guest emails (POS create → received, update, cancel, no-show). */
 export async function POST(request: Request) {
   const staff = await readStaffSession();
   if (!staff) {
@@ -41,7 +41,14 @@ export async function POST(request: Request) {
     );
   }
 
-  if (type === "updated" && data.status === "cancelled") {
+  if (type === "no_show" && data.status !== "no_show") {
+    return NextResponse.json(
+      { error: "Reservation is not marked no-show." },
+      { status: 400 },
+    );
+  }
+
+  if (type === "updated" && (data.status === "cancelled" || data.status === "no_show")) {
     return NextResponse.json(
       { error: "Cancelled reservations cannot be updated." },
       { status: 400 },

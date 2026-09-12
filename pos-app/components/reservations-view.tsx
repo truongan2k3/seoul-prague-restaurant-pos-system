@@ -354,10 +354,11 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const handleCreateReservation = async () => {
     if (!formGuestName.trim() || !formDateTime) return;
     setBusyId("new");
-    const { error: createError } = await createReservation({
+    const guestEmail = formEmail.trim();
+    const { data: created, error: createError } = await createReservation({
       guestName: formGuestName.trim(),
       guestPhone: formPhone.trim() || undefined,
-      guestEmail: formEmail.trim() || undefined,
+      guestEmail: guestEmail || undefined,
       partySize: Math.max(1, formPartySize),
       reservedAt: new Date(formDateTime),
       notes: formNotes.trim() || undefined,
@@ -370,6 +371,14 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     if (createError) {
       setError(createError.message);
       return;
+    }
+    // Same "received" email as online booking when staff enters a guest email.
+    if (guestEmail && created?.id) {
+      void fetch("/api/reservations/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: created.id, type: "received" }),
+      }).catch(() => undefined);
     }
     setShowNewModal(false);
     setFormGuestName("");

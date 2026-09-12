@@ -14,6 +14,7 @@ import { DynamicQrServicesView } from "@/components/dynamic-qr-services-view";
 import { ReadyNotificationListener } from "@/components/ready-notification-listener";
 import { MainNewOrderNotificationListener } from "@/components/main-new-order-notification-listener";
 import { CallWaiterListener } from "@/components/call-waiter-listener";
+import { TableGuestRequestListener } from "@/components/table-guest-request-listener";
 import { Sidebar } from "@/components/sidebar";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { ChangelogPopupGate } from "@/components/changelog-popup-gate";
@@ -624,7 +625,7 @@ export function DashboardShell() {
           />
         );
       case "dynamicQr":
-        return <DynamicQrServicesView />;
+        return <DynamicQrServicesView tables={tables} />;
       case "staff":
         return <StaffView onRefresh={() => void refreshStaffList()} />;
       case "settings":
@@ -650,6 +651,7 @@ export function DashboardShell() {
       <ReadyNotificationListener tables={tables} menuItems={menuItems} />
       <MainNewOrderNotificationListener tables={tables} />
       <CallWaiterListener />
+      <TableGuestRequestListener />
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <AnnouncementMarquee surface="pos" />

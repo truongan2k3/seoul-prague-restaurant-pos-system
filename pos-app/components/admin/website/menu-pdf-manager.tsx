@@ -13,20 +13,6 @@ import { MENU_PDF_LANGUAGES } from "@/lib/website/defaults";
 import { sortMenuPdfs } from "@/lib/website/menu-pdf-order";
 import type { MenuPdfLanguage, WebsiteMenuPdf } from "@/lib/website/types";
 
-async function countPdfPages(file: File): Promise<number | undefined> {
-  try {
-    const pdfjs = await import("pdfjs-dist");
-    pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-      "pdfjs-dist/build/pdf.worker.min.mjs",
-      import.meta.url,
-    ).toString();
-    const buffer = await file.arrayBuffer();
-    const doc = await pdfjs.getDocument({ data: buffer }).promise;
-    return doc.numPages;
-  } catch {
-    return undefined;
-  }
-}
 
 interface MenuPdfManagerProps {
   initial: WebsiteMenuPdf[];
@@ -108,15 +94,33 @@ export function MenuPdfManager({ initial, compact = false, onChange }: MenuPdfMa
         );
       }
 
-      setProgress("Reading PDF pages…");
-      const pageCount = await countPdfPages(file);
+      setProgress("Rendering PDF pages to images…");
+      const { renderMenuPdfPages } = await import("@/lib/website/render-menu-pdf-pages");
+      const rendered = await renderMenuPdfPages(file, { scale: 2, quality: 0.88 });
+      const pageCount = rendered.pageCount;
 
-      setProgress(`Uploading ${(file.size / 1024 / 1024).toFixed(1)} MB…`);
+      setProgress(`Uploading PDF (${(file.size / 1024 / 1024).toFixed(1)} MB)…`);
       const { uploadFileDirectToStorage } = await import("@/lib/website/direct-upload");
       const uploaded = await uploadFileDirectToStorage(file, "menu-pdfs");
       if (uploaded.error || !uploaded.publicUrl || !uploaded.storagePath) {
         setError(uploaded.error || "Direct upload failed.");
         return;
+      }
+
+      const pageUrls: string[] = [];
+      for (let index = 0; index < rendered.blobs.length; index += 1) {
+        setProgress(`Uploading page images… ${index + 1}/${rendered.blobs.length}`);
+        const pageFile = new File(
+          [rendered.blobs[index]],
+          `${language}-page-${String(index + 1).padStart(2, "0")}.jpg`,
+          { type: "image/jpeg" },
+        );
+        const pageUpload = await uploadFileDirectToStorage(pageFile, "menu-pdfs");
+        if (pageUpload.error || !pageUpload.publicUrl) {
+          setError(pageUpload.error || `Failed to upload page ${index + 1}.`);
+          return;
+        }
+        pageUrls.push(pageUpload.publicUrl);
       }
 
       const response = await fetch("/api/website/menu-pdf", {
@@ -128,6 +132,7 @@ export function MenuPdfManager({ initial, compact = false, onChange }: MenuPdfMa
           storagePath: uploaded.storagePath,
           pageCount: pageCount ?? null,
           fileSize: file.size,
+          pageUrls,
         }),
       });
 
@@ -154,7 +159,7 @@ export function MenuPdfManager({ initial, compact = false, onChange }: MenuPdfMa
         return next;
       });
       setMessage(
-        `${MENU_PDF_LANGUAGES.find((r) => r.code === language)?.label} menu saved. Open /menu to view.`,
+        `${MENU_PDF_LANGUAGES.find((r) => r.code === language)?.label} menu saved as page images. Open /menu to view.`,
       );
       if (!compact) router.refresh();
     } catch (err) {

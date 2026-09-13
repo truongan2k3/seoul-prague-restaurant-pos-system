@@ -53,6 +53,7 @@ export async function POST(request: Request) {
     storagePath?: string;
     pageCount?: number | null;
     fileSize?: number;
+    pageUrls?: string[];
   };
   try {
     body = (await request.json()) as typeof body;
@@ -74,6 +75,9 @@ export async function POST(request: Request) {
     body.pageCount != null && Number.isFinite(Number(body.pageCount))
       ? Number(body.pageCount)
       : null;
+  const pageUrls = Array.isArray(body.pageUrls)
+    ? body.pageUrls.filter((url): url is string => typeof url === "string" && url.trim().length > 0)
+    : [];
 
   if (!ALLOWED.includes(language)) {
     return NextResponse.json({ error: "Invalid language. Use cs, en, or zh." }, { status: 400 });
@@ -108,6 +112,7 @@ export async function POST(request: Request) {
         storage_path: storagePath,
         page_count: pageCount,
         file_size: fileSize || null,
+        page_urls: pageUrls,
         sort_order: sortOrder,
         updated_at: new Date().toISOString(),
       },
@@ -117,6 +122,38 @@ export async function POST(request: Request) {
     .single();
 
   if (dbError) {
+    if (/page_urls/i.test(dbError.message)) {
+      const withoutPages = await admin
+        .from("website_menu_pdfs")
+        .upsert(
+          {
+            language,
+            label,
+            file_url: publicUrl,
+            storage_path: storagePath,
+            page_count: pageCount,
+            file_size: fileSize || null,
+            sort_order: sortOrder,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "language" },
+        )
+        .select("*")
+        .single();
+      if (withoutPages.error) {
+        return NextResponse.json(
+          {
+            error: `${withoutPages.error.message}. Run supabase/patch-website-menu-pdf-page-urls.sql in Supabase SQL editor.`,
+          },
+          { status: 500 },
+        );
+      }
+      return NextResponse.json({
+        data: mapMenuPdfRow(withoutPages.data as Record<string, unknown>),
+        warning:
+          "Saved PDF without page images. Run supabase/patch-website-menu-pdf-page-urls.sql then re-upload.",
+      });
+    }
     // Retry without sort_order if column is missing (pre-migration).
     if (/sort_order/i.test(dbError.message)) {
       const retry = await admin
@@ -129,12 +166,44 @@ export async function POST(request: Request) {
             storage_path: storagePath,
             page_count: pageCount,
             file_size: fileSize || null,
+            page_urls: pageUrls,
             updated_at: new Date().toISOString(),
           },
           { onConflict: "language" },
         )
         .select("*")
         .single();
+      if (retry.error && /page_urls/i.test(retry.error.message)) {
+        const withoutPages = await admin
+          .from("website_menu_pdfs")
+          .upsert(
+            {
+              language,
+              label,
+              file_url: publicUrl,
+              storage_path: storagePath,
+              page_count: pageCount,
+              file_size: fileSize || null,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "language" },
+          )
+          .select("*")
+          .single();
+        if (withoutPages.error) {
+          return NextResponse.json(
+            {
+              error: `Database save failed: ${withoutPages.error.message}. Run supabase/patch-website-menu-pdf-page-urls.sql.`,
+            },
+            { status: 500 },
+          );
+        }
+        return NextResponse.json({
+          data: mapMenuPdfRow(withoutPages.data as Record<string, unknown>),
+          warning:
+            "Saved PDF without page images. Run supabase/patch-website-menu-pdf-page-urls.sql then re-upload.",
+        });
+      }
       if (retry.error) {
         const missingTable = /does not exist|42P01|schema cache/i.test(retry.error.message);
         return NextResponse.json(

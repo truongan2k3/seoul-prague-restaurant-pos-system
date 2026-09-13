@@ -438,7 +438,7 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "en" }: MenuPdfFlipboo
 
   const loadPdf = useCallback(
     async (pdf: WebsiteMenuPdf | undefined) => {
-      if (!pdf?.fileUrl) {
+      if (!pdf?.fileUrl && !(pdf?.pageUrls && pdf.pageUrls.length > 0)) {
         setPages([]);
         return;
       }
@@ -449,6 +449,15 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "en" }: MenuPdfFlipboo
       resetView();
       setLightboxPage(null);
       try {
+        // Prefer pre-rendered JPEGs (much less Storage egress than downloading the PDF).
+        if (pdf?.pageUrls && pdf.pageUrls.length > 0) {
+          setPages(pdf.pageUrls);
+          return;
+        }
+        if (!pdf?.language) {
+          setPages([]);
+          return;
+        }
         const images = await renderPdfToImages(proxyPdfUrl(pdf.language));
         if (images.length === 0) {
           setError("Could not render PDF pages.");
@@ -673,7 +682,7 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "en" }: MenuPdfFlipboo
             }`}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={src} alt="" className="h-full w-full object-cover" draggable={false} />
+            <img src={src} alt="" className="h-full w-full object-cover" draggable={false} loading={index < 2 ? "eager" : "lazy"} decoding="async" />
           </button>
         ))}
       </div>

@@ -257,6 +257,8 @@ export interface WebsiteMenuPdf {
   storagePath?: string;
   pageCount?: number;
   fileSize?: number;
+  /** Pre-rendered JPEG page URLs (preferred by flipbook over downloading the PDF). */
+  pageUrls?: string[];
   /** Admin drag order. When all zero, English is shown first by default. */
   sortOrder: number;
   updatedAt?: Date;

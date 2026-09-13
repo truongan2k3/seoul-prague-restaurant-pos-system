@@ -155,6 +155,12 @@ function mapMenuItemRow(row: Record<string, unknown>): WebsiteMenuItem {
   };
 }
 
+function parsePageUrls(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const urls = value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+  return urls.length > 0 ? urls : undefined;
+}
+
 function mapMenuPdfRow(row: Record<string, unknown>): WebsiteMenuPdf {
   return {
     id: row.id as string,
@@ -164,6 +170,7 @@ function mapMenuPdfRow(row: Record<string, unknown>): WebsiteMenuPdf {
     storagePath: (row.storage_path as string) || undefined,
     pageCount: typeof row.page_count === "number" ? row.page_count : undefined,
     fileSize: typeof row.file_size === "number" ? row.file_size : undefined,
+    pageUrls: parsePageUrls(row.page_urls),
     sortOrder: Number(row.sort_order ?? 0),
     updatedAt: row.updated_at ? new Date(row.updated_at as string) : undefined,
   };

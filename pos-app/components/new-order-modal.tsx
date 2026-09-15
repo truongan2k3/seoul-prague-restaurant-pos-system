@@ -1948,8 +1948,8 @@ export function NewOrderModal({
               </div>
 
               <div
-                className={`order-3 min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4 md:order-3 md:pb-4 ${
-                  searchKeyboardOpen ? "pb-[12.5rem] sm:pb-[15.5rem] md:pb-4" : "pb-16 sm:pb-24 md:pb-4"
+                className={`min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 pb-16 sm:p-4 sm:pb-24 md:pb-4 ${
+                  searchKeyboardOpen ? "max-md:pb-3" : ""
                 }`}
               >
                 {filteredItems.length === 0 ? (
@@ -1989,14 +1989,12 @@ export function NewOrderModal({
               </div>
 
               {searchKeyboardOpen && (
-                <div className="order-2 pointer-events-none absolute inset-x-0 bottom-11 z-20 sm:bottom-14 md:pointer-events-auto md:static md:bottom-auto md:z-auto md:shrink-0">
-                  <div className="pointer-events-auto shadow-[0_-8px_24px_rgba(0,0,0,0.12)] md:shadow-none">
-                    <OnScreenKeyboard
-                      value={search}
-                      onChange={setSearch}
-                      onHide={() => setSearchKeyboardOpen(false)}
-                    />
-                  </div>
+                <div className="shrink-0 max-md:mb-11 max-md:shadow-[0_-8px_24px_rgba(0,0,0,0.12)] sm:max-md:mb-14">
+                  <OnScreenKeyboard
+                    value={search}
+                    onChange={setSearch}
+                    onHide={() => setSearchKeyboardOpen(false)}
+                  />
                 </div>
               )}
             </main>

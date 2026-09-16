@@ -572,13 +572,12 @@ async function dispatchKitchenPrint(
         console.warn("[KitchenPrint] Skipping bar ticket — no bar printer configured");
         return;
       }
-      console.warn("[KitchenPrint] Silent print incomplete:", result.error);
-      if (!settings.browserPrintFallback) {
-        throw new Error(result.error || "Silent kitchen print failed");
-      }
+      // Bridge/silent failed — always surface (POS alert / Print Station reprint queue).
+      // Do not swallow via browser fallback: Send would look successful while kitchen got nothing.
+      throw new Error(result.error || "Silent kitchen print failed");
     } catch (error) {
       console.warn("[KitchenPrint] Silent print failed:", error);
-      if (!settings.browserPrintFallback) throw error;
+      throw error;
     }
   }
 

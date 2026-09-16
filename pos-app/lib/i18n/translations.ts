@@ -494,6 +494,14 @@ const en = {
     "Cannot reach print bridge — on THIS PC double-click start-bridge.bat (no Node), then refresh",
   printStationBridgeHelp:
     "Silent print needs the bridge on this Windows PC (no Node): 1) Copy print-bridge folder, double-click POS-Print-Bridge.bat (or Desktop shortcut), keep it open. 2) Open /print-station on the same PC. 3) Bridge URL = http://127.0.0.1:39100.",
+  printStationPendingTitle: "Waiting to reprint",
+  printStationPendingHint:
+    "Jobs that failed (bridge off / printer error). Start the bridge, then tap Reprint.",
+  printStationPendingEmpty: "No failed jobs waiting.",
+  printStationReprint: "Reprint",
+  printStationReprinted: "Reprinted successfully",
+  printFailedToast: "Kitchen print failed",
+  printFailedToastHint: "Open Print Station to reprint",
   barScreen: "Bar Display",
   searchMenu: "Search by name or ID…",
   customItem: "Custom",
@@ -1588,6 +1596,14 @@ const cs: Record<TranslationKey, string> = {
     "Most nedostupný — na TOMTO PC spusťte start-bridge.bat (bez Node) a obnovte stránku",
   printStationBridgeHelp:
     "Tichý tisk potřebuje most na tomto Windows PC (bez Node): 1) Zkopírujte složku print-bridge, spusťte POS-Print-Bridge.bat (nebo Desktop shortcut). 2) Otevřete /print-station na stejném PC. 3) URL = http://127.0.0.1:39100.",
+  printStationPendingTitle: "Čeká na opětovný tisk",
+  printStationPendingHint:
+    "Úlohy, které selhaly (most vypnutý / chyba tiskárny). Spusťte most a klepněte na Opětovný tisk.",
+  printStationPendingEmpty: "Žádné neúspěšné úlohy nečekají.",
+  printStationReprint: "Opětovný tisk",
+  printStationReprinted: "Úspěšně vytištěno znovu",
+  printFailedToast: "Tisk do kuchyně selhal",
+  printFailedToastHint: "Otevřete Print Station a vytiskněte znovu",
   barScreen: "Bar obrazovka",
   searchMenu: "Hledat podle názvu nebo ID…",
   customItem: "Vlastní",
@@ -2677,6 +2693,13 @@ const zh: Record<TranslationKey, string> = {
   printStationNeedBridge: "无法连接打印桥 — 请在本机双击 start-bridge.bat（无需 Node）后刷新",
   printStationBridgeHelp:
     "静默打印需要本机打印桥（无需 Node）：1) 复制 print-bridge 文件夹，双击 POS-Print-Bridge.bat（或桌面快捷方式）并保持打开。2) 在同一台电脑打开 /print-station。3) 打印桥 URL = http://127.0.0.1:39100。",
+  printStationPendingTitle: "等待重新打印",
+  printStationPendingHint: "失败的任务（打印桥未开 / 打印机错误）。启动打印桥后点击重新打印。",
+  printStationPendingEmpty: "暂无失败任务。",
+  printStationReprint: "重新打印",
+  printStationReprinted: "重新打印成功",
+  printFailedToast: "厨房打印失败",
+  printFailedToastHint: "打开 Print Station 重新打印",
   barScreen: "吧台屏幕",
   searchMenu: "按名称或 ID 搜索…",
   customItem: "自定义",

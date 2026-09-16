@@ -12,6 +12,7 @@ import {
   applyFulfillmentModeToNewOrders,
   shouldPrintKitchenOnSend,
 } from "@/lib/kitchen-fulfillment-mode";
+import { reportPrintFailed } from "@/lib/print-failed-alert";
 import { ordersFromLines } from "@/lib/checkout-calculations";
 import { finalizeBillOnlyOrder } from "@/lib/menu-item-dispatch";
 import { filterItemsForBoard } from "@/lib/order-board";
@@ -127,6 +128,11 @@ export function useTableOrderWorkflow({
           menuItems,
         }).catch((printError) => {
           console.warn("[KitchenPrint] Failed:", printError);
+          reportPrintFailed({
+            tableLabel: selectedTable.label,
+            detail: printError instanceof Error ? printError.message : String(printError),
+            source: "direct",
+          });
         });
       }
 
@@ -243,6 +249,11 @@ export function useTableOrderWorkflow({
         menuItems,
       }).catch((printError) => {
         console.warn("[KitchenPrint] Failed:", printError);
+        reportPrintFailed({
+          tableLabel: selectedTable.label,
+          detail: printError instanceof Error ? printError.message : String(printError),
+          source: "direct",
+        });
       });
     }
     refreshAfterAction();

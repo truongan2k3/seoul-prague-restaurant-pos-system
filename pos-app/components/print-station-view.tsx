@@ -10,7 +10,7 @@ import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
 import { applyTableRealtimeEvent } from "@/lib/realtime-pos-sync";
 import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
 import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
-import { subscribeToKitchenPrintMessage, broadcastPrintFailed } from "@/lib/pos-notifications";
+import { subscribeToKitchenPrintMessage, broadcastPrintFailed, broadcastPrintOk } from "@/lib/pos-notifications";
 import {
   loadPendingKitchenPrints,
   removePendingKitchenPrint,
@@ -97,6 +97,7 @@ export function PrintStationView() {
       setPending((prev) => upsertPendingKitchenPrint(job, prev));
       try {
         await broadcastPrintFailed({
+          tableId: job.tableId,
           tableLabel: job.tableLabel,
           detail: job.error,
           pendingId: job.id,
@@ -198,6 +199,11 @@ export function PrintStationView() {
             ok: true,
             detail: `${orders.length} ${translate("printStationItems")}`,
           });
+          try {
+            await broadcastPrintOk({ tableId, tableLabel });
+          } catch {
+            /* ack is best-effort — main POS may still timeout */
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : "Print failed";
           const pendingId = `ticket-${tableId}-${Date.now()}`;

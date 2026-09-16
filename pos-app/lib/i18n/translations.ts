@@ -503,6 +503,9 @@ const en = {
   printFailedToast: "Kitchen print failed",
   printFailedToastHint: "Open Print Station to reprint",
   printFailedDirectHint: "Check the print bridge and kitchen printer on this PC.",
+  printStationOfflineHint: "Open /print-station in the browser on the print PC",
+  printStationOfflineDetail:
+    "Print Station did not confirm — the /print-station browser tab is probably closed. Bridge alone is not enough.",
   printFailedAlertTitle: "Kitchen print failed",
   printFailedAlertDetail: "Error",
   printFailedAlertOk: "OK",
@@ -1610,6 +1613,9 @@ const cs: Record<TranslationKey, string> = {
   printFailedToast: "Tisk do kuchyně selhal",
   printFailedToastHint: "Otevřete Print Station a vytiskněte znovu",
   printFailedDirectHint: "Zkontrolujte print bridge a kuchyňskou tiskárnu na tomto PC.",
+  printStationOfflineHint: "Otevřete /print-station v prohlížeči na tiskovém PC",
+  printStationOfflineDetail:
+    "Print Station nepotvrdil tisk — karta /print-station v prohlížeči je pravděpodobně zavřená. Samotný bridge nestačí.",
   printFailedAlertTitle: "Tisk do kuchyně selhal",
   printFailedAlertDetail: "Chyba",
   printFailedAlertOk: "OK",
@@ -2711,6 +2717,9 @@ const zh: Record<TranslationKey, string> = {
   printFailedToast: "厨房打印失败",
   printFailedToastHint: "打开 Print Station 重新打印",
   printFailedDirectHint: "请检查本机 print bridge 和厨房打印机。",
+  printStationOfflineHint: "请在打印电脑的浏览器打开 /print-station",
+  printStationOfflineDetail:
+    "Print Station 未确认打印 — 浏览器里的 /print-station 标签页可能已关闭。仅开着 print bridge 不够。",
   printFailedAlertTitle: "厨房打印失败",
   printFailedAlertDetail: "错误",
   printFailedAlertOk: "知道了",

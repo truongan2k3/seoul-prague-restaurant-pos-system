@@ -4,8 +4,11 @@ export type PrintFailedAlertPayload = {
   id: string;
   tableLabel?: string;
   detail: string;
-  /** Station queue → reprint there; direct → check bridge/printer on this device. */
-  source: "station" | "direct";
+  /**
+   * station → reprint on Print Station; station-offline → open /print-station;
+   * direct → check bridge/printer on this device.
+   */
+  source: "station" | "station-offline" | "direct";
 };
 
 type Listener = (payload: PrintFailedAlertPayload) => void;
@@ -15,7 +18,7 @@ const listeners = new Set<Listener>();
 export function reportPrintFailed(input: {
   tableLabel?: string;
   detail: string;
-  source: "station" | "direct";
+  source: "station" | "station-offline" | "direct";
   id?: string;
 }) {
   const payload: PrintFailedAlertPayload = {

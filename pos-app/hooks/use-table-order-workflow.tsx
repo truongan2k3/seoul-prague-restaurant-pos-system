@@ -13,8 +13,9 @@ import {
   shouldPrintKitchenOnSend,
 } from "@/lib/kitchen-fulfillment-mode";
 import { reportPrintFailed } from "@/lib/print-failed-alert";
+import { expectPrintStationAck } from "@/lib/print-station-ack";
 import { ordersFromLines } from "@/lib/checkout-calculations";
-import { finalizeBillOnlyOrder } from "@/lib/menu-item-dispatch";
+import { finalizeBillOnlyOrder, isBillOnlyOrderLine } from "@/lib/menu-item-dispatch";
 import { filterItemsForBoard } from "@/lib/order-board";
 import { sendCfdEvent } from "@/lib/cfd-display";
 import type { MenuCategoryRecord, MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
@@ -55,7 +56,7 @@ export function useTableOrderWorkflow({
   onRefreshFloor,
 }: UseTableOrderWorkflowOptions) {
   const refreshAfterAction = onRefreshFloor ?? onRefresh;
-  const { staff, logAction } = useApp();
+  const { staff, logAction, translate } = useApp();
   const { settings } = useSettings();
   const { printReceipt, printKitchenOrder } = useReceiptPrint();
   const [modal, setModal] = useState<TableOrderModalState>(null);
@@ -121,19 +122,30 @@ export function useTableOrderWorkflow({
 
       logAction(isAppend ? "add items" : "new order", `Table ${selectedTable?.label}`);
 
-      if (shouldPrintKitchenOnSend(settings) && !settings.kitchenPrintViaStation && selectedTable) {
-        void printKitchenOrder({
-          tableLabel: selectedTable.label,
-          orders: preparedOrders,
-          menuItems,
-        }).catch((printError) => {
-          console.warn("[KitchenPrint] Failed:", printError);
-          reportPrintFailed({
-            tableLabel: selectedTable.label,
-            detail: printError instanceof Error ? printError.message : String(printError),
-            source: "direct",
-          });
-        });
+      if (shouldPrintKitchenOnSend(settings) && selectedTable) {
+        const printable = preparedOrders.filter((o) => !isBillOnlyOrderLine(o) && !o.skipPrint);
+        if (printable.length > 0) {
+          if (settings.kitchenPrintViaStation) {
+            expectPrintStationAck({
+              tableId: modal.tableId,
+              tableLabel: selectedTable.label,
+              offlineDetail: translate("printStationOfflineDetail"),
+            });
+          } else {
+            void printKitchenOrder({
+              tableLabel: selectedTable.label,
+              orders: preparedOrders,
+              menuItems,
+            }).catch((printError) => {
+              console.warn("[KitchenPrint] Failed:", printError);
+              reportPrintFailed({
+                tableLabel: selectedTable.label,
+                detail: printError instanceof Error ? printError.message : String(printError),
+                source: "direct",
+              });
+            });
+          }
+        }
       }
 
       const updatedTable = mapTableRow(data);
@@ -240,21 +252,31 @@ export function useTableOrderWorkflow({
       options?.printOrders &&
       options.printOrders.length > 0 &&
       shouldPrintKitchenOnSend(settings) &&
-      !settings.kitchenPrintViaStation &&
       selectedTable
     ) {
-      void printKitchenOrder({
-        tableLabel: selectedTable.label,
-        orders: options.printOrders,
-        menuItems,
-      }).catch((printError) => {
-        console.warn("[KitchenPrint] Failed:", printError);
-        reportPrintFailed({
-          tableLabel: selectedTable.label,
-          detail: printError instanceof Error ? printError.message : String(printError),
-          source: "direct",
-        });
-      });
+      const printable = options.printOrders.filter((o) => !isBillOnlyOrderLine(o) && !o.skipPrint);
+      if (printable.length > 0) {
+        if (settings.kitchenPrintViaStation) {
+          expectPrintStationAck({
+            tableId: targetTableId,
+            tableLabel: selectedTable.label,
+            offlineDetail: translate("printStationOfflineDetail"),
+          });
+        } else {
+          void printKitchenOrder({
+            tableLabel: selectedTable.label,
+            orders: options.printOrders,
+            menuItems,
+          }).catch((printError) => {
+            console.warn("[KitchenPrint] Failed:", printError);
+            reportPrintFailed({
+              tableLabel: selectedTable.label,
+              detail: printError instanceof Error ? printError.message : String(printError),
+              source: "direct",
+            });
+          });
+        }
+      }
     }
     refreshAfterAction();
   };

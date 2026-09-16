@@ -28,6 +28,8 @@ import {
 } from "@/src/lib/supabase-data";
 import { shouldPrintKitchenOnSend, applyFulfillmentModeToNewOrders } from "@/lib/kitchen-fulfillment-mode";
 import { reportPrintFailed } from "@/lib/print-failed-alert";
+import { expectPrintStationAck } from "@/lib/print-station-ack";
+import { isBillOnlyOrderLine } from "@/lib/menu-item-dispatch";
 import { appendOrdersToTable, occupyTable } from "@/src/lib/table-actions";
 
 type OrderModalState = {
@@ -150,19 +152,30 @@ function ServerApp() {
 
       logAction(isAppend ? "server add items" : "server order", `Table ${orderModal.table.label}`);
 
-      if (shouldPrintKitchenOnSend(settings) && !settings.kitchenPrintViaStation) {
-        void printKitchenOrder({
-          tableLabel: orderModal.table.label,
-          orders: prepared,
-          menuItems,
-        }).catch((printError) => {
-          console.warn("[KitchenPrint] Failed:", printError);
-          reportPrintFailed({
-            tableLabel: orderModal.table.label,
-            detail: printError instanceof Error ? printError.message : String(printError),
-            source: "direct",
-          });
-        });
+      if (shouldPrintKitchenOnSend(settings)) {
+        const printable = prepared.filter((o) => !isBillOnlyOrderLine(o) && !o.skipPrint);
+        if (printable.length > 0) {
+          if (settings.kitchenPrintViaStation) {
+            expectPrintStationAck({
+              tableId: orderModal.table.id,
+              tableLabel: orderModal.table.label,
+              offlineDetail: translate("printStationOfflineDetail"),
+            });
+          } else {
+            void printKitchenOrder({
+              tableLabel: orderModal.table.label,
+              orders: prepared,
+              menuItems,
+            }).catch((printError) => {
+              console.warn("[KitchenPrint] Failed:", printError);
+              reportPrintFailed({
+                tableLabel: orderModal.table.label,
+                detail: printError instanceof Error ? printError.message : String(printError),
+                source: "direct",
+              });
+            });
+          }
+        }
       }
 
       setOrderModal(null);

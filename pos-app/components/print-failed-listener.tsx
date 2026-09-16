@@ -9,7 +9,13 @@ import {
   subscribeToPrintFailedAlerts,
   type PrintFailedAlertPayload,
 } from "@/lib/print-failed-alert";
-import { subscribeToPrintFailed } from "@/lib/pos-notifications";
+import { clearPrintStationAck } from "@/lib/print-station-ack";
+import {
+  POS_NOTIFICATIONS_CHANNEL,
+  type PrintFailedPayload,
+  type PrintOkPayload,
+} from "@/lib/pos-notifications";
+import { supabase } from "@/src/lib/supabase";
 
 const DEDUPE_MS = 8_000;
 
@@ -50,9 +56,11 @@ export function PrintFailedListener() {
         ? ` · ${translate("table")} ${payload.tableLabel}`
         : "";
       const hint =
-        payload.source === "station"
-          ? translate("printFailedToastHint")
-          : translate("printFailedDirectHint");
+        payload.source === "station-offline"
+          ? translate("printStationOfflineHint")
+          : payload.source === "station"
+            ? translate("printFailedToastHint")
+            : translate("printFailedDirectHint");
       pushNotification({
         id: `print-failed-${payload.id}`,
         message: `🖨️ ${translate("printFailedToast")}${tablePart} — ${hint}`,
@@ -80,24 +88,35 @@ export function PrintFailedListener() {
 
   useEffect(() => {
     const unsubLocal = subscribeToPrintFailedAlerts(enqueueAlert);
-    const unsubRemote = subscribeToPrintFailed((payload) => {
-      enqueueAlert({
-        id: payload.pendingId,
-        tableLabel: payload.tableLabel,
-        detail: payload.detail,
-        source: "station",
-      });
-    });
+    // Must use the same channel topic Print Station sends on.
+    const channel = supabase
+      .channel(POS_NOTIFICATIONS_CHANNEL)
+      .on("broadcast", { event: "print_failed" }, ({ payload }) => {
+        const data = payload as PrintFailedPayload;
+        clearPrintStationAck(data.tableId);
+        enqueueAlert({
+          id: data.pendingId,
+          tableLabel: data.tableLabel,
+          detail: data.detail,
+          source: "station",
+        });
+      })
+      .on("broadcast", { event: "print_ok" }, ({ payload }) => {
+        clearPrintStationAck((payload as PrintOkPayload).tableId);
+      })
+      .subscribe();
     return () => {
       unsubLocal();
-      unsubRemote();
+      void supabase.removeChannel(channel);
     };
   }, [enqueueAlert]);
 
   const hint =
-    alert?.source === "station"
-      ? translate("printFailedToastHint")
-      : translate("printFailedDirectHint");
+    alert?.source === "station-offline"
+      ? translate("printStationOfflineHint")
+      : alert?.source === "station"
+        ? translate("printFailedToastHint")
+        : translate("printFailedDirectHint");
 
   return (
     <Modal

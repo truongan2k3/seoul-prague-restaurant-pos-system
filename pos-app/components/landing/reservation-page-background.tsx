@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  buildYouTubeBackgroundEmbedUrl,
   isReservationGifUrl,
   isReservationVideoUrl,
+  parseYouTubeVideoId,
   reservationBackgroundHasMedia,
 } from "@/lib/website/reservation-background";
 import type { WebsiteReservationBackground } from "@/lib/website/types";
@@ -53,7 +55,8 @@ function useSaveDataOrSlow(): boolean {
 
 /**
  * Full-bleed cinematic background for guest reservation pages.
- * Video is decorative only — never blocks the booking form.
+ * YouTube (when set) is preferred — streams off Supabase Storage.
+ * Video/GIF uploads remain as fallback. Decorative only — never blocks the form.
  */
 export function ReservationPageBackground({
   config,
@@ -69,22 +72,31 @@ export function ReservationPageBackground({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoFailed, setVideoFailed] = useState(false);
   const [shouldLoadVideo, setShouldLoadVideo] = useState(preview);
+  const [shouldLoadYoutube, setShouldLoadYoutube] = useState(preview);
 
   const active = preview || (config.enabled && reservationBackgroundHasMedia(config));
   const posterUrl = config.posterUrl;
   const objectPosition =
     viewport === "mobile" ? config.objectPositionMobile : config.objectPosition;
 
+  const youtubeId = useMemo(
+    () => parseYouTubeVideoId(config.youtubeUrl || ""),
+    [config.youtubeUrl],
+  );
+  const youtubeEmbedUrl = youtubeId ? buildYouTubeBackgroundEmbedUrl(youtubeId) : "";
+
   const videoSrc = useMemo(() => {
+    if (youtubeId) return "";
     if (viewport === "mobile" && config.videoUrlMobile) return config.videoUrlMobile;
     if (config.videoUrl) return config.videoUrl;
     if (config.videoUrlMobile) return config.videoUrlMobile;
     return "";
-  }, [config.videoUrl, config.videoUrlMobile, viewport]);
+  }, [config.videoUrl, config.videoUrlMobile, viewport, youtubeId]);
 
   const useAnimatedGif =
     Boolean(videoSrc) && isReservationGifUrl(videoSrc) && !isReservationVideoUrl(videoSrc);
 
+  const canPlayYoutube = Boolean(youtubeId) && !reducedMotion && !constrained;
   const canPlayVideo =
     Boolean(videoSrc) &&
     isReservationVideoUrl(videoSrc) &&
@@ -92,15 +104,24 @@ export function ReservationPageBackground({
     !constrained &&
     !videoFailed;
 
-  // Lazy-load video after idle / short delay so booking UI paints first.
+  // Lazy-load YouTube / file video after idle so booking UI paints first.
   useEffect(() => {
-    if (!active || !canPlayVideo || preview) {
-      if (preview && canPlayVideo) setShouldLoadVideo(true);
+    if (!active || preview) {
+      if (preview) {
+        setShouldLoadYoutube(canPlayYoutube);
+        setShouldLoadVideo(canPlayVideo);
+      }
       return;
     }
+
+    const wantsMedia = canPlayYoutube || canPlayVideo;
+    if (!wantsMedia) return;
+
     let cancelled = false;
     const enable = () => {
-      if (!cancelled) setShouldLoadVideo(true);
+      if (cancelled) return;
+      if (canPlayYoutube) setShouldLoadYoutube(true);
+      if (canPlayVideo) setShouldLoadVideo(true);
     };
     const idle = (window as Window & {
       requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
@@ -120,12 +141,13 @@ export function ReservationPageBackground({
       }
       if (timeoutId != null) window.clearTimeout(timeoutId);
     };
-  }, [active, canPlayVideo, preview, videoSrc]);
+  }, [active, canPlayVideo, canPlayYoutube, preview, videoSrc, youtubeId]);
 
   useEffect(() => {
     setVideoFailed(false);
     setShouldLoadVideo(preview);
-  }, [videoSrc, preview]);
+    setShouldLoadYoutube(preview);
+  }, [videoSrc, youtubeId, preview]);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -147,10 +169,8 @@ export function ReservationPageBackground({
       className="pointer-events-none absolute inset-0 overflow-hidden"
       aria-hidden
     >
-      {/* Base fill */}
       <div className="absolute inset-0 bg-[#0B0B0C]" />
 
-      {/* Poster / still — always present for LCP + fallback */}
       {posterUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -163,7 +183,21 @@ export function ReservationPageBackground({
         />
       ) : null}
 
-      {/* GIF as animated image fallback when admin uploaded GIF instead of video */}
+      {canPlayYoutube && shouldLoadYoutube ? (
+        <div className="absolute inset-0 overflow-hidden">
+          {/* Scale past 100% to crop YouTube chrome / letterboxing for a full-bleed look. */}
+          <iframe
+            title="Reservation background"
+            src={youtubeEmbedUrl}
+            className="pointer-events-none absolute left-1/2 top-1/2 h-[56.25vw] min-h-full w-[177.78vh] min-w-full -translate-x-1/2 -translate-y-1/2 border-0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen={false}
+            loading="lazy"
+            tabIndex={-1}
+          />
+        </div>
+      ) : null}
+
       {useAnimatedGif && !reducedMotion && !constrained ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -176,7 +210,6 @@ export function ReservationPageBackground({
         />
       ) : null}
 
-      {/* Video loop — desktop/mobile sources chosen above; never loads desktop-only on mobile when mobile URL set */}
       {canPlayVideo && shouldLoadVideo ? (
         <video
           ref={videoRef}
@@ -192,7 +225,6 @@ export function ReservationPageBackground({
           disablePictureInPicture
           onError={() => setVideoFailed(true)}
         >
-          {/* Prefer webm when URL is webm; browsers skip unsupported types */}
           {videoSrc.toLowerCase().includes(".webm") ? (
             <source src={videoSrc} type="video/webm" />
           ) : null}
@@ -203,14 +235,12 @@ export function ReservationPageBackground({
         </video>
       ) : null}
 
-      {/* Readability overlay */}
       <div
         className="absolute inset-0"
         style={{
           background: `linear-gradient(180deg, rgba(11,11,12,${overlay * 0.85}) 0%, rgba(11,11,12,${overlay}) 45%, rgba(11,11,12,${Math.min(0.92, overlay + 0.12)}) 100%)`,
         }}
       />
-      {/* Soft vignette for premium BBQ atmosphere */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_35%,rgba(0,0,0,0.45)_100%)]" />
     </div>
   );

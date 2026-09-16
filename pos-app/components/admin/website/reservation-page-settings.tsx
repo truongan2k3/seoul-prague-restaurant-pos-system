@@ -10,6 +10,7 @@ import {
   DEFAULT_RESERVATION_BACKGROUND,
   RESERVATION_BG_UPLOAD_TIPS,
   normalizeReservationBackground,
+  parseYouTubeVideoId,
 } from "@/lib/website/reservation-background";
 import type { WebsiteReservationBackground, WebsiteSettings } from "@/lib/website/types";
 import { saveWebsiteSettings } from "@/src/lib/website-actions";
@@ -124,8 +125,9 @@ export function ReservationPageSettingsEditor({
         <div>
           <h1 className="text-2xl font-semibold">Reservation page settings</h1>
           <p className="mt-1 max-w-2xl text-sm text-gray-500">
-            Cinematic BBQ smoke / fire background behind the guest booking form. Keep loops short;
-            prefer WebM + MP4 over GIF. Form readability is controlled by the overlay.
+            Cinematic background behind the guest booking form. Prefer a YouTube link (zero Storage
+            egress). File uploads remain as optional fallback. Form readability is controlled by the
+            overlay.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -178,8 +180,35 @@ export function ReservationPageSettingsEditor({
           <section className="space-y-4 rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
             <h2 className="text-sm font-semibold">Media</h2>
 
+            <Field label="YouTube background URL" hint={RESERVATION_BG_UPLOAD_TIPS.youtube}>
+              <input
+                className={inputClass}
+                type="url"
+                placeholder="https://www.youtube.com/watch?v=…"
+                value={bg.youtubeUrl}
+                onChange={(e) =>
+                  patch({
+                    youtubeUrl: e.target.value,
+                    enabled: e.target.value.trim() ? true : bg.enabled,
+                  })
+                }
+              />
+              {bg.youtubeUrl.trim() && !parseYouTubeVideoId(bg.youtubeUrl) ? (
+                <span className="mt-1 block text-[11px] text-amber-600 dark:text-amber-400">
+                  Could not parse a YouTube video id from this URL.
+                </span>
+              ) : null}
+              {parseYouTubeVideoId(bg.youtubeUrl) ? (
+                <span className="mt-1 block text-[11px] text-emerald-700 dark:text-emerald-400">
+                  YouTube will autoplay muted on /reservation (uploaded desktop/mobile files are
+                  skipped while this is set). Clear uploaded videos to stop Storage hits from old
+                  URLs.
+                </span>
+              ) : null}
+            </Field>
+
             <MediaSlot
-              title="Desktop / tablet video"
+              title="Desktop / tablet video (optional)"
               hint={RESERVATION_BG_UPLOAD_TIPS.desktop}
               url={bg.videoUrl}
               busy={uploading === "desktop"}
@@ -286,12 +315,9 @@ export function ReservationPageSettingsEditor({
           </section>
 
           <p className="text-xs text-gray-500">
-            Run SQL if needed:{" "}
-            <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">
-              supabase/patch-reservation-background.sql
-            </code>
-            . Storage uploads use immutable long-cache headers; mobile never downloads the desktop
-            file when a mobile clip is set.
+            Tip: set a YouTube URL and clear uploaded desktop/mobile videos so Storage egress from{" "}
+            <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">reservation-bg</code>{" "}
+            drops. Keep a small poster for LCP / autoplay fallback.
           </p>
         </div>
 

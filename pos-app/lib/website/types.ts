@@ -187,6 +187,11 @@ export interface WebsiteSettings {
 /** Guest reservation page full-bleed background media. */
 export interface WebsiteReservationBackground {
   enabled: boolean;
+  /**
+   * YouTube watch / share / embed URL (or bare video id).
+   * When set, preferred over uploaded video — zero Supabase Storage egress.
+   */
+  youtubeUrl: string;
   /** Primary loop (WebM/MP4 preferred). Served on desktop / as fallback. */
   videoUrl: string;
   /** Optional lighter mobile loop to cut bandwidth. */

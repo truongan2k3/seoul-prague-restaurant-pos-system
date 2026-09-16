@@ -2,6 +2,7 @@ import type { WebsiteReservationBackground } from "@/lib/website/types";
 
 export const DEFAULT_RESERVATION_BACKGROUND: WebsiteReservationBackground = {
   enabled: false,
+  youtubeUrl: "",
   videoUrl: "",
   videoUrlMobile: "",
   posterUrl: "",
@@ -11,12 +12,14 @@ export const DEFAULT_RESERVATION_BACKGROUND: WebsiteReservationBackground = {
 };
 
 export const RESERVATION_BG_UPLOAD_TIPS = {
+  youtube:
+    "Paste a YouTube link for muted autoplay background. Best for egress — video streams from YouTube, not Supabase.",
   desktop:
-    "Prefer short looping WebM or MP4 (≤12s, ≤12MB). Avoid GIF — they are much heavier.",
+    "Optional file upload if you are not using YouTube. Prefer short WebM/MP4 (≤12s, ≤12MB). Avoid large GIFs.",
   mobile:
-    "Optional lighter mobile clip (≤8s, ≤6MB). If empty, desktop video or poster is used.",
+    "Optional lighter mobile clip (≤8s, ≤6MB). Ignored when YouTube URL is set.",
   poster:
-    "Still frame or smoke still (WebP/JPG). Shown while loading, on weak devices, and when autoplay is blocked.",
+    "Still frame (WebP/JPG). Shown while YouTube/video loads, on weak devices, and when autoplay is blocked.",
 };
 
 export function normalizeReservationBackground(
@@ -34,6 +37,12 @@ export function normalizeReservationBackground(
         : DEFAULT_RESERVATION_BACKGROUND.overlayOpacity;
   return {
     enabled: entry.enabled === true,
+    youtubeUrl:
+      typeof entry.youtubeUrl === "string"
+        ? entry.youtubeUrl.trim()
+        : typeof entry.youtube_url === "string"
+          ? entry.youtube_url.trim()
+          : "",
     videoUrl:
       typeof entry.videoUrl === "string"
         ? entry.videoUrl
@@ -68,7 +77,60 @@ export function normalizeReservationBackground(
 export function reservationBackgroundHasMedia(
   bg: WebsiteReservationBackground,
 ): boolean {
-  return Boolean(bg.posterUrl || bg.videoUrl || bg.videoUrlMobile);
+  return Boolean(
+    bg.youtubeUrl || bg.posterUrl || bg.videoUrl || bg.videoUrlMobile,
+  );
+}
+
+/** Extract an 11-char YouTube video id from common URL shapes or a bare id. */
+export function parseYouTubeVideoId(input: string): string | null {
+  const raw = input.trim();
+  if (!raw) return null;
+  if (/^[\w-]{11}$/.test(raw)) return raw;
+
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.replace(/^www\./, "").toLowerCase();
+
+    if (host === "youtu.be") {
+      const id = url.pathname.split("/").filter(Boolean)[0] ?? "";
+      return /^[\w-]{11}$/.test(id) ? id : null;
+    }
+
+    if (host === "youtube.com" || host === "m.youtube.com" || host === "music.youtube.com") {
+      const v = url.searchParams.get("v");
+      if (v && /^[\w-]{11}$/.test(v)) return v;
+
+      const parts = url.pathname.split("/").filter(Boolean);
+      const embedIdx = parts.findIndex((p) => p === "embed" || p === "shorts" || p === "live" || p === "v");
+      if (embedIdx >= 0) {
+        const id = parts[embedIdx + 1] ?? "";
+        if (/^[\w-]{11}$/.test(id)) return id;
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+/** Muted autoplay + loop embed URL (playlist=id required for loop). */
+export function buildYouTubeBackgroundEmbedUrl(videoId: string): string {
+  const params = new URLSearchParams({
+    autoplay: "1",
+    mute: "1",
+    controls: "0",
+    playsinline: "1",
+    loop: "1",
+    playlist: videoId,
+    modestbranding: "1",
+    rel: "0",
+    iv_load_policy: "3",
+    disablekb: "1",
+    fs: "0",
+  });
+  return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
 }
 
 /** Infer whether a URL should render as <video> vs <img>. */

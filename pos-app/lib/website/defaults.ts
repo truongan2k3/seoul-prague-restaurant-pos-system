@@ -59,6 +59,7 @@ export const DEFAULT_WEBSITE_SETTINGS: WebsiteSettings = {
   promoSlideshows: createDefaultPromoSlideshows(),
   reservationBackground: {
     enabled: false,
+    youtubeUrl: "",
     videoUrl: "",
     videoUrlMobile: "",
     posterUrl: "",

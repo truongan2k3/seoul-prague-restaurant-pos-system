@@ -43,6 +43,7 @@ import { buildTestReceiptData } from "@/lib/receipt-calculations";
 import { RECEIPT_FONT_OPTIONS } from "@/lib/receipt-print-styles";
 import { draftToReceiptTemplate } from "@/src/components/ReceiptPrint";
 import { MarqueeSettingsEditor } from "@/components/marquee-settings-editor";
+import { StaffView } from "@/components/staff-view";
 import { ManagerPasscodeChangeForm } from "@/components/manager-passcode-change-form";
 import type { TranslationKey } from "@/lib/i18n/translations";
 import { pingPrintBridge } from "@/src/lib/print-bridge-client";
@@ -53,6 +54,7 @@ import {
   clearBusinessLogoAction,
   uploadBusinessLogoAction,
 } from "@/src/lib/business-auth-actions";
+import { canManageStaff } from "@/lib/staff-roles";
 import { Monitor, Plus, Printer, Save, Tablet, Trash2, Tv } from "lucide-react";
 
 const RECEIPT_FONT_LABEL_KEYS: Record<ReceiptFontFamily, TranslationKey> = {
@@ -76,6 +78,7 @@ type SettingsTabId =
   | "cfd"
   | "devices"
   | "general"
+  | "staff"
   | "security";
 
 export function SettingsView({
@@ -106,6 +109,7 @@ export function SettingsView({
     setNotifyMainNewOrderEnabled,
     setSoundMainNewOrderEnabled,
     currentStaffUser,
+    refreshStaffList,
   } = useApp();
   const { settings, saving, error: settingsError, saveSettingsPageDraft, uploadEventAlertSound, uploadCfdReviewQrImage, saveSettings, refreshSettings } =
     useSettings();
@@ -138,12 +142,16 @@ export function SettingsView({
     { id: "cfd", labelKey: "settingsTabCfd" },
     { id: "devices", labelKey: "settingsTabDevices" },
     { id: "general", labelKey: "settingsTabGeneral" },
+    { id: "staff", labelKey: "settingsTabStaff" },
     { id: "security", labelKey: "settingsTabSecurity" },
   ];
 
-  const visibleSettingsTabs = settingsTabs.filter(
-    (tab) => tab.id !== "security" || currentStaffUser?.role === "admin",
-  );
+  const visibleSettingsTabs = settingsTabs.filter((tab) => {
+    if (tab.id === "security" || tab.id === "staff") {
+      return canManageStaff(currentStaffUser?.role);
+    }
+    return true;
+  });
 
   const weekdayLabels: Record<WeekdayKey, string> = {
     monday: translate("settingsDayMonday"),
@@ -2131,6 +2139,12 @@ export function SettingsView({
             </div>
           </section>
         </div>
+        )}
+
+        {activeSettingsTab === "staff" && (
+          <div className="mx-auto max-w-5xl">
+            <StaffView embedded onRefresh={() => void refreshStaffList()} />
+          </div>
         )}
 
         {activeSettingsTab === "security" && (

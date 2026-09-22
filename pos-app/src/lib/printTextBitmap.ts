@@ -364,6 +364,68 @@ export function textToPngTwoColumnDataUrl(
   return canvas.toDataURL("image/png");
 }
 
+/** Left name (wraps) + qty + amount on the first line. */
+export function textToPngItemQtyRowDataUrl(
+  leftText: string,
+  qtyText: string,
+  rightText: string,
+  options: BitmapDrawOptions,
+): string {
+  const trimmedLeft = leftText.trim();
+  const trimmedQty = qtyText.trim();
+  const trimmedRight = rightText.trim();
+  if (!trimmedLeft && !trimmedQty && !trimmedRight) return "";
+
+  const dpr = options.dpr ?? 2;
+  const measure = document.createElement("canvas");
+  const mctx = measure.getContext("2d");
+  if (!mctx) return "";
+
+  bitmapFont(mctx, options);
+  const { paddingY, lineHeight } = lineMetrics(options);
+  const pad = resolveBitmapHorizontalPad(options.horizontalPad);
+  const fullWidth = effectiveMaxWidth(options.maxWidthPx, options.fontSizePx, options.horizontalPad);
+  const gap = 8;
+  const qtyWidth = trimmedQty ? Math.max(mctx.measureText(trimmedQty).width, mctx.measureText("00").width) : 0;
+  const rightWidth = trimmedRight ? mctx.measureText(trimmedRight).width : 0;
+  const trailing =
+    (trimmedQty ? qtyWidth + gap : 0) + (trimmedRight ? rightWidth + (trimmedQty || trimmedLeft ? gap : 0) : 0);
+  const leftWrapWidth = Math.max(40, fullWidth - trailing);
+  const leftLines = trimmedLeft ? wrapTextLines(mctx, trimmedLeft, leftWrapWidth) : [""];
+  const rowCount = Math.max(leftLines.length, 1);
+  const contentHeight = rowCount * lineHeight + paddingY * 2;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(options.maxWidthPx * dpr);
+  canvas.height = Math.ceil(contentHeight * dpr);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, options.maxWidthPx, contentHeight);
+  ctx.fillStyle = "#000000";
+  bitmapFont(ctx, options);
+  ctx.textBaseline = "top";
+
+  leftLines.forEach((line, index) => {
+    ctx.textAlign = "left";
+    ctx.fillText(line, pad.left, paddingY + index * lineHeight);
+    if (index === 0) {
+      if (trimmedRight) {
+        ctx.textAlign = "right";
+        ctx.fillText(trimmedRight, options.maxWidthPx - pad.right, paddingY);
+      }
+      if (trimmedQty) {
+        ctx.textAlign = "right";
+        const qtyX = options.maxWidthPx - pad.right - (trimmedRight ? rightWidth + gap : 0);
+        ctx.fillText(trimmedQty, qtyX, paddingY);
+      }
+    }
+  });
+
+  return canvas.toDataURL("image/png");
+}
+
 /** Single row with left and right text (totals, column headers). */
 export function textToPngSplitRowDataUrl(
   leftText: string,

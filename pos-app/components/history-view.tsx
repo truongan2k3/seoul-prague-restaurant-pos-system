@@ -8,6 +8,13 @@ import { OrderHistoryModal } from "@/components/order-history-modal";
 import { useApp } from "@/contexts/app-context";
 import { formatCzk } from "@/lib/currency";
 import { saleHasHistoryAlert } from "@/lib/order-activity";
+import {
+  collectCancelledItemsFromOpenLogs,
+  collectCancelledItemsFromSales,
+  filterCancelledItemsInRange,
+  mergeCancelledItemSources,
+  type CancelledItemRecord,
+} from "@/lib/cancelled-items-history";
 import { generateOrderNumber } from "@/lib/receipt-calculations";
 import { shiftIsoDate } from "@/lib/reservation-analytics";
 import {
@@ -18,13 +25,16 @@ import {
   saleNetTotal,
   toDateInputValue,
   type HistoryPaymentFilter,
-  type SummaryPeriod,
 } from "@/lib/summary-analytics";
 import { formatHistoryDateTime, resolveGuestSeatedAt } from "@/lib/sale-history";
 import { filterButtonClass, paymentFilterClass } from "@/lib/theme-classes";
 import { POS_EGRESS } from "@/lib/egress-config";
 import type { MenuItem, SaleRecord } from "@/lib/types";
-import { fetchSales, mapSalesResponse } from "@/src/lib/supabase-data";
+import {
+  fetchOpenTableCancelLogs,
+  fetchSales,
+  mapSalesResponse,
+} from "@/src/lib/supabase-data";
 
 interface HistoryViewProps {
   menuItems: MenuItem[];
@@ -54,6 +64,8 @@ const PAYMENT_LABEL_KEYS: Record<HistoryPaymentFilter, "allPayments" | "cash" | 
 
 const HISTORY_PAGE_SIZE = 50;
 
+type HistoryListMode = "orders" | "cancelled";
+
 function itemCount(sale: SaleRecord): number {
   return sale.items.reduce((sum, item) => sum + item.quantity, 0);
 }
@@ -68,6 +80,7 @@ function itemPreview(sale: SaleRecord, max = 2): string {
 export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   const { translate, language, currentStaffUser } = useApp();
   const [sales, setSales] = useState<SaleRecord[]>([]);
+  const [openCancelLogs, setOpenCancelLogs] = useState<CancelledItemRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<HistoryPeriodOption>("day");
@@ -75,6 +88,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   const [customFrom, setCustomFrom] = useState(() => toDateInputValue(new Date()));
   const [customTo, setCustomTo] = useState(() => toDateInputValue(new Date()));
   const [paymentFilter, setPaymentFilter] = useState<HistoryPaymentFilter>("all");
+  const [listMode, setListMode] = useState<HistoryListMode>("orders");
   const [page, setPage] = useState(1);
   const [selectedSale, setSelectedSale] = useState<SaleRecord | null>(null);
   const [openEditTip, setOpenEditTip] = useState(false);
@@ -93,12 +107,21 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
     const since = new Date();
     since.setDate(since.getDate() - POS_EGRESS.HISTORY_SALES_DAYS);
     since.setHours(0, 0, 0, 0);
-    const { data, error: fetchError } = await fetchSales(since);
+    const [{ data, error: fetchError }, openResult] = await Promise.all([
+      fetchSales(since),
+      fetchOpenTableCancelLogs(since),
+    ]);
     if (fetchError) {
       setError(fetchError.message);
       setSales([]);
     } else {
       setSales(mapSalesResponse(data));
+    }
+    if (openResult.error) {
+      console.warn("[History] open cancel logs:", openResult.error.message);
+      setOpenCancelLogs([]);
+    } else {
+      setOpenCancelLogs(collectCancelledItemsFromOpenLogs(openResult.data));
     }
     setLoading(false);
   }, []);
@@ -112,11 +135,23 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
     [sales, period, paymentFilter, rangeOptions],
   );
 
+  const activeRange = useMemo(
+    () => getPeriodRange(period, rangeOptions),
+    [period, rangeOptions],
+  );
+
+  const cancelledItems = useMemo(() => {
+    const fromSales = collectCancelledItemsFromSales(sales);
+    const merged = mergeCancelledItemSources(fromSales, openCancelLogs);
+    return filterCancelledItemsInRange(merged, activeRange);
+  }, [sales, openCancelLogs, activeRange]);
+
   useEffect(() => {
     setPage(1);
-  }, [period, paymentFilter, rangeOptions]);
+  }, [period, paymentFilter, rangeOptions, listMode]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredSales.length / HISTORY_PAGE_SIZE));
+  const listLength = listMode === "cancelled" ? cancelledItems.length : filteredSales.length;
+  const totalPages = Math.max(1, Math.ceil(listLength / HISTORY_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
 
   const pagedSales = useMemo(() => {
@@ -124,12 +159,12 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
     return filteredSales.slice(start, start + HISTORY_PAGE_SIZE);
   }, [filteredSales, currentPage]);
 
-  const stats = useMemo(() => computeRevenueStats(filteredSales), [filteredSales]);
+  const pagedCancelled = useMemo(() => {
+    const start = (currentPage - 1) * HISTORY_PAGE_SIZE;
+    return cancelledItems.slice(start, start + HISTORY_PAGE_SIZE);
+  }, [cancelledItems, currentPage]);
 
-  const activeRange = useMemo(
-    () => getPeriodRange(period, rangeOptions),
-    [period, rangeOptions],
-  );
+  const stats = useMemo(() => computeRevenueStats(filteredSales), [filteredSales]);
 
   const dateNavLocale = language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB";
 
@@ -145,8 +180,12 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
 
   const showDayNav = period === "day";
   const isTodayAnchor = anchorDate === toDateInputValue(new Date());
+  const showingCancelled = listMode === "cancelled";
 
-  const jumpToToday = () => setAnchorDate(toDateInputValue(new Date()));
+  const jumpToToday = () => {
+    setAnchorDate(toDateInputValue(new Date()));
+    setListMode("orders");
+  };
   const shiftAnchor = (days: number) => {
     setAnchorDate((prev) => shiftIsoDate(prev, days));
   };
@@ -164,6 +203,12 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   const closeModal = () => {
     setSelectedSale(null);
     setOpenEditTip(false);
+  };
+
+  const openSaleFromCancelled = (row: CancelledItemRecord) => {
+    if (!row.saleId) return;
+    const sale = sales.find((s) => s.id === row.saleId);
+    if (sale) openSale(sale);
   };
 
   return (
@@ -249,13 +294,28 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                   <button
                     type="button"
                     onClick={jumpToToday}
-                    disabled={isTodayAnchor}
-                    className={filterButtonClass(isTodayAnchor)}
+                    disabled={isTodayAnchor && !showingCancelled}
+                    className={filterButtonClass(isTodayAnchor && !showingCancelled)}
                   >
                     {translate("resTodayJump")}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setListMode(showingCancelled ? "orders" : "cancelled")}
+                    className={filterButtonClass(showingCancelled)}
+                  >
+                    {translate("historyCancelledItems")}
+                  </button>
                 </div>
-              ) : null}
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setListMode(showingCancelled ? "orders" : "cancelled")}
+                  className={filterButtonClass(showingCancelled)}
+                >
+                  {translate("historyCancelledItems")}
+                </button>
+              )}
 
               {period === "custom" ? (
                 <div className="min-w-0 flex-1 sm:max-w-md">
@@ -288,6 +348,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
             </div>
           </section>
 
+          {!showingCancelled ? (
           <section className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
@@ -319,12 +380,112 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
               </div>
             </div>
           </section>
+          ) : (
+          <section className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              {translate("historyCancelledItems")}
+            </p>
+            <p className="mt-2 text-3xl font-bold tabular-nums text-gray-900 dark:text-gray-100">
+              {cancelledItems.length}
+            </p>
+          </section>
+          )}
 
 
           {loading ? (
             <p className="text-sm text-gray-500 dark:text-gray-400">{translate("loading")}</p>
           ) : error ? (
             <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          ) : showingCancelled ? (
+            cancelledItems.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
+                {translate("historyCancelEmpty")}
+              </p>
+            ) : (
+              <div className="space-y-3">
+                <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+                  <table className="w-full min-w-[880px] text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                        <th className="px-4 py-3 font-semibold">{translate("historyCancelledAt")}</th>
+                        <th className="px-4 py-3 font-semibold">{translate("table")}</th>
+                        <th className="px-4 py-3 font-semibold">{translate("historyItems")}</th>
+                        <th className="px-4 py-3 font-semibold text-right">{translate("historyCancelledQty")}</th>
+                        <th className="px-4 py-3 font-semibold">{translate("staff")}</th>
+                        <th className="px-4 py-3 font-semibold">{translate("historyCancelledReason")}</th>
+                        <th className="px-4 py-3 font-semibold">{translate("historyCancelledBillStatus")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pagedCancelled.map((row) => (
+                        <tr
+                          key={row.id}
+                          className={`border-b border-gray-100 last:border-b-0 dark:border-gray-700/60 ${
+                            row.saleId ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/40" : ""
+                          }`}
+                          onClick={() => openSaleFromCancelled(row)}
+                        >
+                          <td className="px-4 py-3 tabular-nums text-gray-700 dark:text-gray-200">
+                            {formatHistoryDateTime(row.cancelledAt, language)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="inline-flex w-max shrink-0 items-center justify-center whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1 text-sm font-bold leading-none text-white dark:bg-gray-100 dark:text-gray-900">
+                              {row.tableLabel}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">
+                            {row.itemName}
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-900 dark:text-gray-100">
+                            {row.quantity}
+                          </td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{row.staffName}</td>
+                          <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
+                            {row.reason || "—"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                row.source === "open"
+                                  ? "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                                  : "bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300"
+                              }`}
+                            >
+                              {row.source === "open"
+                                ? translate("historyCancelledSourceOpen")
+                                : translate("historyCancelledSourcePaid")}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {totalPages > 1 ? (
+                  <div className="flex items-center justify-between gap-3 text-sm text-gray-600 dark:text-gray-300">
+                    <button
+                      type="button"
+                      disabled={currentPage <= 1}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      className="rounded-lg border border-gray-200 px-3 py-1.5 disabled:opacity-40 dark:border-gray-700"
+                    >
+                      {translate("resPrevDay")}
+                    </button>
+                    <span className="tabular-nums">
+                      {currentPage} / {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      className="rounded-lg border border-gray-200 px-3 py-1.5 disabled:opacity-40 dark:border-gray-700"
+                    >
+                      {translate("resNextDay")}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            )
           ) : filteredSales.length === 0 ? (
             <p className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
               {sales.length === 0 ? translate("noHistory") : translate("historyNoResults")}

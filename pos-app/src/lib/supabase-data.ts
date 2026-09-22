@@ -424,6 +424,31 @@ export async function fetchSales(since?: Date) {
   return query;
 }
 
+/** Cancel / qty-reduce logs still on open (unpaid) tables. */
+export async function fetchOpenTableCancelLogs(since?: Date) {
+  let query = supabase
+    .from("table_activity_logs")
+    .select("id, table_label, item_name, action, staff_name, meta, created_at")
+    .in("action", ["cancel_item", "qty_reduced", "removed_from_order"])
+    .order("created_at", { ascending: false })
+    .limit(2000);
+  if (since) query = query.gte("created_at", since.toISOString());
+  const { data, error } = await query;
+  if (error) return { data: [] as const, error };
+  return {
+    data: (data ?? []).map((row) => ({
+      id: String(row.id),
+      tableLabel: (row.table_label as string | null) ?? "",
+      itemName: (row.item_name as string | null) ?? "Item",
+      action: String(row.action),
+      staffName: (row.staff_name as string | null) ?? "Staff",
+      meta: (row.meta as Record<string, unknown> | null) ?? undefined,
+      createdAt: new Date(row.created_at as string),
+    })),
+    error: null,
+  };
+}
+
 export async function fetchInventory() {
   return supabase.from("inventory_items").select(INVENTORY_COLUMNS).order("name");
 }

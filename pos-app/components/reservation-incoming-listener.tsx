@@ -11,9 +11,11 @@ import {
   showBrowserNotification,
 } from "@/lib/browser-notification";
 import {
+  isAlertSoundLoopActive,
   playCustomAlertSound,
   startAlertSoundLoop,
   stopAlertSoundLoop,
+  unlockNotificationAudio,
 } from "@/lib/notification-sound";
 import {
   classifyReservationUpdate,
@@ -126,20 +128,28 @@ export function ReservationIncomingListener({
   }, []);
 
   const startLoopFor = useCallback(
-    (next: ScreenAlert) => {
+    (next: ScreenAlert, opts?: { forceRestart?: boolean }) => {
       if (!soundMainEnabled) {
         stopLoop();
         return;
       }
       if (!needsConfirmSoundLoop(next)) {
         stopLoop();
+        unlockNotificationAudio();
         playCustomAlertSound(alertSoundUrl(), "newOrder");
         return;
       }
-      // One loop per screen — restart only when switching to a different reservation.
-      if (loopingIdRef.current === next.reservation.id) return;
+      unlockNotificationAudio();
+      // One loop per reservation — restart if stalled or forced (e.g. after unlock gesture).
+      if (
+        !opts?.forceRestart &&
+        loopingIdRef.current === next.reservation.id &&
+        isAlertSoundLoopActive()
+      ) {
+        return;
+      }
       loopingIdRef.current = next.reservation.id;
-      startAlertSoundLoop(alertSoundUrl(), { variant: "newOrder" });
+      startAlertSoundLoop(alertSoundUrl(), { variant: "reservation" });
     },
     [alertSoundUrl, soundMainEnabled, stopLoop],
   );
@@ -496,9 +506,37 @@ export function ReservationIncomingListener({
     }
     const current = alertRef.current;
     if (current && needsConfirmSoundLoop(current)) {
-      startLoopFor(current);
+      startLoopFor(current, { forceRestart: true });
     }
   }, [soundMainEnabled, startLoopFor, stopLoop]);
+
+  // Browsers block audio until a gesture — unlock + (re)start loop on any interaction
+  // while a pending reservation alert is open.
+  useEffect(() => {
+    if (!alert || !needsConfirmSoundLoop(alert) || !soundMainEnabled) return;
+
+    const onGesture = () => {
+      unlockNotificationAudio();
+      const current = alertRef.current;
+      if (!current || !needsConfirmSoundLoop(current)) return;
+      if (!isAlertSoundLoopActive()) {
+        startLoopFor(current, { forceRestart: true });
+      }
+    };
+
+    // Kick immediately (may be silent until first gesture, then gesture handler unlocks).
+    unlockNotificationAudio();
+    startLoopFor(alert, { forceRestart: !isAlertSoundLoopActive() });
+
+    window.addEventListener("pointerdown", onGesture);
+    window.addEventListener("keydown", onGesture);
+    window.addEventListener("touchstart", onGesture, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", onGesture);
+      window.removeEventListener("keydown", onGesture);
+      window.removeEventListener("touchstart", onGesture);
+    };
+  }, [alert, soundMainEnabled, startLoopFor]);
 
   const handleConfirm = async () => {
     if (!alert || (alert.kind !== "new" && alert.kind !== "updated")) return;

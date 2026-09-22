@@ -126,6 +126,63 @@ async function clearTableActivityLogs(tableId: string) {
   }
 }
 
+/**
+ * When an empty bill auto-clears the table, cancel logs would be wiped with
+ * `clearTable`. Snapshot them into a $0 voided sale so History → Cancelled
+ * Items still has a durable record (checkout already snapshots before clear).
+ */
+async function persistOpenCancelActivityToSale(tableId: string): Promise<void> {
+  const { data: table } = await supabase
+    .from("tables")
+    .select("label, occupied_at")
+    .eq("id", tableId)
+    .maybeSingle();
+
+  const seatedAt = (table?.occupied_at as string | null) ?? null;
+  const activityLog = await fetchTableCancelActivityLog(tableId, seatedAt);
+  if (activityLog.length === 0) return;
+
+  const tableLabel = (table?.label as string | null) ?? "";
+  const lastStaff = activityLog[activityLog.length - 1]?.staffName?.trim() || "Staff";
+  const now = new Date().toISOString();
+
+  const { error } = await supabase.from("sales").insert({
+    table_id: tableId,
+    table_label: tableLabel,
+    staff_id: null,
+    staff_name: lastStaff,
+    subtotal: 0,
+    discount_amount: 0,
+    tip: 0,
+    grand_total: 0,
+    payment_method: "cash",
+    items: [],
+    activity_log: activityLog.map((entry) => ({
+      id: entry.id,
+      orderId: entry.orderId,
+      itemName: entry.itemName,
+      action: entry.action,
+      staffName: entry.staffName,
+      meta: entry.meta ?? {},
+      createdAt: entry.createdAt.toISOString(),
+    })),
+    seated_at: seatedAt,
+    closed_at: now,
+    deleted_at: now,
+    service_channel: inferServiceChannel(tableLabel),
+  });
+
+  if (error) {
+    console.warn("[ActivityLog] Failed to persist cancel audit sale:", error.message);
+  }
+}
+
+/** Clear table after optionally saving cancel history for empty-bill sessions. */
+async function clearTablePreservingCancelHistory(tableId: string) {
+  await persistOpenCancelActivityToSale(tableId);
+  return clearTable(tableId);
+}
+
 function aggregateOrderItems(items: OrderItem[]): OrderItem[] {
   const merged: OrderItem[] = [];
 
@@ -232,7 +289,7 @@ async function syncTableOrdersFromDb(tableId: string) {
   if (!rows?.length) {
     const { data: table } = await supabase.from("tables").select("status").eq("id", tableId).single();
     if (table?.status === "empty") return;
-    await clearTable(tableId);
+    await clearTablePreservingCancelHistory(tableId);
     return;
   }
 
@@ -242,7 +299,7 @@ async function syncTableOrdersFromDb(tableId: string) {
 
   // All lines archived/served and nothing left for KDS — free the table.
   if (billable.length === 0 && !kitchenOpen) {
-    await clearTable(tableId);
+    await clearTablePreservingCancelHistory(tableId);
     return;
   }
 
@@ -609,7 +666,7 @@ export async function clearTable(tableId: string) {
 
 /** Staff force-close when bill is empty/paid and kitchen is idle (or stuck). */
 export async function forceCloseTable(tableId: string) {
-  return clearTable(tableId);
+  return clearTablePreservingCancelHistory(tableId);
 }
 
 /**

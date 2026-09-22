@@ -112,3 +112,13 @@ export function mergeCancelledItemSources(
 ): CancelledItemRecord[] {
   return [...fromSales, ...fromOpen];
 }
+
+/** $0 voided sale used only to keep cancel logs after an empty-bill clear. */
+export function isCancelOnlyAuditSale(sale: SaleRecord): boolean {
+  return (
+    Boolean(sale.deletedAt) &&
+    sale.items.length === 0 &&
+    Number(sale.grandTotal) === 0 &&
+    (sale.activityLog ?? []).some((entry) => isCancelActivityAction(entry.action))
+  );
+}

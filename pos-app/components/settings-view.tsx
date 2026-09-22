@@ -71,6 +71,7 @@ type SettingsTabId =
   | "menu"
   | "marquee"
   | "reservations"
+  | "chat"
   | "sounds"
   | "cfd"
   | "devices"
@@ -132,6 +133,7 @@ export function SettingsView({
     { id: "menu", labelKey: "settingsTabMenu" },
     { id: "marquee", labelKey: "settingsTabMarquee" },
     { id: "reservations", labelKey: "settingsTabReservations" },
+    { id: "chat", labelKey: "guestChatSettingsTitle" },
     { id: "sounds", labelKey: "settingsTabSounds" },
     { id: "cfd", labelKey: "settingsTabCfd" },
     { id: "devices", labelKey: "settingsTabDevices" },
@@ -1589,6 +1591,122 @@ export function SettingsView({
         </div>
         )}
 
+        {activeSettingsTab === "chat" && (
+        <div className="mx-auto grid max-w-3xl grid-cols-1 gap-6">
+          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">
+              {translate("guestChatSettingsTitle")}
+            </h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {translate("guestChatSettingsHint")}
+            </p>
+
+            <label className="mt-4 flex items-center gap-2 text-sm text-gray-800 dark:text-gray-200">
+              <input
+                type="checkbox"
+                checked={draft.guestChat.enabled}
+                onChange={(event) =>
+                  updateDraft("guestChat", {
+                    ...draft.guestChat,
+                    enabled: event.target.checked,
+                  })
+                }
+              />
+              {translate("guestChatEnabled")}
+            </label>
+
+            <label className="mt-4 block text-sm">
+              <span className="text-gray-500 dark:text-gray-400">{translate("guestChatWelcome")}</span>
+              <textarea
+                rows={2}
+                value={draft.guestChat.welcomeMessage}
+                onChange={(event) =>
+                  updateDraft("guestChat", {
+                    ...draft.guestChat,
+                    welcomeMessage: event.target.value,
+                  })
+                }
+                className="pos-input mt-1"
+              />
+            </label>
+
+            <label className="mt-4 block text-sm">
+              <span className="text-gray-500 dark:text-gray-400">{translate("guestChatOffline")}</span>
+              <textarea
+                rows={2}
+                value={draft.guestChat.offlineMessage}
+                onChange={(event) =>
+                  updateDraft("guestChat", {
+                    ...draft.guestChat,
+                    offlineMessage: event.target.value,
+                  })
+                }
+                className="pos-input mt-1"
+              />
+            </label>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <label className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">
+                  {translate("guestChatUnansweredMinutes")}
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={120}
+                  value={draft.guestChat.unansweredMinutes}
+                  onChange={(event) =>
+                    updateDraft("guestChat", {
+                      ...draft.guestChat,
+                      unansweredMinutes: Math.min(
+                        120,
+                        Math.max(1, Number(event.target.value) || 5),
+                      ),
+                    })
+                  }
+                  className="pos-input mt-1"
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">
+                  {translate("guestChatArchiveHours")}
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={720}
+                  value={draft.guestChat.autoArchiveHours}
+                  onChange={(event) =>
+                    updateDraft("guestChat", {
+                      ...draft.guestChat,
+                      autoArchiveHours: Math.min(
+                        720,
+                        Math.max(1, Number(event.target.value) || 72),
+                      ),
+                    })
+                  }
+                  className="pos-input mt-1"
+                />
+              </label>
+            </div>
+
+            <label className="mt-4 flex items-center gap-2 text-sm text-gray-800 dark:text-gray-200">
+              <input
+                type="checkbox"
+                checked={draft.guestChat.onlineDuringBusinessHours}
+                onChange={(event) =>
+                  updateDraft("guestChat", {
+                    ...draft.guestChat,
+                    onlineDuringBusinessHours: event.target.checked,
+                  })
+                }
+              />
+              {translate("guestChatOnlineHours")}
+            </label>
+          </section>
+        </div>
+        )}
+
         {activeSettingsTab === "sounds" && (
         <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2">
           <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800 md:col-span-2">
@@ -1642,6 +1760,11 @@ export function SettingsView({
                     key: "cfdWelcome" as const,
                     label: translate("soundCfdWelcome"),
                     testVariant: "ready" as const,
+                  },
+                  {
+                    key: "guestChat" as const,
+                    label: translate("soundGuestChat"),
+                    testVariant: "newOrder" as const,
                   },
                 ] as const
               ).map((row) => {

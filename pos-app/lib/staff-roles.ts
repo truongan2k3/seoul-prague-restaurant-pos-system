@@ -10,6 +10,7 @@ export const ALL_NAV_TABS: NavId[] = [
   "summary",
   "storage",
   "dynamicQr",
+  "guestChat",
   "staff",
   "settings",
 ];
@@ -34,7 +35,7 @@ export function staffBypassesManagerPasscode(role: StaffRole | undefined): boole
 export function defaultNavTabsForRole(role: StaffRole | undefined): NavId[] {
   if (!role) return ["map"];
   if (role === "admin" || role === "manager") return [...ALL_NAV_TABS];
-  if (role === "server") return ["map", "order", "reservations"];
+  if (role === "server") return ["map", "order", "reservations", "guestChat"];
   // Kitchen / bar primarily use dedicated screens; POS map is the fallback home.
   return ["map"];
 }

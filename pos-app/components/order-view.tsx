@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { ElapsedTimer, LiveClock } from "@/components/live-clock";
+import { HeaderClockWithStatus } from "@/components/connection-status-badge";
+import { ElapsedTimer } from "@/components/live-clock";
 import { MapReservationTicker } from "@/components/map-reservation-ticker";
 import { NotificationBell } from "@/components/notification-bell";
 import { OrderItemChecklist } from "@/components/order-item-checklist";
@@ -89,20 +90,20 @@ function OrderCard({
           onOpen();
         }
       }}
-      className={`flex w-[min(85vw,320px)] shrink-0 snap-start cursor-pointer flex-col rounded-xl border p-4 shadow-sm transition-opacity hover:opacity-95 ${
+      className={`flex w-full cursor-pointer flex-col rounded-xl border p-3 shadow-sm transition-all duration-200 hover:opacity-95 sm:p-4 lg:w-[min(85vw,320px)] lg:shrink-0 lg:snap-start ${
         isPaidInProgress
-          ? "border-emerald-300 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/40"
+          ? "border-emerald-500/50 bg-emerald-950/30 dark:border-emerald-800 dark:bg-emerald-950/40"
           : isReady
-            ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/30"
-            : "border-orange-200 bg-white dark:border-orange-900 dark:bg-gray-900"
+            ? "border-emerald-500/40 bg-[var(--card)] dark:border-emerald-900 dark:bg-emerald-950/25"
+            : "border-[var(--border)] bg-[var(--card)]"
       }`}
     >
       <div className="flex shrink-0 items-start justify-between">
         <div>
-          <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          <p className="pos-eyebrow">
             {translate("table")}
           </p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{table.label}</p>
+          <p className="pos-serif text-2xl font-medium text-[var(--foreground)]">{table.label}</p>
         </div>
         <div className="text-right">
           {isPaidInProgress ? (
@@ -162,7 +163,7 @@ function OrderCard({
             type="button"
             onClick={onCheckout}
             disabled={checkoutBusy || rawItems.length === 0 || isPaidInProgress}
-            className="flex-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex-1 rounded-xl bg-[var(--pos-brand)] px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[var(--pos-brand-hover)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {translate("checkout")}
           </button>
@@ -227,19 +228,19 @@ export function OrderView({
   }, [tables, orderItems, menuItems]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <header className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
+    <div className="flex h-full min-h-0 flex-col bg-background text-[var(--foreground)]">
+      <header className="flex shrink-0 items-center justify-between border-b border-[var(--border)] bg-[var(--pos-raised)] px-2.5 py-1.5 sm:px-4 sm:py-2.5 lg:px-6 lg:py-4">
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <h1 className="pos-header-title">
             {translate("order")}
           </h1>
-          <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+          <span className="rounded-full bg-[var(--accent)] px-2.5 py-0.5 text-xs font-semibold text-[var(--muted)]">
             {tableBundles.length} open
           </span>
         </div>
         <div className="flex items-center gap-3">
           <NotificationBell />
-          <LiveClock />
+          <HeaderClockWithStatus />
         </div>
       </header>
 
@@ -249,13 +250,13 @@ export function OrderView({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+      <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6">
         {tableBundles.length === 0 ? (
           <div className="flex h-full min-h-[320px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
             {translate("noOrders")}
           </div>
         ) : (
-          <div className="-mx-1 flex items-start snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain px-1 pb-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:items-start lg:gap-4 lg:overflow-x-auto lg:overscroll-x-contain lg:pb-2 lg:snap-x lg:snap-mandatory">
             {tableBundles.map((bundle) => (
               <OrderCard
                 key={bundle.table.id}

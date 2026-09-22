@@ -7,6 +7,9 @@ export type PrintDispatchSettings = Pick<
   "silentPrintEnabled" | "printBridgeUrl" | "browserPrintFallback" | "printers"
 >;
 
+/** Fail fast when bridge PC is off / URL wrong (browser default fetch hang is too long). */
+const BRIDGE_FETCH_TIMEOUT_MS = 8_000;
+
 const RAW_PRINTER_PORTS = new Set([9100, 9101, 9102, 9103]);
 
 function printersForRoleFromSettings(
@@ -58,13 +61,32 @@ export function validatePrintBridgeUrl(bridgeUrl: string): { ok: boolean; messag
   return { ok: true, message: "Bridge URL looks valid" };
 }
 
+/** True when URL points at this machine (only the PC running print-bridge can ping it). */
+export function isLoopbackPrintBridgeUrl(bridgeUrl: string): boolean {
+  try {
+    const host = new URL(bridgeUrl.trim()).hostname.toLowerCase();
+    return (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "::1" ||
+      host === "[::1]" ||
+      host === "0.0.0.0"
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function pingPrintBridge(bridgeUrl: string): Promise<{ ok: boolean; message: string }> {
   const check = validatePrintBridgeUrl(bridgeUrl);
   if (!check.ok) return check;
 
   const base = bridgeUrl.replace(/\/$/, "");
   try {
-    const response = await fetch(`${base}/health`, { method: "GET" });
+    const response = await fetch(`${base}/health`, {
+      method: "GET",
+      signal: AbortSignal.timeout(BRIDGE_FETCH_TIMEOUT_MS),
+    });
     if (!response.ok) {
       return { ok: false, message: `Bridge HTTP ${response.status}` };
     }
@@ -74,11 +96,18 @@ export async function pingPrintBridge(bridgeUrl: string): Promise<{ ok: boolean;
     }
     return { ok: true, message: "Print bridge OK" };
   } catch (error) {
+    const timedOut =
+      error instanceof DOMException && error.name === "TimeoutError"
+        ? true
+        : error instanceof Error && /aborted|timeout/i.test(error.message);
     return {
       ok: false,
       message:
-        (error instanceof Error ? error.message : "Bridge unreachable") +
-        " — start: node print-bridge/server.mjs",
+        (timedOut
+          ? "Bridge timed out"
+          : error instanceof Error
+            ? error.message
+            : "Bridge unreachable") + " — start: node print-bridge/server.mjs",
     };
   }
 }
@@ -94,16 +123,32 @@ async function sendRawToPrinter(
   }
 
   const base = bridgeUrl.replace(/\/$/, "");
-  const response = await fetch(`${base}/print`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      host: printer.host,
-      port: Number(printer.port) || 9100,
-      dataBase64: bytesToBase64(data),
-      printerName: printer.name,
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${base}/print`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(BRIDGE_FETCH_TIMEOUT_MS),
+      body: JSON.stringify({
+        host: printer.host,
+        port: Number(printer.port) || 9100,
+        dataBase64: bytesToBase64(data),
+        printerName: printer.name,
+      }),
+    });
+  } catch (error) {
+    const timedOut =
+      error instanceof DOMException && error.name === "TimeoutError"
+        ? true
+        : error instanceof Error && /aborted|timeout/i.test(error.message);
+    throw new Error(
+      timedOut
+        ? "Print bridge timed out — is POS-Print-Bridge running?"
+        : error instanceof Error
+          ? error.message
+          : "Print bridge unreachable",
+    );
+  }
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");

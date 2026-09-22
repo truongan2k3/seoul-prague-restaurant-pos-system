@@ -13,6 +13,7 @@ interface ModalProps {
   size?: "default" | "md" | "lg" | "xl";
   bodyClassName?: string;
   scrollBody?: boolean;
+  zIndexClass?: string;
 }
 
 export function Modal({
@@ -24,11 +25,17 @@ export function Modal({
   size = "default",
   bodyClassName = "",
   scrollBody = true,
+  zIndexClass,
 }: ModalProps) {
   return (
-    <ModalOverlay open={open} onClose={onClose} ariaLabelledBy="modal-title">
+    <ModalOverlay
+      open={open}
+      onClose={onClose}
+      ariaLabelledBy="modal-title"
+      zIndexClass={zIndexClass}
+    >
       <ModalPanel
-        className={`flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800 sm:max-h-[92vh] sm:rounded-xl ${
+        className={`flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-2xl border border-[var(--border)] bg-[var(--card)] text-[var(--card-foreground)] shadow-2xl sm:max-h-[92vh] sm:rounded-xl ${
           size === "xl"
             ? "sm:max-w-4xl"
             : size === "lg"
@@ -38,22 +45,22 @@ export function Modal({
                 : "sm:max-w-lg"
         }`}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
-          <h2 id="modal-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+        <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-6 py-4">
+          <h2 id="modal-title" className="pos-serif text-lg font-medium tracking-tight text-[var(--foreground)]">
             {title}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            className="rounded-lg p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         <div
-          className={`flex-1 px-6 py-4 text-gray-800 dark:text-gray-200 ${
+          className={`flex-1 px-6 py-4 text-[var(--foreground)] ${
             scrollBody ? "overflow-y-auto" : "flex min-h-0 flex-col overflow-hidden"
           } ${bodyClassName}`}
         >
@@ -61,7 +68,7 @@ export function Modal({
         </div>
 
         {footer && (
-          <div className="shrink-0 border-t border-gray-200 px-6 py-4 dark:border-gray-700">
+          <div className="shrink-0 border-t border-[var(--border)] px-6 py-4">
             {footer}
           </div>
         )}

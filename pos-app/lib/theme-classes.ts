@@ -14,7 +14,7 @@ export function navButtonClass(active: boolean): string {
 
 export function paymentFilterClass(active: boolean, method: "all" | "cash" | "card"): string {
   if (!active) return "pos-filter-btn";
-  if (method === "cash") return "bg-emerald-600 text-white font-medium hover:bg-emerald-700";
-  if (method === "card") return "bg-blue-600 text-white font-medium hover:bg-blue-700";
+  if (method === "cash") return "bg-emerald-700 text-white font-medium hover:bg-emerald-800";
+  if (method === "card") return "bg-[var(--pos-brand)] text-white font-medium hover:bg-[var(--pos-brand-hover)]";
   return "pos-filter-btn-active";
 }

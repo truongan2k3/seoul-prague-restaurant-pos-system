@@ -7,6 +7,7 @@ import { useApp } from "@/contexts/app-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { useSettings } from "@/contexts/settings-context";
 import { NewOrderModal } from "@/components/new-order-modal";
+import { PrintFailedListener } from "@/components/print-failed-listener";
 import { LanguageSelector } from "@/components/language-selector";
 import { POS_EGRESS } from "@/lib/egress-config";
 import { filterItemsForBoard } from "@/lib/order-board";
@@ -26,6 +27,9 @@ import {
   type SupabaseOrderItemRow,
 } from "@/src/lib/supabase-data";
 import { shouldPrintKitchenOnSend, applyFulfillmentModeToNewOrders } from "@/lib/kitchen-fulfillment-mode";
+import { reportPrintFailed } from "@/lib/print-failed-alert";
+import { expectPrintStationAck } from "@/lib/print-station-ack";
+import { isBillOnlyOrderLine } from "@/lib/menu-item-dispatch";
 import { appendOrdersToTable, occupyTable } from "@/src/lib/table-actions";
 
 type OrderModalState = {
@@ -148,14 +152,30 @@ function ServerApp() {
 
       logAction(isAppend ? "server add items" : "server order", `Table ${orderModal.table.label}`);
 
-      if (shouldPrintKitchenOnSend(settings) && !settings.kitchenPrintViaStation) {
-        void printKitchenOrder({
-          tableLabel: orderModal.table.label,
-          orders: prepared,
-          menuItems,
-        }).catch((printError) => {
-          console.warn("[KitchenPrint] Failed:", printError);
-        });
+      if (shouldPrintKitchenOnSend(settings)) {
+        const printable = prepared.filter((o) => !isBillOnlyOrderLine(o) && !o.skipPrint);
+        if (printable.length > 0) {
+          if (settings.kitchenPrintViaStation) {
+            expectPrintStationAck({
+              tableId: orderModal.table.id,
+              tableLabel: orderModal.table.label,
+              offlineDetail: translate("printStationOfflineDetail"),
+            });
+          } else {
+            void printKitchenOrder({
+              tableLabel: orderModal.table.label,
+              orders: prepared,
+              menuItems,
+            }).catch((printError) => {
+              console.warn("[KitchenPrint] Failed:", printError);
+              reportPrintFailed({
+                tableLabel: orderModal.table.label,
+                detail: printError instanceof Error ? printError.message : String(printError),
+                source: "direct",
+              });
+            });
+          }
+        }
       }
 
       setOrderModal(null);
@@ -169,6 +189,7 @@ function ServerApp() {
 
   return (
     <div className="min-h-screen bg-zinc-100 dark:bg-zinc-950">
+      <PrintFailedListener />
       <header className="flex items-start justify-between gap-3 border-b border-zinc-200 bg-white px-4 py-4 dark:border-zinc-800 dark:bg-zinc-900">
         <div>
           <p className="text-xs uppercase tracking-widest text-zinc-500 dark:text-zinc-400">

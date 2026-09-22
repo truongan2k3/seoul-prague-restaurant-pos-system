@@ -1,4 +1,10 @@
 import type { AppSettings } from "@/lib/types";
+import {
+  minutesNowInVenue,
+  todayIsoDateInVenue,
+  venueWallTimeToUtc,
+  venueWeekdayIndex,
+} from "@/lib/venue-timezone";
 
 export const DEFAULT_RESERVATION_OPERATING_HOURS: AppSettings["reservationOperatingHours"] = {
   monday: { enabled: true, open: "11:00", close: "22:00" },
@@ -44,6 +50,22 @@ export function getWeekdayKey(date: Date): keyof AppSettings["reservationOperati
   return keys[date.getDay()];
 }
 
+/** Weekday key for a YYYY-MM-DD in Europe/Prague (not the server's local TZ). */
+export function getWeekdayKeyForDateIso(
+  dateIso: string,
+): keyof AppSettings["reservationOperatingHours"] {
+  const keys: (keyof AppSettings["reservationOperatingHours"])[] = [
+    "sunday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+  ];
+  return keys[venueWeekdayIndex(dateIso)];
+}
+
 export function buildTimeSlotsForDay(
   dayConfig: AppSettings["reservationOperatingHours"][keyof AppSettings["reservationOperatingHours"]],
   stepMinutes: number,
@@ -67,8 +89,7 @@ export function buildTimeSlotsForDate(
   operatingHours: AppSettings["reservationOperatingHours"],
   stepMinutes: number,
 ): string[] {
-  const date = new Date(`${dateIso}T12:00:00`);
-  const dayKey = getWeekdayKey(date);
+  const dayKey = getWeekdayKeyForDateIso(dateIso);
   return buildTimeSlotsForDay(operatingHours[dayKey], stepMinutes);
 }
 
@@ -76,15 +97,13 @@ export function filterPastTimeSlots(slots: string[], dateIso: string): string[] 
   const today = todayIsoDate();
   if (dateIso !== today) return slots;
 
-  const now = new Date();
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const nowMinutes = minutesNowInVenue();
   return slots.filter((slot) => parseTimeToMinutes(slot) > nowMinutes);
 }
 
+/** Calendar "today" in Europe/Prague (venue timezone). */
 export function todayIsoDate(): string {
-  const now = new Date();
-  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-  return now.toISOString().slice(0, 10);
+  return todayIsoDateInVenue();
 }
 
 export function formatOperatingHoursSummary(
@@ -127,7 +146,7 @@ export function countGuestsInSlot(
   time: string,
   stepMinutes: number,
 ): number {
-  const slotStart = new Date(`${dateIso}T${time}:00`).getTime();
+  const slotStart = venueWallTimeToUtc(dateIso, time).getTime();
   const slotEnd = slotStart + stepMinutes * 60 * 1000;
   const activeStatuses = new Set(["pending", "confirmed", "checked_in", "late"]);
 

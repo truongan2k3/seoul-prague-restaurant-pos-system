@@ -6,12 +6,19 @@ import { LanguageSelector } from "@/components/language-selector";
 import { StaffAdminPasscodeModal } from "@/components/staff-admin-passcode-modal";
 import { useApp } from "@/contexts/app-context";
 import { useAuth } from "@/contexts/auth-context";
+import { POS_HOME_PATH } from "@/lib/page-routes";
 import type { StaffMember } from "@/lib/types";
 import {
   prepareStaffLoginRosterAction,
   resolveStaffLoginSessionAction,
   selectStaffAction,
 } from "@/src/lib/staff-auth-actions";
+
+function resolvePostLoginPath(next: string | null): string {
+  const path = next?.trim() || POS_HOME_PATH;
+  if (path === "/" || path.startsWith("/landing")) return POS_HOME_PATH;
+  return path;
+}
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -33,9 +40,9 @@ function StaffLoginSkeleton() {
 function StaffLoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nextPath = searchParams.get("next") || "/";
+  const nextPath = resolvePostLoginPath(searchParams.get("next"));
   const { session, loading: authLoading, logout } = useAuth();
-  const { translate } = useApp();
+  const { translate, setStaff } = useApp();
 
   const [roster, setRoster] = useState<StaffMember[]>([]);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
@@ -94,6 +101,11 @@ function StaffLoginForm() {
 
     if (result.ok) {
       setAdminPasscodeTarget(null);
+      // AppProvider stays mounted across /staff-login → /app, so push the selected
+      // member into context immediately (reload used to be required otherwise).
+      if (result.member) {
+        setStaff(result.member);
+      }
       router.replace(nextPath);
       router.refresh();
       return;
@@ -233,7 +245,7 @@ function StaffLoginForm() {
 
 export default function StaffLoginPage() {
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-gray-50 px-4 dark:bg-zinc-950">
+    <div className="relative flex min-h-screen items-center justify-center bg-background px-4 dark:bg-zinc-950">
       <div className="absolute right-4 top-4 z-10">
         <LanguageSelector variant="flag-menu" />
       </div>

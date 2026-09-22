@@ -2,12 +2,25 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+type FullscreenDocument = Document & {
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void> | void;
+};
+
+type FullscreenElement = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+};
+
 function getFullscreenElement(): Element | null {
   if (typeof document === "undefined") return null;
-  const doc = document as Document & {
-    webkitFullscreenElement?: Element | null;
-  };
+  const doc = document as FullscreenDocument;
   return doc.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
+}
+
+function canRequestFullscreen(): boolean {
+  if (typeof document === "undefined") return false;
+  const el = document.documentElement as FullscreenElement;
+  return typeof el.requestFullscreen === "function" || typeof el.webkitRequestFullscreen === "function";
 }
 
 export function useFullscreen() {
@@ -15,7 +28,7 @@ export function useFullscreen() {
   const [supported, setSupported] = useState(false);
 
   useEffect(() => {
-    setSupported(typeof document !== "undefined" && "requestFullscreen" in document.documentElement);
+    setSupported(canRequestFullscreen());
     setIsFullscreen(Boolean(getFullscreenElement()));
 
     const onChange = () => setIsFullscreen(Boolean(getFullscreenElement()));
@@ -28,19 +41,29 @@ export function useFullscreen() {
   }, []);
 
   const enter = useCallback(async () => {
-    const el = document.documentElement as HTMLElement & {
-      webkitRequestFullscreen?: () => Promise<void>;
-    };
-    if (el.requestFullscreen) await el.requestFullscreen();
-    else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+    const el = document.documentElement as FullscreenElement;
+    try {
+      if (typeof el.requestFullscreen === "function") {
+        await el.requestFullscreen();
+      } else if (typeof el.webkitRequestFullscreen === "function") {
+        await el.webkitRequestFullscreen();
+      }
+    } catch {
+      // User gesture / browser policy may reject; keep UI usable.
+    }
   }, []);
 
   const exit = useCallback(async () => {
-    const doc = document as Document & {
-      webkitExitFullscreen?: () => Promise<void>;
-    };
-    if (doc.exitFullscreen) await doc.exitFullscreen();
-    else if (doc.webkitExitFullscreen) await doc.webkitExitFullscreen();
+    const doc = document as FullscreenDocument;
+    try {
+      if (typeof doc.exitFullscreen === "function") {
+        await doc.exitFullscreen();
+      } else if (typeof doc.webkitExitFullscreen === "function") {
+        await doc.webkitExitFullscreen();
+      }
+    } catch {
+      // ignore
+    }
   }, []);
 
   const toggle = useCallback(async () => {

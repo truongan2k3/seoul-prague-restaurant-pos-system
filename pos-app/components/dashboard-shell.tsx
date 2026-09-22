@@ -9,14 +9,18 @@ import { SummaryView } from "@/components/summary-view";
 import { StorageView } from "@/components/storage-view";
 import { StaffView } from "@/components/staff-view";
 import { SettingsView } from "@/components/settings-view";
+import { AboutView } from "@/components/about-view";
 import { DynamicQrServicesView } from "@/components/dynamic-qr-services-view";
 import { ReadyNotificationListener } from "@/components/ready-notification-listener";
 import { MainNewOrderNotificationListener } from "@/components/main-new-order-notification-listener";
 import { CallWaiterListener } from "@/components/call-waiter-listener";
+import { PrintFailedListener } from "@/components/print-failed-listener";
+import { TableGuestRequestListener } from "@/components/table-guest-request-listener";
 import { Sidebar } from "@/components/sidebar";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { ChangelogPopupGate } from "@/components/changelog-popup-gate";
 import { ReservationIncomingListener } from "@/components/reservation-incoming-listener";
+import { PushSubscriptionBootstrap } from "@/components/push-subscription-bootstrap";
 import { ReservationReminderListener } from "@/components/reservation-reminder-listener";
 import { POS_EGRESS } from "@/lib/egress-config";
 import { clearPosInitCache, patchPosInitCacheMenu, readPosInitCache, readPosInitCacheStale, writePosInitCache } from "@/lib/pos-init-cache";
@@ -228,6 +232,11 @@ export function DashboardShell() {
   const [loadStartedAt, setLoadStartedAt] = useState(() => Date.now());
   const [initAttempt, setInitAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  // Re-sync staff from cookie when POS shell mounts (after /staff-login client nav).
+  useEffect(() => {
+    void refreshStaffList();
+  }, [refreshStaffList]);
 
   const retryPosLoad = useCallback(() => {
     setInitAttempt((attempt) => attempt + 1);
@@ -617,7 +626,7 @@ export function DashboardShell() {
           />
         );
       case "dynamicQr":
-        return <DynamicQrServicesView />;
+        return <DynamicQrServicesView tables={tables} />;
       case "staff":
         return <StaffView onRefresh={() => void refreshStaffList()} />;
       case "settings":
@@ -631,16 +640,20 @@ export function DashboardShell() {
             }}
           />
         );
+      case "about":
+        return <AboutView />;
       default:
         return null;
     }
   })();
 
   return (
-    <div className="flex h-[100dvh] bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+    <div className="flex h-[100dvh] bg-background text-[var(--foreground)]">
       <ReadyNotificationListener tables={tables} menuItems={menuItems} />
       <MainNewOrderNotificationListener tables={tables} />
       <CallWaiterListener />
+      <PrintFailedListener />
+      <TableGuestRequestListener />
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <AnnouncementMarquee surface="pos" />
@@ -648,6 +661,7 @@ export function DashboardShell() {
       </div>
       {tableOrder.tableOrderModals}
       <ChangelogPopupGate />
+      <PushSubscriptionBootstrap />
       <ReservationIncomingListener />
       <ReservationReminderListener />
     </div>

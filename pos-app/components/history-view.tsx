@@ -1,17 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
-import { AlertTriangle, Eye, Pencil, Trash2 } from "lucide-react";
-import { LiveClock } from "@/components/live-clock";
+import { AlertTriangle, ChevronLeft, ChevronRight, Eye, Pencil, Percent } from "lucide-react";
+import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { DateRangeInputs } from "@/components/date-range-inputs";
 import { OrderHistoryModal } from "@/components/order-history-modal";
-import { usePinGate } from "@/contexts/pin-gate-context";
 import { useApp } from "@/contexts/app-context";
-import { useNotifications } from "@/contexts/notification-context";
 import { formatCzk } from "@/lib/currency";
 import { saleHasHistoryAlert } from "@/lib/order-activity";
 import { generateOrderNumber } from "@/lib/receipt-calculations";
-import { canManageStaff } from "@/lib/staff-roles";
+import { shiftIsoDate } from "@/lib/reservation-analytics";
 import {
   computeRevenueStats,
   filterHistorySales,
@@ -26,11 +24,6 @@ import { formatHistoryDateTime, resolveGuestSeatedAt } from "@/lib/sale-history"
 import { filterButtonClass, paymentFilterClass } from "@/lib/theme-classes";
 import { POS_EGRESS } from "@/lib/egress-config";
 import type { MenuItem, SaleRecord } from "@/lib/types";
-import {
-  deleteSaleRecords,
-  deleteSalesByDate,
-  deleteSalesByMonth,
-} from "@/src/lib/sales-actions";
 import { fetchSales, mapSalesResponse } from "@/src/lib/supabase-data";
 
 interface HistoryViewProps {
@@ -38,15 +31,18 @@ interface HistoryViewProps {
   onSaleUpdated?: (sale: SaleRecord) => void;
 }
 
-const PERIOD_OPTIONS: SummaryPeriod[] = ["today", "yesterday", "week", "month", "custom"];
+const PERIOD_OPTIONS = ["day", "week", "month", "custom"] as const;
+type HistoryPeriodOption = (typeof PERIOD_OPTIONS)[number];
 
-const PERIOD_LABEL_KEYS = {
-  today: "summaryToday",
-  yesterday: "summaryYesterday",
+const PERIOD_LABEL_KEYS: Record<
+  HistoryPeriodOption,
+  "resPeriodDay" | "summaryWeek" | "summaryMonth" | "summaryPickRange"
+> = {
+  day: "resPeriodDay",
   week: "summaryWeek",
   month: "summaryMonth",
   custom: "summaryPickRange",
-} as const;
+};
 
 const PAYMENT_OPTIONS: HistoryPaymentFilter[] = ["all", "cash", "card"];
 
@@ -55,6 +51,8 @@ const PAYMENT_LABEL_KEYS: Record<HistoryPaymentFilter, "allPayments" | "cash" | 
   cash: "cash",
   card: "card",
 };
+
+const HISTORY_PAGE_SIZE = 50;
 
 function itemCount(sale: SaleRecord): number {
   return sale.items.reduce((sum, item) => sum + item.quantity, 0);
@@ -66,32 +64,28 @@ function itemPreview(sale: SaleRecord, max = 2): string {
   return `${names.slice(0, max).join(", ")} +${names.length - max}`;
 }
 
-function toMonthInputValue(date = new Date()): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  return `${year}-${month}`;
-}
 
 export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
-  const { translate, language, currentStaffUser, logAction } = useApp();
-  const { pushNotification } = useNotifications();
-  const { requestPin } = usePinGate();
+  const { translate, language, currentStaffUser } = useApp();
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState<SummaryPeriod>("today");
+  const [period, setPeriod] = useState<HistoryPeriodOption>("day");
+  const [anchorDate, setAnchorDate] = useState(() => toDateInputValue(new Date()));
   const [customFrom, setCustomFrom] = useState(() => toDateInputValue(new Date()));
   const [customTo, setCustomTo] = useState(() => toDateInputValue(new Date()));
   const [paymentFilter, setPaymentFilter] = useState<HistoryPaymentFilter>("all");
+  const [page, setPage] = useState(1);
   const [selectedSale, setSelectedSale] = useState<SaleRecord | null>(null);
   const [openEditTip, setOpenEditTip] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [deleteDate, setDeleteDate] = useState(() => toDateInputValue(new Date()));
-  const [deleteMonth, setDeleteMonth] = useState(() => toMonthInputValue());
-  const [deleting, setDeleting] = useState(false);
 
   const canEditTip = Boolean(currentStaffUser);
-  const canManageHistory = canManageStaff(currentStaffUser?.role);
+
+  const rangeOptions = useMemo(() => {
+    if (period === "day") return { from: anchorDate, to: anchorDate };
+    if (period === "custom") return { from: customFrom, to: customTo };
+    return undefined;
+  }, [period, anchorDate, customFrom, customTo]);
 
   const loadSales = useCallback(async () => {
     setLoading(true);
@@ -114,151 +108,53 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   }, [loadSales]);
 
   const filteredSales = useMemo(
-    () =>
-      filterHistorySales(
-        sales,
-        period,
-        paymentFilter,
-        period === "custom" ? { from: customFrom, to: customTo } : undefined,
-      ),
-    [sales, period, paymentFilter, customFrom, customTo],
+    () => filterHistorySales(sales, period, paymentFilter, rangeOptions),
+    [sales, period, paymentFilter, rangeOptions],
   );
 
-  const filteredIds = useMemo(() => new Set(filteredSales.map((sale) => sale.id)), [filteredSales]);
-
   useEffect(() => {
-    setSelectedIds((prev) => {
-      const next = new Set([...prev].filter((id) => filteredIds.has(id)));
-      return next.size === prev.size ? prev : next;
-    });
-  }, [filteredIds]);
+    setPage(1);
+  }, [period, paymentFilter, rangeOptions]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredSales.length / HISTORY_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+
+  const pagedSales = useMemo(() => {
+    const start = (currentPage - 1) * HISTORY_PAGE_SIZE;
+    return filteredSales.slice(start, start + HISTORY_PAGE_SIZE);
+  }, [filteredSales, currentPage]);
 
   const stats = useMemo(() => computeRevenueStats(filteredSales), [filteredSales]);
 
   const activeRange = useMemo(
-    () =>
-      getPeriodRange(
-        period,
-        period === "custom" ? { from: customFrom, to: customTo } : undefined,
-      ),
-    [period, customFrom, customTo],
+    () => getPeriodRange(period, rangeOptions),
+    [period, rangeOptions],
   );
 
+  const dateNavLocale = language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB";
+
+  const dayLabel = useMemo(() => {
+    const date = new Date(`${anchorDate}T12:00:00`);
+    return date.toLocaleDateString(dateNavLocale, {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  }, [anchorDate, dateNavLocale]);
+
+  const showDayNav = period === "day";
+  const isTodayAnchor = anchorDate === toDateInputValue(new Date());
+
+  const jumpToToday = () => setAnchorDate(toDateInputValue(new Date()));
+  const shiftAnchor = (days: number) => {
+    setAnchorDate((prev) => shiftIsoDate(prev, days));
+  };
+
   const periodLabel =
-    period === "custom"
+    period === "custom" || period === "week" || period === "month"
       ? `${formatSummaryDate(activeRange.start, language)} – ${formatSummaryDate(activeRange.end, language)}`
-      : `${formatSummaryDate(activeRange.start, language)}${
-          period === "week" || period === "month"
-            ? ` – ${formatSummaryDate(activeRange.end, language)}`
-            : ""
-        }`;
-
-  const allFilteredSelected =
-    filteredSales.filter((sale) => !sale.deletedAt).length > 0 &&
-    filteredSales.filter((sale) => !sale.deletedAt).every((sale) => selectedIds.has(sale.id));
-
-  const toggleSelectAll = () => {
-    const activeIds = filteredSales.filter((sale) => !sale.deletedAt).map((sale) => sale.id);
-    if (allFilteredSelected) {
-      setSelectedIds(new Set());
-      return;
-    }
-    setSelectedIds(new Set(activeIds));
-  };
-
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleDeleteResult = (
-    deletedRows: { id: string; deleted_at?: string | null }[] | undefined,
-    detail: string,
-  ) => {
-    if (!deletedRows || deletedRows.length === 0) {
-      pushNotification({ message: translate("historyDeleteFailed") });
-      return;
-    }
-    const deletedAtById = new Map(
-      deletedRows.map((row) => [
-        row.id,
-        row.deleted_at ? new Date(row.deleted_at) : new Date(),
-      ]),
-    );
-    setSales((prev) =>
-      prev.map((sale) => {
-        const deletedAt = deletedAtById.get(sale.id);
-        return deletedAt ? { ...sale, deletedAt } : sale;
-      }),
-    );
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      deletedRows.forEach((row) => next.delete(row.id));
-      return next;
-    });
-    if (selectedSale && deletedAtById.has(selectedSale.id)) {
-      setSelectedSale(null);
-      setOpenEditTip(false);
-    }
-    logAction("delete_sale", detail);
-    pushNotification({ message: translate("historyDeleteSuccess") });
-  };
-
-  const runDelete = async (
-    action: () => Promise<{
-      data: { id: string; deleted_at?: string | null }[] | null;
-      error: { message: string } | null;
-    }>,
-    detail: string,
-  ) => {
-    if (deleting) return;
-    setDeleting(true);
-    const { data, error: deleteError } = await action();
-    setDeleting(false);
-    if (deleteError) {
-      pushNotification({ message: translate("historyDeleteFailed") });
-      return;
-    }
-    handleDeleteResult(data ?? undefined, detail);
-  };
-
-  const confirmDeleteSelected = () => {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    requestPin(
-      () => runDelete(() => deleteSaleRecords(ids), `Deleted ${ids.length} sale(s)`),
-      { force: true },
-    );
-  };
-
-  const confirmDeleteByDate = () => {
-    requestPin(
-      () => runDelete(() => deleteSalesByDate(deleteDate), `Deleted sales on ${deleteDate}`),
-      { force: true },
-    );
-  };
-
-  const confirmDeleteMonth = () => {
-    requestPin(
-      () => runDelete(() => deleteSalesByMonth(deleteMonth), `Deleted sales for ${deleteMonth}`),
-      { force: true },
-    );
-  };
-
-  const confirmDeleteOne = (sale: SaleRecord) => {
-    requestPin(
-      () =>
-        runDelete(
-          () => deleteSaleRecords([sale.id]),
-          `Deleted sale ${generateOrderNumber(sale.closedAt)} (${sale.tableLabel})`,
-        ),
-      { force: true },
-    );
-  };
+      : formatSummaryDate(activeRange.start, language);
 
   const openSale = (sale: SaleRecord, editTip = false) => {
     setSelectedSale(sale);
@@ -271,10 +167,10 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   };
 
   return (
-    <div className="flex h-full flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
+    <div className="flex h-full flex-col bg-background text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200/80 bg-background px-2.5 py-1.5 sm:px-4 sm:py-2.5 lg:px-6 lg:py-4 dark:border-gray-800 dark:bg-gray-900">
         <div>
-          <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <h1 className="text-sm font-semibold sm:text-base lg:text-lg text-gray-900 dark:text-gray-100">
             {translate("history")}
           </h1>
           <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{periodLabel}</p>
@@ -287,53 +183,108 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
           >
             Refresh
           </button>
-          <LiveClock />
+          <HeaderClockWithStatus />
         </div>
       </header>
 
       <div className="flex-1 overflow-auto p-6">
         <div className="mx-auto max-w-6xl space-y-6">
-          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {translate("date")}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {PERIOD_OPTIONS.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setPeriod(option)}
-                  className={filterButtonClass(period === option)}
-                >
-                  {translate(PERIOD_LABEL_KEYS[option])}
-                </button>
-              ))}
-            </div>
-            {period === "custom" && (
-              <DateRangeInputs
-                from={customFrom}
-                to={customTo}
-                onFromChange={setCustomFrom}
-                onToChange={setCustomTo}
-              />
-            )}
-          </section>
+          <section className="rounded-xl border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">
+                {translate("date")}
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {PERIOD_OPTIONS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => {
+                      setPeriod(option);
+                      if (option === "day") {
+                        setAnchorDate((prev) => prev || toDateInputValue(new Date()));
+                      }
+                      if (option === "custom") {
+                        setCustomFrom(anchorDate);
+                        setCustomTo(anchorDate);
+                      }
+                    }}
+                    className={filterButtonClass(period === option)}
+                  >
+                    {translate(PERIOD_LABEL_KEYS[option])}
+                  </button>
+                ))}
+              </div>
 
-          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {translate("paymentMethod")}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {PAYMENT_OPTIONS.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setPaymentFilter(option)}
-                  className={paymentFilterClass(paymentFilter === option, option)}
-                >
-                  {translate(PAYMENT_LABEL_KEYS[option])}
-                </button>
-              ))}
+              {showDayNav ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => shiftAnchor(-1)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                    aria-label={translate("resPrevDay")}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <label className="relative inline-flex min-w-[9.5rem] cursor-pointer items-center justify-center">
+                    <span className="pointer-events-none rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-center text-xs font-semibold tabular-nums text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:text-sm">
+                      {dayLabel}
+                    </span>
+                    <input
+                      type="date"
+                      value={anchorDate}
+                      onChange={(event) => setAnchorDate(event.target.value)}
+                      className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0"
+                      aria-label={translate("resPeriodDay")}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => shiftAnchor(1)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                    aria-label={translate("resNextDay")}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={jumpToToday}
+                    disabled={isTodayAnchor}
+                    className={filterButtonClass(isTodayAnchor)}
+                  >
+                    {translate("resTodayJump")}
+                  </button>
+                </div>
+              ) : null}
+
+              {period === "custom" ? (
+                <div className="min-w-0 flex-1 sm:max-w-md">
+                  <DateRangeInputs
+                    from={customFrom}
+                    to={customTo}
+                    onFromChange={setCustomFrom}
+                    onToChange={setCustomTo}
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">
+                {translate("paymentMethod")}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {PAYMENT_OPTIONS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setPaymentFilter(option)}
+                    className={paymentFilterClass(paymentFilter === option, option)}
+                  >
+                    {translate(PAYMENT_LABEL_KEYS[option])}
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
 
@@ -369,60 +320,6 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
             </div>
           </section>
 
-          {canManageHistory && filteredSales.length > 0 && (
-            <section className="rounded-xl border border-red-200 bg-red-50/50 p-4 dark:border-red-900/50 dark:bg-red-950/20">
-              <div className="flex flex-wrap items-end gap-3">
-                <button
-                  type="button"
-                  disabled={selectedIds.size === 0 || deleting}
-                  onClick={confirmDeleteSelected}
-                  className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  {translate("deleteSelected")}
-                  {selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}
-                </button>
-                <div className="flex flex-wrap items-end gap-2">
-                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
-                    {translate("deleteByDate")}
-                    <input
-                      type="date"
-                      value={deleteDate}
-                      onChange={(event) => setDeleteDate(event.target.value)}
-                      className="pos-input mt-1 block min-w-[10rem]"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    disabled={deleting}
-                    onClick={confirmDeleteByDate}
-                    className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/40"
-                  >
-                    {translate("confirmDelete")}
-                  </button>
-                </div>
-                <div className="flex flex-wrap items-end gap-2">
-                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300">
-                    {translate("deleteEntireMonth")}
-                    <input
-                      type="month"
-                      value={deleteMonth}
-                      onChange={(event) => setDeleteMonth(event.target.value)}
-                      className="pos-input mt-1 block min-w-[10rem]"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    disabled={deleting}
-                    onClick={confirmDeleteMonth}
-                    className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/40"
-                  >
-                    {translate("confirmDelete")}
-                  </button>
-                </div>
-              </div>
-            </section>
-          )}
 
           {loading ? (
             <p className="text-sm text-gray-500 dark:text-gray-400">{translate("loading")}</p>
@@ -433,21 +330,11 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
               {sales.length === 0 ? translate("noHistory") : translate("historyNoResults")}
             </p>
           ) : (
+            <div className="space-y-3">
             <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
               <table className="w-full min-w-[1120px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
-                    {canManageHistory && (
-                      <th className="px-4 py-3 font-semibold">
-                        <input
-                          type="checkbox"
-                          checked={allFilteredSelected}
-                          onChange={toggleSelectAll}
-                          aria-label={translate("selectAll")}
-                          className="h-4 w-4 rounded border-gray-300"
-                        />
-                      </th>
-                    )}
                     <th className="px-4 py-3 font-semibold">{translate("table")}</th>
                     <th className="px-4 py-3 font-semibold">{translate("historyItems")}</th>
                     <th className="px-4 py-3 font-semibold">{translate("staff")}</th>
@@ -462,10 +349,10 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSales.map((sale) => {
+                  {pagedSales.map((sale) => {
                     const orderId = generateOrderNumber(sale.closedAt);
                     const isDeleted = Boolean(sale.deletedAt);
-                    const colCount = canManageHistory ? 12 : 11;
+                    const colCount = 11;
                     return (
                       <Fragment key={sale.id}>
                         {isDeleted && (
@@ -483,18 +370,6 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                               : ""
                           }`}
                         >
-                        {canManageHistory && (
-                          <td className="px-4 py-3">
-                            <input
-                              type="checkbox"
-                              checked={selectedIds.has(sale.id)}
-                              disabled={isDeleted}
-                              onChange={() => toggleSelect(sale.id)}
-                              aria-label={`${translate("selectAll")} ${orderId}`}
-                              className="h-4 w-4 rounded border-gray-300 disabled:opacity-40"
-                            />
-                          </td>
-                        )}
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5">
                             <span className="inline-flex w-max shrink-0 items-center justify-center whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1 text-base font-bold leading-none text-white dark:bg-gray-100 dark:text-gray-900">
@@ -509,11 +384,24 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                                 <AlertTriangle className="h-5 w-5" strokeWidth={2.5} />
                               </span>
                             )}
+                            {sale.discountAmount > 0 && (
+                              <span
+                                title={translate("historyDiscountAlert")}
+                                className="inline-flex shrink-0 text-emerald-600 dark:text-emerald-400"
+                                aria-label={translate("historyDiscountAlert")}
+                              >
+                                <Percent className="h-5 w-5" strokeWidth={2.5} />
+                              </span>
+                            )}
                           </div>
                           {sale.guestName && (
                             <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
                               {sale.guestName}
-                              {sale.visitSource === "walk_in" ? " · Walk-in" : sale.visitSource === "reservation" ? " · Booking" : ""}
+                              {sale.visitSource === "phone_call"
+                                ? " · Phone"
+                                : sale.visitSource
+                                  ? " · Online"
+                                  : ""}
                             </p>
                           )}
                         </td>
@@ -569,18 +457,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                                 className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-800 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200"
                               >
                                 <Pencil className="h-3.5 w-3.5" />
-                                {translate("editTip")}
-                              </button>
-                            )}
-                            {canManageHistory && !isDeleted && (
-                              <button
-                                type="button"
-                                disabled={deleting}
-                                onClick={() => confirmDeleteOne(sale)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                                {translate("deleteOrder")}
+                                {translate("editTipAndPayment")}
                               </button>
                             )}
                           </div>
@@ -594,6 +471,47 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {filteredSales.length > HISTORY_PAGE_SIZE ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  {translate("historyPageOf")
+                    .replace("{page}", String(currentPage))
+                    .replace("{total}", String(totalPages))}
+                  <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                    ({translate("historyPageShowing")
+                      .replace("{from}", String((currentPage - 1) * HISTORY_PAGE_SIZE + 1))
+                      .replace(
+                        "{to}",
+                        String(Math.min(currentPage * HISTORY_PAGE_SIZE, filteredSales.length)),
+                      )
+                      .replace("{count}", String(filteredSales.length))}
+                    )
+                  </span>
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPage((prev) => Math.max(1, Math.min(prev, totalPages) - 1))}
+                    disabled={currentPage <= 1}
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 enabled:hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:text-gray-200 dark:enabled:hover:bg-gray-700"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    {translate("historyPrevPage")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPage((prev) => Math.min(totalPages, Math.min(prev, totalPages) + 1))}
+                    disabled={currentPage >= totalPages}
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 enabled:hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:text-gray-200 dark:enabled:hover:bg-gray-700"
+                  >
+                    {translate("historyNextPage")}
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ) : null}
             </div>
           )}
         </div>
@@ -615,11 +533,6 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                 row.id === deletedId ? { ...row, deletedAt: deletedAt ?? new Date() } : row,
               ),
             );
-            setSelectedIds((prev) => {
-              const next = new Set(prev);
-              next.delete(deletedId);
-              return next;
-            });
             closeModal();
           }}
         />

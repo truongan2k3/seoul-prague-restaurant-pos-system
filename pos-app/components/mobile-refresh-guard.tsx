@@ -63,7 +63,7 @@ function canStartPullToRefresh(scrollable: HTMLElement | null): boolean {
 
 export function MobileRefreshGuard() {
   const pathname = usePathname();
-  const pullToRefreshEnabled = pathname === "/";
+  const pullToRefreshEnabled = pathname === "/app";
   const { translate } = useApp();
   const { pushNotification } = useNotifications();
   const { hasUnsavedWork, getDirtyEntries } = useUnsavedWork();

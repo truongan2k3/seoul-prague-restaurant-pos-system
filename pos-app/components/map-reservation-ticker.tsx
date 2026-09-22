@@ -7,7 +7,14 @@ import { useSettings } from "@/contexts/settings-context";
 import {
   filterReservationsByPeriod,
   reservationStatusLabelKey,
+  reservationStatusTone,
 } from "@/lib/reservation-analytics";
+import {
+  parseReservationBbqNotes,
+  pickEventTypeLabel,
+  type GuestReservationLang,
+  type ReservationBbqPreference,
+} from "@/lib/reservation-guest-form";
 import type { ReservationRecord, ReservationStatus } from "@/lib/types";
 import {
   fetchReservations,
@@ -33,22 +40,20 @@ function clampTickerSeconds(value: number | undefined): number {
 
 function formatTime(date: Date, language: string): string {
   return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : language === "cs" ? "cs-CZ" : "en-GB", {
+    timeZone: "Europe/Prague",
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
 }
 
-function statusTone(status: ReservationRecord["status"]): string {
-  switch (status) {
-    case "pending":
-      return "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200";
-    case "confirmed":
-      return "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200";
-    case "late":
-      return "bg-orange-100 text-orange-900 dark:bg-orange-950 dark:text-orange-200";
-    default:
-      return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
+function bbqBadgeClass(bbq: ReservationBbqPreference): string {
+  if (bbq === "yes") {
+    return "bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-200";
   }
+  if (bbq === "no") {
+    return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+  }
+  return "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200";
 }
 
 export function MapReservationTicker() {
@@ -67,10 +72,11 @@ export function MapReservationTicker() {
     since.setHours(0, 0, 0, 0);
     const { data, error } = await fetchReservations(since);
     if (error || !data) return;
+    // Include online + phone + unmarked reservations; skip walk-ins only.
     const today = filterReservationsByPeriod(mapReservationsResponse(data), "today")
       .filter(
         (row) =>
-          row.source === "reservation" && UPCOMING_STATUSES.includes(row.status),
+          row.source !== "walk_in" && UPCOMING_STATUSES.includes(row.status),
       )
       .sort((a, b) => a.reservedAt.getTime() - b.reservedAt.getTime());
     setRows(today);
@@ -117,12 +123,37 @@ export function MapReservationTicker() {
   if (!current) return null;
 
   const entering = phase === "in";
+  const { bbq, noteText } = parseReservationBbqNotes(current.notes);
+  // Only show a badge for BBQ or Casual — hide when guest chose "I don't know".
+  const bbqLabel =
+    bbq === "yes"
+      ? translate("mapResTickerBbqYes")
+      : bbq === "no"
+        ? translate("mapResTickerBbqNo")
+        : null;
+
+  const eventTypeLang: GuestReservationLang = language === "cs" ? "cs" : "en";
+  const eventTypeLabel = current.eventType
+    ? pickEventTypeLabel(
+        settings.reservationEventTypes.find((option) => option.id === current.eventType) ?? {
+          id: current.eventType,
+          labels: {
+            en: current.eventType,
+            cs: current.eventType,
+            vi: current.eventType,
+            de: current.eventType,
+            ko: current.eventType,
+          },
+        },
+        eventTypeLang,
+      )
+    : null;
 
   return (
-    <aside className="flex h-[3.25rem] shrink-0 items-center gap-2.5 border-t border-gray-200 bg-white px-3 dark:border-gray-800 dark:bg-gray-900 sm:h-14 sm:gap-3.5 sm:px-5">
+    <aside className="flex shrink-0 flex-col gap-1 border-t border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-900 sm:h-14 sm:flex-row sm:items-center sm:gap-3.5 sm:px-5 sm:py-0">
       <div className="flex shrink-0 items-center gap-2 text-gray-500 dark:text-gray-400">
         <CalendarClock className="h-4 w-4 text-red-500" />
-        <span className="hidden text-xs font-semibold uppercase tracking-wide sm:inline">
+        <span className="text-[10px] font-semibold uppercase tracking-wide sm:text-xs">
           {translate("mapResTickerTitle")}
         </span>
         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium tabular-nums text-gray-600 dark:bg-gray-800 dark:text-gray-300">
@@ -133,34 +164,54 @@ export function MapReservationTicker() {
       <div className="relative min-h-[1.75rem] min-w-0 flex-1 overflow-hidden">
         <div
           key={current.id + String(index)}
-          className="flex min-w-0 items-center gap-2.5 sm:gap-3.5"
+          className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-3.5"
           style={{
             transition: `opacity ${FADE_MS}ms ${EASE}, transform ${FADE_MS}ms ${EASE}`,
             opacity: entering ? 1 : 0,
             transform: entering ? "translateY(0)" : "translateY(10px)",
           }}
         >
-          <span className="shrink-0 font-mono text-base font-bold tabular-nums text-gray-900 dark:text-gray-100">
-            {formatTime(current.reservedAt, language)}
-          </span>
-          <span
-            className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase ${statusTone(current.status)}`}
-          >
-            {translate(reservationStatusLabelKey(current.status))}
-          </span>
-          <span className="min-w-0 truncate text-sm font-semibold text-gray-900 sm:text-[15px] dark:text-gray-100">
-            {current.guestName}
-            <span className="font-normal text-gray-500 dark:text-gray-400">
-              {" "}
-              · {current.partySize}
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 font-mono text-base font-bold tabular-nums text-gray-900 dark:text-gray-100">
+              {formatTime(current.reservedAt, language)}
             </span>
-          </span>
-          <span className="hidden min-w-0 truncate text-sm text-gray-500 sm:inline dark:text-gray-400">
-            {current.tableLabel
-              ? `${translate("table")} ${current.tableLabel}`
-              : translate("mapResTickerNoTable")}
-            {current.bookingCode ? ` · ${current.bookingCode}` : ""}
-          </span>
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900 sm:text-[15px] dark:text-gray-100">
+              {current.guestName}
+              <span className="font-normal text-gray-500 dark:text-gray-400">
+                {" "}
+                · {current.partySize}
+              </span>
+            </span>
+          </div>
+          <div className="flex min-w-0 items-center gap-1.5 pl-[0.15rem] sm:min-w-0 sm:flex-1 sm:pl-0">
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase sm:px-2.5 sm:text-[11px] ${reservationStatusTone(current.status)}`}
+            >
+              {translate(reservationStatusLabelKey(current.status))}
+            </span>
+            {eventTypeLabel ? (
+              <span className="shrink-0 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-sky-800 sm:text-[11px] dark:bg-sky-950/50 dark:text-sky-200">
+                {eventTypeLabel}
+              </span>
+            ) : null}
+            {bbq && bbqLabel ? (
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase sm:text-[11px] ${bbqBadgeClass(bbq)}`}
+              >
+                {bbqLabel}
+              </span>
+            ) : null}
+            <span
+              className="min-w-0 truncate text-xs text-gray-500 sm:text-sm dark:text-gray-400"
+              title={noteText || undefined}
+            >
+              {current.tableLabel
+                ? `${translate("table")} ${current.tableLabel}`
+                : translate("mapResTickerNoTable")}
+              {current.bookingCode ? ` · ${current.bookingCode}` : ""}
+              {noteText ? ` · ${translate("mapResTickerNotes")}: ${noteText}` : ""}
+            </span>
+          </div>
         </div>
       </div>
     </aside>

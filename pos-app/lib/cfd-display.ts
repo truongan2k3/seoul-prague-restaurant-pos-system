@@ -9,7 +9,16 @@ export type CfdClientState = "idle" | "checkout" | "thankyou";
 export type CfdEventName =
   | "START_CHECKOUT"
   | "PAYMENT_SUCCESS"
-  | "CANCEL_CHECKOUT";
+  | "CANCEL_CHECKOUT"
+  | "GUEST_WELCOME";
+
+/** Ephemeral reception welcome — not persisted (6s overlay on CFD). */
+export interface CfdWelcomePayload {
+  reservationId: string;
+  guestName: string;
+  isReturning: boolean;
+  tableLabel?: string | null;
+}
 
 export interface CfdCheckoutItem {
   name: string;
@@ -37,12 +46,18 @@ export interface CfdCheckoutPayload {
    * has shown at least the minimum duration (split next-person flow).
    */
   deferIfThankYou?: boolean;
+  /**
+   * During split-by-items picking: show the full order with a select prompt.
+   * Switches back to checkout totals after staff proceeds to payment.
+   */
+  mode?: "checkout" | "split-select";
 }
 
 export interface CfdEventPayload {
   START_CHECKOUT: CfdCheckoutPayload;
   PAYMENT_SUCCESS: { tableNumber?: string };
   CANCEL_CHECKOUT: Record<string, never>;
+  GUEST_WELCOME: CfdWelcomePayload;
 }
 
 export interface CfdPersistedSnapshot {
@@ -90,6 +105,7 @@ export function buildCfdCheckoutPayload(
     changeDue?: number;
     staffInitiated?: boolean;
     deferIfThankYou?: boolean;
+    mode?: "checkout" | "split-select";
   },
 ): CfdCheckoutPayload {
   const menuById = new Map(menuItems.map((item) => [item.id, item]));
@@ -129,6 +145,7 @@ export function buildCfdCheckoutPayload(
     changeDue: totals.changeDue,
     staffInitiated: totals.staffInitiated,
     deferIfThankYou: totals.deferIfThankYou,
+    mode: totals.mode,
   };
 }
 
@@ -281,6 +298,8 @@ export async function sendCfdEvent<E extends CfdEventName>(
 ): Promise<void> {
   if (event === "START_CHECKOUT") {
     scheduleCheckoutPersist(payload as CfdCheckoutPayload);
+  } else if (event === "GUEST_WELCOME") {
+    // Welcome is ephemeral overlay only — do not touch checkout/thank-you persistence.
   } else {
     if (checkoutPersistTimer) {
       clearTimeout(checkoutPersistTimer);
@@ -320,6 +339,7 @@ export function subscribeCfdEvents(handlers: {
   onStartCheckout: (payload: CfdCheckoutPayload) => void;
   onPaymentSuccess: (payload?: CfdEventPayload["PAYMENT_SUCCESS"]) => void;
   onCancelCheckout: () => void;
+  onGuestWelcome?: (payload: CfdWelcomePayload) => void;
   onResubscribed?: () => void;
 }): () => void {
   let disposed = false;
@@ -356,6 +376,11 @@ export function subscribeCfdEvents(handlers: {
       })
       .on("broadcast", { event: "CANCEL_CHECKOUT" }, () => {
         handlers.onCancelCheckout();
+      })
+      .on("broadcast", { event: "GUEST_WELCOME" }, ({ payload }) => {
+        if (payload && typeof payload === "object" && handlers.onGuestWelcome) {
+          handlers.onGuestWelcome(payload as CfdWelcomePayload);
+        }
       })
       .subscribe((status) => {
         if (disposed) return;
@@ -413,6 +438,7 @@ export function checkoutPayloadFingerprint(payload: CfdCheckoutPayload | null): 
   if (!payload) return "";
   return [
     payload.tableNumber,
+    payload.mode ?? "checkout",
     payload.amountDueNow,
     payload.tip,
     payload.discount,

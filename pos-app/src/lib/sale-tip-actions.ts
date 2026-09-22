@@ -17,12 +17,13 @@ type SaleRowForTipEdit = {
   activity_log: unknown;
 };
 
-/** Update tip on a completed sale and append an audit entry to activity_log. */
+/** Update tip and/or bill payment method on a completed sale; append audit to activity_log. */
 export async function updateSaleTipRecord(
   saleId: string,
   input: {
     tip: number;
     tipPaymentMethod: PaymentMethod;
+    paymentMethod: PaymentMethod;
   },
 ) {
   const businessSession = await readAuthSession();
@@ -48,11 +49,17 @@ export async function updateSaleTipRecord(
   const sale = row as SaleRowForTipEdit;
   const previousTip = Number(sale.tip ?? 0);
   const previousTipPaymentMethod = (sale.tip_payment_method ?? sale.payment_method) as PaymentMethod;
+  const previousPaymentMethod = sale.payment_method as PaymentMethod;
   const nextTip = Math.max(0, Number(input.tip.toFixed(2)));
   const nextTipPaymentMethod = input.tipPaymentMethod;
+  const nextPaymentMethod = input.paymentMethod;
 
-  if (previousTip === nextTip && previousTipPaymentMethod === nextTipPaymentMethod) {
-    return { data: null, error: new Error("No tip changes to save.") };
+  if (
+    previousTip === nextTip &&
+    previousTipPaymentMethod === nextTipPaymentMethod &&
+    previousPaymentMethod === nextPaymentMethod
+  ) {
+    return { data: null, error: new Error("No changes to save.") };
   }
 
   const subtotal = Number(sale.subtotal);
@@ -62,12 +69,26 @@ export async function updateSaleTipRecord(
   const payload: Record<string, unknown> = {
     tip: nextTip,
     tip_payment_method: nextTipPaymentMethod,
+    payment_method: nextPaymentMethod,
     grand_total: Number(grandTotal.toFixed(2)),
   };
 
-  if (sale.payment_method === "cash" && sale.amount_given != null) {
-    const amountGiven = Number(sale.amount_given);
+  if (nextPaymentMethod === "cash") {
+    const amountGiven =
+      previousPaymentMethod === "cash" && sale.amount_given != null
+        ? Number(sale.amount_given)
+        : grandTotal;
+    payload.amount_given = Number(amountGiven.toFixed(2));
     payload.change_due = Number(Math.max(0, amountGiven - grandTotal).toFixed(2));
+    payload.card_auth_code = null;
+    payload.card_last4 = null;
+    payload.card_brand = null;
+  } else {
+    payload.amount_given = null;
+    payload.change_due = null;
+    payload.card_auth_code = null;
+    payload.card_last4 = null;
+    payload.card_brand = null;
   }
 
   const existingLog = Array.isArray(sale.activity_log) ? sale.activity_log : [];
@@ -81,6 +102,8 @@ export async function updateSaleTipRecord(
       newTip: nextTip,
       previousTipPaymentMethod,
       newTipPaymentMethod: nextTipPaymentMethod,
+      previousPaymentMethod,
+      newPaymentMethod: nextPaymentMethod,
     },
     createdAt: new Date().toISOString(),
   };

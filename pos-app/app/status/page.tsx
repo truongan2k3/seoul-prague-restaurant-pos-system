@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import {
   changeBusinessOwnerPasswordAction,
   getBusinessOwnerInfoAction,
@@ -10,12 +10,6 @@ import {
   statusAdminLoginAction,
   statusAdminLogoutAction,
 } from "@/src/lib/status-admin-actions";
-import {
-  buildPresenceMap,
-  isPageOnline,
-  subscribeToPagePresence,
-  type PagePresencePayload,
-} from "@/lib/pos-page-presence";
 import { PAGE_TARGET_LABELS, PAGE_TARGETS, type PageTarget } from "@/lib/page-routes";
 
 export default function StatusAdminPage() {
@@ -39,11 +33,6 @@ export default function StatusAdminPage() {
   const [refreshFeedback, setRefreshFeedback] = useState<string | null>(null);
   const [refreshSubmitting, setRefreshSubmitting] = useState<PageTarget | "all" | null>(null);
 
-  const [presenceUpdates, setPresenceUpdates] = useState<Map<PageTarget, PagePresencePayload>>(
-    () => new Map(),
-  );
-  const [now, setNow] = useState(() => Date.now());
-
   useEffect(() => {
     void getStatusAdminSessionAction().then((session) => {
       setAuthenticated(session != null);
@@ -59,30 +48,6 @@ export default function StatusAdminPage() {
       }
     });
   }, [authenticated]);
-
-  useEffect(() => {
-    if (!authenticated) return;
-    return subscribeToPagePresence((payload) => {
-      setPresenceUpdates((prev) => {
-        const next = new Map(prev);
-        next.set(payload.page, payload);
-        return next;
-      });
-    });
-  }, [authenticated]);
-
-  useEffect(() => {
-    if (!authenticated) return;
-    const interval = window.setInterval(() => setNow(Date.now()), 5000);
-    return () => window.clearInterval(interval);
-  }, [authenticated]);
-
-  const presenceStates = useMemo(
-    () => buildPresenceMap(presenceUpdates, now),
-    [presenceUpdates, now],
-  );
-
-  const onlineCount = presenceStates.filter((entry) => entry.online).length;
 
   const handleLogin = async (event: FormEvent) => {
     event.preventDefault();
@@ -172,15 +137,6 @@ export default function StatusAdminPage() {
     setPopupFeedback("Gửi thất bại. Vui lòng thử lại.");
   };
 
-  const formatLastSeen = useCallback((lastSeenAt: string) => {
-    if (!lastSeenAt) return "Chưa kết nối";
-    if (isPageOnline(lastSeenAt, now)) return "Đang hoạt động";
-    const diffSec = Math.round((now - new Date(lastSeenAt).getTime()) / 1000);
-    if (diffSec < 120) return `Offline ${diffSec}s trước`;
-    const diffMin = Math.round(diffSec / 60);
-    return `Offline ${diffMin} phút trước`;
-  }, [now]);
-
   if (authenticated === null) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-950 text-zinc-400">
@@ -240,7 +196,7 @@ export default function StatusAdminPage() {
           <div>
             <h1 className="text-3xl font-bold">Trạng thái hệ thống</h1>
             <p className="mt-1 text-sm text-zinc-400">
-              {onlineCount}/{presenceStates.length} trang đang hoạt động
+              Live page presence đã tắt (tiết kiệm Realtime). Vẫn có thể gửi tải lại / popup.
             </p>
           </div>
           <button
@@ -255,7 +211,7 @@ export default function StatusAdminPage() {
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <button
             type="button"
-            disabled={refreshSubmitting != null || onlineCount === 0}
+            disabled={refreshSubmitting != null}
             onClick={() => void handleRefreshPages([...PAGE_TARGETS])}
             className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
           >
@@ -267,29 +223,25 @@ export default function StatusAdminPage() {
         </div>
 
         <section className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {presenceStates.map((entry) => (
+          {PAGE_TARGETS.map((page) => (
             <div
-              key={entry.page}
+              key={page}
               className="rounded-xl border border-zinc-800 bg-zinc-900 p-4"
             >
               <div className="flex items-center justify-between gap-2">
-                <h2 className="font-semibold">{PAGE_TARGET_LABELS[entry.page]}</h2>
-                <span
-                  className={`inline-flex h-2.5 w-2.5 rounded-full ${
-                    entry.online ? "bg-emerald-400" : "bg-zinc-600"
-                  }`}
-                  aria-hidden
-                />
+                <h2 className="font-semibold">{PAGE_TARGET_LABELS[page]}</h2>
               </div>
-              <p className="mt-2 text-sm text-zinc-400">{formatLastSeen(entry.lastSeenAt)}</p>
-              <p className="mt-1 text-xs text-zinc-500">/{entry.page === "main" ? "" : entry.page}</p>
+              <p className="mt-2 text-sm text-zinc-400">
+                Không theo dõi online realtime
+              </p>
+              <p className="mt-1 text-xs text-zinc-500">/{page === "main" ? "app" : page}</p>
               <button
                 type="button"
-                disabled={!entry.online || refreshSubmitting != null}
-                onClick={() => void handleRefreshPages([entry.page])}
+                disabled={refreshSubmitting != null}
+                onClick={() => void handleRefreshPages([page])}
                 className="mt-3 w-full rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {refreshSubmitting === entry.page ? "Đang gửi…" : "Tải lại trang này"}
+                {refreshSubmitting === page ? "Đang gửi…" : "Tải lại trang này"}
               </button>
             </div>
           ))}

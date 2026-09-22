@@ -14,18 +14,18 @@ function TableTimer({ start }: { start: Date }) {
   return (
     <ElapsedTimer
       start={start}
-      className="rounded-md bg-black/10 px-2 py-0.5 font-mono text-xs font-semibold text-gray-900 dark:bg-white/10 dark:text-gray-100"
+      className="rounded-md bg-black/20 px-2 py-0.5 font-mono text-xs font-semibold text-[var(--foreground)] dark:bg-white/10"
     />
   );
 }
 
 const statusStyles = {
   empty:
-    "border-gray-300/70 bg-gray-50 hover:border-gray-400 dark:border-gray-700/80 dark:bg-gray-900/70 dark:hover:border-gray-600",
+    "border-[var(--border)] bg-[var(--card)]/90 hover:border-[var(--pos-champagne)]/50",
   waiting:
-    "border-amber-400/90 bg-amber-50/90 hover:border-amber-400 dark:border-amber-500/80 dark:bg-amber-950/50 table-glow-waiting",
+    "border-amber-400/80 bg-amber-50/90 hover:border-amber-400 table-glow-waiting dark:border-amber-500/70 dark:bg-amber-950/45",
   ready:
-    "border-emerald-400/90 bg-emerald-50/90 hover:border-emerald-400 dark:border-emerald-500/80 dark:bg-emerald-950/45 table-glow-ready",
+    "border-emerald-400/80 bg-emerald-50/90 hover:border-emerald-400 table-glow-ready dark:border-emerald-500/70 dark:bg-emerald-950/40",
 } as const;
 
 interface TableCardProps {
@@ -60,23 +60,23 @@ export function TableCard({
     orderItems.length > 0 ? orderItems : (table.orders ?? []);
   const occupiedSince = resolveTableOccupiedSince(table, displayOrders);
 
-  const cardClassName = `flex h-full w-full flex-col border p-2.5 text-left shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 sm:p-3 ${
+  const cardClassName = `flex h-full w-full flex-col border p-2.5 text-left shadow-sm transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pos-champagne)]/50 sm:p-3 ${
     compact ? "min-h-[100px] max-h-none rounded-xl" : "min-h-[120px] max-h-[176px] rounded-xl"
   } ${isRound && !compact ? "aspect-square max-h-[140px] items-center justify-center text-center rounded-full" : ""} ${statusStyles[table.status]} ${
     isPaidInProgress ? "ring-2 ring-emerald-500/70" : ""
   } ${slaAlert ? "sla-alert-pulse" : ""} ${
-    editMode ? "cursor-grab ring-2 ring-blue-400 ring-offset-2 active:cursor-grabbing" : "hover:shadow-md"
-  } ${table.type === "special" ? "ring-1 ring-inset ring-gray-300/60 dark:ring-gray-600/60" : ""}`;
+    editMode ? "cursor-grab ring-2 ring-[var(--pos-champagne)]/60 ring-offset-2 ring-offset-[var(--background)] active:cursor-grabbing" : "hover:shadow-md"
+  } ${table.type === "special" ? "ring-1 ring-inset ring-[var(--pos-champagne)]/40" : ""}`;
 
   const content = (
     <>
       <div className={`flex w-full shrink-0 items-start justify-between gap-2 ${isRound ? "flex-col items-center" : ""}`}>
         <div>
-          <span className={`font-bold tracking-tight text-gray-900 dark:text-gray-100 ${compact ? "text-lg sm:text-xl" : "text-xl sm:text-2xl"}`}>
+          <span className={`pos-serif font-medium tracking-tight text-[var(--foreground)] ${compact ? "text-lg sm:text-xl" : "text-xl sm:text-2xl"}`}>
             {table.label}
           </span>
           {table.type === "special" && (
-            <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-gray-500 sm:px-2 sm:text-[10px] dark:bg-gray-800 dark:text-gray-400">
+            <span className="ml-1 rounded-full bg-[var(--pos-champagne)]/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[var(--pos-champagne)] sm:px-2 sm:text-[10px]">
               VIP
             </span>
           )}
@@ -93,7 +93,7 @@ export function TableCard({
           {displayOrders.map((item, index) => (
             <li
               key={item.id ?? `${table.id}-${index}-${item.menuItemId ?? "x"}-${item.name}-${item.notes ?? ""}`}
-              className="flex items-center justify-between gap-1 truncate text-xs text-gray-800 dark:text-gray-200"
+              className="flex items-center justify-between gap-1 truncate text-xs text-[var(--foreground)]/85"
             >
               <span className="min-w-0 truncate">
                 {orderItemDisplayName(item, menuItems, language)}{" "}
@@ -105,7 +105,7 @@ export function TableCard({
       )}
 
       {table.status === "empty" && (
-        <p className="mt-auto shrink-0 pt-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+        <p className="mt-auto shrink-0 pt-2 text-xs font-medium text-[var(--muted)]">
           {translate("available")}
         </p>
       )}
@@ -145,7 +145,7 @@ export function TableCard({
               event.stopPropagation();
               onEdit();
             }}
-            className="absolute -right-2 -top-2 z-30 flex h-8 w-8 items-center justify-center rounded-full border border-blue-200 bg-white text-blue-600 shadow-md hover:bg-blue-50 dark:border-blue-800 dark:bg-gray-900 dark:text-blue-300 dark:hover:bg-blue-950"
+            className="absolute -right-2 -top-2 z-30 flex h-8 w-8 items-center justify-center rounded-full border border-[var(--pos-champagne)]/40 bg-[var(--card)] text-[var(--pos-champagne)] shadow-md hover:bg-[var(--accent)]"
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>

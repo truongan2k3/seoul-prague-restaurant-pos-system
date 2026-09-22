@@ -10,7 +10,13 @@ import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
 import { applyTableRealtimeEvent } from "@/lib/realtime-pos-sync";
 import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
 import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
-import { subscribeToKitchenPrintMessage } from "@/lib/pos-notifications";
+import { subscribeToKitchenPrintMessage, broadcastPrintFailed, broadcastPrintOk } from "@/lib/pos-notifications";
+import {
+  loadPendingKitchenPrints,
+  removePendingKitchenPrint,
+  upsertPendingKitchenPrint,
+  type PendingKitchenPrintJob,
+} from "@/lib/pending-kitchen-prints";
 import { pingPrintBridge } from "@/src/lib/print-bridge-client";
 import { printKitchenMessage, printKitchenTicket } from "@/src/lib/printKitchenTicket";
 import {
@@ -44,7 +50,9 @@ export function PrintStationView() {
   const [bridgeDetail, setBridgeDetail] = useState("");
   const [listening, setListening] = useState(false);
   const [logs, setLogs] = useState<JobLog[]>([]);
+  const [pending, setPending] = useState<PendingKitchenPrintJob[]>([]);
   const [printing, setPrinting] = useState(false);
+  const [reprintingId, setReprintingId] = useState<string | null>(null);
 
   const settingsRef = useRef(settings);
   const tablesRef = useRef(tables);
@@ -56,6 +64,10 @@ export function PrintStationView() {
   settingsRef.current = settings;
   tablesRef.current = tables;
   menuRef.current = menuItems;
+
+  useEffect(() => {
+    setPending(loadPendingKitchenPrints());
+  }, []);
 
   const pushLog = useCallback((entry: Omit<JobLog, "id" | "at">) => {
     const row: JobLog = {
@@ -79,6 +91,75 @@ export function PrintStationView() {
         setPrinting(false);
       });
   }, []);
+
+  const rememberFailedJob = useCallback(
+    async (job: PendingKitchenPrintJob) => {
+      setPending((prev) => upsertPendingKitchenPrint(job, prev));
+      try {
+        await broadcastPrintFailed({
+          tableId: job.tableId,
+          tableLabel: job.tableLabel,
+          detail: job.error,
+          pendingId: job.id,
+        });
+      } catch {
+        /* toast is best-effort */
+      }
+    },
+    [],
+  );
+
+  const reprintPending = useCallback(
+    (job: PendingKitchenPrintJob) => {
+      const cfg = settingsRef.current;
+      setReprintingId(job.id);
+      enqueuePrint(async () => {
+        try {
+          if (job.kind === "ticket") {
+            await printKitchenTicket({
+              tableLabel: job.tableLabel,
+              orders: job.orders ?? [],
+              menuItems: menuRef.current,
+              settings: cfg,
+            });
+          } else {
+            await printKitchenMessage({
+              tableLabel: job.tableLabel,
+              message: job.message ?? "",
+              messageZh: job.messageZh ?? "",
+              settings: cfg,
+            });
+          }
+          setPending((prev) => removePendingKitchenPrint(job.id, prev));
+          pushLog({
+            label: job.tableLabel
+              ? `${translate("table")} ${job.tableLabel}`
+              : translate("kitchenMessageGeneral"),
+            ok: true,
+            detail: translate("printStationReprinted"),
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Print failed";
+          const nextJob: PendingKitchenPrintJob = {
+            ...job,
+            error: message,
+            failedAt: new Date().toISOString(),
+          };
+          await rememberFailedJob(nextJob);
+          pushLog({
+            label: job.tableLabel
+              ? `${translate("table")} ${job.tableLabel}`
+              : translate("kitchenMessageGeneral"),
+            ok: false,
+            detail: message,
+          });
+        } finally {
+          setReprintingId(null);
+        }
+      });
+    },
+    [enqueuePrint, pushLog, rememberFailedJob, translate],
+  );
 
   const reloadTables = useCallback(async () => {
     const tablesRes = await fetchTableSummaries();
@@ -118,16 +199,32 @@ export function PrintStationView() {
             ok: true,
             detail: `${orders.length} ${translate("printStationItems")}`,
           });
+          try {
+            await broadcastPrintOk({ tableId, tableLabel });
+          } catch {
+            /* ack is best-effort — main POS may still timeout */
+          }
         } catch (error) {
+          const message = error instanceof Error ? error.message : "Print failed";
+          const pendingId = `ticket-${tableId}-${Date.now()}`;
+          await rememberFailedJob({
+            id: pendingId,
+            kind: "ticket",
+            tableId,
+            tableLabel,
+            orders,
+            error: message,
+            failedAt: new Date().toISOString(),
+          });
           pushLog({
             label: `${translate("table")} ${tableLabel}`,
             ok: false,
-            detail: error instanceof Error ? error.message : "Print failed",
+            detail: message,
           });
         }
       });
     },
-    [enqueuePrint, pushLog, translate],
+    [enqueuePrint, pushLog, rememberFailedJob, translate],
   );
 
   const queueInsert = useCallback(
@@ -240,12 +337,24 @@ export function PrintStationView() {
             detail: translate("printStationMessageJob"),
           });
         } catch (error) {
+          const message = error instanceof Error ? error.message : "Print failed";
+          const pendingId = `msg-${Date.now()}`;
+          await rememberFailedJob({
+            id: pendingId,
+            kind: "message",
+            tableId: payload.tableId,
+            tableLabel: payload.tableLabel?.trim() || translate("kitchenMessageGeneral"),
+            message: payload.message,
+            messageZh: payload.messageZh,
+            error: message,
+            failedAt: new Date().toISOString(),
+          });
           pushLog({
             label: payload.tableLabel?.trim()
               ? `${translate("table")} ${payload.tableLabel}`
               : translate("kitchenMessageGeneral"),
             ok: false,
-            detail: error instanceof Error ? error.message : "Print failed",
+            detail: message,
           });
         }
       });
@@ -267,6 +376,7 @@ export function PrintStationView() {
     queueInsert,
     enqueuePrint,
     pushLog,
+    rememberFailedJob,
     translate,
   ]);
 
@@ -363,6 +473,65 @@ export function PrintStationView() {
               {translate("printStationBridgeHelp")}
             </p>
           ) : null}
+        </section>
+
+        <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900 dark:bg-amber-950/30">
+          <h2 className="font-semibold text-amber-950 dark:text-amber-100">
+            {translate("printStationPendingTitle")}
+          </h2>
+          <p className="mt-1 text-sm text-amber-800/90 dark:text-amber-200/80">
+            {translate("printStationPendingHint")}
+          </p>
+          {pending.length === 0 ? (
+            <p className="mt-2 text-sm text-amber-700/80 dark:text-amber-300/70">
+              {translate("printStationPendingEmpty")}
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-3">
+              {pending.map((job) => (
+                <li
+                  key={job.id}
+                  className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-amber-200/80 bg-white/80 p-3 text-sm dark:border-amber-900/60 dark:bg-zinc-900/70"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium">
+                      {job.tableLabel
+                        ? `${translate("table")} ${job.tableLabel}`
+                        : translate("kitchenMessageGeneral")}
+                    </p>
+                    <p className="text-zinc-600 dark:text-zinc-400">{job.error}</p>
+                    <p className="mt-0.5 text-xs text-zinc-400">
+                      {new Date(job.failedAt).toLocaleTimeString()}
+                      {job.kind === "ticket" && job.orders
+                        ? ` · ${job.orders.length} ${translate("printStationItems")}`
+                        : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      disabled={reprintingId === job.id || printing}
+                      onClick={() => reprintPending(job)}
+                      className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 dark:bg-amber-600"
+                    >
+                      {reprintingId === job.id
+                        ? translate("printStationPrinting")
+                        : translate("printStationReprint")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPending((prev) => removePendingKitchenPrint(job.id, prev))
+                      }
+                      className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold dark:border-zinc-600"
+                    >
+                      {translate("cancel")}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">

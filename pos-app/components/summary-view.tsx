@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, Minus, Printer } from "lucide-react";
-import { LiveClock } from "@/components/live-clock";
+import { ArrowDownRight, ArrowUpRight, Download, Minus, Printer } from "lucide-react";
+import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { DateRangeInputs } from "@/components/date-range-inputs";
 import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
@@ -15,19 +15,20 @@ import {
   filterSalesInRange,
   formatSummaryDate,
   getPeriodRange,
-  saleNetTotal,
   toDateInputValue,
   type CategoryTopSellers,
   type SummaryPeriod,
   type TopSellerGroup,
   type TopSellerRow,
 } from "@/lib/summary-analytics";
+import { downloadSummaryItemsExcel } from "@/lib/summary-excel-export";
+import { computeSummaryItemStats } from "@/lib/summary-item-stats";
 import { computeTaxSummaryReport } from "@/lib/tax-summary";
 import { printTaxSummaryReport } from "@/src/lib/printTaxSummary";
 import { filterButtonClass, segmentButtonClass } from "@/lib/theme-classes";
 import type { MenuItem, SaleRecord } from "@/lib/types";
 
-const PERIOD_OPTIONS: SummaryPeriod[] = ["today", "yesterday", "week", "month", "custom"];
+const PERIOD_OPTIONS = ["today", "yesterday", "week", "month", "custom"] as const;
 
 const PERIOD_LABEL_KEYS = {
   today: "summaryToday",
@@ -147,6 +148,7 @@ export function SummaryView({
   const [customTo, setCustomTo] = useState(() => toDateInputValue(new Date()));
   const [sellerGroup, setSellerGroup] = useState<TopSellerGroup>("all");
   const [taxPrinting, setTaxPrinting] = useState(false);
+  const [excelExporting, setExcelExporting] = useState(false);
 
   const todayRange = useMemo(() => getPeriodRange("today"), []);
   const yesterdayRange = useMemo(() => getPeriodRange("yesterday"), []);
@@ -201,6 +203,11 @@ export function SummaryView({
     [filteredSales, menuItems, activeRange, settings],
   );
 
+  const itemStatsReport = useMemo(
+    () => computeSummaryItemStats(filteredSales, menuItems, language),
+    [filteredSales, menuItems, language],
+  );
+
   const handlePrintTaxSummary = async () => {
     setTaxPrinting(true);
     try {
@@ -214,6 +221,42 @@ export function SummaryView({
     }
   };
 
+  const handleDownloadExcel = () => {
+    if (itemStatsReport.rows.length === 0) return;
+    setExcelExporting(true);
+    try {
+      downloadSummaryItemsExcel(itemStatsReport, activeRange, language, {
+        itemsSheet: translate("summaryExcelItemsSheet"),
+        taxSheet: translate("summaryExcelTaxSheet"),
+        itemName: translate("summaryExcelItemName"),
+        quantity: translate("summaryExcelQuantity"),
+        originalTotal: translate("summaryExcelOriginalTotal"),
+        taxRate: translate("taxSummaryRate"),
+        taxBase: translate("taxSummaryBase"),
+        taxVat: translate("taxSummaryVat"),
+        taxGross: translate("taxSummaryGross"),
+        category: translate("summaryExcelCategory"),
+        itemType: translate("summaryExcelItemType"),
+        period: translate("summaryExcelPeriod"),
+        note: translate("summaryExcelNote"),
+        soldSection: translate("summaryExcelSoldSection"),
+        cancelledSection: translate("summaryExcelCancelledSection"),
+        typeTotalsSection: translate("summaryExcelTypeTotals"),
+        categoryTotalsSection: translate("summaryExcelCategoryTotals"),
+        overviewSection: translate("summaryExcelOverview"),
+        soldTotal: translate("summaryExcelSoldTotal"),
+        cancelledTotal: translate("summaryExcelCancelledTotal"),
+        food: translate("summaryExcelFood"),
+        drinks: translate("summaryExcelDrinks"),
+        emptyCancelled: translate("summaryExcelEmptyCancelled"),
+        emptySold: translate("summaryExcelEmptySold"),
+        subtotal: translate("summaryExcelSubtotal"),
+      });
+    } finally {
+      setExcelExporting(false);
+    }
+  };
+
   const periodLabel =
     period === "custom"
       ? `${formatSummaryDate(activeRange.start, language)} – ${formatSummaryDate(activeRange.end, language)}`
@@ -224,10 +267,10 @@ export function SummaryView({
         }`;
 
   return (
-    <div className="flex h-full flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
+    <div className="flex h-full flex-col bg-background text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200/80 bg-background px-2.5 py-1.5 sm:px-4 sm:py-2.5 lg:px-6 lg:py-4 dark:border-gray-800 dark:bg-gray-900">
         <div>
-          <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{translate("summary")}</h1>
+          <h1 className="text-sm font-semibold sm:text-base lg:text-lg text-gray-900 dark:text-gray-100">{translate("summary")}</h1>
           <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{periodLabel}</p>
         </div>
         <div className="flex items-center gap-3">
@@ -238,7 +281,7 @@ export function SummaryView({
           >
             Refresh
           </button>
-          <LiveClock />
+          <HeaderClockWithStatus />
         </div>
       </header>
 
@@ -289,7 +332,7 @@ export function SummaryView({
                   <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
                     {translate("summaryYesterday")}
                   </p>
-                  <p className="mt-1 text-lg font-semibold tabular-nums text-gray-800 dark:text-gray-200">
+                  <p className="mt-1 text-sm font-semibold sm:text-base lg:text-lg tabular-nums text-gray-800 dark:text-gray-200">
                     {formatPrice(yesterdayStats.revenue)}
                   </p>
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -334,20 +377,36 @@ export function SummaryView({
 
             <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  {translate("topItems")}
-                </h2>
-                <div className="pos-segment">
-                  {GROUP_OPTIONS.map((group) => (
-                    <button
-                      key={group}
-                      type="button"
-                      onClick={() => setSellerGroup(group)}
-                      className={segmentButtonClass(sellerGroup === group)}
-                    >
-                      {translate(GROUP_LABEL_KEYS[group])}
-                    </button>
-                  ))}
+                <div>
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    {translate("topItems")}
+                  </h2>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {translate("summaryExcelHint")}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={itemStatsReport.rows.length === 0 || excelExporting}
+                    onClick={handleDownloadExcel}
+                    className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-800 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                  >
+                    <Download className="h-4 w-4" />
+                    {excelExporting ? "…" : translate("summaryExcelDownload")}
+                  </button>
+                  <div className="pos-segment">
+                    {GROUP_OPTIONS.map((group) => (
+                      <button
+                        key={group}
+                        type="button"
+                        onClick={() => setSellerGroup(group)}
+                        className={segmentButtonClass(sellerGroup === group)}
+                      >
+                        {translate(GROUP_LABEL_KEYS[group])}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -439,52 +498,6 @@ export function SummaryView({
                 ))}
               </div>
             )}
-          </section>
-
-          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {translate("zReport")}
-            </h2>
-            <div className="mt-4 overflow-x-auto">
-              {filteredSales.length === 0 ? (
-                <p className="text-sm text-gray-500 dark:text-gray-400">{translate("summaryNoSales")}</p>
-              ) : (
-                <table className="w-full text-left text-sm text-gray-800 dark:text-gray-200">
-                  <thead>
-                    <tr className="border-b border-gray-200 text-gray-500 dark:border-gray-700 dark:text-gray-400">
-                      <th className="py-2 pr-4">Time</th>
-                      <th className="py-2 pr-4">{translate("table")}</th>
-                      <th className="py-2 pr-4">{translate("staff")}</th>
-                      <th className="py-2 pr-4">{translate("payment")}</th>
-                      <th className="py-2 text-right">{translate("totalExclTip")}</th>
-                      <th className="py-2 text-right">{translate("tips")}</th>
-                      <th className="py-2 text-right">{translate("grandTotal")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredSales.map((sale) => (
-                      <tr key={sale.id} className="border-b dark:border-gray-800/50">
-                        <td className="py-2 pr-4 tabular-nums">
-                          {sale.closedAt.toLocaleString(language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB")}
-                        </td>
-                        <td className="py-2 pr-4">{sale.tableLabel}</td>
-                        <td className="py-2 pr-4">{sale.staffName}</td>
-                        <td className="py-2 pr-4 capitalize">{sale.paymentMethod}</td>
-                        <td className="py-2 text-right tabular-nums">
-                          {formatPrice(saleNetTotal(sale))}
-                        </td>
-                        <td className="py-2 text-right tabular-nums text-gray-600 dark:text-gray-400">
-                          {sale.tip > 0 ? formatPrice(sale.tip) : "—"}
-                        </td>
-                        <td className="py-2 text-right font-medium tabular-nums">
-                          {formatPrice(sale.grandTotal)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
           </section>
         </div>
       </div>

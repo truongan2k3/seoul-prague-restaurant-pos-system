@@ -14,6 +14,7 @@ export const DEFAULT_SOUND_CONFIGS: SoundConfigs = {
   itemReady: "/sounds/bell.mp3",
   paymentSuccess: "/sounds/success.mp3",
   reservationReminder: "/sounds/chime.mp3",
+  cfdWelcome: "/sounds/chime.mp3",
 };
 
 export const SOUND_FILE_OPTIONS = [
@@ -164,6 +165,12 @@ export function parseSoundConfigs(value: unknown): SoundConfigs {
         : typeof row.reservationReminder === "string"
           ? row.reservationReminder
           : DEFAULT_SOUND_CONFIGS.reservationReminder,
+    cfdWelcome:
+      typeof row.cfd_welcome === "string"
+        ? row.cfd_welcome
+        : typeof row.cfdWelcome === "string"
+          ? row.cfdWelcome
+          : DEFAULT_SOUND_CONFIGS.cfdWelcome,
   };
 }
 
@@ -175,5 +182,6 @@ export function soundConfigsToDb(configs: SoundConfigs) {
     item_ready: configs.itemReady,
     payment_success: configs.paymentSuccess,
     reservation_reminder: configs.reservationReminder,
+    cfd_welcome: configs.cfdWelcome,
   };
 }

@@ -2,16 +2,583 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/modal";
+import { GuestReturningBadge } from "@/components/guest-returning-badge";
 import { useApp } from "@/contexts/app-context";
+import { useNotifications } from "@/contexts/notification-context";
 import { useSettings } from "@/contexts/settings-context";
+import {
+  ensureBrowserNotificationPermission,
+  showBrowserNotification,
+} from "@/lib/browser-notification";
 import { playCustomAlertSound } from "@/lib/notification-sound";
+import {
+  classifyReservationUpdate,
+  reservationAlertDedupeKey,
+  shouldAlertOnReservationInsert,
+  type ReservationChangeAlertKind,
+} from "@/lib/reservation-change-alert";
 import { pickEventTypeLabel } from "@/lib/reservation-guest-form";
+import {
+  guestAlertToReservationRecord,
+  type GuestReservationAlertPayload,
+} from "@/lib/reservation-guest-alert";
 import type { ReservationRecord } from "@/lib/types";
+import type { GuestVisitProfile } from "@/src/lib/guest-history-actions";
+import { fetchGuestVisitProfile } from "@/src/lib/guest-history-actions";
 import {
   fetchReservations,
   mapReservationsResponse,
+  markLateReservations,
+  subscribeToGuestReservationAlerts,
   subscribeToReservationChanges,
 } from "@/src/lib/reservation-actions";
+
+type ScreenAlert =
+  | { kind: "new"; reservation: ReservationRecord }
+  | {
+      kind: "updated";
+      reservation: ReservationRecord;
+      previous?: GuestReservationAlertPayload["previous"];
+    }
+  | { kind: "cancelled"; reservation: ReservationRecord }
+  | { kind: "no_show"; reservation: ReservationRecord };
+
+const DEDUPE_MS = 12_000;
+/** Phones often suspend realtime while locked — poll + resume catch-up. */
+const RESUME_POLL_MS = 25_000;
+
+function toScreenKind(kind: ReservationChangeAlertKind): ScreenAlert["kind"] {
+  return kind;
+}
+
+function lookbackSince(): Date {
+  const since = new Date();
+  since.setDate(since.getDate() - 1);
+  return since;
+}
+
+/** Popup + sound + in-app toast + browser notification for reservation changes (not check-in). */
+export function ReservationIncomingListener() {
+  const { translate, language, soundMainEnabled } = useApp();
+  const { settings } = useSettings();
+  const { pushNotification } = useNotifications();
+  const [alert, setAlert] = useState<ScreenAlert | null>(null);
+  const [visitProfile, setVisitProfile] = useState<GuestVisitProfile | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const cacheRef = useRef<Map<string, ReservationRecord>>(new Map());
+  const readyRef = useRef(false);
+  const queueRef = useRef<ScreenAlert[]>([]);
+  const alertRef = useRef<ScreenAlert | null>(null);
+  const recentAlertAtRef = useRef<Map<string, number>>(new Map());
+  const suppressUntilRef = useRef<Map<string, number>>(new Map());
+  const syncingRef = useRef(false);
+
+  const formatDateTime = useCallback(
+    (date: Date | string) =>
+      new Date(date).toLocaleString(
+        language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB",
+        {
+          timeZone: "Europe/Prague",
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        },
+      ),
+    [language],
+  );
+
+  const playAlertSound = useCallback(() => {
+    if (!soundMainEnabled) return;
+    const soundUrl =
+      settings.soundConfigs.reservationReminder ||
+      settings.soundConfigs.newOrder ||
+      settings.soundConfigs.mainNewOrder;
+    playCustomAlertSound(soundUrl, "newOrder");
+  }, [
+    settings.soundConfigs.mainNewOrder,
+    settings.soundConfigs.newOrder,
+    settings.soundConfigs.reservationReminder,
+    soundMainEnabled,
+  ]);
+
+  const showNext = useCallback((next: ScreenAlert | null) => {
+    alertRef.current = next;
+    setAlert(next);
+    setError(null);
+    setVisitProfile(null);
+  }, []);
+
+  const markDeduped = useCallback((kind: ReservationChangeAlertKind, id: string) => {
+    recentAlertAtRef.current.set(reservationAlertDedupeKey(kind, id), Date.now());
+  }, []);
+
+  const wasRecentlyAlerted = useCallback((kind: ReservationChangeAlertKind, id: string) => {
+    const at = recentAlertAtRef.current.get(reservationAlertDedupeKey(kind, id));
+    if (at == null) return false;
+    return Date.now() - at < DEDUPE_MS;
+  }, []);
+
+  const isSuppressed = useCallback((id: string) => {
+    const until = suppressUntilRef.current.get(id);
+    if (until == null) return false;
+    if (Date.now() > until) {
+      suppressUntilRef.current.delete(id);
+      return false;
+    }
+    return true;
+  }, []);
+
+  const browserBodyFor = useCallback(
+    (next: ScreenAlert) => {
+      const r = next.reservation;
+      const when = formatDateTime(r.reservedAt);
+      const code = r.bookingCode ? ` · ${r.bookingCode}` : "";
+      return `${r.guestName} · ${r.partySize} pax · ${when}${code}`;
+    },
+    [formatDateTime],
+  );
+
+  const titleFor = useCallback(
+    (next: ScreenAlert) => {
+      switch (next.kind) {
+        case "cancelled":
+          return translate("resChangeCancelledTitle");
+        case "no_show":
+          return translate("resChangeNoShowTitle");
+        case "updated":
+          return translate("resChangeUpdatedTitle");
+        default:
+          return translate("resIncomingTitle");
+      }
+    },
+    [translate],
+  );
+
+  const enqueueAlert = useCallback(
+    (next: ScreenAlert) => {
+      if (isSuppressed(next.reservation.id)) return;
+      const dedupeKind: ReservationChangeAlertKind =
+        next.kind === "new"
+          ? "new"
+          : next.kind === "cancelled"
+            ? "cancelled"
+            : next.kind === "no_show"
+              ? "no_show"
+              : "updated";
+      if (wasRecentlyAlerted(dedupeKind, next.reservation.id)) return;
+      markDeduped(dedupeKind, next.reservation.id);
+
+      const title = titleFor(next);
+      const body = browserBodyFor(next);
+
+      showBrowserNotification({
+        title,
+        body,
+        tag: `reservation-${dedupeKind}-${next.reservation.id}`,
+      });
+
+      // In-app toast — reliable on phones even when OS notifications are blocked.
+      pushNotification({
+        id: `reservation-${dedupeKind}-${next.reservation.id}-${Date.now()}`,
+        message: `${title}: ${body}`,
+        playSound: false,
+      });
+
+      try {
+        navigator.vibrate?.([120, 60, 120]);
+      } catch {
+        /* ignore */
+      }
+
+      if (!alertRef.current) {
+        showNext(next);
+        playAlertSound();
+        return;
+      }
+      queueRef.current.push(next);
+      playAlertSound();
+    },
+    [
+      browserBodyFor,
+      isSuppressed,
+      markDeduped,
+      playAlertSound,
+      pushNotification,
+      showNext,
+      titleFor,
+      wasRecentlyAlerted,
+    ],
+  );
+
+  const applyRemoteRow = useCallback(
+    (reservation: ReservationRecord, opts?: { alert: boolean }) => {
+      const previous = cacheRef.current.get(reservation.id);
+      cacheRef.current.set(reservation.id, reservation);
+      if (!opts?.alert || !readyRef.current) return;
+
+      if (!previous) {
+        if (shouldAlertOnReservationInsert(reservation)) {
+          enqueueAlert({ kind: "new", reservation });
+        }
+        return;
+      }
+
+      if (previous.updatedAt.getTime() === reservation.updatedAt.getTime()) return;
+
+      const kind = classifyReservationUpdate(previous, reservation);
+      if (!kind) return;
+      // Staff "+ New reservation" often emits INSERT then a quick UPDATE echo —
+      // keep only the "new" alert, not a second "updated" popup.
+      if (kind === "updated" && wasRecentlyAlerted("new", reservation.id)) return;
+      if (kind === "updated") {
+        enqueueAlert({
+          kind: "updated",
+          reservation,
+          previous: {
+            partySize: previous.partySize,
+            reservedAt: previous.reservedAt.toISOString(),
+            notes: previous.notes ?? null,
+          },
+        });
+        return;
+      }
+      enqueueAlert({ kind: toScreenKind(kind), reservation } as ScreenAlert);
+    },
+    [enqueueAlert, wasRecentlyAlerted],
+  );
+
+  const syncFromServer = useCallback(
+    async (opts?: { alert: boolean }) => {
+      if (syncingRef.current) return;
+      syncingRef.current = true;
+      try {
+        const { data } = await fetchReservations(lookbackSince());
+        const rows = mapReservationsResponse(data);
+        for (const row of rows) {
+          applyRemoteRow(row, { alert: Boolean(opts?.alert) });
+        }
+      } finally {
+        syncingRef.current = false;
+      }
+    },
+    [applyRemoteRow],
+  );
+
+  const dismissAlert = useCallback(() => {
+    const queued = queueRef.current.shift() ?? null;
+    showNext(queued);
+  }, [showNext]);
+
+  useEffect(() => {
+    ensureBrowserNotificationPermission();
+    const onInteract = () => ensureBrowserNotificationPermission();
+    window.addEventListener("pointerdown", onInteract, { once: true });
+    return () => window.removeEventListener("pointerdown", onInteract);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      await syncFromServer({ alert: false });
+      if (cancelled) return;
+      readyRef.current = true;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [syncFromServer]);
+
+  // Catch up after phone lock / tab background (realtime often pauses on mobile).
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") return;
+      ensureBrowserNotificationPermission();
+      if (!readyRef.current) return;
+      void syncFromServer({ alert: true });
+    };
+    const onResume = () => {
+      if (!readyRef.current) return;
+      void syncFromServer({ alert: true });
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pageshow", onResume);
+    window.addEventListener("focus", onResume);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pageshow", onResume);
+      window.removeEventListener("focus", onResume);
+    };
+  }, [syncFromServer]);
+
+  // Safety poll while the POS tab is open (helps flaky mobile websockets).
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      if (!readyRef.current) return;
+      void syncFromServer({ alert: true });
+    }, RESUME_POLL_MS);
+    return () => window.clearInterval(id);
+  }, [syncFromServer]);
+
+  useEffect(() => {
+    const holdingMinutes = settings.reservationTableHoldingTime || 30;
+    const run = () => {
+      void markLateReservations(holdingMinutes);
+    };
+    run();
+    const intervalId = window.setInterval(run, 60_000);
+    return () => window.clearInterval(intervalId);
+  }, [settings.reservationTableHoldingTime]);
+
+  useEffect(() => {
+    return subscribeToReservationChanges({
+      onInsert: (reservation) => {
+        applyRemoteRow(reservation, { alert: true });
+      },
+      onUpdate: (reservation) => {
+        applyRemoteRow(reservation, { alert: true });
+      },
+      onDelete: (reservationId) => {
+        const previous = cacheRef.current.get(reservationId);
+        cacheRef.current.delete(reservationId);
+        if (!readyRef.current || !previous) return;
+        if (previous.status === "checked_in" || previous.status === "completed") return;
+        enqueueAlert({ kind: "cancelled", reservation: { ...previous, status: "cancelled" } });
+      },
+    });
+  }, [applyRemoteRow, enqueueAlert]);
+
+  useEffect(() => {
+    return subscribeToGuestReservationAlerts((payload) => {
+      const reservation = guestAlertToReservationRecord(payload);
+      const merged: ReservationRecord = {
+        ...(cacheRef.current.get(reservation.id) ?? reservation),
+        ...reservation,
+        updatedAt: new Date(),
+      };
+      cacheRef.current.set(reservation.id, merged);
+      if (payload.kind === "cancelled") {
+        enqueueAlert({ kind: "cancelled", reservation: merged });
+        return;
+      }
+      enqueueAlert({ kind: "updated", reservation: merged, previous: payload.previous });
+    });
+  }, [enqueueAlert]);
+
+  useEffect(() => {
+    if (!alert || alert.kind === "cancelled" || alert.kind === "no_show") {
+      setVisitProfile(null);
+      return;
+    }
+    const incoming = alert.reservation;
+    let cancelled = false;
+    void fetchGuestVisitProfile({
+      email: incoming.guestEmail,
+      phone: incoming.guestPhone,
+      excludeReservationId: incoming.id,
+      beforeAt: incoming.reservedAt,
+    }).then(({ data }) => {
+      if (!cancelled) setVisitProfile(data.isReturning ? data : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [alert]);
+
+  const handleConfirm = async () => {
+    if (!alert || (alert.kind !== "new" && alert.kind !== "updated")) return;
+    if (alert.reservation.status !== "pending") {
+      dismissAlert();
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    suppressUntilRef.current.set(alert.reservation.id, Date.now() + DEDUPE_MS);
+    markDeduped("updated", alert.reservation.id);
+    const result = await confirmReservationWithEmail(alert.reservation.id);
+    setBusy(false);
+    if (result.error) {
+      suppressUntilRef.current.delete(alert.reservation.id);
+      setError(result.error);
+      return;
+    }
+    dismissAlert();
+  };
+
+  const reservation = alert?.reservation ?? null;
+  const eventLabel =
+    reservation?.eventType &&
+    pickEventTypeLabel(
+      settings.reservationEventTypes.find((option) => option.id === reservation.eventType) ?? {
+        id: reservation.eventType,
+        labels: {
+          en: reservation.eventType,
+          cs: reservation.eventType,
+          vi: reservation.eventType,
+          de: reservation.eventType,
+          ko: reservation.eventType,
+        },
+      },
+      "en",
+    );
+
+  const title = alert ? titleFor(alert) : "";
+
+  const hint =
+    alert?.kind === "cancelled"
+      ? translate("resChangeCancelledHint")
+      : alert?.kind === "no_show"
+        ? translate("resChangeNoShowHint")
+        : alert?.kind === "updated"
+          ? translate("resChangeUpdatedHint")
+          : translate("resIncomingHint");
+
+  const previous = alert?.kind === "updated" ? alert.previous : undefined;
+  const showPreviousTime =
+    previous?.reservedAt &&
+    reservation &&
+    new Date(previous.reservedAt).getTime() !== reservation.reservedAt.getTime();
+  const showPreviousParty =
+    previous?.partySize != null && reservation && previous.partySize !== reservation.partySize;
+
+  const canConfirm = Boolean(
+    reservation &&
+      (alert?.kind === "new" || alert?.kind === "updated") &&
+      reservation.status === "pending",
+  );
+
+  const toneCancelled = alert?.kind === "cancelled" || alert?.kind === "no_show";
+
+  return (
+    <Modal
+      open={alert != null}
+      onClose={() => {
+        if (!busy) dismissAlert();
+      }}
+      title={title}
+      zIndexClass="z-[110]"
+    >
+      {reservation ? (
+        <div className="space-y-4">
+          <p
+            className={`text-sm ${
+              toneCancelled
+                ? "font-medium text-red-700 dark:text-red-300"
+                : "text-gray-600 dark:text-gray-300"
+            }`}
+          >
+            {hint}
+          </p>
+          {visitProfile?.isReturning && !toneCancelled ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/50">
+              <GuestReturningBadge
+                profile={visitProfile}
+                email={reservation.guestEmail}
+                phone={reservation.guestPhone}
+                defaultOpen
+              />
+            </div>
+          ) : null}
+          <dl
+            className={`space-y-2 rounded-xl px-4 py-3 text-sm ${
+              toneCancelled
+                ? "bg-red-50 dark:bg-red-950/40"
+                : "bg-zinc-100 dark:bg-zinc-800"
+            }`}
+          >
+            <div className="flex justify-between gap-3">
+              <dt className="text-gray-500 dark:text-gray-400">{translate("guestName")}</dt>
+              <dd className="font-semibold text-gray-900 dark:text-gray-100">{reservation.guestName}</dd>
+            </div>
+            {reservation.bookingCode ? (
+              <div className="flex justify-between gap-3">
+                <dt className="text-gray-500 dark:text-gray-400">{translate("bookingCode")}</dt>
+                <dd className="font-semibold text-gray-900 dark:text-gray-100">{reservation.bookingCode}</dd>
+              </div>
+            ) : null}
+            <div className="flex justify-between gap-3">
+              <dt className="text-gray-500 dark:text-gray-400">{translate("partySize")}</dt>
+              <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                {reservation.partySize}
+                {showPreviousParty ? (
+                  <span className="ml-2 text-xs font-normal text-amber-700 dark:text-amber-300">
+                    ({translate("resGuestPrevious")}: {previous?.partySize})
+                  </span>
+                ) : null}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-gray-500 dark:text-gray-400">{translate("reservedAt")}</dt>
+              <dd className="text-right font-semibold text-gray-900 dark:text-gray-100">
+                {formatDateTime(reservation.reservedAt)}
+                {showPreviousTime ? (
+                  <span className="mt-0.5 block text-xs font-normal text-amber-700 dark:text-amber-300">
+                    {translate("resGuestPrevious")}: {formatDateTime(previous!.reservedAt!)}
+                  </span>
+                ) : null}
+              </dd>
+            </div>
+            {reservation.guestPhone ? (
+              <div className="flex justify-between gap-3">
+                <dt className="text-gray-500 dark:text-gray-400">{translate("guestPhone")}</dt>
+                <dd className="font-medium text-gray-900 dark:text-gray-100">{reservation.guestPhone}</dd>
+              </div>
+            ) : null}
+            {reservation.guestEmail ? (
+              <div className="flex justify-between gap-3">
+                <dt className="text-gray-500 dark:text-gray-400">{translate("guestEmail")}</dt>
+                <dd className="font-medium text-gray-900 dark:text-gray-100">{reservation.guestEmail}</dd>
+              </div>
+            ) : null}
+            {eventLabel ? (
+              <div className="flex justify-between gap-3">
+                <dt className="text-gray-500 dark:text-gray-400">{translate("resEventType")}</dt>
+                <dd className="font-medium text-gray-900 dark:text-gray-100">{eventLabel}</dd>
+              </div>
+            ) : null}
+            {reservation.notes ? (
+              <div>
+                <dt className="text-gray-500 dark:text-gray-400">{translate("resNotes")}</dt>
+                <dd className="mt-1 text-gray-800 dark:text-gray-200">{reservation.notes}</dd>
+              </div>
+            ) : null}
+          </dl>
+          {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {canConfirm ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleConfirm()}
+                className="flex-1 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {busy ? translate("confirming") : translate("resIncomingConfirm")}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={dismissAlert}
+              className={`flex-1 rounded-xl py-3 text-sm font-semibold ${
+                canConfirm
+                  ? "border border-gray-200 text-gray-800 dark:border-gray-600 dark:text-gray-100"
+                  : toneCancelled
+                    ? "bg-red-600 text-white"
+                    : "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
+              }`}
+            >
+              {canConfirm ? translate("resIncomingLater") : translate("resGuestAlertOk")}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </Modal>
+  );
+}
 
 async function confirmReservationWithEmail(reservationId: string) {
   const response = await fetch("/api/reservations/confirm", {
@@ -24,162 +591,4 @@ async function confirmReservationWithEmail(reservationId: string) {
     return { error: payload.error || "Failed to confirm reservation" };
   }
   return { error: null };
-}
-
-/** Popup on main POS when a guest submits an online reservation. */
-export function ReservationIncomingListener() {
-  const { translate, language, soundMainEnabled } = useApp();
-  const { settings } = useSettings();
-  const [incoming, setIncoming] = useState<ReservationRecord | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const seenIdsRef = useRef<Set<string>>(new Set());
-  const readyRef = useRef(false);
-
-  const formatDateTime = useCallback(
-    (date: Date) =>
-      date.toLocaleString(
-        language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB",
-        { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" },
-      ),
-    [language],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const since = new Date();
-      since.setDate(since.getDate() - 1);
-      const { data } = await fetchReservations(since);
-      if (cancelled) return;
-      mapReservationsResponse(data).forEach((row) => seenIdsRef.current.add(row.id));
-      readyRef.current = true;
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    return subscribeToReservationChanges({
-      onInsert: (reservation) => {
-        if (seenIdsRef.current.has(reservation.id)) return;
-        seenIdsRef.current.add(reservation.id);
-        if (!readyRef.current) return;
-        if (reservation.source !== "reservation" || reservation.status !== "pending") return;
-
-        setError(null);
-        setIncoming(reservation);
-        if (soundMainEnabled) {
-          const soundUrl =
-            settings.soundConfigs.newOrder || settings.soundConfigs.mainNewOrder;
-          playCustomAlertSound(soundUrl, "newOrder");
-        }
-      },
-    });
-  }, [settings.soundConfigs.mainNewOrder, settings.soundConfigs.newOrder, soundMainEnabled]);
-
-  const handleConfirm = async () => {
-    if (!incoming) return;
-    setBusy(true);
-    setError(null);
-    const result = await confirmReservationWithEmail(incoming.id);
-    setBusy(false);
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
-    setIncoming(null);
-  };
-
-  const eventLabel =
-    incoming?.eventType &&
-    pickEventTypeLabel(
-      settings.reservationEventTypes.find((option) => option.id === incoming.eventType) ?? {
-        id: incoming.eventType,
-        labels: {
-          en: incoming.eventType,
-          cs: incoming.eventType,
-          vi: incoming.eventType,
-          de: incoming.eventType,
-          ko: incoming.eventType,
-        },
-      },
-      "en",
-    );
-
-  return (
-    <Modal
-      open={incoming != null}
-      onClose={() => {
-        if (!busy) setIncoming(null);
-      }}
-      title={translate("resIncomingTitle")}
-    >
-      {incoming ? (
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600 dark:text-gray-300">{translate("resIncomingHint")}</p>
-          <dl className="space-y-2 rounded-xl bg-zinc-100 px-4 py-3 text-sm dark:bg-zinc-800">
-            <div className="flex justify-between gap-3">
-              <dt className="text-gray-500 dark:text-gray-400">{translate("guestName")}</dt>
-              <dd className="font-semibold text-gray-900 dark:text-gray-100">{incoming.guestName}</dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-gray-500 dark:text-gray-400">{translate("partySize")}</dt>
-              <dd className="font-semibold text-gray-900 dark:text-gray-100">{incoming.partySize}</dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-gray-500 dark:text-gray-400">{translate("reservedAt")}</dt>
-              <dd className="font-semibold text-gray-900 dark:text-gray-100">
-                {formatDateTime(incoming.reservedAt)}
-              </dd>
-            </div>
-            {incoming.guestPhone ? (
-              <div className="flex justify-between gap-3">
-                <dt className="text-gray-500 dark:text-gray-400">{translate("guestPhone")}</dt>
-                <dd className="font-medium text-gray-900 dark:text-gray-100">{incoming.guestPhone}</dd>
-              </div>
-            ) : null}
-            {incoming.guestEmail ? (
-              <div className="flex justify-between gap-3">
-                <dt className="text-gray-500 dark:text-gray-400">{translate("guestEmail")}</dt>
-                <dd className="font-medium text-gray-900 dark:text-gray-100">{incoming.guestEmail}</dd>
-              </div>
-            ) : null}
-            {eventLabel ? (
-              <div className="flex justify-between gap-3">
-                <dt className="text-gray-500 dark:text-gray-400">{translate("resEventType")}</dt>
-                <dd className="font-medium text-gray-900 dark:text-gray-100">{eventLabel}</dd>
-              </div>
-            ) : null}
-            {incoming.notes ? (
-              <div>
-                <dt className="text-gray-500 dark:text-gray-400">{translate("resNotes")}</dt>
-                <dd className="mt-1 text-gray-800 dark:text-gray-200">{incoming.notes}</dd>
-              </div>
-            ) : null}
-          </dl>
-          {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void handleConfirm()}
-              className="flex-1 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              {busy ? translate("confirming") : translate("resIncomingConfirm")}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => setIncoming(null)}
-              className="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-semibold text-gray-800 dark:border-gray-600 dark:text-gray-100"
-            >
-              {translate("resIncomingLater")}
-            </button>
-          </div>
-        </div>
-      ) : null}
-    </Modal>
-  );
 }

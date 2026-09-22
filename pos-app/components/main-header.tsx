@@ -1,6 +1,6 @@
 "use client";
 
-import { LiveClock } from "@/components/live-clock";
+import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { NotificationBell } from "@/components/notification-bell";
 import { useApp } from "@/contexts/app-context";
 import type { TranslationKey } from "@/lib/i18n/translations";
@@ -16,6 +16,7 @@ const TAB_LABEL_KEYS: Record<NavId, TranslationKey> = {
   dynamicQr: "dynamicQrServices",
   staff: "staffManagement",
   settings: "settings",
+  about: "about",
 };
 
 interface MainHeaderProps {
@@ -32,7 +33,7 @@ export function MainHeader({ activeTab }: MainHeaderProps) {
       </h1>
       <div className="flex items-center gap-3">
         <NotificationBell />
-        <LiveClock className="text-xs font-medium tabular-nums text-gray-500 dark:text-gray-400" />
+        <HeaderClockWithStatus />
       </div>
     </header>
   );

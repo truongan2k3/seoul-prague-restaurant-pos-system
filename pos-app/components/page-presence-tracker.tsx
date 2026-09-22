@@ -3,10 +3,10 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { pathnameToPageTarget } from "@/lib/page-routes";
-import { trackPagePresence } from "@/lib/pos-page-presence";
+import { trackConnectionHealth } from "@/lib/connection-health";
 import { useConnectionStatus } from "@/contexts/connection-status-context";
 
-/** Sends periodic heartbeats so /status can show which pages are online. */
+/** Tracks network/realtime health without page-presence heartbeats. */
 export function PagePresenceTracker() {
   const pathname = usePathname();
   const pageTarget = pathnameToPageTarget(pathname);
@@ -17,7 +17,7 @@ export function PagePresenceTracker() {
       setStatus(typeof navigator !== "undefined" && !navigator.onLine ? "no-network" : "offline");
       return;
     }
-    return trackPagePresence(pageTarget, setStatus);
+    return trackConnectionHealth(setStatus);
   }, [pageTarget, setStatus]);
 
   return null;

@@ -8,7 +8,7 @@ import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { CancelReasonModal } from "@/components/cancel-reason-modal";
 import { NewOrderNotificationListener } from "@/components/new-order-notification-listener";
 import { LanguageSelector } from "@/components/language-selector";
-import { LiveClock } from "@/components/live-clock";
+import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { OrderItemChecklist } from "@/components/order-item-checklist";
 import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
@@ -92,24 +92,24 @@ function TicketCard({
 
   return (
     <article
-      className={`flex h-full min-h-0 w-[min(100%,360px)] shrink-0 flex-col rounded-2xl border-4 bg-white p-4 shadow-xl sm:w-[340px] sm:p-5 dark:bg-gray-900 ${
+      className={`flex h-full min-h-0 w-[min(100%,360px)] shrink-0 flex-col rounded-2xl border-2 bg-[#121214] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.45)] sm:w-[340px] sm:p-5 ${
         hasCancelled
           ? "border-red-500 ring-2 ring-red-500/40"
           : ticketHasOpenKitchenWork(ticket.items)
-            ? "border-amber-500 ring-2 ring-amber-500/30"
-            : "border-emerald-500 ring-2 ring-emerald-500/20 opacity-95"
+            ? "border-amber-500/80 ring-2 ring-amber-500/25"
+            : "border-emerald-500/70 ring-2 ring-emerald-500/20 opacity-95"
       }`}
     >
-      <header className="flex shrink-0 items-start justify-between gap-4 border-b-2 border-gray-200 pb-3 dark:border-gray-700 sm:pb-4">
+      <header className="flex shrink-0 items-start justify-between gap-4 border-b border-white/10 pb-3 sm:pb-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-500 dark:text-gray-400">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#C9A88B]">
             {translate("table")}
           </p>
-          <p className="text-3xl font-black leading-none tracking-tight text-gray-950 sm:text-4xl dark:text-gray-100">
+          <p className="pos-serif text-3xl font-medium leading-none tracking-tight text-[#f5f2ef] sm:text-4xl">
             {ticket.table.label}
           </p>
         </div>
-        <div className="rounded-xl bg-gray-100 px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+        <div className="rounded-xl bg-white/5 px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-white/70">
           {openCount} {translate("preparing").toLowerCase()}
         </div>
       </header>
@@ -368,11 +368,9 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
     }
   };
 
-  const isKitchen = variant === "kitchen";
-  const shellClass = isKitchen
-    ? "flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-zinc-950 text-white"
-    : "flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-slate-950 text-white";
-  const headerBorder = isKitchen ? "border-zinc-700" : "border-slate-700";
+  const shellClass =
+    "flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#0B0B0C] text-[#f5f2ef]";
+  const headerBorder = "border-white/10";
   const title = station === "kitchen" ? translate("kitchen") : translate("bar");
   const totalPreparing = items.filter((i) => resolveKitchenStatus(i) === "pending").length;
 
@@ -415,8 +413,10 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
         className={`flex shrink-0 flex-wrap items-center justify-between gap-4 border-b-2 px-6 py-5 ${headerBorder}`}
       >
         <div>
-          <h1 className="text-3xl font-black uppercase tracking-tight">{title} KDS</h1>
-          <p className="mt-1 text-sm font-medium text-zinc-400">
+          <h1 className="pos-serif text-3xl font-medium tracking-tight text-[#f5f2ef]">
+            {title} <span className="text-[#C9A88B]">KDS</span>
+          </h1>
+          <p className="mt-1 text-sm font-medium text-white/50">
             {tickets.length} {translate("table").toLowerCase()} · {totalPreparing}{" "}
             {translate("preparing").toLowerCase()}
           </p>
@@ -438,11 +438,11 @@ export function StationBoard({ station, variant = station }: StationBoardProps) 
             language={language}
             onLanguageChange={setLanguage}
           />
-          <div className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100">
-            <User className="h-4 w-4 text-zinc-400" />
+          <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-[#121214] px-3 py-2 text-sm text-[#f5f2ef]">
+            <User className="h-4 w-4 text-[#C9A88B]" />
             <span>{currentStaffUser?.name ?? translate("staff")}</span>
           </div>
-          <LiveClock className="text-lg font-bold tabular-nums text-zinc-200" />
+          <HeaderClockWithStatus clockClassName="text-lg font-bold tabular-nums text-white/80" />
         </div>
       </header>
 

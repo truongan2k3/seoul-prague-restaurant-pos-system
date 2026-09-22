@@ -47,15 +47,26 @@ export function formatCancelActivityLine(entry: OrderLogEntry): string {
 export function formatTipEditActivityLine(entry: OrderLogEntry): string {
   const previousTip = Number(entry.meta?.previousTip ?? 0);
   const newTip = Number(entry.meta?.newTip ?? 0);
-  const previousMethod =
+  const previousTipMethod =
     (entry.meta?.previousTipPaymentMethod as PaymentMethod | undefined) ?? "cash";
-  const newMethod = (entry.meta?.newTipPaymentMethod as PaymentMethod | undefined) ?? previousMethod;
+  const newTipMethod =
+    (entry.meta?.newTipPaymentMethod as PaymentMethod | undefined) ?? previousTipMethod;
+  const previousPaymentMethod =
+    (entry.meta?.previousPaymentMethod as PaymentMethod | undefined) ?? previousTipMethod;
+  const newPaymentMethod =
+    (entry.meta?.newPaymentMethod as PaymentMethod | undefined) ?? previousPaymentMethod;
 
-  const tipPart = `${formatCzk(previousTip)} → ${formatCzk(newTip)}`;
-  if (previousMethod !== newMethod) {
-    return `${tipPart} (${previousMethod} → ${newMethod})`;
+  const parts: string[] = [];
+  if (previousTip !== newTip || previousTipMethod !== newTipMethod) {
+    const tipPart = `${formatCzk(previousTip)} → ${formatCzk(newTip)}`;
+    parts.push(
+      previousTipMethod !== newTipMethod ? `${tipPart} (${previousTipMethod} → ${newTipMethod})` : tipPart,
+    );
   }
-  return tipPart;
+  if (previousPaymentMethod !== newPaymentMethod) {
+    parts.push(`payment ${previousPaymentMethod} → ${newPaymentMethod}`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : formatCzk(newTip);
 }
 
 export function formatHistoryActivityLine(entry: OrderLogEntry): string {

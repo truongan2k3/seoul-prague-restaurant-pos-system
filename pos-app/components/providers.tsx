@@ -27,15 +27,16 @@ function PinGateWrapper({ children }: { children: React.ReactNode }) {
       bypassPin={staffBypassesManagerPasscode(currentStaffUser?.role)}
     >
       <ConnectionStatusProvider>
-        <UnsavedWorkProvider>
-          {children}
-          <AdminBroadcastListener />
-          <AdminRefreshListener />
-          <PagePresenceTracker />
-          <ConnectionStatusBadge />
-          <MobileRefreshGuard />
-          <FullscreenToggle variant="fab" />
-        </UnsavedWorkProvider>
+        <ConnectionStatusBadge>
+          <UnsavedWorkProvider>
+            {children}
+            <AdminBroadcastListener />
+            <AdminRefreshListener />
+            <PagePresenceTracker />
+            <MobileRefreshGuard />
+            <FullscreenToggle variant="fab" />
+          </UnsavedWorkProvider>
+        </ConnectionStatusBadge>
       </ConnectionStatusProvider>
       <ManagerPasscodeModal />
     </PinGateProvider>

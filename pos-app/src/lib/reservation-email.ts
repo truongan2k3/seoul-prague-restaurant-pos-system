@@ -1,8 +1,13 @@
 import type { ReservationStatus } from "@/lib/types";
 
-const RESTAURANT_NAME = "SEOUL PRAGUE Korean BBQ";
+const BRAND_NAME = "SEOUL PRAGUE";
 
-export type ReservationEmailKind = "received" | "confirmed" | "updated" | "cancelled";
+export type ReservationEmailKind =
+  | "received"
+  | "confirmed"
+  | "updated"
+  | "cancelled"
+  | "no_show";
 
 export interface ReservationEmailPayload {
   guestName: string;
@@ -29,6 +34,7 @@ export function buildManageUrl(manageToken: string): string {
 
 function formatWhen(date: Date): string {
   return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Prague",
     weekday: "short",
     day: "numeric",
     month: "short",
@@ -38,17 +44,41 @@ function formatWhen(date: Date): string {
   }).format(date);
 }
 
+function headingFor(kind: ReservationEmailKind): string {
+  switch (kind) {
+    case "received":
+      return "Reservation request received";
+    case "confirmed":
+      return "Reservation confirmed";
+    case "updated":
+      return "Reservation updated";
+    case "cancelled":
+      return "Reservation cancelled";
+    case "no_show":
+      return "Reservation cancelled — no-show";
+  }
+}
+
 function subjectFor(kind: ReservationEmailKind, bookingCode: string): string {
   switch (kind) {
     case "received":
-      return `${RESTAURANT_NAME}: reservation request ${bookingCode}`;
+      return `Reservation request · ${bookingCode}`;
     case "confirmed":
-      return `${RESTAURANT_NAME}: reservation confirmed ${bookingCode}`;
+      return `Reservation confirmed · ${bookingCode}`;
     case "updated":
-      return `${RESTAURANT_NAME}: reservation updated ${bookingCode}`;
+      return `Reservation updated · ${bookingCode}`;
     case "cancelled":
-      return `${RESTAURANT_NAME}: reservation cancelled ${bookingCode}`;
+      return `Reservation cancelled · ${bookingCode}`;
+    case "no_show":
+      return `Reservation cancelled (no-show) · ${bookingCode}`;
   }
+}
+
+function reservationFromHeader(): string {
+  const raw = process.env.RESEND_FROM_EMAIL?.trim() || "SEOUL PRAGUE <onboarding@resend.dev>";
+  const angled = raw.match(/<([^>]+)>/);
+  const email = angled?.[1]?.trim() || (raw.includes("@") && !raw.includes(" ") ? raw : "onboarding@resend.dev");
+  return `${BRAND_NAME} <${email}>`;
 }
 
 function introFor(kind: ReservationEmailKind): string {
@@ -61,13 +91,15 @@ function introFor(kind: ReservationEmailKind): string {
       return "Your reservation has been updated. Please review the new details below.";
     case "cancelled":
       return "Your reservation has been cancelled. You can book again anytime.";
+    case "no_show":
+      return "Your reservation was cancelled because you did not arrive on time. You are welcome to book again anytime.";
   }
 }
 
 function buildHtml(kind: ReservationEmailKind, payload: ReservationEmailPayload): string {
   const when = formatWhen(payload.reservedAt);
   const manageBlock =
-    kind === "cancelled"
+    kind === "cancelled" || kind === "no_show"
       ? ""
       : `<p style="margin:24px 0 8px">
           <a href="${payload.manageUrl}" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:600">
@@ -76,13 +108,17 @@ function buildHtml(kind: ReservationEmailKind, payload: ReservationEmailPayload)
         </p>
         <p style="color:#71717a;font-size:12px">Or open: ${payload.manageUrl}</p>`;
 
+  const intro = introFor(kind);
+  const heading = headingFor(kind);
+
   return `<!DOCTYPE html>
 <html>
 <body style="font-family:system-ui,-apple-system,sans-serif;background:#fafafa;color:#18181b;padding:24px">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${intro}</div>
   <div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #e4e4e7;border-radius:16px;padding:28px">
-    <p style="margin:0;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#a1a1aa">${RESTAURANT_NAME}</p>
-    <h1 style="margin:8px 0 12px;font-size:22px">${subjectFor(kind, payload.bookingCode)}</h1>
-    <p style="margin:0 0 16px;color:#3f3f46">${introFor(kind)}</p>
+    <p style="margin:0;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#a1a1aa">${BRAND_NAME}</p>
+    <h1 style="margin:8px 0 12px;font-size:22px">${heading}</h1>
+    <p style="margin:0 0 16px;color:#3f3f46">${intro}</p>
     <table style="width:100%;border-collapse:collapse;font-size:14px">
       <tr><td style="padding:6px 0;color:#71717a">Code</td><td style="padding:6px 0;font-weight:600">${payload.bookingCode}</td></tr>
       <tr><td style="padding:6px 0;color:#71717a">Guest</td><td style="padding:6px 0;font-weight:600">${payload.guestName}</td></tr>
@@ -110,7 +146,7 @@ function buildText(kind: ReservationEmailKind, payload: ReservationEmailPayload)
     `Party: ${payload.partySize}`,
   ];
   if (payload.notes) lines.push(`Notes: ${payload.notes}`);
-  if (kind !== "cancelled") {
+  if (kind !== "cancelled" && kind !== "no_show") {
     lines.push("", `Manage: ${payload.manageUrl}`);
   }
   return lines.join("\n");
@@ -122,8 +158,7 @@ export async function sendReservationEmail(
   payload: ReservationEmailPayload,
 ): Promise<{ sent: boolean; error?: string }> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
-  const from =
-    process.env.RESEND_FROM_EMAIL?.trim() || "SEOUL PRAGUE <onboarding@resend.dev>";
+  const from = reservationFromHeader();
 
   if (!apiKey) {
     console.warn("[reservation-email] RESEND_API_KEY not set — skipping email");

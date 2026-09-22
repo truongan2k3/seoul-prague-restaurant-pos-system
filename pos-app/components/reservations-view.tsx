@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapPin, Plus, UserPlus } from "lucide-react";
-import { LiveClock } from "@/components/live-clock";
+import { MapPin, ChevronLeft, ChevronRight, Pencil, Plus } from "lucide-react";
+import { GuestReturningBadge } from "@/components/guest-returning-badge";
+import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { Modal } from "@/components/modal";
+import { DateRangeInputs } from "@/components/date-range-inputs";
 import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
 import { useNotifications } from "@/contexts/notification-context";
@@ -12,30 +14,42 @@ import {
   canCancelReservation,
   canCheckIn,
   canConfirmReservation,
+  canEditReservation,
   canMarkNoShow,
   computeReservationStats,
   filterReservationsByPeriod,
   filterReservationsByStatus,
+  sortReservationsForDayList,
   isLateReservation,
   reservationStatusLabelKey,
+  reservationStatusTone,
+  shiftIsoDate,
+  weekBoundsForDate,
   type ReservationPeriod,
   type ReservationStatusFilter,
 } from "@/lib/reservation-analytics";
 import { filterButtonClass } from "@/lib/theme-classes";
+import { toDateInputValue } from "@/lib/summary-analytics";
 import {
   RESERVATION_UNDO_MS,
   type ReservationUndoEntry,
 } from "@/lib/reservation-undo";
-import { pickEventTypeLabel } from "@/lib/reservation-guest-form";
+import { pickEventTypeLabel, parseReservationBbqNotes } from "@/lib/reservation-guest-form";
 import type { ReservationRecord, RestaurantTable } from "@/lib/types";
 import { ReservationTableSelect, isOccupiedTable } from "@/components/reservation-table-select";
 import { ReservationUndoBar } from "@/components/reservation-undo-bar";
+import { PartySizeStepper } from "@/components/reservation-party-size-stepper";
+import { ReservationDateTimeFields } from "@/components/reservation-datetime-fields";
+import {
+  ReservationSourceBadge,
+  ReservationSourcePicker,
+  type StaffBookingSource,
+} from "@/components/reservation-source-ui";
 import {
   assignReservationTable,
   cancelReservation,
   checkInReservationWithTable,
   createReservation,
-  createWalkIn,
   fetchReservationSnapshot,
   fetchReservations,
   fetchTableSnapshot,
@@ -45,7 +59,10 @@ import {
   restoreReservationSnapshot,
   restoreTableSnapshot,
   subscribeToReservationChanges,
+  updateReservationDetails,
 } from "@/src/lib/reservation-actions";
+import { fetchGuestVisitProfile } from "@/src/lib/guest-history-actions";
+import { sendCfdEvent } from "@/lib/cfd-display";
 
 async function confirmReservationWithEmail(reservationId: string) {
   const response = await fetch("/api/reservations/confirm", {
@@ -71,12 +88,72 @@ async function cancelReservationWithEmail(reservationId: string) {
   return result;
 }
 
-const PERIOD_OPTIONS: ReservationPeriod[] = ["today", "week", "month"];
+async function markNoShowWithEmail(reservationId: string) {
+  const result = await markReservationNoShow(reservationId);
+  if (result.error) return result;
+  void fetch("/api/reservations/notify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: reservationId, type: "no_show" }),
+  }).catch(() => undefined);
+  return result;
+}
+
+/** Staff note-only edits should not email the guest. */
+function isStaffNotesOnlyChange(
+  previous: ReservationRecord,
+  input: Parameters<typeof updateReservationDetails>[1],
+): boolean {
+  const nextNotes = input.notes?.trim() || "";
+  const prevNotes = previous.notes?.trim() || "";
+  if (nextNotes === prevNotes) return false;
+
+  const sameName = previous.guestName.trim() === input.guestName.trim();
+  const samePhone = (previous.guestPhone ?? "").trim() === (input.guestPhone?.trim() || "");
+  const sameEmail = (previous.guestEmail ?? "").trim() === (input.guestEmail?.trim() || "");
+  const sameParty = previous.partySize === Math.max(1, input.partySize);
+  const sameWhen = previous.reservedAt.getTime() === input.reservedAt.getTime();
+  const sameEvent = (previous.eventType ?? "").trim() === (input.eventType?.trim() || "");
+  const sameTable =
+    input.tableId === undefined ||
+    (previous.tableId ?? "") === (input.tableId || "");
+
+  return sameName && samePhone && sameEmail && sameParty && sameWhen && sameEvent && sameTable;
+}
+
+async function updateReservationWithEmail(
+  reservationId: string,
+  input: Parameters<typeof updateReservationDetails>[1],
+  previous?: ReservationRecord,
+) {
+  const result = await updateReservationDetails(reservationId, input);
+  if (result.error) return result;
+  if (previous && isStaffNotesOnlyChange(previous, input)) {
+    return result;
+  }
+  void fetch("/api/reservations/notify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: reservationId, type: "updated" }),
+  }).catch(() => undefined);
+  return result;
+}
+
+function toDateTimeLocalValue(date: Date): string {
+  const copy = new Date(date);
+  copy.setMinutes(copy.getMinutes() - copy.getTimezoneOffset());
+  return copy.toISOString().slice(0, 16);
+}
+
+const PERIOD_OPTIONS: ReservationPeriod[] = ["day", "upcoming", "range"];
 
 const PERIOD_LABEL_KEYS = {
+  day: "resPeriodDay",
+  week: "resPeriodWeek",
+  range: "resPeriodRange",
+  upcoming: "resPeriodUpcoming",
+  all: "resPeriodAll",
   today: "summaryToday",
-  week: "summaryWeek",
-  month: "summaryMonth",
 } as const;
 
 const STATUS_FILTER_OPTIONS: { value: ReservationStatusFilter; labelKey: "resFilterAll" | "resFilterPending" | "resFilterConfirmed" | "resFilterLate" | "resFilterCheckedIn" | "resFilterNoShow" }[] = [
@@ -100,15 +177,18 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const { settings } = useSettings();
   const { pushNotification } = useNotifications();
   const [reservations, setReservations] = useState<ReservationRecord[]>([]);
-  const [period, setPeriod] = useState<ReservationPeriod>("today");
+  const [period, setPeriod] = useState<ReservationPeriod>("day");
+  const [anchorDate, setAnchorDate] = useState(() => toDateInputValue(new Date()));
+  const [customFrom, setCustomFrom] = useState(() => toDateInputValue(new Date()));
+  const [customTo, setCustomTo] = useState(() => toDateInputValue(new Date()));
   const [statusFilter, setStatusFilter] = useState<ReservationStatusFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showNewModal, setShowNewModal] = useState(false);
-  const [showWalkInModal, setShowWalkInModal] = useState(false);
   const [assignTarget, setAssignTarget] = useState<ReservationRecord | null>(null);
   const [checkInTarget, setCheckInTarget] = useState<ReservationRecord | null>(null);
+  const [editTarget, setEditTarget] = useState<ReservationRecord | null>(null);
   const seenReservationIdsRef = useRef<Set<string>>(new Set());
   const initialLoadDoneRef = useRef(false);
 
@@ -119,9 +199,8 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const [formDateTime, setFormDateTime] = useState("");
   const [formNotes, setFormNotes] = useState("");
   const [formTableId, setFormTableId] = useState("");
-  const [walkInPartySize, setWalkInPartySize] = useState(2);
-  const [walkInName, setWalkInName] = useState("");
-  const [walkInTableId, setWalkInTableId] = useState("");
+  const [formEventType, setFormEventType] = useState("");
+  const [formSource, setFormSource] = useState<StaffBookingSource>("reservation");
   const [assignTableId, setAssignTableId] = useState("");
   const [checkInTableId, setCheckInTableId] = useState("");
   const [undoEntry, setUndoEntry] = useState<ReservationUndoEntry | null>(null);
@@ -131,7 +210,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     setLoading(true);
     setError(null);
     const since = new Date();
-    since.setDate(since.getDate() - 60);
+    since.setFullYear(since.getFullYear() - 1);
     since.setHours(0, 0, 0, 0);
     const { data, error: fetchError } = await fetchReservations(since);
     if (fetchError) {
@@ -175,15 +254,55 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     setFormDateTime(now.toISOString().slice(0, 16));
   }, [showNewModal]);
 
+  const periodOptions = useMemo(() => {
+    if (period === "day" || period === "today") {
+      return { anchorDate, from: anchorDate, to: anchorDate };
+    }
+    if (period === "week") {
+      const bounds = weekBoundsForDate(anchorDate);
+      return { anchorDate, from: bounds.from, to: bounds.to };
+    }
+    if (period === "range") {
+      return { from: customFrom, to: customTo, anchorDate };
+    }
+    return { anchorDate };
+  }, [period, anchorDate, customFrom, customTo]);
+
   const filtered = useMemo(() => {
-    const byPeriod = filterReservationsByPeriod(reservations, period);
-    return filterReservationsByStatus(byPeriod, statusFilter);
-  }, [reservations, period, statusFilter]);
+    const byPeriod = filterReservationsByPeriod(reservations, period, periodOptions);
+    const byStatus = filterReservationsByStatus(byPeriod, statusFilter);
+    // Today / day view: pending & confirmed first; completed / cancelled at the bottom.
+    if (period === "day" || period === "today") {
+      return sortReservationsForDayList(byStatus);
+    }
+    return [...byStatus].sort((a, b) => a.reservedAt.getTime() - b.reservedAt.getTime());
+  }, [reservations, period, statusFilter, periodOptions]);
 
   const stats = useMemo(
-    () => computeReservationStats(filterReservationsByPeriod(reservations, period)),
-    [reservations, period],
+    () => computeReservationStats(filterReservationsByPeriod(reservations, period, periodOptions)),
+    [reservations, period, periodOptions],
   );
+
+  const jumpToToday = () => setAnchorDate(toDateInputValue(new Date()));
+
+  const shiftAnchor = (days: number) => {
+    setAnchorDate((prev) => shiftIsoDate(prev, days));
+  };
+
+  const dateNavLocale = language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB";
+
+  const dayLabel = useMemo(() => {
+    const date = new Date(`${anchorDate}T12:00:00`);
+    return date.toLocaleDateString(dateNavLocale, {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  }, [anchorDate, dateNavLocale]);
+
+  const showDayNav = period === "day";
+  const isTodayAnchor = anchorDate === toDateInputValue(new Date());
 
   const emptyTables = useMemo(
     () => tables.filter((table) => table.status === "empty"),
@@ -248,21 +367,31 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const handleCreateReservation = async () => {
     if (!formGuestName.trim() || !formDateTime) return;
     setBusyId("new");
-    const { error: createError } = await createReservation({
+    const guestEmail = formEmail.trim();
+    const { data: created, error: createError } = await createReservation({
       guestName: formGuestName.trim(),
       guestPhone: formPhone.trim() || undefined,
-      guestEmail: formEmail.trim() || undefined,
+      guestEmail: guestEmail || undefined,
       partySize: Math.max(1, formPartySize),
       reservedAt: new Date(formDateTime),
       notes: formNotes.trim() || undefined,
       tableId: formTableId || undefined,
       staffId: currentStaffUser?.id,
       staffName: currentStaffUser?.name,
+      source: formSource,
     });
     setBusyId(null);
     if (createError) {
       setError(createError.message);
       return;
+    }
+    // Same "received" email as online booking when staff enters a guest email.
+    if (guestEmail && created?.id) {
+      void fetch("/api/reservations/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: created.id, type: "received" }),
+      }).catch(() => undefined);
     }
     setShowNewModal(false);
     setFormGuestName("");
@@ -270,27 +399,46 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     setFormEmail("");
     setFormNotes("");
     setFormTableId("");
+    setFormSource("reservation");
     void loadReservations();
   };
 
-  const handleWalkIn = async () => {
-    if (!walkInTableId) return;
-    setBusyId("walkin");
-    const { error: createError } = await createWalkIn({
-      partySize: Math.max(1, walkInPartySize),
-      tableId: walkInTableId,
-      guestName: walkInName.trim() || undefined,
-      staffId: currentStaffUser?.id,
-      staffName: currentStaffUser?.name,
-    });
+  const openEditModal = (row: ReservationRecord) => {
+    setEditTarget(row);
+    setFormGuestName(row.guestName);
+    setFormPhone(row.guestPhone ?? "");
+    setFormEmail(row.guestEmail ?? "");
+    setFormPartySize(row.partySize);
+    setFormDateTime(toDateTimeLocalValue(row.reservedAt));
+    setFormNotes(row.notes ?? "");
+    setFormTableId(row.tableId ?? "");
+    setFormEventType(row.eventType ?? "");
+    setError(null);
+  };
+
+  const handleUpdateReservation = async () => {
+    if (!editTarget || !formGuestName.trim() || !formDateTime) return;
+    setBusyId(editTarget.id);
+    const { error: updateError } = await updateReservationWithEmail(
+      editTarget.id,
+      {
+        guestName: formGuestName.trim(),
+        guestPhone: formPhone.trim() || undefined,
+        guestEmail: formEmail.trim() || undefined,
+        partySize: Math.max(1, formPartySize),
+        reservedAt: new Date(formDateTime),
+        notes: formNotes.trim() || undefined,
+        tableId: editTarget.status === "checked_in" ? undefined : formTableId || null,
+        eventType: formEventType || null,
+      },
+      editTarget,
+    );
     setBusyId(null);
-    if (createError) {
-      setError(createError.message);
+    if (updateError) {
+      setError(updateError instanceof Error ? updateError.message : String(updateError));
       return;
     }
-    setShowWalkInModal(false);
-    setWalkInName("");
-    setWalkInTableId("");
+    setEditTarget(null);
     void loadReservations();
   };
 
@@ -335,6 +483,13 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
     const tableSnapshot = checkInOccupied ? undefined : (await fetchTableSnapshot(checkInTableId)) ?? undefined;
 
+    const { data: visitProfile } = await fetchGuestVisitProfile({
+      email: checkInTarget.guestEmail,
+      phone: checkInTarget.guestPhone,
+      excludeReservationId: checkInTarget.id,
+      beforeAt: checkInTarget.reservedAt,
+    });
+
     setBusyId(checkInTarget.id);
     const { error: checkInError } = await checkInReservationWithTable(
       checkInTarget.id,
@@ -347,6 +502,14 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       setError(checkInError instanceof Error ? checkInError.message : String(checkInError));
       return;
     }
+
+    const assignedTable = tables.find((table) => table.id === checkInTableId);
+    void sendCfdEvent("GUEST_WELCOME", {
+      reservationId: checkInTarget.id,
+      guestName: checkInTarget.guestName,
+      isReturning: visitProfile.isReturning,
+      tableLabel: assignedTable?.label ?? checkInTarget.tableLabel ?? null,
+    });
 
     queueUndo({
       id: `${checkInTarget.id}-checkin-${Date.now()}`,
@@ -361,6 +524,11 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   };
 
   const handleCancelReservation = async (row: ReservationRecord) => {
+    const confirmed = window.confirm(
+      translate("confirmCancelReservation").replace("{name}", row.guestName),
+    );
+    if (!confirmed) return;
+
     const snapshot = await fetchReservationSnapshot(row.id);
     if (!snapshot) {
       setError(translate("resUndoFailed"));
@@ -384,64 +552,135 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     void loadReservations();
   };
 
+  const handleMarkNoShow = async (row: ReservationRecord) => {
+    const confirmed = window.confirm(
+      translate("confirmMarkNoShow").replace("{name}", row.guestName),
+    );
+    if (!confirmed) return;
+    await runAction(row.id, () => markNoShowWithEmail(row.id));
+  };
+
   const formatDateTime = (date: Date) =>
     date.toLocaleString(language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB", {
+      timeZone: "Europe/Prague",
       weekday: "short",
       day: "numeric",
       month: "short",
+      year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
     });
 
   const cardClassName = (row: ReservationRecord) =>
     isLateReservation(row)
-      ? "rounded-xl border-2 border-orange-500 bg-orange-50 p-4 shadow-sm animate-pulse dark:border-orange-500 dark:bg-orange-950/40"
-      : "rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800";
+      ? "rounded-xl border-2 border-orange-500 bg-orange-50 p-2.5 shadow-sm animate-pulse dark:border-orange-500 dark:bg-orange-950/40 sm:p-4"
+      : "rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-4";
 
   return (
-    <div className="flex h-full flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
-        <h1 className="text-lg font-semibold">{translate("reservations")}</h1>
-        <div className="flex flex-wrap items-center gap-2">
+    <div className="flex h-full flex-col bg-background text-[var(--foreground)]">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--pos-raised)] px-2 py-1.5 sm:gap-3 sm:px-4 sm:py-2 lg:px-6">
+        <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+          <h1 className="pos-header-title shrink-0">{translate("reservations")}</h1>
+          <HeaderClockWithStatus />
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <button
             type="button"
-            onClick={() => setShowWalkInModal(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium dark:border-gray-700"
+            onClick={() => {
+              setFormSource("reservation");
+              setShowNewModal(true);
+            }}
+            className="inline-flex items-center gap-1 rounded-md bg-gray-900 px-2 py-1 text-[11px] font-semibold text-white dark:bg-gray-100 dark:text-gray-900 sm:gap-1.5 sm:rounded-lg sm:px-2.5 sm:py-1.5 sm:text-xs"
           >
-            <UserPlus className="h-4 w-4" />
-            {translate("walkIn")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowNewModal(true)}
-            className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white dark:bg-gray-100 dark:text-gray-900"
-          >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             {translate("newReservation")}
           </button>
-          <LiveClock />
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="mx-auto max-w-6xl space-y-6">
-          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {translate("resAdvancedStats")}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {PERIOD_OPTIONS.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setPeriod(option)}
-                  className={filterButtonClass(period === option)}
-                >
-                  {translate(PERIOD_LABEL_KEYS[option])}
-                </button>
-              ))}
+      <div className="flex-1 overflow-auto p-2.5 sm:p-4 lg:p-6">
+        <div className="mx-auto max-w-6xl space-y-3 sm:space-y-4 lg:space-y-6">
+          <section className="rounded-xl border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">
+                {translate("resAdvancedStats")}
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {PERIOD_OPTIONS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => {
+                      setPeriod(option);
+                      if (option === "day") {
+                        setAnchorDate((prev) => prev || toDateInputValue(new Date()));
+                      }
+                      if (option === "range") {
+                        setCustomFrom(anchorDate);
+                        setCustomTo(anchorDate);
+                      }
+                    }}
+                    className={filterButtonClass(period === option)}
+                  >
+                    {translate(PERIOD_LABEL_KEYS[option])}
+                  </button>
+                ))}
+              </div>
+
+              {showDayNav ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => shiftAnchor(-1)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                    aria-label={translate("resPrevDay")}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <label className="relative inline-flex min-w-[9.5rem] cursor-pointer items-center justify-center">
+                    <span className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-center text-xs font-semibold tabular-nums text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:text-sm">
+                      {dayLabel}
+                    </span>
+                    <input
+                      type="date"
+                      value={anchorDate}
+                      onChange={(event) => setAnchorDate(event.target.value)}
+                      className="absolute inset-0 z-10 cursor-pointer opacity-0"
+                      aria-label={translate("resPeriodDay")}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => shiftAnchor(1)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                    aria-label={translate("resNextDay")}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={jumpToToday}
+                    disabled={isTodayAnchor}
+                    className={filterButtonClass(isTodayAnchor)}
+                  >
+                    {translate("resTodayJump")}
+                  </button>
+                </div>
+              ) : null}
+
+              {period === "range" ? (
+                <div className="min-w-0 flex-1 sm:max-w-md">
+                  <DateRangeInputs
+                    from={customFrom}
+                    to={customTo}
+                    onFromChange={setCustomFrom}
+                    onToChange={setCustomTo}
+                  />
+                </div>
+              ) : null}
             </div>
-            <div className="mt-4 flex flex-wrap gap-2">
+
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
               {STATUS_FILTER_OPTIONS.map(({ value, labelKey }) => (
                 <button
                   key={value}
@@ -455,7 +694,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             </div>
           </section>
 
-          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
+          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {(
               [
                 { label: "resTotalGuests" as const, value: stats.totalGuests },
@@ -463,18 +702,17 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                 { label: "resPending" as const, value: stats.pendingConfirmation },
                 { label: "resLate" as const, value: stats.late },
                 { label: "resCheckedIn" as const, value: stats.checkedIn },
-                { label: "resWalkIns" as const, value: stats.walkIns },
                 { label: "resNoShows" as const, value: stats.noShows },
               ] as const
             ).map(({ label, value }) => (
               <div
                 key={label}
-                className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
+                className="rounded-xl border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:p-3"
               >
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                   {translate(label)}
                 </p>
-                <p className="mt-2 text-2xl font-bold tabular-nums text-gray-900 dark:text-gray-100">{value}</p>
+                <p className="mt-1 text-lg font-bold tabular-nums text-gray-900 dark:text-gray-100 sm:mt-2 sm:text-2xl">{value}</p>
               </div>
             ))}
           </section>
@@ -498,19 +736,21 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-lg font-semibold">{row.guestName}</h2>
+                        <h2 className="text-sm font-semibold sm:text-base lg:text-lg">{row.guestName}</h2>
                         <span
-                          className={`rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide sm:text-xs ${
                             isLateReservation(row)
-                              ? "bg-orange-200 text-orange-900 dark:bg-orange-900 dark:text-orange-100"
-                              : "bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300"
+                              ? reservationStatusTone("late")
+                              : reservationStatusTone(row.status)
                           }`}
                         >
                           {translate(reservationStatusLabelKey(row.status))}
                         </span>
-                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-950 dark:text-blue-200">
-                          {translate(row.source === "walk_in" ? "resSourceWalkIn" : "resSourceReservation")}
-                        </span>
+                        <ReservationSourceBadge
+                          source={row.source}
+                          phoneLabel={translate("resSourcePhoneCall")}
+                          onlineLabel={translate("resSourceOnline")}
+                        />
                       </div>
                       <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
                         {formatDateTime(row.reservedAt)} · {row.partySize} {translate("partySize").toLowerCase()}
@@ -540,18 +780,65 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           )}
                         </p>
                       ) : null}
-                      {row.notes && (
-                        <p className="mt-1 text-sm italic text-gray-500">{row.notes}</p>
-                      )}
+                      {(() => {
+                        const { bbq, noteText } = parseReservationBbqNotes(row.notes);
+                        // BBQ / Casual only — no badge when guest answered "I don't know".
+                        const bbqLabel =
+                          bbq === "yes"
+                            ? translate("mapResTickerBbqYes")
+                            : bbq === "no"
+                              ? translate("mapResTickerBbqNo")
+                              : null;
+                        return (
+                          <>
+                            {bbq && bbqLabel ? (
+                              <p className="mt-1">
+                                <span
+                                  className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${
+                                    bbq === "yes"
+                                      ? "bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-200"
+                                      : bbq === "no"
+                                        ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                                        : "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200"
+                                  }`}
+                                >
+                                  {bbqLabel}
+                                </span>
+                              </p>
+                            ) : null}
+                            {noteText ? (
+                              <p className="mt-1 text-sm italic text-gray-500">{noteText}</p>
+                            ) : null}
+                          </>
+                        );
+                      })()}
+                      <GuestReturningBadge
+                        email={row.guestEmail}
+                        phone={row.guestPhone}
+                        excludeReservationId={row.id}
+                        beforeAt={row.reservedAt}
+                      />
                     </div>
 
                     <div className="flex flex-wrap gap-2">
+                      {canEditReservation(row.status) && (
+                        <button
+                          type="button"
+                          disabled={busyId === row.id}
+                          onClick={() => openEditModal(row)}
+                          aria-label={translate("editReservation")}
+                          title={translate("editReservation")}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200 dark:hover:bg-blue-900"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       {canConfirmReservation(row.status) && (
                         <button
                           type="button"
                           disabled={busyId === row.id}
                           onClick={() => void runAction(row.id, () => confirmReservationWithEmail(row.id))}
-                          className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white"
+                          className="rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-500 sm:rounded-lg sm:px-3 sm:py-1.5 sm:text-xs"
                         >
                           {translate("confirmReservation")}
                         </button>
@@ -564,7 +851,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                             setCheckInTarget(row);
                             setCheckInTableId(row.tableId ?? "");
                           }}
-                          className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white"
+                          className="rounded-md bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-sky-500 sm:rounded-lg sm:px-3 sm:py-1.5 sm:text-xs"
                         >
                           {translate("checkIn")}
                         </button>
@@ -586,7 +873,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                         <button
                           type="button"
                           disabled={busyId === row.id}
-                          onClick={() => void runAction(row.id, () => markReservationNoShow(row.id))}
+                          onClick={() => void handleMarkNoShow(row)}
                           className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-amber-950"
                         >
                           {translate("markNoShow")}
@@ -611,30 +898,53 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
         </div>
       </div>
 
-      <Modal open={showNewModal} onClose={() => setShowNewModal(false)} title={translate("newReservation")}>
+      <Modal
+        open={showNewModal}
+        onClose={() => {
+          setFormSource("reservation");
+          setShowNewModal(false);
+        }}
+        title={translate("newReservation")}
+      >
         <div className="space-y-3">
           <label className="block text-sm">
             <span className="text-gray-500">{translate("guestName")}</span>
             <input value={formGuestName} onChange={(e) => setFormGuestName(e.target.value)} className="pos-input mt-1" />
           </label>
+          <div className="block text-sm">
+            <span className="text-gray-500">{translate("reservationSource")}</span>
+            <div className="mt-1">
+              <ReservationSourcePicker
+                value={formSource}
+                onChange={setFormSource}
+                posLabel={translate("resSourceReservation")}
+                phoneLabel={translate("resSourcePhoneCall")}
+              />
+            </div>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
               <span className="text-gray-500">{translate("guestPhone")}</span>
               <input value={formPhone} onChange={(e) => setFormPhone(e.target.value)} className="pos-input mt-1" />
             </label>
-            <label className="block text-sm">
-              <span className="text-gray-500">{translate("partySize")}</span>
-              <input type="number" min={1} value={formPartySize} onChange={(e) => setFormPartySize(Number(e.target.value))} className="pos-input mt-1" />
-            </label>
+            <PartySizeStepper
+              value={formPartySize}
+              onChange={setFormPartySize}
+              max={settings.reservationMaxGuestsPerSlot || 50}
+              label={translate("partySize")}
+            />
           </div>
           <label className="block text-sm">
             <span className="text-gray-500">{translate("guestEmail")}</span>
             <input type="email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} className="pos-input mt-1" />
           </label>
-          <label className="block text-sm">
-            <span className="text-gray-500">{translate("reservedAt")}</span>
-            <input type="datetime-local" value={formDateTime} onChange={(e) => setFormDateTime(e.target.value)} className="pos-input mt-1" />
-          </label>
+          <ReservationDateTimeFields
+            value={formDateTime}
+            onChange={setFormDateTime}
+            settings={settings}
+            dateLabel={translate("reservedDate")}
+            timeLabel={translate("reservedTime")}
+          />
           <label className="block text-sm">
             <span className="text-gray-500">{translate("selectTable")}</span>
             <select value={formTableId} onChange={(e) => setFormTableId(e.target.value)} className="pos-input mt-1">
@@ -654,30 +964,86 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
         </div>
       </Modal>
 
-      <Modal open={showWalkInModal} onClose={() => setShowWalkInModal(false)} title={translate("walkIn")}>
-        <div className="space-y-3">
-          <p className="text-sm text-gray-500">{translate("visitSource")}: {translate("resSourceWalkIn")}</p>
-          <label className="block text-sm">
-            <span className="text-gray-500">{translate("guestName")}</span>
-            <input value={walkInName} onChange={(e) => setWalkInName(e.target.value)} placeholder="Walk-in" className="pos-input mt-1" />
-          </label>
-          <label className="block text-sm">
-            <span className="text-gray-500">{translate("partySize")}</span>
-            <input type="number" min={1} value={walkInPartySize} onChange={(e) => setWalkInPartySize(Number(e.target.value))} className="pos-input mt-1" />
-          </label>
-          <label className="block text-sm">
-            <span className="text-gray-500">{translate("selectTable")}</span>
-            <select value={walkInTableId} onChange={(e) => setWalkInTableId(e.target.value)} className="pos-input mt-1">
-              <option value="">{translate("selectEmptyTable")}</option>
-              {emptyTables.map((table) => (
-                <option key={table.id} value={table.id}>{translate("table")} {table.label}</option>
-              ))}
-            </select>
-          </label>
-          <button type="button" disabled={busyId === "walkin" || !walkInTableId} onClick={() => void handleWalkIn()} className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white disabled:opacity-50">
-            {translate("checkIn")}
-          </button>
-        </div>
+      <Modal
+        open={editTarget !== null}
+        onClose={() => setEditTarget(null)}
+        title={translate("editReservation")}
+      >
+        {editTarget ? (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {editTarget.bookingCode ? `${editTarget.bookingCode} · ` : ""}
+              {translate(reservationStatusLabelKey(editTarget.status))}
+            </p>
+            <label className="block text-sm">
+              <span className="text-gray-500">{translate("guestName")}</span>
+              <input value={formGuestName} onChange={(e) => setFormGuestName(e.target.value)} className="pos-input mt-1" />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm">
+                <span className="text-gray-500">{translate("guestPhone")}</span>
+                <input value={formPhone} onChange={(e) => setFormPhone(e.target.value)} className="pos-input mt-1" />
+              </label>
+              <PartySizeStepper
+                value={formPartySize}
+                onChange={setFormPartySize}
+                max={settings.reservationMaxGuestsPerSlot || 50}
+                label={translate("partySize")}
+              />
+            </div>
+            <label className="block text-sm">
+              <span className="text-gray-500">{translate("guestEmail")}</span>
+              <input type="email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} className="pos-input mt-1" />
+            </label>
+            <ReservationDateTimeFields
+              value={formDateTime}
+              onChange={setFormDateTime}
+              settings={settings}
+              dateLabel={translate("reservedDate")}
+              timeLabel={translate("reservedTime")}
+            />
+            {editTarget.status !== "checked_in" ? (
+              <label className="block text-sm">
+                <span className="text-gray-500">{translate("selectTable")}</span>
+                <select value={formTableId} onChange={(e) => setFormTableId(e.target.value)} className="pos-input mt-1">
+                  <option value="">{translate("selectEmptyTable")}</option>
+                  {emptyTables.map((table) => (
+                    <option key={table.id} value={table.id}>{translate("table")} {table.label}</option>
+                  ))}
+                </select>
+              </label>
+            ) : editTarget.tableLabel ? (
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                {translate("table")} {editTarget.tableLabel}
+              </p>
+            ) : null}
+            {settings.reservationEventTypes.length > 0 ? (
+              <label className="block text-sm">
+                <span className="text-gray-500">{translate("resEventType")}</span>
+                <select value={formEventType} onChange={(e) => setFormEventType(e.target.value)} className="pos-input mt-1">
+                  <option value="">—</option>
+                  {settings.reservationEventTypes.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {pickEventTypeLabel(option, language === "cs" ? "cs" : language === "zh" ? "en" : "en")}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <label className="block text-sm">
+              <span className="text-gray-500">{translate("resNotes")}</span>
+              <textarea value={formNotes} onChange={(e) => setFormNotes(e.target.value)} className="pos-input mt-1 min-h-[72px]" />
+            </label>
+            <button
+              type="button"
+              disabled={busyId === editTarget.id || !formGuestName.trim() || !formDateTime}
+              onClick={() => void handleUpdateReservation()}
+              className="w-full rounded-xl bg-[var(--pos-brand)] py-3 text-sm font-semibold text-white hover:bg-[var(--pos-brand-hover)] disabled:opacity-50"
+            >
+              {translate("saveReservation")}
+            </button>
+          </div>
+        ) : null}
       </Modal>
 
       <Modal open={assignTarget !== null} onClose={() => setAssignTarget(null)} title={translate("assignTable")}>
@@ -695,7 +1061,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
               {translate("tableOccupiedWarning")}
             </p>
           ) : null}
-          <button type="button" disabled={!assignTableId || busyId === assignTarget?.id} onClick={() => void handleAssign()} className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white disabled:opacity-50">
+          <button type="button" disabled={!assignTableId || busyId === assignTarget?.id} onClick={() => void handleAssign()} className="w-full rounded-xl bg-[var(--pos-brand)] py-3 text-sm font-semibold text-white hover:bg-[var(--pos-brand-hover)] disabled:opacity-50">
             {translate("assignTable")}
           </button>
         </div>
@@ -731,7 +1097,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             type="button"
             disabled={!checkInTableId || busyId === checkInTarget?.id}
             onClick={() => void handleCheckIn()}
-            className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white disabled:opacity-50"
+            className="w-full rounded-xl bg-[var(--pos-brand)] py-3 text-sm font-semibold text-white hover:bg-[var(--pos-brand-hover)] disabled:opacity-50"
           >
             {translate("checkIn")}
           </button>

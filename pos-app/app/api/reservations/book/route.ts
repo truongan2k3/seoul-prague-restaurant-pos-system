@@ -4,6 +4,7 @@ import {
   sendReservationEmail,
 } from "@/src/lib/reservation-email";
 import { createOnlineReservationServer } from "@/src/lib/reservation-guest-server";
+import { reservationPushCopy, sendReservationPush } from "@/src/lib/push-server";
 
 export async function POST(request: Request) {
   let body: {
@@ -17,6 +18,8 @@ export async function POST(request: Request) {
     eventType?: string;
     gdprConsent?: boolean;
     lang?: string;
+    emailOptional?: boolean;
+    receptionDesk?: boolean;
   };
 
   try {
@@ -35,6 +38,8 @@ export async function POST(request: Request) {
     notes: body.notes,
     eventType: body.eventType,
     gdprConsent: body.gdprConsent === true,
+    emailOptional: body.emailOptional === true,
+    receptionDesk: body.receptionDesk === true,
     lang:
       body.lang === "cs" ||
       body.lang === "vi" ||
@@ -63,8 +68,19 @@ export async function POST(request: Request) {
     emailSent = emailResult.sent;
   }
 
+  void sendReservationPush(
+    reservationPushCopy({
+      kind: "new",
+      guestName: data.guestName,
+      partySize: data.partySize,
+      reservedAt: data.reservedAt,
+      bookingCode: data.bookingCode,
+    }),
+  );
+
   return NextResponse.json({
     reservation: {
+      id: data.id,
       bookingCode: data.bookingCode,
       manageToken: data.manageToken,
       manageUrl: buildManageUrl(data.manageToken),

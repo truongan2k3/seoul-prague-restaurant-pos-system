@@ -2,35 +2,57 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * POS design tokens — aligned with Landing Page luxury palette.
+ * Brand: charcoal canvas, burgundy primary, champagne accent.
+ * Status colors stay semantic (amber waiting / emerald ready / rose alert).
+ */
 :root {
   color-scheme: light;
-  --background: #f9fafb;
-  --foreground: #111827;
+  --background: #f7f5f3;
+  --foreground: #141416;
   --card: #ffffff;
-  --card-foreground: #111827;
-  --muted: #6b7280;
-  --border: #e5e7eb;
+  --card-foreground: #141416;
+  --muted: #6b6560;
+  --border: #e6e1db;
   --input-bg: #ffffff;
-  --accent: #f3f4f6;
+  --accent: #efeae4;
+  --pos-brand: #8b1e2d;
+  --pos-brand-hover: #a02435;
+  --pos-champagne: #c9a88b;
+  --pos-champagne-soft: #e8d5c4;
+  --pos-ink: #0b0b0c;
+  --pos-raised: #ffffff;
+  --pos-ring: rgba(139, 30, 45, 0.35);
 }
 
 .dark {
   color-scheme: dark;
-  --background: #030712;
-  --foreground: #f9fafb;
-  --card: #111827;
-  --card-foreground: #f9fafb;
-  --muted: #9ca3af;
-  --border: #374151;
-  --input-bg: #1f2937;
-  --accent: #1f2937;
+  --background: #0b0b0c;
+  --foreground: #f5f2ef;
+  --card: #121214;
+  --card-foreground: #f5f2ef;
+  --muted: #a39e98;
+  --border: rgba(255, 255, 255, 0.1);
+  --input-bg: #1a1a1c;
+  --accent: #1a1a1c;
+  --pos-brand: #8b1e2d;
+  --pos-brand-hover: #a02435;
+  --pos-champagne: #c9a88b;
+  --pos-champagne-soft: #e8d5c4;
+  --pos-ink: #0b0b0c;
+  --pos-raised: #141416;
+  --pos-ring: rgba(201, 168, 139, 0.35);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-pos-brand: var(--pos-brand);
+  --color-pos-champagne: var(--pos-champagne);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-playfair);
 }
 
 html {
@@ -46,6 +68,11 @@ body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* Light pastel shell — views using bg-background pick up --background. */
+.pos-shell-bg {
+  background-color: var(--background);
 }
 
 /* Block native pull-to-refresh on phones; app uses a guarded custom pull instead. */
@@ -74,6 +101,59 @@ body {
 
 .touch-action-none {
   touch-action: none;
+}
+
+.landing-theme {
+  color-scheme: dark;
+}
+
+.landing-serif {
+  font-family: var(--font-playfair), "Times New Roman", Georgia, serif;
+}
+
+.pos-serif {
+  font-family: var(--font-playfair), "Times New Roman", Georgia, serif;
+}
+
+/* Landing gallery — soft vertical bob while the strip drifts horizontally */
+@keyframes landing-gallery-bob {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -7px;
+  }
+}
+
+.landing-gallery-frame-bob {
+  animation: landing-gallery-bob 5.5s ease-in-out infinite;
+  animation-delay: var(--gallery-bob-delay, 0s);
+  will-change: translate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-gallery-frame-bob {
+    animation: none;
+  }
+}
+
+.landing-theme .pos-input {
+  background: #111;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.menu-flipbook {
+  margin: 0 auto;
+}
+
+.menu-book-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .pos-mobile-sticky-bar {
@@ -109,8 +189,8 @@ select option {
 }
 
 .dark select option {
-  background-color: #1f2937;
-  color: #f9fafb;
+  background-color: #1a1a1c;
+  color: #f5f2ef;
 }
 
 input[type="date"],
@@ -131,50 +211,129 @@ input[type="search"] {
 
 /* Shared surface tokens for panels & modals */
 .pos-surface {
-  @apply bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100;
+  background-color: var(--card);
+  color: var(--card-foreground);
 }
 
 .pos-muted {
-  @apply text-gray-500 dark:text-gray-400;
+  color: var(--muted);
 }
 
 .pos-label {
-  @apply text-xs font-medium text-gray-500 dark:text-gray-400;
+  @apply text-xs font-medium tracking-wide uppercase;
+  color: var(--muted);
+  letter-spacing: 0.08em;
 }
 
 .pos-input {
-  @apply w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100;
+  @apply w-full rounded-lg border px-3 py-2 text-sm outline-none transition-shadow;
+  border-color: var(--border);
+  background-color: var(--input-bg);
+  color: var(--foreground);
 }
 
-/* Filter / period / payment toggle buttons */
+.pos-input:focus {
+  box-shadow: 0 0 0 2px var(--pos-ring);
+}
+
+.pos-btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors;
+  background-color: var(--pos-brand);
+}
+
+.pos-btn-primary:hover {
+  background-color: var(--pos-brand-hover);
+}
+
+.pos-btn-primary:disabled {
+  opacity: 0.5;
+}
+
+.pos-btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors;
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+.pos-btn-ghost:hover {
+  background-color: var(--accent);
+}
+
+/* Filter / period / payment toggle buttons — denser on phones */
 .pos-filter-btn {
-  @apply rounded-lg px-3 py-2 text-sm font-medium transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700;
+  @apply rounded-md px-2 py-1 text-[11px] font-medium transition-colors sm:rounded-lg sm:px-3 sm:py-2 sm:text-sm;
+  background-color: var(--accent);
+  color: var(--foreground);
+}
+
+.pos-filter-btn:hover {
+  filter: brightness(0.96);
+}
+
+.dark .pos-filter-btn:hover {
+  filter: brightness(1.15);
 }
 
 .pos-filter-btn-active {
-  @apply rounded-lg px-3 py-2 text-sm font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-600 dark:text-white dark:hover:bg-blue-700;
+  @apply rounded-md px-2 py-1 text-[11px] font-medium text-white transition-colors sm:rounded-lg sm:px-3 sm:py-2 sm:text-sm;
+  background-color: var(--pos-brand);
+}
+
+.pos-filter-btn-active:hover {
+  background-color: var(--pos-brand-hover);
 }
 
 /* Segmented control (compact tabs inside a pill track) */
 .pos-segment {
-  @apply flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800;
+  @apply flex flex-wrap gap-1 rounded-lg p-1;
+  background-color: var(--accent);
 }
 
 .pos-segment-btn {
-  @apply rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-gray-100;
+  @apply rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors;
+  color: var(--muted);
+}
+
+.pos-segment-btn:hover {
+  color: var(--foreground);
 }
 
 .pos-segment-btn-active {
-  @apply rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors bg-blue-600 text-white font-medium shadow-sm dark:bg-blue-600 dark:text-white;
+  @apply rounded-md px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors;
+  background-color: var(--pos-brand);
 }
 
-/* Sidebar navigation */
+/* Sidebar navigation — denser on phones/tablets */
 .pos-nav-btn {
-  @apply flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white;
+  @apply flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors lg:gap-3 lg:rounded-lg lg:px-3 lg:py-2.5 lg:text-sm;
+  color: var(--muted);
+}
+
+.pos-nav-btn:hover {
+  background-color: var(--accent);
+  color: var(--foreground);
 }
 
 .pos-nav-btn-active {
-  @apply flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors bg-blue-600 text-white dark:bg-blue-600 dark:text-white;
+  @apply flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium text-white transition-colors lg:gap-3 lg:rounded-lg lg:px-3 lg:py-2.5 lg:text-sm;
+  background-color: var(--pos-brand);
+}
+
+.pos-panel {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+
+.pos-header-title {
+  font-family: var(--font-playfair), "Times New Roman", Georgia, serif;
+  @apply text-base font-medium tracking-tight sm:text-lg;
+  color: var(--foreground);
+}
+
+.pos-eyebrow {
+  @apply text-[10px] font-semibold uppercase tracking-[0.22em] sm:text-[11px];
+  color: var(--pos-champagne);
 }
 
 /* ── Map SLA alert: 10+ min pending/preparing ─────────────────────────────── */

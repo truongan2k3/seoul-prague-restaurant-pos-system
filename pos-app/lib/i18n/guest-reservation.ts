@@ -19,6 +19,11 @@ export type GuestReservationCopy = {
   additionalNotes: string;
   eventType: string;
   selectEventType: string;
+  bbqQuestion: string;
+  bbqHint: string;
+  bbqYes: string;
+  bbqNo: string;
+  bbqUndecided: string;
   guestSingular: string;
   guestPlural: string;
   namePlaceholder: string;
@@ -61,6 +66,11 @@ const en: GuestReservationCopy = {
   additionalNotes: "Additional Notes",
   eventType: "Event Type",
   selectEventType: "Select event type",
+  bbqQuestion: "Would you like Korean BBQ grilling?",
+  bbqHint: "Your answer helps us prepare the best experience for you.",
+  bbqYes: "Yes, BBQ please",
+  bbqNo: "No, regular dining",
+  bbqUndecided: "I don't know yet",
   guestSingular: "guest",
   guestPlural: "guests",
   namePlaceholder: "Full name",
@@ -103,6 +113,11 @@ const cs: GuestReservationCopy = {
   additionalNotes: "Poznámka",
   eventType: "Typ akce",
   selectEventType: "Vyberte typ akce",
+  bbqQuestion: "Máte zájem o korejské grilování?",
+  bbqHint: "Vaše odpověď nám pomůže lépe se na vaši návštěvu připravit.",
+  bbqYes: "Ano, grilování",
+  bbqNo: "Ne, běžné stravování",
+  bbqUndecided: "Ještě nevím",
   guestSingular: "host",
   guestPlural: "hostů",
   namePlaceholder: "Celé jméno",
@@ -145,6 +160,11 @@ const vi: GuestReservationCopy = {
   additionalNotes: "Ghi chú thêm",
   eventType: "Loại sự kiện",
   selectEventType: "Chọn loại sự kiện",
+  bbqQuestion: "Bạn có muốn ăn nướng BBQ không?",
+  bbqHint: "Trả lời giúp nhà hàng chuẩn bị tốt hơn cho bạn.",
+  bbqYes: "Có, tôi muốn nướng",
+  bbqNo: "Không, ăn bình thường",
+  bbqUndecided: "Tôi chưa biết nữa",
   guestSingular: "khách",
   guestPlural: "khách",
   namePlaceholder: "Họ và tên",
@@ -187,6 +207,11 @@ const de: GuestReservationCopy = {
   additionalNotes: "Zusätzliche Hinweise",
   eventType: "Anlass",
   selectEventType: "Anlass wählen",
+  bbqQuestion: "Möchten Sie koreanisches BBQ-Grillen?",
+  bbqHint: "Ihre Antwort hilft uns, das beste Erlebnis für Sie vorzubereiten.",
+  bbqYes: "Ja, BBQ bitte",
+  bbqNo: "Nein, normales Essen",
+  bbqUndecided: "Weiß ich noch nicht",
   guestSingular: "Gast",
   guestPlural: "Gäste",
   namePlaceholder: "Vollständiger Name",
@@ -229,6 +254,11 @@ const ko: GuestReservationCopy = {
   additionalNotes: "추가 요청",
   eventType: "행사 유형",
   selectEventType: "행사 유형 선택",
+  bbqQuestion: "한국 BBQ 그릴을 원하시나요?",
+  bbqHint: "응답은 최고의 경험을 준비하는 데 도움이 됩니다.",
+  bbqYes: "네, BBQ 원합니다",
+  bbqNo: "아니요, 일반 식사",
+  bbqUndecided: "아직 모르겠어요",
   guestSingular: "명",
   guestPlural: "명",
   namePlaceholder: "이름",
@@ -278,3 +308,55 @@ export function parseGuestReservationLang(value: string | null | undefined): Gue
   }
   return "en";
 }
+
+/**
+ * Map a BCP-47 tag (e.g. `vi-VN`, `cs`) to a supported guest reservation language.
+ * Unknown languages fall back to English.
+ */
+export function matchGuestReservationLang(tag: string | null | undefined): GuestReservationLang | null {
+  if (!tag) return null;
+  const normalized = tag.trim().toLowerCase().replace(/_/g, "-");
+  if (!normalized) return null;
+
+  const primary = normalized.split("-")[0] ?? "";
+  if (
+    primary === "cs" ||
+    primary === "vi" ||
+    primary === "de" ||
+    primary === "ko" ||
+    primary === "en"
+  ) {
+    return primary;
+  }
+
+  // Occasional browser tags that still map cleanly.
+  if (normalized.startsWith("cz")) return "cs";
+  if (normalized.startsWith("vn")) return "vi";
+  return null;
+}
+
+/** Prefer session choice; otherwise detect from the device / browser; default English. */
+export function resolveInitialGuestReservationLang(
+  stored: string | null | undefined,
+  languages: readonly string[] = [],
+): GuestReservationLang {
+  if (stored) return parseGuestReservationLang(stored);
+
+  for (const tag of languages) {
+    const matched = matchGuestReservationLang(tag);
+    if (matched) return matched;
+  }
+  return "en";
+}
+
+/** Read navigator language list when available (browser only). */
+export function detectGuestReservationLangFromNavigator(): GuestReservationLang {
+  if (typeof navigator === "undefined") return "en";
+  const list: string[] = [];
+  if (Array.isArray(navigator.languages)) {
+    list.push(...navigator.languages);
+  }
+  if (navigator.language) list.push(navigator.language);
+  return resolveInitialGuestReservationLang(null, list);
+}
+

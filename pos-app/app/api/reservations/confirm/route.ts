@@ -44,6 +44,8 @@ export async function POST(request: Request) {
     emailSent = emailResult.sent;
   }
 
+  // No staff push on confirm — already notified as "New reservation".
+
   return NextResponse.json({
     ok: true,
     emailSent,

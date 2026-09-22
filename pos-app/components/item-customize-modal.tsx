@@ -11,6 +11,7 @@ import {
   getDefaultSelections,
   optionLabel,
   resolveSelectedOptions,
+  type OptionGroupSelections,
 } from "@/lib/menu-customization";
 import { formatPosPrice, menuPriceDisplayOptionsFromSettings } from "@/lib/price-display";
 import { menuItemDisplayName } from "@/lib/menu-display";
@@ -18,7 +19,7 @@ import type { MenuItem, SelectedMenuOption } from "@/lib/types";
 
 export interface CustomizeResult {
   selectedOptions: SelectedMenuOption[];
-  selections: Record<string, string>;
+  selections: OptionGroupSelections;
   price: number;
   displayName: string;
   kitchenModifierText: string;
@@ -40,7 +41,7 @@ export function ItemCustomizeModal({ open, item, onClose, onConfirm }: ItemCusto
   const formatOrderPrice = (amount: number) => formatPosPrice(amount, priceOptions);
   const config = item.customizationConfig;
 
-  const [selections, setSelections] = useState<Record<string, string>>({});
+  const [selections, setSelections] = useState<OptionGroupSelections>({});
   const [itemNote, setItemNote] = useState("");
   const [translateItemNote, setTranslateItemNote] = useState(false);
 
@@ -70,11 +71,24 @@ export function ItemCustomizeModal({ open, item, onClose, onConfirm }: ItemCusto
     if (!config?.optionGroups?.length) return true;
     return config.optionGroups.every((group) => {
       if (!group.required) return true;
-      return Boolean(selections[group.id]);
+      return (selections[group.id]?.length ?? 0) > 0;
     });
   }, [config, selections]);
 
   if (!open || !config) return null;
+
+  const toggleOption = (groupId: string, optionId: string, multi: boolean) => {
+    setSelections((prev) => {
+      const current = prev[groupId] ?? [];
+      if (multi) {
+        const next = current.includes(optionId)
+          ? current.filter((id) => id !== optionId)
+          : [...current, optionId];
+        return { ...prev, [groupId]: next };
+      }
+      return { ...prev, [groupId]: [optionId] };
+    });
+  };
 
   const handleConfirm = () => {
     onConfirm({
@@ -123,10 +137,11 @@ export function ItemCustomizeModal({ open, item, onClose, onConfirm }: ItemCusto
                   ? group.nameZh ?? group.nameEn
                   : group.nameEn}
               {group.required ? " *" : ""}
+              {group.multi ? ` · ${translate("optionGroupMulti")}` : ""}
             </p>
             <div className="flex flex-wrap gap-2">
               {group.options.map((option) => {
-                const active = selections[group.id] === option.id;
+                const active = (selections[group.id] ?? []).includes(option.id);
                 const sideDelta =
                   group.id === "protein"
                     ? 0
@@ -148,9 +163,7 @@ export function ItemCustomizeModal({ open, item, onClose, onConfirm }: ItemCusto
                   <button
                     key={option.id}
                     type="button"
-                    onClick={() =>
-                      setSelections((prev) => ({ ...prev, [group.id]: option.id }))
-                    }
+                    onClick={() => toggleOption(group.id, option.id, Boolean(group.multi))}
                     className={`rounded-xl border px-3 py-2 text-left text-sm font-medium transition ${
                       active
                         ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-200"

@@ -34,7 +34,8 @@ export type NavId =
   | "storage"
   | "dynamicQr"
   | "staff"
-  | "settings";
+  | "settings"
+  | "about";
 
 export type WeekdayKey =
   | "monday"
@@ -124,6 +125,8 @@ export interface SoundConfigs {
   paymentSuccess: string;
   /** Floor prep popup before a reservation arrives. */
   reservationReminder: string;
+  /** Client Screen welcome after reservation check-in. */
+  cfdWelcome: string;
 }
 
 /** Languages printed on kitchen tickets (large primary + optional secondary). */
@@ -238,6 +241,11 @@ export interface AppSettings {
   menuItemSortMode: MenuSortMode;
   /** Link encoded in review QR when no custom QR image is set */
   cfdReviewUrl: string;
+  /**
+   * Banchan option ids shown on table guest QR.
+   * null = all options from the Banchan library group; [] = none.
+   */
+  tableQrEnabledBanchanIds: string[] | null;
   /** Optional uploaded QR image override */
   cfdReviewQrImageUrl: string;
   /** Scrolling announcement banner — per-screen configs */
@@ -285,7 +293,7 @@ export interface MenuOptionGroup {
   nameCz: string;
   nameZh?: string;
   required?: boolean;
-  /** Allow selecting multiple options in the group (future; order UI is single-select today). */
+  /** Allow selecting multiple options in the group. */
   multi?: boolean;
   options: MenuOptionChoice[];
 }
@@ -465,7 +473,7 @@ export interface StaffMember {
   allowedNav?: NavId[];
 }
 
-export type VisitSource = "reservation" | "walk_in";
+export type VisitSource = "reservation" | "walk_in" | "phone_call" | "online";
 
 export type ReservationStatus =
   | "pending"

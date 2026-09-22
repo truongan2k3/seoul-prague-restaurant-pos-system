@@ -31,6 +31,7 @@ export interface PushNotificationInput {
   message: string;
   staffName?: string;
   playSound?: false | "ready" | "newOrder" | "mainNewOrder";
+  variant?: "success" | "error";
 }
 
 interface NotificationContextValue {
@@ -51,6 +52,7 @@ const NotificationContext = createContext<NotificationContextValue | null>(null)
 interface ActiveToast {
   id: string;
   message: string;
+  variant: "success" | "error";
 }
 
 function ToastStack({
@@ -66,30 +68,47 @@ function ToastStack({
     <div
       aria-live="polite"
       aria-relevant="additions"
-      className="pointer-events-none fixed top-16 right-4 z-[100] flex w-full max-w-sm flex-col gap-2"
+      className="pointer-events-none fixed inset-x-3 top-[max(4.5rem,env(safe-area-inset-top))] z-[100] flex flex-col gap-2 sm:inset-x-auto sm:right-4 sm:w-full sm:max-w-sm"
     >
-      {toasts.map((toast) => (
-        <div
-          key={toast.id}
-          role="status"
-          className="pointer-events-auto flex items-start gap-3 rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-lg ring-1 ring-emerald-500/20 dark:border-emerald-800 dark:bg-gray-800 dark:ring-emerald-500/30"
-        >
-          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-            <Check className="h-4 w-4" aria-hidden />
-          </div>
-          <p className="min-w-0 flex-1 pt-1 text-sm font-medium leading-snug text-gray-900 dark:text-gray-100">
-            {toast.message}
-          </p>
-          <button
-            type="button"
-            onClick={() => onDismiss(toast.id)}
-            aria-label="Dismiss notification"
-            className="shrink-0 rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+      {toasts.map((toast) => {
+        const isError = toast.variant === "error";
+        return (
+          <div
+            key={toast.id}
+            role={isError ? "alert" : "status"}
+            className={`pointer-events-auto flex items-start gap-3 rounded-xl border bg-white px-4 py-3 shadow-lg ring-1 dark:bg-gray-800 ${
+              isError
+                ? "border-red-200 ring-red-500/20 dark:border-red-800 dark:ring-red-500/30"
+                : "border-emerald-200 ring-emerald-500/20 dark:border-emerald-800 dark:ring-emerald-500/30"
+            }`}
           >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      ))}
+            <div
+              className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                isError
+                  ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
+                  : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+              }`}
+            >
+              {isError ? (
+                <X className="h-4 w-4" aria-hidden />
+              ) : (
+                <Check className="h-4 w-4" aria-hidden />
+              )}
+            </div>
+            <p className="min-w-0 flex-1 pt-1 text-sm font-medium leading-snug text-gray-900 dark:text-gray-100">
+              {toast.message}
+            </p>
+            <button
+              type="button"
+              onClick={() => onDismiss(toast.id)}
+              aria-label="Dismiss notification"
+              className="shrink-0 rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -207,7 +226,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const pushNotification = useCallback(
-    ({ id, message, staffName, playSound = "ready" }: PushNotificationInput) => {
+    ({
+      id,
+      message,
+      staffName,
+      playSound = "ready",
+      variant = "success",
+    }: PushNotificationInput) => {
       const notificationId = id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
       setHistory((prev) =>
@@ -225,7 +250,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
       setToasts((prev) => {
         const withoutDuplicate = prev.filter((toast) => toast.id !== notificationId);
-        return [{ id: notificationId, message }, ...withoutDuplicate].slice(0, 6);
+        return [
+          { id: notificationId, message, variant },
+          ...withoutDuplicate,
+        ].slice(0, 6);
       });
 
       const existingTimer = timersRef.current.get(notificationId);

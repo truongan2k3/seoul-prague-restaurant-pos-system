@@ -8,12 +8,20 @@ import type { ReservationSnapshot, TableSnapshot } from "@/lib/reservation-undo"
 import { generateBookingCode, generateManageToken } from "@/lib/reservation-codes";
 import {
   buildTimeSlotsForDate,
-  getWeekdayKey,
+  getWeekdayKeyForDateIso,
   type SlotCapacityRow,
   countGuestsInSlot,
 } from "@/lib/reservation-slots";
+import { shouldAlertOnReservationInsert } from "@/lib/reservation-change-alert";
+import { venueDayRangeUtc, venueWallTimeToUtc } from "@/lib/venue-timezone";
+import { notifyReservationPushEvent } from "@/lib/web-push-client";
 import { fetchAppSettings } from "@/src/lib/settings-actions";
 import { supabase } from "@/src/lib/supabase";
+import {
+  GUEST_RESERVATION_ALERT_CHANNEL,
+  GUEST_RESERVATION_ALERT_EVENT,
+  type GuestReservationAlertPayload,
+} from "@/lib/reservation-guest-alert";
 
 export interface CreateReservationInput {
   guestName: string;
@@ -29,6 +37,24 @@ export interface CreateReservationInput {
   status?: ReservationStatus;
 }
 
+export interface UpdateReservationInput {
+  guestName: string;
+  guestPhone?: string;
+  guestEmail?: string;
+  partySize: number;
+  reservedAt: Date;
+  notes?: string;
+  tableId?: string | null;
+  eventType?: string | null;
+}
+
+const STAFF_EDITABLE_STATUSES: ReservationStatus[] = [
+  "pending",
+  "confirmed",
+  "late",
+  "checked_in",
+];
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -37,7 +63,8 @@ export async function fetchReservations(since?: Date) {
   let query = supabase
     .from("reservations")
     .select("*, tables(label)")
-    .order("reserved_at", { ascending: true });
+    .order("reserved_at", { ascending: true })
+    .limit(5000);
 
   if (since) {
     query = query.gte("reserved_at", since.toISOString());
@@ -49,9 +76,9 @@ export async function fetchReservations(since?: Date) {
 export async function createReservation(input: CreateReservationInput) {
   const status = input.status ?? (input.source === "walk_in" ? "checked_in" : "pending");
   const source = input.source ?? "reservation";
-  const withGuestCodes = source === "reservation";
+  const withGuestCodes = source === "reservation" || source === "online" || source === "phone_call";
 
-  return supabase
+  const result = await supabase
     .from("reservations")
     .insert({
       guest_name: input.guestName,
@@ -72,6 +99,22 @@ export async function createReservation(input: CreateReservationInput) {
     })
     .select("*, tables(label)")
     .single();
+
+  if (result.data) {
+    const row = mapReservationRow(result.data as Parameters<typeof mapReservationRow>[0]);
+    if (shouldAlertOnReservationInsert(row)) {
+      notifyReservationPushEvent({
+        kind: "new",
+        reservationId: row.id,
+        guestName: row.guestName,
+        partySize: row.partySize,
+        reservedAt: row.reservedAt,
+        bookingCode: row.bookingCode,
+      });
+    }
+  }
+
+  return result;
 }
 
 export async function updateReservationStatus(
@@ -88,12 +131,38 @@ export async function updateReservationStatus(
   if (extra?.checkedInAt) payload.checked_in_at = extra.checkedInAt.toISOString();
   if (extra?.completedAt) payload.completed_at = extra.completedAt.toISOString();
 
-  return supabase
+  const result = await supabase
     .from("reservations")
     .update(payload)
     .eq("id", reservationId)
     .select("*, tables(label)")
     .single();
+
+  if (result.data) {
+    const row = mapReservationRow(result.data as Parameters<typeof mapReservationRow>[0]);
+    if (status === "cancelled") {
+      notifyReservationPushEvent({
+        kind: "cancelled",
+        reservationId: row.id,
+        guestName: row.guestName,
+        partySize: row.partySize,
+        reservedAt: row.reservedAt,
+        bookingCode: row.bookingCode,
+      });
+    } else if (status === "no_show") {
+      notifyReservationPushEvent({
+        kind: "no_show",
+        reservationId: row.id,
+        guestName: row.guestName,
+        partySize: row.partySize,
+        reservedAt: row.reservedAt,
+        bookingCode: row.bookingCode,
+      });
+    }
+    // pending → confirmed: no second staff push (already notified on "New reservation").
+  }
+
+  return result;
 }
 
 export async function confirmReservation(reservationId: string) {
@@ -102,6 +171,73 @@ export async function confirmReservation(reservationId: string) {
 
 export async function cancelReservation(reservationId: string) {
   return updateReservationStatus(reservationId, "cancelled");
+}
+
+export async function updateReservationDetails(
+  reservationId: string,
+  input: UpdateReservationInput,
+) {
+  const { data: existing, error: fetchError } = await supabase
+    .from("reservations")
+    .select("id, status")
+    .eq("id", reservationId)
+    .single();
+
+  if (fetchError || !existing) {
+    return { data: null, error: fetchError ?? new Error("Reservation not found.") };
+  }
+
+  const status = existing.status as ReservationStatus;
+  if (!STAFF_EDITABLE_STATUSES.includes(status)) {
+    return {
+      data: null,
+      error: new Error("This reservation can no longer be edited."),
+    };
+  }
+
+  const guestName = input.guestName.trim();
+  if (!guestName) {
+    return { data: null, error: new Error("Guest name is required.") };
+  }
+
+  const nextStatus: ReservationStatus = status === "late" ? "confirmed" : status;
+
+  const payload: Record<string, unknown> = {
+    guest_name: guestName,
+    guest_phone: input.guestPhone?.trim() || null,
+    guest_email: input.guestEmail?.trim() || null,
+    party_size: Math.max(1, input.partySize),
+    reserved_at: input.reservedAt.toISOString(),
+    notes: input.notes?.trim() || null,
+    event_type: input.eventType?.trim() || null,
+    status: nextStatus,
+    updated_at: nowIso(),
+  };
+
+  if (input.tableId !== undefined && status !== "checked_in") {
+    payload.table_id = input.tableId || null;
+  }
+
+  const result = await supabase
+    .from("reservations")
+    .update(payload)
+    .eq("id", reservationId)
+    .select("*, tables(label)")
+    .single();
+
+  if (result.data) {
+    const row = mapReservationRow(result.data as Parameters<typeof mapReservationRow>[0]);
+    notifyReservationPushEvent({
+      kind: "updated",
+      reservationId: row.id,
+      guestName: row.guestName,
+      partySize: row.partySize,
+      reservedAt: row.reservedAt,
+      bookingCode: row.bookingCode,
+    });
+  }
+
+  return result;
 }
 
 export async function markReservationNoShow(reservationId: string) {
@@ -220,14 +356,13 @@ export async function checkInReservationWithTable(
 const DEFAULT_LATE_GRACE_MINUTES = 30;
 
 export async function fetchReservationsForDate(dateIso: string) {
-  const start = `${dateIso}T00:00:00`;
-  const end = `${dateIso}T23:59:59`;
+  const { startIso, endExclusiveIso } = venueDayRangeUtc(dateIso);
 
   return supabase
     .from("reservations")
     .select("party_size, reserved_at, status")
-    .gte("reserved_at", start)
-    .lte("reserved_at", end);
+    .gte("reserved_at", startIso)
+    .lt("reserved_at", endExclusiveIso);
 }
 
 export async function markLateReservations(holdingMinutes = DEFAULT_LATE_GRACE_MINUTES) {
@@ -268,8 +403,8 @@ export async function createOnlineReservation(input: {
   notes?: string;
 }) {
   const { data: settings } = await fetchAppSettings();
-  const reservedAt = new Date(`${input.date}T${input.time}:00`);
-  const dayKey = getWeekdayKey(reservedAt);
+  const reservedAt = venueWallTimeToUtc(input.date, input.time);
+  const dayKey = getWeekdayKeyForDateIso(input.date);
   const dayConfig = settings.reservationOperatingHours[dayKey];
 
   if (!dayConfig.enabled) {
@@ -313,7 +448,7 @@ export async function createOnlineReservation(input: {
     partySize: guestCount,
     reservedAt,
     notes: input.notes?.trim() || undefined,
-    source: "reservation",
+    source: "online",
     status: "pending",
   });
 }
@@ -335,20 +470,16 @@ export async function assignReservationTable(
     return { data: null, error: new Error("Table is not available") };
   }
 
-  const { data: existing } = await supabase
+  // Assign table only — do not check in. Check-in stays a separate action.
+  return supabase
     .from("reservations")
-    .select("status")
+    .update({
+      table_id: tableId,
+      updated_at: nowIso(),
+    })
     .eq("id", reservationId)
+    .select("*, tables(label)")
     .single();
-
-  const status = (existing?.status as ReservationStatus | undefined) ?? "checked_in";
-  const nextStatus: ReservationStatus =
-    status === "confirmed" ? "checked_in" : status;
-
-  return updateReservationStatus(reservationId, nextStatus, {
-    tableId,
-    checkedInAt: nextStatus === "checked_in" ? new Date() : undefined,
-  });
 }
 
 export async function findActiveReservationForTable(tableId: string) {
@@ -373,28 +504,11 @@ export async function completeReservationForTable(tableId: string, reservationId
   });
 }
 
-export async function createWalkIn(input: {
-  partySize: number;
-  tableId: string;
-  guestName?: string;
-  staffId?: string;
-  staffName?: string;
-}) {
-  return createReservation({
-    guestName: input.guestName?.trim() || "Walk-in",
-    partySize: input.partySize,
-    reservedAt: new Date(),
-    source: "walk_in",
-    tableId: input.tableId,
-    status: "checked_in",
-    staffId: input.staffId,
-    staffName: input.staffName,
-  });
-}
-
 interface ReservationChangeHandlers {
   onChange?: () => void;
   onInsert?: (reservation: ReservationRecord) => void;
+  onUpdate?: (reservation: ReservationRecord) => void;
+  onDelete?: (reservationId: string) => void;
 }
 
 export function subscribeToReservationChanges(handlers: ReservationChangeHandlers | (() => void)) {
@@ -417,13 +531,41 @@ export function subscribeToReservationChanges(handlers: ReservationChangeHandler
     .on(
       "postgres_changes",
       { event: "UPDATE", schema: "public", table: "reservations" },
-      () => normalized.onChange?.(),
+      (payload) => {
+        if (payload.new) {
+          normalized.onUpdate?.(
+            mapReservationRow(payload.new as Parameters<typeof mapReservationRow>[0]),
+          );
+        }
+        normalized.onChange?.();
+      },
     )
     .on(
       "postgres_changes",
       { event: "DELETE", schema: "public", table: "reservations" },
-      () => normalized.onChange?.(),
+      (payload) => {
+        const id = (payload.old as { id?: string } | null)?.id;
+        if (id) normalized.onDelete?.(id);
+        normalized.onChange?.();
+      },
     )
+    .subscribe();
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}
+
+export function subscribeToGuestReservationAlerts(
+  onAlert: (payload: GuestReservationAlertPayload) => void,
+) {
+  const channel = supabase
+    .channel(GUEST_RESERVATION_ALERT_CHANNEL)
+    .on("broadcast", { event: GUEST_RESERVATION_ALERT_EVENT }, (message) => {
+      const payload = message.payload as GuestReservationAlertPayload | undefined;
+      if (!payload?.kind || !payload.reservation?.id) return;
+      onAlert(payload);
+    })
     .subscribe();
 
   return () => {

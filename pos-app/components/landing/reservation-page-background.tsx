@@ -8,6 +8,7 @@ import {
   parseYouTubeVideoId,
   reservationBackgroundHasMedia,
 } from "@/lib/website/reservation-background";
+import { LandingImage } from "@/lib/website/landing-image";
 import type { WebsiteReservationBackground } from "@/lib/website/types";
 
 type Viewport = "mobile" | "desktop";
@@ -172,14 +173,15 @@ export function ReservationPageBackground({
       <div className="absolute inset-0 bg-[#0B0B0C]" />
 
       {posterUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <LandingImage
           src={posterUrl}
           alt=""
-          className="absolute inset-0 h-full w-full object-cover"
+          fill
+          priority={preview}
+          sizes="100vw"
+          quality={70}
+          className="object-cover"
           style={{ objectPosition }}
-          decoding="async"
-          fetchPriority={preview ? "high" : "low"}
         />
       ) : null}
 

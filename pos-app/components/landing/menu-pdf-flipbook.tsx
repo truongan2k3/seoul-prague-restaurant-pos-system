@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import HTMLFlipBook from "react-pageflip";
 import {
   ChevronLeft,
@@ -13,8 +13,66 @@ import {
 } from "lucide-react";
 import type { MenuPdfLanguage, WebsiteMenuPdf } from "@/lib/website/types";
 import { MENU_PDF_LANGUAGES } from "@/lib/website/defaults";
+import { LandingImage } from "@/lib/website/landing-image";
 
 type PdfJsModule = typeof import("pdfjs-dist");
+
+/** Only fetch nearby flipbook pages — far pages stay placeholders until flipped. */
+const FLIPBOOK_PREFETCH_RADIUS = 2;
+
+function MenuPdfPageImage({
+  src,
+  alt,
+  className,
+  style,
+  load,
+  priority = false,
+  sizes,
+  width,
+  height,
+  fill = false,
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+  style?: CSSProperties;
+  load: boolean;
+  priority?: boolean;
+  sizes: string;
+  width?: number;
+  height?: number;
+  fill?: boolean;
+}) {
+  if (!load) {
+    return (
+      <div
+        className={
+          fill
+            ? `absolute inset-0 bg-[#e8e0d5] ${className ?? ""}`
+            : `h-full w-full bg-[#e8e0d5] ${className ?? ""}`
+        }
+        style={style}
+        aria-hidden
+      />
+    );
+  }
+
+  return (
+    <LandingImage
+      src={src}
+      alt={alt}
+      className={className}
+      style={style}
+      sizes={sizes}
+      quality={72}
+      priority={priority}
+      width={width}
+      height={height}
+      fill={fill}
+      draggable={false}
+    />
+  );
+}
 
 let pdfWorkerReady = false;
 
@@ -334,16 +392,19 @@ function MenuPageLightbox({
           if (event.target === event.currentTarget) onClose();
         }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <MenuPdfPageImage
           src={src}
           alt={`Menu page ${pageIndex + 1} enlarged`}
+          load
+          priority
+          sizes="100vw"
+          width={1600}
+          height={2200}
           className="absolute left-1/2 top-1/2 max-h-[min(92vh,100%)] max-w-[min(96vw,100%)] origin-center object-contain shadow-2xl will-change-transform select-none"
           style={{
             transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${zoom})`,
             transition: dragRef.current ? undefined : "transform 160ms ease-out",
           }}
-          draggable={false}
         />
 
         <button
@@ -681,8 +742,16 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "en" }: MenuPdfFlipboo
                 : "border-white/15 opacity-70 hover:opacity-100"
             }`}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={src} alt="" className="h-full w-full object-cover" draggable={false} loading={index < 2 ? "eager" : "lazy"} decoding="async" />
+            <MenuPdfPageImage
+              src={src}
+              alt=""
+              load={Math.abs(index - pageIndex) <= FLIPBOOK_PREFETCH_RADIUS || index < 2}
+              priority={index < 2}
+              sizes="48px"
+              width={96}
+              height={128}
+              className="h-full w-full object-cover"
+            />
           </button>
         ))}
       </div>
@@ -751,19 +820,21 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "en" }: MenuPdfFlipboo
                 <div key={`${language}-page-${index}`} className="menu-book-page bg-[#f5f0ea]">
                   <button
                     type="button"
-                    className="h-full w-full cursor-zoom-in"
+                    className="relative h-full w-full cursor-zoom-in"
                     onClick={() => {
                       if (zoomed) return;
                       openLightbox(index);
                     }}
                     aria-label={`Enlarge page ${index + 1}`}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <MenuPdfPageImage
                       src={src}
                       alt={`Menu page ${index + 1}`}
-                      className="h-full w-full object-contain"
-                      draggable={false}
+                      fill
+                      load={Math.abs(index - pageIndex) <= FLIPBOOK_PREFETCH_RADIUS || index < 2}
+                      priority={index < 2}
+                      sizes="(max-width: 768px) 92vw, 46vw"
+                      className="object-contain"
                     />
                   </button>
                 </div>

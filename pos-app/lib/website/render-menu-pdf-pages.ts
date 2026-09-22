@@ -9,8 +9,9 @@ export async function renderMenuPdfPages(
   options?: { maxPages?: number; scale?: number; quality?: number },
 ): Promise<{ blobs: Blob[]; pageCount: number }> {
   const maxPages = options?.maxPages ?? 40;
-  const scale = options?.scale ?? 2;
-  const quality = options?.quality ?? 0.88;
+  // Slightly lighter than 2× / 0.88 — still sharp on retina, smaller Storage objects for guests.
+  const scale = options?.scale ?? 1.6;
+  const quality = options?.quality ?? 0.8;
 
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = new URL(

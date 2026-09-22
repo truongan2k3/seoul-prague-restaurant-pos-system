@@ -4,6 +4,9 @@ import { fetchWebsiteContent } from "@/src/lib/website-public";
 
 type Props = { params: Promise<{ tableId: string }> };
 
+/** Align with other public marketing pages — avoid re-hitting Supabase every table QR open. */
+export const revalidate = 120;
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { tableId } = await params;
   const content = await fetchWebsiteContent();

@@ -26,6 +26,7 @@ import {
   type TableGuestPaymentMethod,
   type TableGuestRequestKind,
 } from "@/lib/table-guest";
+import { LandingImage } from "@/lib/website/landing-image";
 
 type BillLine = {
   name: string;
@@ -156,8 +157,15 @@ export function TableGuestPageClient({
         <header className="flex items-start justify-between gap-3">
           <div>
             {logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt="" className="mb-3 h-10 w-10 object-contain opacity-90" />
+              <LandingImage
+                src={logoUrl}
+                alt=""
+                width={40}
+                height={40}
+                sizes="40px"
+                quality={80}
+                className="mb-3 h-10 w-10 object-contain opacity-90"
+              />
             ) : null}
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#C9A88B]">
               {restaurantName}

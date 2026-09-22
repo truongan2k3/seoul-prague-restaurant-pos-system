@@ -24,7 +24,6 @@ import {
   ruleToPngDataUrl,
   textToPngDataUrl,
   textToPngItemQtyRowDataUrl,
-  textToPngItemRowDataUrl,
   textToPngSplitRowDataUrl,
   textToPngThreeColumnDataUrl,
   textToPngTwoColumnDataUrl,
@@ -151,13 +150,6 @@ export async function buildBitmapReceiptHtml(
   const pushSplit = (left: string, right: string, size: number, weight: KitchenBitmapWeight) => {
     emit(
       textToPngSplitRowDataUrl(left, right, baseOpts(size, weight)),
-      `${left} ${right}`,
-    );
-  };
-
-  const pushItem = (left: string, right: string, size: number, weight: KitchenBitmapWeight) => {
-    emit(
-      textToPngItemRowDataUrl(left, right, baseOpts(size, weight)),
       `${left} ${right}`,
     );
   };

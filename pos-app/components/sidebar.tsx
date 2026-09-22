@@ -44,7 +44,6 @@ export const navItems = [
   { id: "summary" as const, labelKey: "summary" as const, icon: BarChart3 },
   { id: "storage" as const, labelKey: "storage" as const, icon: Package },
   { id: "dynamicQr" as const, labelKey: "dynamicQrServices" as const, icon: QrCode },
-  { id: "staff" as const, labelKey: "staffManagement" as const, icon: Users },
   { id: "settings" as const, labelKey: "settings" as const, icon: Settings },
   { id: "about" as const, labelKey: "about" as const, icon: Info },
 ] as const;

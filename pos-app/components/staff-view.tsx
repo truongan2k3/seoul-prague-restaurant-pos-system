@@ -25,9 +25,11 @@ const ROLE_LABELS: Record<StaffRole, string> = {
 
 interface StaffViewProps {
   onRefresh: () => void;
+  /** When true, omit the full-page header (used inside Settings). */
+  embedded?: boolean;
 }
 
-export function StaffView({ onRefresh }: StaffViewProps) {
+export function StaffView({ onRefresh, embedded = false }: StaffViewProps) {
   const { translate, currentStaffUser, staffList, logAction } = useApp();
   const { requestPin } = usePinGate();
   const [formOpen, setFormOpen] = useState(false);
@@ -114,20 +116,26 @@ export function StaffView({ onRefresh }: StaffViewProps) {
   };
 
   return (
-    <div className="flex h-full flex-col bg-background text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <header className="flex shrink-0 items-center justify-between border-b border-gray-200/80 bg-background px-2.5 py-1.5 sm:px-4 sm:py-2.5 lg:px-6 lg:py-4 dark:border-gray-800 dark:bg-gray-900">
-        <div>
-          <h1 className="text-sm font-semibold sm:text-base lg:text-lg text-gray-900 dark:text-gray-100">
-            {translate("staffManagement")}
-          </h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            {staffList.length} members · synced with Supabase
-          </p>
-        </div>
-        <HeaderClockWithStatus />
-      </header>
+    <div
+      className={`flex flex-col bg-background text-gray-900 dark:bg-gray-950 dark:text-gray-100 ${
+        embedded ? "" : "h-full"
+      }`}
+    >
+      {embedded ? null : (
+        <header className="flex shrink-0 items-center justify-between border-b border-gray-200/80 bg-background px-2.5 py-1.5 sm:px-4 sm:py-2.5 lg:px-6 lg:py-4 dark:border-gray-800 dark:bg-gray-900">
+          <div>
+            <h1 className="text-sm font-semibold sm:text-base lg:text-lg text-gray-900 dark:text-gray-100">
+              {translate("staffManagement")}
+            </h1>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {staffList.length} members · synced with Supabase
+            </p>
+          </div>
+          <HeaderClockWithStatus />
+        </header>
+      )}
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className={`flex-1 overflow-auto ${embedded ? "p-0" : "p-6"}`}>
         <section className="mx-auto max-w-5xl rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 px-2.5 py-1.5 sm:px-4 sm:py-2.5 lg:px-6 lg:py-4 dark:border-gray-700">
             <div className="flex items-center gap-2">

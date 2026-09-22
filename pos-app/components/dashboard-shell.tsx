@@ -7,7 +7,6 @@ import { HistoryView } from "@/components/history-view";
 import { ReservationsView } from "@/components/reservations-view";
 import { SummaryView } from "@/components/summary-view";
 import { StorageView } from "@/components/storage-view";
-import { StaffView } from "@/components/staff-view";
 import { SettingsView } from "@/components/settings-view";
 import { AboutView } from "@/components/about-view";
 import { DynamicQrServicesView } from "@/components/dynamic-qr-services-view";
@@ -631,8 +630,6 @@ export function DashboardShell() {
         return <DynamicQrServicesView tables={tables} />;
       case "guestChat":
         return <GuestChatView />;
-      case "staff":
-        return <StaffView onRefresh={() => void refreshStaffList()} />;
       case "settings":
         return (
           <SettingsView

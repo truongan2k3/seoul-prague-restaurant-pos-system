@@ -11,7 +11,6 @@ export const ALL_NAV_TABS: NavId[] = [
   "summary",
   "storage",
   "dynamicQr",
-  "staff",
   "settings",
 ];
 
@@ -82,8 +81,9 @@ export function canAccessNavTabForMember(
 ): boolean {
   // Credits page — always available under Settings for any signed-in staff.
   if (tab === "about") return Boolean(member);
-  // Admin always gets staff management + settings regardless of custom allowedNav.
-  if (tab === "staff" && canManageStaff(member?.role)) return true;
+  // Staff management lives inside Settings (admin-only), not as an outer sidebar tab.
+  if (tab === "staff") return false;
+  // Admin always gets settings regardless of custom allowedNav.
   if (tab === "settings" && member?.role === "admin") return true;
   // Guest Chat always visible for admin / manager / server (website inbox).
   if (

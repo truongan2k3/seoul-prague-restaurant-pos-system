@@ -457,12 +457,6 @@ export function buildThermalPrintCss(
   }
   .receipt-czech .receipt-items-head-left,
   .receipt-czech .receipt-item-left { flex: 1; min-width: 0; word-break: break-word; }
-  .receipt-czech .receipt-items-head-qty,
-  .receipt-czech .receipt-item-qty {
-    flex: 0 0 8mm;
-    text-align: right;
-    white-space: nowrap;
-  }
   .receipt-czech .receipt-items-head-right,
   .receipt-czech .receipt-item-right {
     flex: 0 0 auto;

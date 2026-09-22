@@ -20,7 +20,7 @@ import {
 import { receiptBitmapTypographyFromSettings } from "@/lib/receipt-bitmap-typography";
 import type { AppSettings } from "@/lib/types";
 import { ReceiptBodyContent, type ReceiptTemplate } from "@/src/components/ReceiptPrint";
-import { padReceiptLine, receiptItemEscPosLines, receiptItemsHeaderEscPosLine, receiptMetaEscPosLines, formatReceiptQty, RECEIPT_LINE_WIDTH } from "@/lib/receipt-line-format";
+import { padReceiptLine, receiptItemEscPosLines, receiptItemsHeaderEscPosLine, receiptMetaEscPosLines, formatReceiptQtyTimesPrice, RECEIPT_LINE_WIDTH } from "@/lib/receipt-line-format";
 import { DEFAULT_RECEIPT_PAPER_WIDTH_MM, receiptRasterWidthDots, RECEIPT_CUT_BOTTOM_BLANK_DOTS, RECEIPT_CUT_BOTTOM_FEED_LINES } from "@/lib/receipt-raster";
 import { receiptShouldUseBitmap } from "@/lib/print-dispatch";
 
@@ -251,15 +251,13 @@ export function buildReceiptEscPosLines(
   lines.push(receiptItemsHeaderEscPosLine(RECEIPT_LINE_WIDTH));
 
   for (const item of data.items) {
-    const amount = `${formatReceiptAmount(item.lineTotal)} ${item.taxGroup}`;
-    lines.push(
-      ...receiptItemEscPosLines(
-        item.name,
-        amount,
-        RECEIPT_LINE_WIDTH,
-        formatReceiptQty(item.quantity),
-      ),
+    const right = formatReceiptQtyTimesPrice(
+      item.quantity,
+      item.unitPrice,
+      item.taxGroup,
+      formatReceiptAmount,
     );
+    lines.push(...receiptItemEscPosLines(item.name, right, RECEIPT_LINE_WIDTH));
   }
 
   lines.push("--------------------------------");

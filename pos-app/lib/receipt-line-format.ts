@@ -1,7 +1,5 @@
 /** Monospace receipt line helpers (~42 cols at 58mm Font B). */
 export const RECEIPT_LINE_WIDTH = 42;
-/** Fixed width for the quantity column (right-aligned before amount). */
-export const RECEIPT_QTY_WIDTH = 3;
 
 export function padReceiptLine(left: string, right: string, width = RECEIPT_LINE_WIDTH): string {
   const l = left.trim();
@@ -42,27 +40,23 @@ export function wrapReceiptText(text: string, maxWidth: number): string[] {
   return lines.length > 0 ? lines : [""];
 }
 
-/** Item row(s): optional qty column; amount on first line; long names wrap. */
+/** Item row(s): right text on first line; long names wrap at word boundaries. */
 export function receiptItemEscPosLines(
   name: string,
-  amount: string,
+  rightText: string,
   width = RECEIPT_LINE_WIDTH,
-  qty?: string | number | null,
 ): string[] {
   const left = name.trim();
-  const right = amount.trim();
-  const qtyStr = qty == null || qty === "" ? "" : String(qty).trim();
-  const rightBlock = qtyStr ? `${qtyStr.padStart(RECEIPT_QTY_WIDTH)} ${right}` : right;
+  const right = rightText.trim();
+  if (!right) return wrapReceiptText(left, width);
 
-  if (!rightBlock) return wrapReceiptText(left, width);
-
-  const firstLeftMax = Math.max(8, width - rightBlock.length - 1);
+  const firstLeftMax = Math.max(8, width - right.length - 1);
   if (left.length <= firstLeftMax) {
-    return [padReceiptLine(left, rightBlock, width)];
+    return [padReceiptLine(left, right, width)];
   }
 
   const wrapped = wrapReceiptText(left, firstLeftMax);
-  const lines = [padReceiptLine(wrapped[0] ?? "", rightBlock, width)];
+  const lines = [padReceiptLine(wrapped[0] ?? "", right, width)];
   for (let i = 1; i < wrapped.length; i += 1) {
     const cont = wrapped[i]?.trim();
     if (cont) lines.push(cont);
@@ -70,16 +64,32 @@ export function receiptItemEscPosLines(
   return lines;
 }
 
-/** Header row matching item columns: Položka | Ks | Částka */
+/** Header: Položka | Ks × cena (no line-total column). */
 export function receiptItemsHeaderEscPosLine(width = RECEIPT_LINE_WIDTH): string {
-  return padReceiptLine("Položka", `${"Ks".padStart(RECEIPT_QTY_WIDTH)} Částka`, width);
+  return padReceiptLine("Položka", "Ks × cena", width);
 }
 
-/** Format quantity for the receipt qty column. */
+/** Format quantity for receipt display. */
 export function formatReceiptQty(quantity: number): string {
   if (!Number.isFinite(quantity)) return "0";
   if (Number.isInteger(quantity)) return String(quantity);
   return String(quantity);
+}
+
+/**
+ * Line right-hand side: `2 × 195,00 A` (qty × unit price + tax group).
+ * No line-total column — grand total stays in the footer.
+ */
+export function formatReceiptQtyTimesPrice(
+  quantity: number,
+  unitPrice: number,
+  taxGroup?: string,
+  formatAmount: (n: number) => string = (n) => n.toFixed(2).replace(".", ","),
+): string {
+  const qty = formatReceiptQty(quantity);
+  const price = formatAmount(unitPrice);
+  const base = `${qty} × ${price}`;
+  return taxGroup ? `${base} ${taxGroup}` : base;
 }
 
 /** Two stacked columns (meta header): left block + right block in one monospace row set. */

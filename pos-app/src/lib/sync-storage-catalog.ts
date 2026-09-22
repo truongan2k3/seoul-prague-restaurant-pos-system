@@ -7,7 +7,6 @@ import {
 } from "@/lib/storage-catalog-defaults";
 import {
   createNotePreset,
-  updateNotePreset,
   type NotePresetInput,
 } from "@/src/lib/note-preset-actions";
 import {
@@ -133,7 +132,16 @@ async function upsertNotePreset(
   const key = notePresetKey(input.labelEn);
   const existing = existingByKey.get(key);
   if (existing) {
-    const { error } = await updateNotePreset(existing.id, { ...input, active: true });
+    // Keep user drag order — only revive/sync labels for catalog defaults.
+    const { error } = await supabase
+      .from("note_presets")
+      .update({
+        label_en: input.labelEn.trim(),
+        label_cz: input.labelCz.trim() || null,
+        label_zh: input.labelZh.trim(),
+        active: true,
+      })
+      .eq("id", existing.id);
     return !error;
   }
   const { data, error } = await createNotePreset({ ...input, active: true });

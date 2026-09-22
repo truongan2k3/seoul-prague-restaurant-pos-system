@@ -5,6 +5,7 @@ import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { CfdReservationPanel } from "@/components/cfd-reservation-panel";
 import { CfdWelcomeOverlay, type CfdWelcomeContent } from "@/components/cfd-welcome-overlay";
 import { LanguageSelector } from "@/components/language-selector";
+import { ReservationIncomingListener } from "@/components/reservation-incoming-listener";
 import {
   applyCfdSnapshot,
   checkoutPayloadFingerprint,
@@ -804,6 +805,9 @@ export function ClientDisplayView({
           onDone={clearWelcome}
         />
       ) : null}
+
+      {/* Same reservation popup + looping sound as main POS; sync via realtime Confirm. */}
+      <ReservationIncomingListener enableLateMarker={false} />
     </div>
   );
 }

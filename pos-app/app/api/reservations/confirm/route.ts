@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readAuthSession } from "@/src/lib/auth/session";
 import { readStaffSession } from "@/src/lib/auth/staff-session";
 import {
   buildManageUrl,
@@ -7,8 +8,11 @@ import {
 import { confirmReservationServer } from "@/src/lib/reservation-guest-server";
 
 export async function POST(request: Request) {
+  // Main POS uses staff session; Customer Display (/client) is a station with
+  // business login only — accept either so Confirm sync works on both screens.
   const staff = await readStaffSession();
-  if (!staff) {
+  const business = staff ? null : await readAuthSession();
+  if (!staff && !business) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

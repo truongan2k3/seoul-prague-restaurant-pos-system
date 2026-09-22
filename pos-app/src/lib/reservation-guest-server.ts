@@ -28,6 +28,10 @@ export interface OnlineBookInput {
   eventType?: string;
   gdprConsent?: boolean;
   lang?: GuestReservationLang;
+  /** Client Screen / reception: allow empty email even if settings require it. */
+  emailOptional?: boolean;
+  /** Client Screen / reception: create as confirmed staff booking (check-in ready). */
+  receptionDesk?: boolean;
 }
 
 export interface GuestReservationPublic {
@@ -251,7 +255,7 @@ function validateGuestInput(
   const eventType = input.eventType?.trim() ?? "";
 
   if (required.name && !guestName) return copy.errorName;
-  if (required.email && !email) return copy.errorEmail;
+  if (required.email && !email && !input.emailOptional) return copy.errorEmail;
   if (required.phone && !phone) return copy.errorPhone;
   if ((required.date || required.time) && (!input.date || !input.time)) {
     return copy.errorDateTime;
@@ -314,8 +318,8 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
       notes: input.notes?.trim() || null,
       event_type: eventType,
       gdpr_consent_at: nowIso,
-      source: "online",
-      status: "pending",
+      source: input.receptionDesk ? "reservation" : "online",
+      status: input.receptionDesk ? "confirmed" : "pending",
       booking_code: bookingCode,
       manage_token: manageToken,
       updated_at: nowIso,

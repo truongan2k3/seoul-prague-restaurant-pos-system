@@ -43,7 +43,20 @@ function RequiredMark({ show }: { show: boolean }) {
   return <span className="text-[#C9A88B]"> *</span>;
 }
 
-export function ReservationBookingView({ website }: { website?: WebsiteContent }) {
+export function ReservationBookingView({
+  website,
+  embedded = false,
+  emailOptional = false,
+  onBooked,
+}: {
+  website?: WebsiteContent;
+  /** Form-only layout for Client Screen panel. */
+  embedded?: boolean;
+  /** Force email optional (overrides admin required-fields for this form). */
+  emailOptional?: boolean;
+  /** When set (typically embedded), skip success modal and notify parent. */
+  onBooked?: (info: { id: string; bookingCode: string }) => void;
+}) {
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [reservationsForDate, setReservationsForDate] = useState<SlotCapacityRow[]>([]);
   const [settingsLoading, setSettingsLoading] = useState(true);
@@ -67,7 +80,10 @@ export function ReservationBookingView({ website }: { website?: WebsiteContent }
   const [successEmailSent, setSuccessEmailSent] = useState(false);
 
   const copy = guestReservationCopy(lang);
-  const required = appSettings.reservationRequiredFields;
+  const required = {
+    ...appSettings.reservationRequiredFields,
+    email: emailOptional ? false : appSettings.reservationRequiredFields.email,
+  };
   const eventTypes = appSettings.reservationEventTypes;
   const guestTexts = appSettings.reservationGuestTexts;
   const showEventTypeField = eventTypes.length > 0;
@@ -241,11 +257,14 @@ export function ReservationBookingView({ website }: { website?: WebsiteContent }
           eventType: eventType.trim() || undefined,
           gdprConsent: true,
           lang,
+          emailOptional: emailOptional || undefined,
+          receptionDesk: embedded || undefined,
         }),
       });
       const payload = (await response.json().catch(() => ({}))) as {
         error?: string;
         reservation?: {
+          id?: string;
           bookingCode: string;
           manageUrl: string;
           emailSent: boolean;
@@ -256,10 +275,18 @@ export function ReservationBookingView({ website }: { website?: WebsiteContent }
         return;
       }
 
+      resetForm();
+      if (onBooked) {
+        onBooked({
+          id: payload.reservation.id ?? "",
+          bookingCode: payload.reservation.bookingCode,
+        });
+        return;
+      }
+
       setSuccessBookingCode(payload.reservation.bookingCode);
       setSuccessManageUrl(payload.reservation.manageUrl);
       setSuccessEmailSent(payload.reservation.emailSent);
-      resetForm();
       setShowSuccess(true);
     } catch {
       setError(copy.errorSubmitRetry);
@@ -282,31 +309,34 @@ export function ReservationBookingView({ website }: { website?: WebsiteContent }
   const logoUrl = website?.media.logo?.fileUrl;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 pb-16">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Reservations</p>
-          <h1 className="landing-serif mt-3 text-3xl text-white lg:text-5xl">{copy.makeReservation}</h1>
-          <p className="mt-2 max-w-xl text-sm text-white/55">{copy.reserveSubtitle}</p>
+    <div className={embedded ? "w-full" : "mx-auto max-w-6xl px-4 pb-16"}>
+      {embedded ? null : (
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Reservations</p>
+            <h1 className="landing-serif mt-3 text-3xl text-white lg:text-5xl">{copy.makeReservation}</h1>
+            <p className="mt-2 max-w-xl text-sm text-white/55">{copy.reserveSubtitle}</p>
+          </div>
+          <label className="inline-flex items-center gap-2 border border-white/15 bg-[#121214] px-3 py-2 text-sm">
+            <Globe className="h-4 w-4 text-[#C9A88B]" />
+            <select
+              value={lang}
+              onChange={(event) => setLang(parseGuestReservationLang(event.target.value))}
+              className="bg-transparent text-white outline-none"
+              aria-label="Language"
+            >
+              {GUEST_RESERVATION_LANGS.map((code) => (
+                <option key={code} value={code} className="bg-[#121214]">
+                  {GUEST_LANG_LABELS[code]}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-        <label className="inline-flex items-center gap-2 border border-white/15 bg-[#121214] px-3 py-2 text-sm">
-          <Globe className="h-4 w-4 text-[#C9A88B]" />
-          <select
-            value={lang}
-            onChange={(event) => setLang(parseGuestReservationLang(event.target.value))}
-            className="bg-transparent text-white outline-none"
-            aria-label="Language"
-          >
-            {GUEST_RESERVATION_LANGS.map((code) => (
-              <option key={code} value={code} className="bg-[#121214]">
-                {GUEST_LANG_LABELS[code]}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className={embedded ? "block" : "grid grid-cols-1 gap-6 lg:grid-cols-3"}>
+        {embedded ? null : (
         <aside className="space-y-4 lg:col-span-1">
           <div className="rounded-none border border-white/10 bg-[#121214]/90 p-6 shadow-xl">
             {logoUrl ? (
@@ -370,10 +400,39 @@ export function ReservationBookingView({ website }: { website?: WebsiteContent }
             </div>
           </div>
         </aside>
+        )}
 
-        <section className="lg:col-span-2">
-          <div className="rounded-none border border-white/10 bg-[#121214]/95 p-6 shadow-2xl sm:p-8">
-            <form onSubmit={(event) => void handleSubmit(event)} className="mt-8 space-y-5">
+        <section className={embedded ? "block" : "lg:col-span-2"}>
+          <div
+            className={
+              embedded
+                ? "rounded-none"
+                : "rounded-none border border-white/10 bg-[#121214]/95 p-6 shadow-2xl sm:p-8"
+            }
+          >
+            {embedded ? (
+              <div className="mb-4 flex items-center justify-end gap-3">
+                <label className="inline-flex items-center gap-2 border border-white/15 bg-[#121214] px-3 py-2 text-sm">
+                  <Globe className="h-4 w-4 text-[#C9A88B]" />
+                  <select
+                    value={lang}
+                    onChange={(event) => setLang(parseGuestReservationLang(event.target.value))}
+                    className="bg-transparent text-white outline-none"
+                    aria-label="Language"
+                  >
+                    {GUEST_RESERVATION_LANGS.map((code) => (
+                      <option key={code} value={code} className="bg-[#121214]">
+                        {GUEST_LANG_LABELS[code]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            ) : null}
+            <form
+              onSubmit={(event) => void handleSubmit(event)}
+              className={embedded ? "space-y-4" : "mt-8 space-y-5"}
+            >
               <label className="block text-sm">
                 <span className="font-medium text-white/90">
                   {copy.yourName}

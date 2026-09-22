@@ -206,7 +206,8 @@ export function OrderView({
 
     return tables
       .filter((t) => t.status !== "empty" && tableIdsWithWork.has(t.id))
-      .sort((a, b) => (a.occupiedAt?.getTime() ?? 0) - (b.occupiedAt?.getTime() ?? 0))
+      // Newest open tables on the left; older sessions to the right.
+      .sort((a, b) => (b.occupiedAt?.getTime() ?? 0) - (a.occupiedAt?.getTime() ?? 0))
       .map((table): TableOrderBundle => {
         const rawItems = filterItemsForBoard(
           orderItems.filter((item) => item.tableId === table.id),

@@ -6,11 +6,11 @@ export const ALL_NAV_TABS: NavId[] = [
   "map",
   "order",
   "reservations",
+  "guestChat",
   "history",
   "summary",
   "storage",
   "dynamicQr",
-  "guestChat",
   "staff",
   "settings",
 ];
@@ -53,8 +53,20 @@ export function parseAllowedNav(value: unknown): NavId[] | undefined {
 /** Effective tabs for a member (custom list or role defaults). */
 export function effectiveNavTabs(member: StaffMember | null | undefined): NavId[] {
   if (!member) return ["map"];
+  // Admin / manager always get the full sidebar (includes newly added tabs like Guest Chat).
+  if (member.role === "admin" || member.role === "manager") {
+    return [...ALL_NAV_TABS];
+  }
   if (member.allowedNav && member.allowedNav.length > 0) {
-    return member.allowedNav.filter((tab) => ALL_NAV_TABS.includes(tab));
+    const custom = member.allowedNav.filter((tab) => ALL_NAV_TABS.includes(tab));
+    // Merge role-default tabs that were added after the staff row was saved
+    // (e.g. guestChat) so servers still see new features without a re-save.
+    const defaults = defaultNavTabsForRole(member.role);
+    const merged = [...custom];
+    for (const tab of defaults) {
+      if (!merged.includes(tab)) merged.push(tab);
+    }
+    return merged;
   }
   return defaultNavTabsForRole(member.role);
 }
@@ -73,6 +85,13 @@ export function canAccessNavTabForMember(
   // Admin always gets staff management + settings regardless of custom allowedNav.
   if (tab === "staff" && canManageStaff(member?.role)) return true;
   if (tab === "settings" && member?.role === "admin") return true;
+  // Guest Chat always visible for admin / manager / server (website inbox).
+  if (
+    tab === "guestChat" &&
+    (member?.role === "admin" || member?.role === "manager" || member?.role === "server")
+  ) {
+    return true;
+  }
   if (!effectiveNavTabs(member).includes(tab)) return false;
   return true;
 }

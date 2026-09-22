@@ -1,6 +1,7 @@
 "use client";
 
 import { Maximize2, Minimize2 } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { useApp } from "@/contexts/app-context";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 
@@ -10,11 +11,24 @@ interface FullscreenToggleProps {
   variant?: "sidebar" | "fab";
 }
 
+/** Public marketing / guest surfaces — no fullscreen FAB. */
+function hideFullscreenFabOnPath(pathname: string | null): boolean {
+  if (!pathname) return false;
+  if (pathname === "/" || pathname.startsWith("/landing")) return true;
+  if (pathname === "/reservation" || pathname.startsWith("/reservation/")) return true;
+  if (pathname === "/menu" || pathname.startsWith("/menu/")) return true;
+  if (pathname === "/special-event" || pathname.startsWith("/special-event/")) return true;
+  if (pathname.startsWith("/table/")) return true;
+  return false;
+}
+
 export function FullscreenToggle({ compact = false, variant = "sidebar" }: FullscreenToggleProps) {
   const { translate } = useApp();
   const { isFullscreen, supported, toggle } = useFullscreen();
+  const pathname = usePathname();
 
   if (!supported) return null;
+  if (variant === "fab" && hideFullscreenFabOnPath(pathname)) return null;
 
   const label = isFullscreen ? translate("exitFullscreen") : translate("fullscreen");
 

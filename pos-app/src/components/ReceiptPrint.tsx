@@ -9,6 +9,7 @@ import {
   formatReceiptTime,
   type ReceiptData,
 } from "@/lib/receipt-calculations";
+import { formatReceiptQtyTimesPrice } from "@/lib/receipt-line-format";
 import type { ReceiptBrandingVisibility } from "@/lib/receipt-branding";
 import { DEFAULT_RECEIPT_BRANDING_VISIBILITY } from "@/lib/receipt-branding";
 import type { AppSettings } from "@/lib/types";
@@ -223,7 +224,12 @@ export function ReceiptBodyContent({
           <div key={`${item.name}-${idx}`} className="receipt-item-czech">
             <span className="receipt-item-left">{item.name}</span>
             <span className="receipt-item-right">
-              {item.quantity} × {formatReceiptAmount(item.unitPrice)} {item.taxGroup}
+              {formatReceiptQtyTimesPrice(
+                item.quantity,
+                item.unitPrice,
+                item.taxGroup,
+                formatReceiptAmount,
+              )}
             </span>
           </div>
         ))}

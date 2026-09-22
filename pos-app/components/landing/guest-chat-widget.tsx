@@ -15,9 +15,12 @@ import {
   type GuestChatSession,
 } from "@/lib/guest-chat";
 import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
+import { subscribeGuestChatHiddenForMenuBook } from "@/lib/guest-chat-ui";
 
 type Props = {
   page: GuestChatPage;
+  /** Lift FAB above the sticky mobile “Book a table” bar. */
+  liftAboveBookCta?: boolean;
 };
 
 type PanelStatus = "online" | "waiting" | "replied" | "offline" | "closed";
@@ -50,7 +53,7 @@ function statusText(status: PanelStatus): string {
  * Floating Chat With Us on landing / reservation pages.
  * Start screen collects guest name; closed chats can reopen via “I still need help”.
  */
-export function GuestChatWidget({ page }: Props) {
+export function GuestChatWidget({ page, liftAboveBookCta = false }: Props) {
   const [enabled, setEnabled] = useState(false);
   const [open, setOpen] = useState(false);
   const [config, setConfig] = useState<GuestChatConfig | null>(null);
@@ -58,13 +61,14 @@ export function GuestChatWidget({ page }: Props) {
   const [messages, setMessages] = useState<GuestChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [guestName, setGuestName] = useState("");
-  const [phase, setPhase] = useState<"booting" | "start" | "chat">("booting");
+  const [phase, setPhase] = useState<"booting" | "start" | "chat">("start");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showFollowUp, setShowFollowUp] = useState(false);
   const [followEmail, setFollowEmail] = useState("");
   const [followPhone, setFollowPhone] = useState("");
   const [followSaved, setFollowSaved] = useState(false);
+  const [hiddenForMenuBook, setHiddenForMenuBook] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   const followTimerRef = useRef<number | null>(null);
   const bootingRef = useRef(false);
@@ -74,6 +78,10 @@ export function GuestChatWidget({ page }: Props) {
   const chatClosed =
     session != null && (session.status === "closed" || session.status === "resolved");
   const canSend = session != null && isActiveGuestChatStatus(session.status) && !busy;
+
+  useEffect(() => {
+    return subscribeGuestChatHiddenForMenuBook(setHiddenForMenuBook);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,7 +126,10 @@ export function GuestChatWidget({ page }: Props) {
         setMessages(payload.messages ?? []);
         if (payload.session.guestName) setGuestName(payload.session.guestName);
         if (payload.session.guestEmail) setFollowSaved(true);
-        setPhase("chat");
+        const needsName =
+          !payload.session.guestName?.trim() &&
+          isActiveGuestChatStatus(payload.session.status);
+        setPhase(needsName ? "start" : "chat");
       } else {
         setSession(null);
         setMessages([]);
@@ -168,6 +179,13 @@ export function GuestChatWidget({ page }: Props) {
 
   useEffect(() => {
     if (!open || !enabled) return;
+    // No stored session → show Start + name immediately (do not create a session).
+    if (!readStoredSessionId()) {
+      setSession(null);
+      setMessages([]);
+      setPhase("start");
+      return;
+    }
     void resumeSession();
   }, [open, enabled, resumeSession]);
 
@@ -422,14 +440,30 @@ export function GuestChatWidget({ page }: Props) {
     }
   };
 
-  if (!enabled) return null;
+  if (!enabled || hiddenForMenuBook) return null;
+
+  const fabPosition = liftAboveBookCta
+    ? "bottom-[5.75rem] right-4 sm:bottom-6 sm:right-6"
+    : "bottom-5 right-5 sm:bottom-6 sm:right-6";
+  const panelPosition = liftAboveBookCta
+    ? "inset-x-3 bottom-[5.25rem] sm:inset-x-auto sm:bottom-6 sm:right-6"
+    : "inset-x-3 bottom-3 sm:inset-x-auto sm:bottom-6 sm:right-6";
 
   return (
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
-        className={`fixed bottom-5 right-5 z-[90] flex items-center gap-2 rounded-full border border-[#C9A88B]/40 bg-[#0B0B0C] px-4 py-3 text-sm font-medium text-[#F5EDE4] shadow-[0_12px_40px_rgba(0,0,0,0.45)] transition hover:border-[#C9A88B] hover:bg-[#141416] sm:bottom-6 sm:right-6 ${
+        onClick={() => {
+          setOpen(true);
+          setError(null);
+          // Fresh open without a stored session → Start screen only (no API create).
+          if (!readStoredSessionId()) {
+            setSession(null);
+            setMessages([]);
+            setPhase("start");
+          }
+        }}
+        className={`fixed z-[90] flex items-center gap-2 rounded-full border border-[#C9A88B]/40 bg-[#0B0B0C] px-4 py-3 text-sm font-medium text-[#F5EDE4] shadow-[0_12px_40px_rgba(0,0,0,0.45)] transition hover:border-[#C9A88B] hover:bg-[#141416] ${fabPosition} ${
           open ? "pointer-events-none opacity-0" : "opacity-100"
         }`}
         aria-label="Chat with us"
@@ -440,7 +474,7 @@ export function GuestChatWidget({ page }: Props) {
       </button>
 
       {open ? (
-        <div className="fixed inset-x-3 bottom-3 z-[95] flex justify-end sm:inset-x-auto sm:bottom-6 sm:right-6">
+        <div className={`fixed z-[95] flex justify-end ${panelPosition}`}>
           <div className="flex h-[min(70dvh,560px)] w-full max-w-[400px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0B0B0C] text-[#F5EDE4] shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
             <header className="flex items-start justify-between gap-3 border-b border-white/10 px-4 py-3">
               <div>

@@ -14,6 +14,7 @@ import {
 import type { MenuPdfLanguage, WebsiteMenuPdf } from "@/lib/website/types";
 import { MENU_PDF_LANGUAGES } from "@/lib/website/defaults";
 import { LandingImage } from "@/lib/website/landing-image";
+import { setGuestChatHiddenForMenuBook } from "@/lib/guest-chat-ui";
 
 type PdfJsModule = typeof import("pdfjs-dist");
 
@@ -319,7 +320,7 @@ function MenuPageLightbox({
     });
 
   return (
-    <div className="fixed inset-0 z-[90] flex flex-col bg-black/95" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-[130] flex flex-col bg-black/95" role="dialog" aria-modal="true">
       <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <p className="truncate text-sm text-white/70">
           {label ? `${label} · ` : ""}
@@ -551,6 +552,15 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "en" }: MenuPdfFlipboo
       document.body.style.overflow = previous;
     };
   }, [expanded]);
+
+  // Hide Chat With Us while the menu book covers the viewport.
+  useEffect(() => {
+    const hide = expanded || lightboxPage != null;
+    setGuestChatHiddenForMenuBook(hide);
+    return () => {
+      setGuestChatHiddenForMenuBook(false);
+    };
+  }, [expanded, lightboxPage]);
 
   // Wheel zoom scoped to the viewer stage (does not zoom the whole page).
   useEffect(() => {
@@ -939,7 +949,7 @@ export function MenuPdfFlipbook({ pdfs, initialLanguage = "en" }: MenuPdfFlipboo
           Opening menu book…
         </div>
       ) : expanded ? (
-        <div className="fixed inset-0 z-[80] flex flex-col bg-[#0B0B0C]/95 p-4 backdrop-blur-sm lg:p-8">
+        <div className="fixed inset-0 z-[120] flex flex-col bg-[#0B0B0C]/95 p-4 backdrop-blur-sm lg:p-8">
           <div className="mb-4 flex items-center justify-between gap-3">
             <p className="text-sm text-white/70">{activePdf?.label ?? "Menu"} · large view</p>
             <button

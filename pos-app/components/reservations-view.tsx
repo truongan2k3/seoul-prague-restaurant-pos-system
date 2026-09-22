@@ -61,6 +61,8 @@ import {
   subscribeToReservationChanges,
   updateReservationDetails,
 } from "@/src/lib/reservation-actions";
+import { fetchGuestVisitProfile } from "@/src/lib/guest-history-actions";
+import { sendCfdEvent } from "@/lib/cfd-display";
 
 async function confirmReservationWithEmail(reservationId: string) {
   const response = await fetch("/api/reservations/confirm", {
@@ -481,6 +483,13 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
     const tableSnapshot = checkInOccupied ? undefined : (await fetchTableSnapshot(checkInTableId)) ?? undefined;
 
+    const { data: visitProfile } = await fetchGuestVisitProfile({
+      email: checkInTarget.guestEmail,
+      phone: checkInTarget.guestPhone,
+      excludeReservationId: checkInTarget.id,
+      beforeAt: checkInTarget.reservedAt,
+    });
+
     setBusyId(checkInTarget.id);
     const { error: checkInError } = await checkInReservationWithTable(
       checkInTarget.id,
@@ -493,6 +502,14 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       setError(checkInError instanceof Error ? checkInError.message : String(checkInError));
       return;
     }
+
+    const assignedTable = tables.find((table) => table.id === checkInTableId);
+    void sendCfdEvent("GUEST_WELCOME", {
+      reservationId: checkInTarget.id,
+      guestName: checkInTarget.guestName,
+      isReturning: visitProfile.isReturning,
+      tableLabel: assignedTable?.label ?? checkInTarget.tableLabel ?? null,
+    });
 
     queueUndo({
       id: `${checkInTarget.id}-checkin-${Date.now()}`,

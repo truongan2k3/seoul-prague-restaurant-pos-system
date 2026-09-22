@@ -96,21 +96,32 @@ async function archiveStaleSessions(config: GuestChatConfig): Promise<void> {
     .lt("last_message_at", cutoff);
 }
 
+export type GuestChatSessionAction = "resume" | "start" | "need_help";
+
 export async function openOrResumeGuestChatSession(input: {
   guestClientId: string;
   page: GuestChatPage;
   sessionId?: string | null;
-}): Promise<{ session: GuestChatSession; messages: GuestChatMessage[]; config: GuestChatConfig; error: string | null }> {
+  guestName?: string | null;
+  /** resume = load only; start = create with name; need_help = reopen closed session */
+  action?: GuestChatSessionAction;
+}): Promise<{
+  session: GuestChatSession | null;
+  messages: GuestChatMessage[];
+  config: GuestChatConfig;
+  error: string | null;
+}> {
   const guestClientId = input.guestClientId.trim();
   if (!guestClientId) {
     return {
-      session: null as unknown as GuestChatSession,
+      session: null,
       messages: [],
       config: DEFAULT_GUEST_CHAT_CONFIG,
       error: "Missing guest client id.",
     };
   }
 
+  const action: GuestChatSessionAction = input.action ?? "resume";
   const config = await fetchGuestChatConfigServer();
   void archiveStaleSessions(config);
 
@@ -125,27 +136,91 @@ export async function openOrResumeGuestChatSession(input: {
       .eq("guest_client_id", guestClientId)
       .maybeSingle();
     sessionRow = (data as SessionRow | null) ?? null;
-    if (sessionRow && (sessionRow.status === "closed" || sessionRow.status === "resolved")) {
-      // Reopen resolved only; closed stays closed → new session below.
-      if (sessionRow.status === "resolved") {
-        const { data: reopened } = await admin
-          .from("guest_chat_sessions")
-          .update({
-            status: "open",
-            resolved_at: null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", sessionRow.id)
-          .select("*")
-          .single();
-        sessionRow = (reopened as SessionRow | null) ?? sessionRow;
-      } else {
-        sessionRow = null;
-      }
-    }
   }
 
-  if (!sessionRow) {
+  // Guest clicked "I still need help" — reopen the closed/resolved session.
+  if (action === "need_help") {
+    if (!sessionRow) {
+      return { session: null, messages: [], config, error: "Chat session not found." };
+    }
+    if (sessionRow.status !== "closed" && sessionRow.status !== "resolved") {
+      const messages = await listMessagesForSession(sessionRow.id);
+      return { session: mapSession(sessionRow), messages, config, error: null };
+    }
+    const now = new Date().toISOString();
+    const { data: reopened, error: reopenError } = await admin
+      .from("guest_chat_sessions")
+      .update({
+        status: "open",
+        resolved_at: null,
+        closed_at: null,
+        last_message_at: now,
+        updated_at: now,
+        unread_by_staff: true,
+      })
+      .eq("id", sessionRow.id)
+      .select("*")
+      .single();
+    if (reopenError || !reopened) {
+      return {
+        session: null,
+        messages: [],
+        config,
+        error: reopenError?.message ?? "Could not reopen chat.",
+      };
+    }
+    sessionRow = reopened as SessionRow;
+    await admin.from("guest_chat_messages").insert({
+      session_id: sessionRow.id,
+      sender: "system",
+      body: "Guest requested more help.",
+    });
+    void broadcastGuestChatAlert({
+      kind: "new_message",
+      sessionId: sessionRow.id,
+      preview: "Guest requested more help.",
+      guestClientId: sessionRow.guest_client_id,
+      status: "open",
+      unreadByStaff: true,
+    });
+    const messages = await listMessagesForSession(sessionRow.id);
+    return { session: mapSession(sessionRow), messages, config, error: null };
+  }
+
+  // Resume: return existing active or closed session; do not auto-create.
+  if (action === "resume") {
+    if (sessionRow && (sessionRow.status === "closed" || sessionRow.status === "resolved")) {
+      const messages = await listMessagesForSession(sessionRow.id);
+      return { session: mapSession(sessionRow), messages, config, error: null };
+    }
+    if (!sessionRow) {
+      const { data: existing } = await admin
+        .from("guest_chat_sessions")
+        .select("*")
+        .eq("guest_client_id", guestClientId)
+        .in("status", ["open", "waiting", "replied", "follow_up"])
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      sessionRow = (existing as SessionRow | null) ?? null;
+    }
+    if (!sessionRow) {
+      return { session: null, messages: [], config, error: null };
+    }
+    const messages = await listMessagesForSession(sessionRow.id);
+    return { session: mapSession(sessionRow), messages, config, error: null };
+  }
+
+  // Start: create a new session (or reuse an already-active one) with guest name.
+  const guestName = input.guestName?.trim() || "";
+  if (guestName.length < 1) {
+    return { session: null, messages: [], config, error: "Please enter your name." };
+  }
+  if (guestName.length > 80) {
+    return { session: null, messages: [], config, error: "Name is too long." };
+  }
+
+  if (!sessionRow || sessionRow.status === "closed" || sessionRow.status === "resolved") {
     const { data: existing } = await admin
       .from("guest_chat_sessions")
       .select("*")
@@ -157,41 +232,67 @@ export async function openOrResumeGuestChatSession(input: {
     sessionRow = (existing as SessionRow | null) ?? null;
   }
 
-  if (!sessionRow) {
-    const now = new Date().toISOString();
-    const { data, error } = await admin
-      .from("guest_chat_sessions")
-      .insert({
-        guest_client_id: guestClientId,
-        page: input.page,
-        status: "open",
-        last_message_at: now,
-        created_at: now,
-        updated_at: now,
-      })
-      .select("*")
-      .single();
-    if (error || !data) {
-      return {
-        session: null as unknown as GuestChatSession,
-        messages: [],
-        config,
-        error: error?.message ?? "Failed to create chat session.",
-      };
+  if (sessionRow) {
+    if (!sessionRow.guest_name) {
+      const { data: named } = await admin
+        .from("guest_chat_sessions")
+        .update({
+          guest_name: guestName,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", sessionRow.id)
+        .select("*")
+        .single();
+      sessionRow = (named as SessionRow | null) ?? { ...sessionRow, guest_name: guestName };
     }
-    sessionRow = data as SessionRow;
+    const messages = await listMessagesForSession(sessionRow.id);
+    return { session: mapSession(sessionRow), messages, config, error: null };
+  }
 
-    if (config.welcomeMessage.trim()) {
-      await admin.from("guest_chat_messages").insert({
-        session_id: sessionRow.id,
-        sender: "system",
-        body: config.welcomeMessage.trim(),
-      });
-    }
+  const now = new Date().toISOString();
+  const { data, error } = await admin
+    .from("guest_chat_sessions")
+    .insert({
+      guest_client_id: guestClientId,
+      page: input.page,
+      status: "open",
+      guest_name: guestName,
+      last_message_at: now,
+      created_at: now,
+      updated_at: now,
+    })
+    .select("*")
+    .single();
+  if (error || !data) {
+    return {
+      session: null,
+      messages: [],
+      config,
+      error: error?.message ?? "Failed to create chat session.",
+    };
+  }
+  sessionRow = data as SessionRow;
+
+  if (config.welcomeMessage.trim()) {
+    await admin.from("guest_chat_messages").insert({
+      session_id: sessionRow.id,
+      sender: "system",
+      body: config.welcomeMessage.trim(),
+    });
   }
 
   const messages = await listMessagesForSession(sessionRow.id);
   return { session: mapSession(sessionRow), messages, config, error: null };
+}
+
+export async function countStaffUnreadGuestChats(): Promise<number> {
+  const admin = createSupabaseAdmin();
+  const { count, error } = await admin
+    .from("guest_chat_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("unread_by_staff", true);
+  if (error) return 0;
+  return count ?? 0;
 }
 
 export async function listMessagesForSession(sessionId: string): Promise<GuestChatMessage[]> {
@@ -227,8 +328,15 @@ export async function postGuestChatMessage(input: {
   }
 
   let session = sessionData as SessionRow;
-  if (session.status === "closed") {
-    return { message: null, session: mapSession(session), error: "This chat was closed." };
+  if (session.status === "closed" || session.status === "resolved") {
+    return {
+      message: null,
+      session: mapSession(session),
+      error:
+        session.status === "closed"
+          ? "This chat was closed."
+          : "This chat was resolved. Tap “I still need help” to continue.",
+    };
   }
 
   const now = new Date().toISOString();
@@ -487,6 +595,14 @@ export async function updateStaffChatSession(input: {
 
   if (error || !data) {
     return { session: null, error: error?.message ?? "Update failed." };
+  }
+
+  if (input.action === "close") {
+    await admin.from("guest_chat_messages").insert({
+      session_id: input.sessionId,
+      sender: "system",
+      body: "This chat was closed. Tap “I still need help” if you need more assistance.",
+    });
   }
 
   void broadcastGuestChatAlert({

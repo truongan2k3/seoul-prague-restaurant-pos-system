@@ -27,6 +27,7 @@ import { StaffQuickSwitchModal } from "@/components/staff-quick-switch-modal";
 import { useApp } from "@/contexts/app-context";
 import { useAuth } from "@/contexts/auth-context";
 import { usePendingReservationCount } from "@/hooks/use-pending-reservation-count";
+import { useGuestChatUnreadCount } from "@/hooks/use-guest-chat-unread-count";
 import { useNotifications } from "@/contexts/notification-context";
 import { navButtonClass } from "@/lib/theme-classes";
 import { canAccessNavTabForMember } from "@/lib/staff-roles";
@@ -71,6 +72,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const { pushNotification } = useNotifications();
   const { business, session, logout } = useAuth();
   const pendingReservationCount = usePendingReservationCount();
+  const guestChatUnreadCount = useGuestChatUnreadCount();
   const [collapsed, setCollapsed] = useState(false);
   const [selfProfileOpen, setSelfProfileOpen] = useState(false);
   const [quickSwitchOpen, setQuickSwitchOpen] = useState(false);
@@ -226,6 +228,16 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
                     )}
                     {!isExpanded && id === "reservations" && pendingReservationCount > 0 && (
                       <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-[var(--pos-brand)] lg:right-1 lg:top-1 lg:h-2 lg:w-2" />
+                    )}
+                    {id === "guestChat" && guestChatUnreadCount > 0 && (
+                      <span
+                        className={`absolute rounded-full bg-red-500 ${
+                          isExpanded
+                            ? "right-2 top-1/2 h-2 w-2 -translate-y-1/2"
+                            : "right-0.5 top-0.5 h-1.5 w-1.5 lg:right-1 lg:top-1 lg:h-2 lg:w-2"
+                        }`}
+                        aria-label={`${guestChatUnreadCount} unread guest chats`}
+                      />
                     )}
                   </button>
                 </li>

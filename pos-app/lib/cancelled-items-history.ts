@@ -12,8 +12,12 @@ export type CancelledItemRecord = {
   cancelledAt: Date;
   tableLabel: string;
   reason?: string;
-  /** open = still on an unpaid table session; paid = snapshotted into a closed sale */
-  source: "open" | "paid";
+  /**
+   * open = still on an unpaid table session
+   * paid = snapshotted into a real paid sale
+   * voided = emptied unpaid bill (cancel-only audit sale, never paid)
+   */
+  source: "open" | "paid" | "voided";
   saleId?: string;
   action: string;
 };
@@ -28,8 +32,18 @@ function reasonFromMeta(meta?: Record<string, unknown>): string | undefined {
   return reason || undefined;
 }
 
+/** $0 voided sale used only to keep cancel logs after an empty-bill clear. */
+export function isCancelOnlyAuditSale(sale: SaleRecord): boolean {
+  return (
+    Boolean(sale.deletedAt) &&
+    sale.items.length === 0 &&
+    Number(sale.grandTotal) === 0 &&
+    (sale.activityLog ?? []).some((entry) => isCancelActivityAction(entry.action))
+  );
+}
+
 export function cancelledItemFromSaleEntry(
-  sale: Pick<SaleRecord, "id" | "tableLabel">,
+  sale: SaleRecord,
   entry: OrderLogEntry,
 ): CancelledItemRecord | null {
   if (!isCancelActivityAction(entry.action)) return null;
@@ -41,7 +55,7 @@ export function cancelledItemFromSaleEntry(
     cancelledAt: entry.createdAt instanceof Date ? entry.createdAt : new Date(entry.createdAt),
     tableLabel: sale.tableLabel,
     reason: reasonFromMeta(entry.meta),
-    source: "paid",
+    source: isCancelOnlyAuditSale(sale) ? "voided" : "paid",
     saleId: sale.id,
     action: entry.action,
   };
@@ -111,14 +125,4 @@ export function mergeCancelledItemSources(
   fromOpen: CancelledItemRecord[],
 ): CancelledItemRecord[] {
   return [...fromSales, ...fromOpen];
-}
-
-/** $0 voided sale used only to keep cancel logs after an empty-bill clear. */
-export function isCancelOnlyAuditSale(sale: SaleRecord): boolean {
-  return (
-    Boolean(sale.deletedAt) &&
-    sale.items.length === 0 &&
-    Number(sale.grandTotal) === 0 &&
-    (sale.activityLog ?? []).some((entry) => isCancelActivityAction(entry.action))
-  );
 }

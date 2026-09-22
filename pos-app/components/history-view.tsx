@@ -12,6 +12,7 @@ import {
   collectCancelledItemsFromOpenLogs,
   collectCancelledItemsFromSales,
   filterCancelledItemsInRange,
+  isCancelOnlyAuditSale,
   mergeCancelledItemSources,
   type CancelledItemRecord,
 } from "@/lib/cancelled-items-history";
@@ -131,7 +132,10 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   }, [loadSales]);
 
   const filteredSales = useMemo(
-    () => filterHistorySales(sales, period, paymentFilter, rangeOptions),
+    () =>
+      filterHistorySales(sales, period, paymentFilter, rangeOptions).filter(
+        (sale) => !isCancelOnlyAuditSale(sale),
+      ),
     [sales, period, paymentFilter, rangeOptions],
   );
 

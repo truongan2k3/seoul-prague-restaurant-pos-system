@@ -12,18 +12,19 @@ import {
 import type { CfdWelcomePayload } from "@/lib/cfd-display";
 import { sendCfdEvent } from "@/lib/cfd-display";
 import { t, type TranslationKey } from "@/lib/i18n/translations";
-import type { LanguageCode, ReservationRecord } from "@/lib/types";
+import type { LanguageCode, ReservationRecord, RestaurantTable } from "@/lib/types";
 import { formatInVenueTz, todayIsoDateInVenue, venueDayRangeUtc } from "@/lib/venue-timezone";
 import type { WebsiteContent } from "@/lib/website/types";
 import { ReservationBookingView } from "@/components/reservation-booking-view";
+import { ReservationTableSelect, isOccupiedTable } from "@/components/reservation-table-select";
 import { fetchGuestVisitProfile } from "@/src/lib/guest-history-actions";
 import {
-  checkInReservation,
   checkInReservationWithTable,
   fetchReservations,
   mapReservationsResponse,
   subscribeToReservationChanges,
 } from "@/src/lib/reservation-actions";
+import { fetchTableSummaries, mapTablesResponse } from "@/src/lib/supabase-data";
 
 type Props = {
   open: boolean;
@@ -39,11 +40,14 @@ function statusLabel(status: ReservationRecord["status"], language: LanguageCode
 
 export function CfdReservationPanel({ open, onClose, language, onWelcome, website }: Props) {
   const [rows, setRows] = useState<ReservationRecord[]>([]);
+  const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [tablePickerOpen, setTablePickerOpen] = useState(false);
+  const [checkInTableId, setCheckInTableId] = useState("");
   const checkInLockRef = useRef(false);
   const welcomedIdsRef = useRef<Set<string>>(new Set());
 
@@ -51,6 +55,15 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
     (key: TranslationKey) => t(language, key),
     [language],
   );
+
+  const loadTables = useCallback(async () => {
+    const { data, error: tablesError } = await fetchTableSummaries();
+    if (tablesError) {
+      setTables([]);
+      return;
+    }
+    setTables(mapTablesResponse(data));
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,17 +93,23 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
   useEffect(() => {
     if (!open) return;
     void load();
+    void loadTables();
     const unsub = subscribeToReservationChanges({
-      onChange: () => void load(),
+      onChange: () => {
+        void load();
+        void loadTables();
+      },
     });
     return unsub;
-  }, [open, load]);
+  }, [open, load, loadTables]);
 
   useEffect(() => {
     if (!open) {
       setSelectedId(null);
       setError(null);
       setShowCreate(false);
+      setTablePickerOpen(false);
+      setCheckInTableId("");
     }
   }, [open]);
 
@@ -99,6 +118,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
     [rows, selectedId],
   );
   const canCheckInSelected = selected ? canCheckIn(selected.status) : false;
+  const checkInOccupied = checkInTableId ? isOccupiedTable(tables, checkInTableId) : false;
 
   const handleBooked = useCallback(
     (info: { id: string; bookingCode: string }) => {
@@ -109,56 +129,79 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
     [load],
   );
 
-  const handleCheckIn = useCallback(async () => {
-    if (!selected || !canCheckIn(selected.status) || checkInLockRef.current) return;
-    checkInLockRef.current = true;
-    setBusyId(selected.id);
-    setError(null);
+  const completeCheckIn = useCallback(
+    async (row: ReservationRecord, tableId: string) => {
+      if (checkInLockRef.current) return;
+      checkInLockRef.current = true;
+      setBusyId(row.id);
+      setError(null);
 
-    try {
-      const { data: profile } = await fetchGuestVisitProfile({
-        email: selected.guestEmail,
-        phone: selected.guestPhone,
-        excludeReservationId: selected.id,
-        beforeAt: selected.reservedAt,
-      });
+      try {
+        const { data: profile } = await fetchGuestVisitProfile({
+          email: row.guestEmail,
+          phone: row.guestPhone,
+          excludeReservationId: row.id,
+          beforeAt: row.reservedAt,
+        });
 
-      let result: { error: Error | null };
-      if (selected.tableId) {
-        result = await checkInReservationWithTable(selected.id, selected.tableId, {
+        const result = await checkInReservationWithTable(row.id, tableId, {
           allowOccupied: true,
         });
-      } else {
-        result = await checkInReservation(selected.id);
-      }
 
-      if (result.error) {
-        setError(result.error instanceof Error ? result.error.message : String(result.error));
-        return;
-      }
+        if (result.error) {
+          setError(result.error instanceof Error ? result.error.message : String(result.error));
+          return;
+        }
 
-      welcomedIdsRef.current.add(selected.id);
-      const payload: CfdWelcomePayload = {
-        reservationId: selected.id,
-        guestName: selected.guestName,
-        isReturning: profile.isReturning,
-        tableLabel: selected.tableLabel ?? null,
-      };
-      onClose();
-      onWelcome(payload);
-      void sendCfdEvent("GUEST_WELCOME", payload);
-      void load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Check-in failed.");
-    } finally {
-      setBusyId(null);
-      checkInLockRef.current = false;
+        const tableLabel =
+          tables.find((table) => table.id === tableId)?.label ?? row.tableLabel ?? null;
+
+        welcomedIdsRef.current.add(row.id);
+        const payload: CfdWelcomePayload = {
+          reservationId: row.id,
+          guestName: row.guestName,
+          isReturning: profile.isReturning,
+          tableLabel,
+        };
+        setTablePickerOpen(false);
+        setCheckInTableId("");
+        onClose();
+        onWelcome(payload);
+        void sendCfdEvent("GUEST_WELCOME", payload);
+        void load();
+        void loadTables();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Check-in failed.");
+      } finally {
+        setBusyId(null);
+        checkInLockRef.current = false;
+      }
+    },
+    [tables, onClose, onWelcome, load, loadTables],
+  );
+
+  const handleCheckInClick = useCallback(() => {
+    if (!selected || !canCheckIn(selected.status) || busyId != null) return;
+    setError(null);
+
+    if (selected.tableId) {
+      void completeCheckIn(selected, selected.tableId);
+      return;
     }
-  }, [selected, onClose, onWelcome, load]);
+
+    setCheckInTableId("");
+    setTablePickerOpen(true);
+    void loadTables();
+  }, [selected, busyId, completeCheckIn, loadTables]);
+
+  const handleConfirmTableCheckIn = useCallback(() => {
+    if (!selected || !checkInTableId) return;
+    void completeCheckIn(selected, checkInTableId);
+  }, [selected, checkInTableId, completeCheckIn]);
 
   return (
     <aside
-      className={`landing-theme absolute inset-y-0 left-0 z-40 flex w-[min(100%,28rem)] flex-col border-r border-white/10 bg-[#0B0B0C]/97 shadow-[20px_0_60px_rgba(0,0,0,0.55)] backdrop-blur-md transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+      className={`landing-theme absolute inset-0 z-40 flex w-full flex-col border-r-0 bg-[#0B0B0C] shadow-none transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
         open ? "translate-x-0" : "-translate-x-full pointer-events-none"
       }`}
       aria-hidden={!open}
@@ -258,7 +301,9 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="truncate text-base font-semibold text-white">{row.guestName}</p>
+                            <p className="truncate text-xl font-semibold text-white sm:text-2xl">
+                              {row.guestName}
+                            </p>
                             <p className="mt-1 text-sm tabular-nums text-white/60">{time}</p>
                           </div>
                           <span
@@ -289,26 +334,90 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
           </div>
 
           <div className="shrink-0 border-t border-white/10 bg-[#0B0B0C]/95 p-4">
-            {error ? <p className="mb-3 text-center text-xs text-amber-200/90">{error}</p> : null}
+            {error && !tablePickerOpen ? (
+              <p className="mb-3 text-center text-xs text-amber-200/90">{error}</p>
+            ) : null}
             <button
               type="button"
               disabled={!canCheckInSelected || busyId != null}
-              onClick={() => void handleCheckIn()}
+              onClick={handleCheckInClick}
               className="flex w-full items-center justify-center gap-2 bg-[#8B1E2D] px-6 py-5 text-lg font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[#A02435] disabled:cursor-not-allowed disabled:opacity-40"
             >
               {busyId ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
-              Check-in
+              {translate("checkIn")}
             </button>
             <p className="mt-2 text-center text-[11px] text-white/35">
               {canCheckInSelected
                 ? selected?.tableLabel
                   ? `Seats at ${selected.tableLabel}`
-                  : "Will check in without a table"
+                  : translate("selectTable")
                 : "Select a confirmed or late reservation"}
             </p>
           </div>
         </>
       )}
+
+      {tablePickerOpen && selected ? (
+        <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/65 p-4 sm:items-center">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={translate("checkIn")}
+            className="w-full max-w-md border border-white/15 bg-[#121214] p-5 shadow-2xl"
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#C9A88B]">
+                  {translate("checkIn")}
+                </p>
+                <p className="landing-serif mt-1 text-2xl text-[#F5EDE4]">{selected.guestName}</p>
+                <p className="mt-1 text-sm text-white/55">
+                  {selected.partySize} {translate("partySize").toLowerCase()}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => {
+                  setTablePickerOpen(false);
+                  setCheckInTableId("");
+                }}
+                className="rounded-full border border-white/15 p-2 text-white/70 hover:bg-white/10 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <label className="block text-sm">
+              <span className="text-white/50">{translate("selectTable")}</span>
+              <ReservationTableSelect
+                tables={tables}
+                value={checkInTableId}
+                onChange={setCheckInTableId}
+                className="pos-input mt-1"
+              />
+            </label>
+
+            {checkInOccupied ? (
+              <p className="mt-3 border border-amber-500/40 bg-amber-950/40 px-3 py-2 text-sm text-amber-100">
+                {translate("tableOccupiedWarning")}
+              </p>
+            ) : null}
+
+            {error ? <p className="mt-3 text-sm text-amber-200/90">{error}</p> : null}
+
+            <button
+              type="button"
+              disabled={!checkInTableId || busyId === selected.id}
+              onClick={handleConfirmTableCheckIn}
+              className="mt-5 flex w-full items-center justify-center gap-2 bg-[#8B1E2D] px-6 py-4 text-base font-semibold uppercase tracking-[0.16em] text-white transition hover:bg-[#A02435] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {busyId === selected.id ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
+              {translate("checkIn")}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </aside>
   );
 }

@@ -27,6 +27,7 @@ import { LandingImage } from "@/lib/website/landing-image";
 import type { WebsiteContent } from "@/lib/website/types";
 import { useSettings } from "@/contexts/settings-context";
 import { useBlobUrl, useBlobUrlCache } from "@/hooks/use-blob-url-cache";
+import { playCfdWelcomeSound, unlockNotificationAudio } from "@/lib/notification-sound";
 
 const THANK_YOU_SECONDS = 20;
 /** Minimum thank-you time before advancing to the next split guest. */
@@ -74,8 +75,8 @@ function CfdClock({ language }: { language: LanguageCode }) {
   }
 
   const datePart = now.toLocaleDateString(locale, {
-    weekday: "long",
-    month: "long",
+    weekday: "short",
+    month: "short",
     day: "numeric",
     year: "numeric",
   });
@@ -88,9 +89,10 @@ function CfdClock({ language }: { language: LanguageCode }) {
   return (
     <time
       dateTime={now.toISOString()}
-      className="text-right text-sm font-medium text-white/70 sm:text-base"
+      className="flex flex-col items-end gap-0.5 text-right leading-tight"
     >
-      {datePart} - {timePart}
+      <span className="text-[11px] font-medium text-white/55 sm:text-xs">{datePart}</span>
+      <span className="text-sm font-semibold tabular-nums text-white/85 sm:text-base">{timePart}</span>
     </time>
   );
 }
@@ -109,8 +111,8 @@ function CfdHeader({
   restaurantName: string;
 }) {
   return (
-    <header className="z-20 flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-[#0B0B0C]/95 px-4 py-4 backdrop-blur-md sm:gap-4 sm:px-6">
-      <div className="flex min-w-0 items-center gap-3">
+    <header className="z-20 flex shrink-0 items-center gap-3 border-b border-white/10 bg-[#0B0B0C]/95 px-4 py-3 backdrop-blur-md sm:gap-4 sm:px-6 sm:py-4">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         {logoUrl ? (
           <LandingImage
             src={logoUrl}
@@ -120,11 +122,11 @@ function CfdHeader({
             sizes="44px"
             quality={80}
             priority
-            className="h-11 w-11 shrink-0 object-contain"
+            className="h-10 w-10 shrink-0 object-contain sm:h-11 sm:w-11"
           />
         ) : null}
         <div className="min-w-0">
-          <p className="landing-serif truncate text-xl text-[#F5EDE4] sm:text-2xl">
+          <p className="landing-serif text-lg leading-tight text-[#F5EDE4] sm:text-2xl">
             {restaurantName}
           </p>
           <p className="mt-0.5 text-[10px] uppercase tracking-[0.28em] text-[#C9A88B]">
@@ -132,7 +134,7 @@ function CfdHeader({
           </p>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <LanguageSelector
           variant="flag-menu"
           tone="dark"
@@ -156,8 +158,8 @@ function CheckoutView({
   const isSplitSelect = checkout.mode === "split-select";
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="shrink-0 border-b border-white/10 bg-[#121214]/95 px-4 py-4 sm:px-6">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0B0B0C]">
+      <div className="shrink-0 border-b border-white/10 bg-[#0B0B0C] px-4 py-4 sm:px-6">
         <p className="landing-serif text-2xl text-[#F5EDE4] sm:text-3xl">
           {translate("table")}: {checkout.tableNumber}
         </p>
@@ -169,7 +171,7 @@ function CheckoutView({
             <p className="mt-1 text-sm text-[#C9A88B]/80">{translate("cfdSplitSelectHint")}</p>
           </div>
         ) : (
-          <p className="mt-1 text-xs font-semibold uppercase tracking-[0.22em] text-white/45">
+          <p className="mt-1 text-xs font-semibold uppercase tracking-[0.22em] text-[#C9A88B]/80">
             {translate("orderDetails")}
           </p>
         )}
@@ -178,7 +180,7 @@ function CheckoutView({
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
         <div className="overflow-hidden border border-white/10 bg-[#121214]">
           <table className="w-full text-left">
-            <thead className="sticky top-0 z-10 bg-[#1a1a1c] text-xs font-semibold uppercase tracking-wider text-white/55">
+            <thead className="sticky top-0 z-10 bg-[#161618] text-xs font-semibold uppercase tracking-wider text-[#C9A88B]/85">
               <tr>
                 <th className="px-4 py-3 text-center">{translate("cfdQty")}</th>
                 <th className="px-4 py-3">{translate("itemName")}</th>
@@ -188,12 +190,12 @@ function CheckoutView({
             </thead>
             <tbody className="divide-y divide-white/5">
               {checkout.items.map((item, index) => (
-                <tr key={`${item.name}-${index}`} className="text-white">
-                  <td className="px-4 py-4 text-center text-2xl font-semibold tabular-nums sm:text-3xl">
+                <tr key={`${item.name}-${index}`} className="text-[#F5EDE4]">
+                  <td className="px-4 py-4 text-center text-2xl font-semibold tabular-nums text-[#C9A88B] sm:text-3xl">
                     {item.quantity}
                   </td>
                   <td className="px-4 py-4 text-lg font-medium leading-snug sm:text-xl">{item.name}</td>
-                  <td className="hidden px-4 py-4 text-right text-lg tabular-nums text-white/55 sm:table-cell">
+                  <td className="hidden px-4 py-4 text-right text-lg tabular-nums text-white/50 sm:table-cell">
                     {formatCzk(item.unitPrice)}
                   </td>
                   <td className="px-4 py-4 text-right text-xl font-semibold tabular-nums sm:text-2xl">
@@ -221,7 +223,7 @@ function CheckoutView({
                 </div>
               )}
               {checkout.tip > 0 && (
-                <div className="flex justify-between text-emerald-300/90">
+                <div className="flex justify-between text-[#E8D5C4]">
                   <span>{translate("tip")}</span>
                   <span className="tabular-nums">{formatCzk(checkout.tip)}</span>
                 </div>
@@ -548,12 +550,14 @@ export function ClientDisplayView({
     welcomedIdsRef.current.add(payload.reservationId);
     welcomeActiveRef.current = true;
     setPanelOpen(false);
+    unlockNotificationAudio();
+    playCfdWelcomeSound(settings.soundConfigs.cfdWelcome);
     setWelcome({
       guestName: payload.guestName.trim(),
       isReturning: Boolean(payload.isReturning),
       tableLabel: payload.tableLabel,
     });
-  }, []);
+  }, [settings.soundConfigs.cfdWelcome]);
 
   const clearWelcome = useCallback(() => {
     welcomeActiveRef.current = false;
@@ -696,6 +700,7 @@ export function ClientDisplayView({
   // Hidden gesture: swipe from left edge → open panel; swipe left on panel → close.
   // Only while idle (main content / video). No visible Reservation button.
   const onTouchStart = (event: TouchEvent) => {
+    unlockNotificationAudio();
     if (welcome || clientState !== "idle") return;
     const touch = event.touches[0];
     if (!touch) return;
@@ -750,15 +755,6 @@ export function ClientDisplayView({
           onWelcome={showWelcome}
           website={website}
         />
-
-        {panelOpen && clientState === "idle" && !welcome ? (
-          <button
-            type="button"
-            aria-label="Close reservations"
-            className="absolute inset-0 z-30 bg-black/45 transition-opacity"
-            onClick={() => setPanelOpen(false)}
-          />
-        ) : null}
 
         <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {/* Keep idle slideshow mounted (hidden) so checkout cycles never remount/re-fetch media. */}

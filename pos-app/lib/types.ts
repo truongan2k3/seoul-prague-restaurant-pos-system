@@ -125,6 +125,8 @@ export interface SoundConfigs {
   paymentSuccess: string;
   /** Floor prep popup before a reservation arrives. */
   reservationReminder: string;
+  /** Client Screen welcome after reservation check-in. */
+  cfdWelcome: string;
 }
 
 /** Languages printed on kitchen tickets (large primary + optional secondary). */

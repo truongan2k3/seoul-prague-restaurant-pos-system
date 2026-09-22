@@ -1638,6 +1638,11 @@ export function SettingsView({
                     label: translate("soundReservationReminder"),
                     testVariant: "newOrder" as const,
                   },
+                  {
+                    key: "cfdWelcome" as const,
+                    label: translate("soundCfdWelcome"),
+                    testVariant: "ready" as const,
+                  },
                 ] as const
               ).map((row) => {
                 const currentValue =

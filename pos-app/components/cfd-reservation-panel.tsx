@@ -158,7 +158,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
 
   return (
     <aside
-      className={`landing-theme absolute inset-y-0 left-0 z-40 flex w-[min(100%,28rem)] flex-col border-r border-white/10 bg-[#0B0B0C]/97 shadow-[20px_0_60px_rgba(0,0,0,0.55)] backdrop-blur-md transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+      className={`landing-theme absolute inset-0 z-40 flex w-full flex-col border-r-0 bg-[#0B0B0C] shadow-none transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
         open ? "translate-x-0" : "-translate-x-full pointer-events-none"
       }`}
       aria-hidden={!open}
@@ -258,7 +258,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="truncate text-base font-semibold text-white">{row.guestName}</p>
+                            <p className="truncate text-xl font-semibold text-white sm:text-2xl">{row.guestName}</p>
                             <p className="mt-1 text-sm tabular-nums text-white/60">{time}</p>
                           </div>
                           <span

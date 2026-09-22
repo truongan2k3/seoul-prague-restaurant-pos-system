@@ -71,6 +71,15 @@ export function playCallWaiterSound(url?: string) {
   playBellTone([1047, 784, 1047, 1319], 0.7);
 }
 
+/** Soft ascending welcome for Client Screen check-in. */
+export function playCfdWelcomeSound(url?: string) {
+  if (url) {
+    playCustomAlertSound(url, "ready");
+    return;
+  }
+  playBellTone([523, 659, 784, 1047], 0.85);
+}
+
 export function playCancelAlertSound() {
   playBellTone([440, 330, 220], 0.5);
 }

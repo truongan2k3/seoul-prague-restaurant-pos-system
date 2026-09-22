@@ -27,6 +27,7 @@ import { LandingImage } from "@/lib/website/landing-image";
 import type { WebsiteContent } from "@/lib/website/types";
 import { useSettings } from "@/contexts/settings-context";
 import { useBlobUrl, useBlobUrlCache } from "@/hooks/use-blob-url-cache";
+import { playCfdWelcomeSound, unlockNotificationAudio } from "@/lib/notification-sound";
 
 const THANK_YOU_SECONDS = 20;
 /** Minimum thank-you time before advancing to the next split guest. */
@@ -548,12 +549,14 @@ export function ClientDisplayView({
     welcomedIdsRef.current.add(payload.reservationId);
     welcomeActiveRef.current = true;
     setPanelOpen(false);
+    unlockNotificationAudio();
+    playCfdWelcomeSound(settings.soundConfigs.cfdWelcome);
     setWelcome({
       guestName: payload.guestName.trim(),
       isReturning: Boolean(payload.isReturning),
       tableLabel: payload.tableLabel,
     });
-  }, []);
+  }, [settings.soundConfigs.cfdWelcome]);
 
   const clearWelcome = useCallback(() => {
     welcomeActiveRef.current = false;
@@ -696,6 +699,7 @@ export function ClientDisplayView({
   // Hidden gesture: swipe from left edge → open panel; swipe left on panel → close.
   // Only while idle (main content / video). No visible Reservation button.
   const onTouchStart = (event: TouchEvent) => {
+    unlockNotificationAudio();
     if (welcome || clientState !== "idle") return;
     const touch = event.touches[0];
     if (!touch) return;
@@ -750,15 +754,6 @@ export function ClientDisplayView({
           onWelcome={showWelcome}
           website={website}
         />
-
-        {panelOpen && clientState === "idle" && !welcome ? (
-          <button
-            type="button"
-            aria-label="Close reservations"
-            className="absolute inset-0 z-30 bg-black/45 transition-opacity"
-            onClick={() => setPanelOpen(false)}
-          />
-        ) : null}
 
         <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {/* Keep idle slideshow mounted (hidden) so checkout cycles never remount/re-fetch media. */}

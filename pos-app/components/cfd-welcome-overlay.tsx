@@ -122,7 +122,7 @@ export function CfdWelcomeOverlay({
           initial={reduceMotion ? false : { opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, delay: 0.7 }}
-          className="landing-serif mt-7 text-2xl text-white/90 sm:text-3xl"
+          className="landing-serif mt-7 text-3xl text-white/90 sm:text-4xl"
         >
           {content.guestName}
         </motion.p>

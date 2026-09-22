@@ -139,7 +139,7 @@ export function LandingPageView({ content }: LandingPageViewProps) {
         })}
       </main>
       <LandingFooter content={content} />
-      <GuestChatWidget page="landing" />
+      <GuestChatWidget page="landing" liftAboveBookCta />
     </div>
   );
 }

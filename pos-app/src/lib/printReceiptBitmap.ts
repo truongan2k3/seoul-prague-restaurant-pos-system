@@ -23,13 +23,13 @@ import {
   RECEIPT_BITMAP_HORIZONTAL_PAD,
   ruleToPngDataUrl,
   textToPngDataUrl,
-  textToPngItemQtyRowDataUrl,
+  textToPngItemRowDataUrl,
   textToPngSplitRowDataUrl,
   textToPngThreeColumnDataUrl,
   textToPngTwoColumnDataUrl,
   type BitmapTextOptions,
 } from "@/src/lib/printTextBitmap";
-import { formatReceiptQty } from "@/lib/receipt-line-format";
+import { formatReceiptQtyTimesPrice } from "@/lib/receipt-line-format";
 
 /** Raster width set per print job from paper width (1 dot ≈ 1 canvas px). */
 
@@ -154,16 +154,10 @@ export async function buildBitmapReceiptHtml(
     );
   };
 
-  const pushItemQty = (
-    left: string,
-    qty: string,
-    right: string,
-    size: number,
-    weight: KitchenBitmapWeight,
-  ) => {
+  const pushItem = (left: string, right: string, size: number, weight: KitchenBitmapWeight) => {
     emit(
-      textToPngItemQtyRowDataUrl(left, qty, right, baseOpts(size, weight)),
-      `${left} ${qty} ${right}`,
+      textToPngItemRowDataUrl(left, right, baseOpts(size, weight)),
+      `${left} ${right}`,
     );
   };
 
@@ -280,17 +274,16 @@ export async function buildBitmapReceiptHtml(
     });
   }
 
-  pushItemQty("Položka", "Ks", "Částka", typography.metaPx, weights.primary);
+  pushSplit("Položka", "Ks × cena", typography.metaPx, weights.primary);
 
   for (const item of data.items) {
-    const amount = `${formatReceiptAmount(item.lineTotal)} ${item.taxGroup}`;
-    pushItemQty(
-      item.name.trim(),
-      formatReceiptQty(item.quantity),
-      amount,
-      typography.itemPx,
-      weights.primary,
+    const right = formatReceiptQtyTimesPrice(
+      item.quantity,
+      item.unitPrice,
+      item.taxGroup,
+      formatReceiptAmount,
     );
+    pushItem(item.name.trim(), right, typography.itemPx, weights.primary);
   }
 
   pushDashedRule();

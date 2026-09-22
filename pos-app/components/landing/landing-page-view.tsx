@@ -19,6 +19,7 @@ import {
   LandingSpacer,
 } from "@/components/landing/landing-custom-blocks";
 import { LandingPromoSlideshow } from "@/components/landing/landing-promo-slideshow";
+import { GuestChatWidget } from "@/components/landing/guest-chat-widget";
 import {
   normalizePageLayout,
   sectionVisibilityClass,
@@ -138,6 +139,7 @@ export function LandingPageView({ content }: LandingPageViewProps) {
         })}
       </main>
       <LandingFooter content={content} />
+      <GuestChatWidget page="landing" />
     </div>
   );
 }

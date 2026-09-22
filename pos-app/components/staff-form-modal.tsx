@@ -21,6 +21,7 @@ const NAV_LABEL_KEYS: Record<NavId, TranslationKey> = {
   summary: "summary",
   storage: "storage",
   dynamicQr: "dynamicQrServices",
+  guestChat: "guestChatTitle",
   staff: "staffManagement",
   settings: "settings",
   about: "about",

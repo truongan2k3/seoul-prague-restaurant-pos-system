@@ -11,6 +11,7 @@ import type {
   ReservationGuestVenue,
   ReservationRequiredFields,
 } from "@/lib/reservation-guest-form";
+import type { GuestChatConfig } from "@/lib/guest-chat";
 
 export type TableStatus = "empty" | "waiting" | "ready";
 export type TableShape = "square" | "round";
@@ -33,6 +34,7 @@ export type NavId =
   | "summary"
   | "storage"
   | "dynamicQr"
+  | "guestChat"
   | "staff"
   | "settings"
   | "about";
@@ -127,6 +129,8 @@ export interface SoundConfigs {
   reservationReminder: string;
   /** Client Screen welcome after reservation check-in. */
   cfdWelcome: string;
+  /** POS alert when a guest sends Chat With Us message. */
+  guestChat: string;
 }
 
 /** Languages printed on kitchen tickets (large primary + optional secondary). */
@@ -271,6 +275,8 @@ export interface AppSettings {
   changelogPopupTitle: string;
   /** Plain text; one bullet per line */
   changelogPopupBody: string;
+  /** Website Chat With Us configuration */
+  guestChat: GuestChatConfig;
 }
 
 export type StaffRole = "admin" | "manager" | "server" | "kitchen" | "bar";

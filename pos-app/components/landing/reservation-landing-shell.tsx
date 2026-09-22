@@ -1,5 +1,6 @@
 import { LandingNavbar } from "@/components/landing/landing-navbar";
 import { LandingFooter } from "@/components/landing/landing-menu-gallery";
+import { GuestChatWidget } from "@/components/landing/guest-chat-widget";
 import { ReservationPageBackground } from "@/components/landing/reservation-page-background";
 import type { WebsiteContent } from "@/lib/website/types";
 
@@ -19,6 +20,7 @@ export function ReservationLandingShell({
         <div className="pt-24 lg:pt-28">{children}</div>
         <LandingFooter content={content} showBookCta={false} />
       </div>
+      <GuestChatWidget page="reservation" />
     </div>
   );
 }

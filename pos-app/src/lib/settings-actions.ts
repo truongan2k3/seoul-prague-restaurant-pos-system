@@ -11,6 +11,11 @@ import type {
   SoundConfigs,
 } from "@/lib/types";
 import { DEFAULT_SOUND_CONFIGS, parseSoundConfigs, soundConfigsToDb } from "@/lib/auto-serve";
+import {
+  DEFAULT_GUEST_CHAT_CONFIG,
+  guestChatConfigToDb,
+  parseGuestChatConfig,
+} from "@/lib/guest-chat";
 import { parseReservationReminderMode } from "@/lib/reservation-reminder";
 import { DEFAULT_RESERVATION_OPERATING_HOURS } from "@/lib/reservation-slots";
 import {
@@ -169,6 +174,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   changelogPopupEnabled: false,
   changelogPopupTitle: "What's new",
   changelogPopupBody: "",
+  guestChat: { ...DEFAULT_GUEST_CHAT_CONFIG },
 };
 
 type SettingsRow = {
@@ -246,6 +252,7 @@ type SettingsRow = {
   changelog_popup_enabled?: boolean | null;
   changelog_popup_title?: string | null;
   changelog_popup_body?: string | null;
+  guest_chat_config?: unknown;
 };
 
 function parseNumericSetting(value: number | string | null | undefined, fallback: number): number {
@@ -503,6 +510,7 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
       row.changelog_popup_title ?? DEFAULT_APP_SETTINGS.changelogPopupTitle,
     changelogPopupBody:
       row.changelog_popup_body ?? DEFAULT_APP_SETTINGS.changelogPopupBody,
+    guestChat: parseGuestChatConfig(row.guest_chat_config),
   };
 }
 
@@ -664,6 +672,9 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   }
   if (partial.changelogPopupBody !== undefined) {
     payload.changelog_popup_body = partial.changelogPopupBody;
+  }
+  if (partial.guestChat !== undefined) {
+    payload.guest_chat_config = guestChatConfigToDb(partial.guestChat);
   }
   return payload;
 }
@@ -890,6 +901,7 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "changelogPopupEnabled"
     | "changelogPopupTitle"
     | "changelogPopupBody"
+    | "guestChat"
   >;
 
 export function pickPrinterBillDraft(settings: AppSettings): PrinterBillSettingsDraft {
@@ -966,5 +978,6 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     changelogPopupEnabled: settings.changelogPopupEnabled,
     changelogPopupTitle: settings.changelogPopupTitle,
     changelogPopupBody: settings.changelogPopupBody,
+    guestChat: { ...settings.guestChat },
   };
 }

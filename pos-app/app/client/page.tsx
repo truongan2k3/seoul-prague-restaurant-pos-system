@@ -8,5 +8,11 @@ export default async function ClientDisplayPage() {
   const logoUrl = content.media.logo?.fileUrl;
   const restaurantName = content.settings.restaurantName?.trim() || "SEOUL PRAGUE";
 
-  return <ClientDisplayView logoUrl={logoUrl} restaurantName={restaurantName} />;
+  return (
+    <ClientDisplayView
+      logoUrl={logoUrl}
+      restaurantName={restaurantName}
+      website={content}
+    />
+  );
 }

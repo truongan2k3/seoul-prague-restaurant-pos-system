@@ -24,6 +24,7 @@ import { formatCzk } from "@/lib/checkout-calculations";
 import { t, type TranslationKey } from "@/lib/i18n/translations";
 import type { CfdSlideshowItem, LanguageCode } from "@/lib/types";
 import { LandingImage } from "@/lib/website/landing-image";
+import type { WebsiteContent } from "@/lib/website/types";
 import { useSettings } from "@/contexts/settings-context";
 import { useBlobUrl, useBlobUrlCache } from "@/hooks/use-blob-url-cache";
 
@@ -488,9 +489,11 @@ function IdleDisplayView({
 export function ClientDisplayView({
   logoUrl,
   restaurantName = "SEOUL PRAGUE",
+  website,
 }: {
   logoUrl?: string;
   restaurantName?: string;
+  website?: WebsiteContent;
 } = {}) {
   const { settings } = useSettings();
   const { language, setLanguage, translate } = useCfdLanguage();
@@ -745,6 +748,7 @@ export function ClientDisplayView({
           onClose={() => setPanelOpen(false)}
           language={language}
           onWelcome={showWelcome}
+          website={website}
         />
 
         {panelOpen && clientState === "idle" && !welcome ? (

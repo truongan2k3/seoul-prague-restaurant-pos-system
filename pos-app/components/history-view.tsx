@@ -452,12 +452,16 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                               className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${
                                 row.source === "open"
                                   ? "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
-                                  : "bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300"
+                                  : row.source === "voided"
+                                    ? "bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-200"
+                                    : "bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300"
                               }`}
                             >
                               {row.source === "open"
                                 ? translate("historyCancelledSourceOpen")
-                                : translate("historyCancelledSourcePaid")}
+                                : row.source === "voided"
+                                  ? translate("historyCancelledSourceVoided")
+                                  : translate("historyCancelledSourcePaid")}
                             </span>
                           </td>
                         </tr>

@@ -32,7 +32,7 @@ export const LIGHT_BG_PRESETS: ReadonlyArray<{
     | "lightBgLavender"
     | "lightBgSky";
 }> = [
-  { id: "default", background: "#f9fafb", accent: "#f3f4f6", labelKey: "lightBgDefault" },
+  { id: "default", background: "#f7f5f3", accent: "#efeae4", labelKey: "lightBgDefault" },
   { id: "mist", background: "#eef3f8", accent: "#e2ebf3", labelKey: "lightBgMist" },
   { id: "blush", background: "#fdf2f4", accent: "#f8e4e8", labelKey: "lightBgBlush" },
   { id: "peach", background: "#fff1e8", accent: "#ffe4d4", labelKey: "lightBgPeach" },

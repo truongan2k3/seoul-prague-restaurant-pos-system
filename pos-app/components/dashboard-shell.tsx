@@ -648,7 +648,7 @@ export function DashboardShell() {
   })();
 
   return (
-    <div className="flex h-[100dvh] bg-background text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+    <div className="flex h-[100dvh] bg-background text-[var(--foreground)]">
       <ReadyNotificationListener tables={tables} menuItems={menuItems} />
       <MainNewOrderNotificationListener tables={tables} />
       <CallWaiterListener />

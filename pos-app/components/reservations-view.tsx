@@ -560,10 +560,10 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       : "rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-4";
 
   return (
-    <div className="flex h-full flex-col bg-background text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200/80 bg-background px-2 py-1.5 dark:border-gray-800 dark:bg-gray-900 sm:gap-3 sm:px-4 sm:py-2 lg:px-6">
+    <div className="flex h-full flex-col bg-background text-[var(--foreground)]">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--pos-raised)] px-2 py-1.5 sm:gap-3 sm:px-4 sm:py-2 lg:px-6">
         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
-          <h1 className="shrink-0 text-sm font-semibold sm:text-base lg:text-lg">{translate("reservations")}</h1>
+          <h1 className="pos-header-title shrink-0">{translate("reservations")}</h1>
           <HeaderClockWithStatus />
         </div>
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -1021,7 +1021,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
               type="button"
               disabled={busyId === editTarget.id || !formGuestName.trim() || !formDateTime}
               onClick={() => void handleUpdateReservation()}
-              className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              className="w-full rounded-xl bg-[var(--pos-brand)] py-3 text-sm font-semibold text-white hover:bg-[var(--pos-brand-hover)] disabled:opacity-50"
             >
               {translate("saveReservation")}
             </button>
@@ -1044,7 +1044,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
               {translate("tableOccupiedWarning")}
             </p>
           ) : null}
-          <button type="button" disabled={!assignTableId || busyId === assignTarget?.id} onClick={() => void handleAssign()} className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white disabled:opacity-50">
+          <button type="button" disabled={!assignTableId || busyId === assignTarget?.id} onClick={() => void handleAssign()} className="w-full rounded-xl bg-[var(--pos-brand)] py-3 text-sm font-semibold text-white hover:bg-[var(--pos-brand-hover)] disabled:opacity-50">
             {translate("assignTable")}
           </button>
         </div>
@@ -1080,7 +1080,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             type="button"
             disabled={!checkInTableId || busyId === checkInTarget?.id}
             onClick={() => void handleCheckIn()}
-            className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white disabled:opacity-50"
+            className="w-full rounded-xl bg-[var(--pos-brand)] py-3 text-sm font-semibold text-white hover:bg-[var(--pos-brand-hover)] disabled:opacity-50"
           >
             {translate("checkIn")}
           </button>

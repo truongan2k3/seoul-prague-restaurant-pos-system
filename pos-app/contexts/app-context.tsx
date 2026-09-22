@@ -50,9 +50,9 @@ function readStoredNumber(key: string, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 function readStoredTheme(): ThemeMode {
-  if (typeof window === "undefined") return "light";
+  if (typeof window === "undefined") return "dark";
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
-  return stored === "dark" ? "dark" : "light";
+  return stored === "light" ? "light" : "dark";
 }
 
 function readStoredLanguage(): LanguageCode {
@@ -108,7 +108,7 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<LanguageCode>("en");
-  const [theme, setTheme] = useState<ThemeMode>("light");
+  const [theme, setTheme] = useState<ThemeMode>("dark");
   const [lightBackground, setLightBackgroundState] = useState<LightBackgroundSelection>({
     kind: "preset",
     id: "default",

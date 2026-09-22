@@ -11,13 +11,35 @@ function getAudioContext(): AudioContext | null {
   return audioContext;
 }
 
-/** Call once after user interaction so autoplay policies allow sounds. */
+/** Call after user interaction so autoplay policies allow sounds. */
 export function unlockNotificationAudio() {
   const ctx = getAudioContext();
-  if (!ctx || unlocked) return;
-  void ctx.resume().then(() => {
+  if (!ctx) return;
+
+  const markUnlocked = () => {
     unlocked = true;
+  };
+
+  void ctx.resume().then(markUnlocked).catch(() => {
+    /* ignore */
   });
+
+  // Silent buffer kick — required on some browsers even after resume().
+  try {
+    const buffer = ctx.createBuffer(1, 1, ctx.sampleRate || 22050);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(0);
+    markUnlocked();
+  } catch {
+    /* ignore */
+  }
+}
+
+export function isNotificationAudioUnlocked(): boolean {
+  const ctx = getAudioContext();
+  return unlocked && Boolean(ctx && ctx.state === "running");
 }
 
 /** Short pleasant bell "ting" via Web Audio API. */
@@ -31,18 +53,32 @@ export function playNewOrderBell() {
   window.setTimeout(() => playBellTone([880, 1320, 1760], 0.55), 220);
 }
 
+/** Urgent triple beep for pending reservation alerts (works without MP3 files). */
+export function playReservationAlertBeep() {
+  playBellTone([880, 1174], 0.32);
+  window.setTimeout(() => playBellTone([880, 1174], 0.32), 260);
+  window.setTimeout(() => playBellTone([1318, 1760], 0.42), 520);
+}
+
 const DEFAULT_SOUND_URL = "/sounds/default-bell.mp3";
+/** Built-in preset paths — files are optional; fall back to Web Audio. */
+const PRESET_SOUND_PREFIX = "/sounds/";
 /** Fixed gap after a clip finishes before the next play (no overlap). */
-const ALERT_LOOP_GAP_MS = 2_500;
-/** Approx length used when falling back to Web Audio bells (no ended event). */
+const ALERT_LOOP_GAP_MS = 2_000;
+/** Approx length of reservation triple-beep cycle. */
+const RESERVATION_BEEP_MS = 1_000;
+/** Approx length used when falling back to Web Audio double-bell. */
 const BELL_FALLBACK_MS = 1_200;
+/** If HTMLAudio never ends (404 / stalled), fall back to Web Audio. */
+const HTML_AUDIO_WATCHDOG_MS = 4_000;
 
 let alertLoopActive = false;
 let alertLoopUrl = "";
-let alertLoopVariant: "ready" | "newOrder" = "newOrder";
+let alertLoopVariant: "ready" | "newOrder" | "reservation" = "reservation";
 let alertLoopGapMs = ALERT_LOOP_GAP_MS;
 let alertLoopAudio: HTMLAudioElement | null = null;
 let alertLoopTimer: number | null = null;
+let alertLoopWatchdog: number | null = null;
 
 function clearAlertLoopTimer() {
   if (alertLoopTimer != null) {
@@ -51,7 +87,15 @@ function clearAlertLoopTimer() {
   }
 }
 
+function clearAlertLoopWatchdog() {
+  if (alertLoopWatchdog != null) {
+    window.clearTimeout(alertLoopWatchdog);
+    alertLoopWatchdog = null;
+  }
+}
+
 function stopAlertLoopAudio() {
+  clearAlertLoopWatchdog();
   if (!alertLoopAudio) return;
   try {
     alertLoopAudio.onended = null;
@@ -72,6 +116,10 @@ export function stopAlertSoundLoop() {
   stopAlertLoopAudio();
 }
 
+export function isAlertSoundLoopActive(): boolean {
+  return alertLoopActive;
+}
+
 function scheduleAlertLoopNext(delayMs: number) {
   clearAlertLoopTimer();
   if (!alertLoopActive) return;
@@ -81,42 +129,81 @@ function scheduleAlertLoopNext(delayMs: number) {
   }, delayMs);
 }
 
+function isPresetSoundUrl(url: string): boolean {
+  if (!url) return true;
+  if (url === DEFAULT_SOUND_URL || url.endsWith(DEFAULT_SOUND_URL)) return true;
+  try {
+    const path = new URL(url, "http://local").pathname;
+    return path.startsWith(PRESET_SOUND_PREFIX);
+  } catch {
+    return url.startsWith(PRESET_SOUND_PREFIX);
+  }
+}
+
+function playWebAudioAlertOnce(variant: "ready" | "newOrder" | "reservation") {
+  unlockNotificationAudio();
+  if (variant === "reservation") {
+    playReservationAlertBeep();
+    return RESERVATION_BEEP_MS;
+  }
+  if (variant === "newOrder") {
+    playNewOrderBell();
+    return BELL_FALLBACK_MS;
+  }
+  playReadyBell();
+  return BELL_FALLBACK_MS;
+}
+
 function playAlertLoopOnce() {
   if (!alertLoopActive) return;
   stopAlertLoopAudio();
+  unlockNotificationAudio();
 
   const url = alertLoopUrl;
   const variant = alertLoopVariant;
   const gapMs = alertLoopGapMs;
 
-  if (!url || url === DEFAULT_SOUND_URL || url.endsWith(DEFAULT_SOUND_URL)) {
-    if (variant === "newOrder") playNewOrderBell();
-    else playReadyBell();
-    scheduleAlertLoopNext(gapMs + BELL_FALLBACK_MS);
+  // Preset / missing local MP3s → Web Audio (reliable continuous browser alert).
+  if (!url || isPresetSoundUrl(url)) {
+    const toneMs = playWebAudioAlertOnce(variant === "ready" ? "ready" : variant === "newOrder" ? "newOrder" : "reservation");
+    scheduleAlertLoopNext(gapMs + toneMs);
     return;
   }
 
+  // Custom uploaded URL — try HTMLAudio, with watchdog fallback to Web Audio.
   const audio = new Audio(url);
   alertLoopAudio = audio;
-  audio.volume = 0.85;
+  audio.preload = "auto";
+  audio.volume = 0.9;
+
+  const fallBackToWebAudio = () => {
+    if (alertLoopAudio !== audio && alertLoopAudio != null) return;
+    stopAlertLoopAudio();
+    if (!alertLoopActive) return;
+    const toneMs = playWebAudioAlertOnce(variant === "ready" ? "ready" : "reservation");
+    scheduleAlertLoopNext(gapMs + toneMs);
+  };
+
   audio.onended = () => {
     if (alertLoopAudio !== audio) return;
+    clearAlertLoopWatchdog();
     alertLoopAudio = null;
     scheduleAlertLoopNext(gapMs);
   };
   audio.onerror = () => {
-    if (alertLoopAudio !== audio) return;
-    alertLoopAudio = null;
-    if (variant === "newOrder") playNewOrderBell();
-    else playReadyBell();
-    scheduleAlertLoopNext(gapMs + BELL_FALLBACK_MS);
+    fallBackToWebAudio();
   };
+
+  alertLoopWatchdog = window.setTimeout(() => {
+    alertLoopWatchdog = null;
+    // Stalled / never-ended clip — keep the loop alive via Web Audio.
+    if (alertLoopAudio === audio && alertLoopActive) {
+      fallBackToWebAudio();
+    }
+  }, HTML_AUDIO_WATCHDOG_MS);
+
   void audio.play().catch(() => {
-    if (alertLoopAudio !== audio) return;
-    alertLoopAudio = null;
-    if (variant === "newOrder") playNewOrderBell();
-    else playReadyBell();
-    scheduleAlertLoopNext(gapMs + BELL_FALLBACK_MS);
+    fallBackToWebAudio();
   });
 }
 
@@ -126,12 +213,16 @@ function playAlertLoopOnce() {
  */
 export function startAlertSoundLoop(
   url: string,
-  options?: { gapMs?: number; variant?: "ready" | "newOrder" },
+  options?: {
+    gapMs?: number;
+    variant?: "ready" | "newOrder" | "reservation";
+  },
 ) {
   stopAlertSoundLoop();
+  unlockNotificationAudio();
   alertLoopActive = true;
   alertLoopUrl = url;
-  alertLoopVariant = options?.variant ?? "newOrder";
+  alertLoopVariant = options?.variant ?? "reservation";
   alertLoopGapMs = options?.gapMs ?? ALERT_LOOP_GAP_MS;
   playAlertLoopOnce();
 }
@@ -140,7 +231,8 @@ export function playCustomAlertSound(
   url: string,
   variant: "ready" | "newOrder" = "ready",
 ) {
-  if (!url || url === DEFAULT_SOUND_URL || url.endsWith(DEFAULT_SOUND_URL)) {
+  unlockNotificationAudio();
+  if (!url || isPresetSoundUrl(url)) {
     if (variant === "newOrder") playNewOrderBell();
     else playReadyBell();
     return;
@@ -191,12 +283,12 @@ function playBellTone(frequencies: number[], durationSec: number) {
   const ctx = getAudioContext();
   if (!ctx) return;
 
-  void ctx.resume().then(() => {
+  const run = () => {
     const now = ctx.currentTime;
 
     const master = ctx.createGain();
     master.gain.setValueAtTime(0.0001, now);
-    master.gain.exponentialRampToValueAtTime(0.35, now + 0.015);
+    master.gain.exponentialRampToValueAtTime(0.4, now + 0.015);
     master.gain.exponentialRampToValueAtTime(0.0001, now + durationSec);
     master.connect(ctx.destination);
 
@@ -219,5 +311,15 @@ function playBellTone(frequencies: number[], durationSec: number) {
       osc.start(now);
       osc.stop(now + durationSec);
     }
+  };
+
+  if (ctx.state === "running") {
+    run();
+    return;
+  }
+
+  void ctx.resume().then(() => {
+    unlocked = true;
+    run();
   });
 }

@@ -57,10 +57,8 @@ function buildHeroSlides(content: WebsiteContent): HeroSlide[] {
   push("sig2", content.media.signature_2?.fileUrl, content.media.signature_2?.objectPosition);
   push("sig3", content.media.signature_3?.fileUrl, content.media.signature_3?.objectPosition);
 
-  for (const item of content.gallery) {
-    if (ambient.length >= 6) break;
-    push(`gallery-${item.id}`, item.imageUrl);
-  }
+  // Do not pull gallery into the hero — those assets load later at smaller sizes.
+  // Reusing them here as 100vw slides doubles Storage / image-optimizer egress.
 
   return ambient;
 }
@@ -92,27 +90,39 @@ export function LandingHero({ content }: LandingHeroProps) {
     >
       <div className="absolute inset-0" aria-hidden>
         {slides.length > 0 ? (
-          slides.map((slide, slideIndex) => {
-            const visible = reduceMotion ? slideIndex === 0 : slideIndex === index;
-            return (
-              <div
-                key={slide.id}
-                className="absolute inset-0 transition-opacity duration-[1600ms] ease-in-out"
-                style={{ opacity: visible ? 1 : 0 }}
-              >
-                <LandingImage
-                  src={slide.src}
-                  alt=""
-                  fill
-                  priority={slideIndex === 0}
-                  sizes="100vw"
-                  quality={68}
-                  className="object-cover"
-                  style={{ objectPosition: slide.objectPosition }}
-                />
-              </div>
+          (() => {
+            // Mount only active + next (and previous while fading) to avoid downloading every 100vw slide.
+            const prevIndex = (index - 1 + slides.length) % slides.length;
+            const nextIndex = (index + 1) % slides.length;
+            const mountedIndexes = new Set<number>(
+              reduceMotion || slides.length === 1
+                ? [0]
+                : [index, nextIndex, prevIndex],
             );
-          })
+            return [...mountedIndexes].map((slideIndex) => {
+              const slide = slides[slideIndex];
+              if (!slide) return null;
+              const visible = reduceMotion ? slideIndex === 0 : slideIndex === index;
+              return (
+                <div
+                  key={slide.id}
+                  className="absolute inset-0 transition-opacity duration-[1600ms] ease-in-out"
+                  style={{ opacity: visible ? 1 : 0 }}
+                >
+                  <LandingImage
+                    src={slide.src}
+                    alt=""
+                    fill
+                    priority={slideIndex === 0 || slideIndex === index}
+                    sizes="100vw"
+                    quality={68}
+                    className="object-cover"
+                    style={{ objectPosition: slide.objectPosition }}
+                  />
+                </div>
+              );
+            });
+          })()
         ) : (
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,#3a1218_0%,#0B0B0C_55%)]" />
         )}

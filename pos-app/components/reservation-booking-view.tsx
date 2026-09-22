@@ -25,6 +25,7 @@ import {
   resolveInitialGuestReservationLang,
 } from "@/lib/i18n/guest-reservation";
 import type { AppSettings } from "@/lib/types";
+import { LandingImage } from "@/lib/website/landing-image";
 import type { WebsiteContent } from "@/lib/website/types";
 import { DEFAULT_APP_SETTINGS, fetchAppSettings } from "@/src/lib/settings-actions";
 import { fetchReservationsForDate } from "@/src/lib/reservation-actions";
@@ -309,8 +310,15 @@ export function ReservationBookingView({ website }: { website?: WebsiteContent }
         <aside className="space-y-4 lg:col-span-1">
           <div className="rounded-none border border-white/10 bg-[#121214]/90 p-6 shadow-xl">
             {logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt="" className="mb-4 h-14 w-14 object-contain" />
+              <LandingImage
+                src={logoUrl}
+                alt=""
+                width={56}
+                height={56}
+                sizes="56px"
+                quality={80}
+                className="mb-4 h-14 w-14 object-contain"
+              />
             ) : (
               <div className="mb-4 inline-flex bg-[#8B1E2D]/25 p-3 text-[#C9A88B]">
                 <UtensilsCrossed className="h-6 w-6" />

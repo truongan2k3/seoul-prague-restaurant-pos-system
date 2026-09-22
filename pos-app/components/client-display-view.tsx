@@ -281,7 +281,14 @@ function CfdSlideshowPlayer({
   const item = items[Math.max(0, index % Math.max(items.length, 1))];
   const mediaClass = "max-h-full max-w-full object-contain";
   const singleItem = items.length <= 1;
-  const blobUrls = useBlobUrlCache(items.map((entry) => entry.url));
+  // Prefetch only active + next clip — avoid downloading the whole playlist on idle.
+  const prefetchUrls = useMemo(() => {
+    if (items.length === 0) return [] as string[];
+    const activeUrl = items[Math.max(0, index % items.length)]?.url;
+    const nextUrl = items[(index + 1) % items.length]?.url;
+    return [activeUrl, nextUrl].filter((url): url is string => Boolean(url?.trim()));
+  }, [items, index]);
+  const blobUrls = useBlobUrlCache(prefetchUrls);
   const resolveSrc = useCallback((url: string) => blobUrls[url] ?? "", [blobUrls]);
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   // Stable list identity for timers (urls only) — avoid remount/refetch storms.
@@ -351,6 +358,9 @@ function CfdSlideshowPlayer({
         )}
         {items.map((entry, entryIndex) => {
           const active = entryIndex === index % items.length;
+          const nextIndex = (index + 1) % items.length;
+          // Keep only active + next in the DOM — avoids decoding every playlist clip.
+          if (!active && entryIndex !== nextIndex) return null;
           const hiddenClass = active ? "relative z-10 opacity-100" : "pointer-events-none absolute inset-0 opacity-0";
           const src = resolveSrc(entry.url);
           if (!src) return null;
@@ -367,7 +377,7 @@ function CfdSlideshowPlayer({
                 playsInline
                 autoPlay={active}
                 loop={singleItem}
-                preload="auto"
+                preload={active ? "auto" : "metadata"}
                 onEnded={singleItem ? undefined : active ? goNext : undefined}
                 className={`${mediaClass} ${hiddenClass}`}
               />
@@ -380,7 +390,7 @@ function CfdSlideshowPlayer({
               src={src}
               alt="Promotional display"
               decoding="async"
-              loading={entryIndex === 0 ? "eager" : "lazy"}
+              loading={active ? "eager" : "lazy"}
               className={`${mediaClass} ${hiddenClass}`}
             />
           );

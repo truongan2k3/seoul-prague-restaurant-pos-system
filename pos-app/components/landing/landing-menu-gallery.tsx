@@ -103,7 +103,7 @@ export function LandingGallery({ content }: { content: WebsiteContent }) {
                 quality={70}
                 className="h-auto w-full"
                 draggable={false}
-                priority={index === 0}
+                priority={false}
               />
             </figure>
           ))}

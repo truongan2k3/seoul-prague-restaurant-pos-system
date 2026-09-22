@@ -11,6 +11,7 @@ import {
   type SlotCapacityRow,
 } from "@/lib/reservation-slots";
 import type { AppSettings, ReservationStatus } from "@/lib/types";
+import { LandingImage } from "@/lib/website/landing-image";
 import type { WebsiteContent } from "@/lib/website/types";
 import { formatInVenueTz, splitVenueWallTime } from "@/lib/venue-timezone";
 import { DEFAULT_APP_SETTINGS, fetchAppSettings } from "@/src/lib/settings-actions";
@@ -255,8 +256,15 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
     <div className="mx-auto max-w-xl px-4 pb-16">
         <div className="mb-8 flex items-center gap-3">
           {logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt="" className="h-12 w-12 object-contain" />
+            <LandingImage
+              src={logoUrl}
+              alt=""
+              width={48}
+              height={48}
+              sizes="48px"
+              quality={80}
+              className="h-12 w-12 object-contain"
+            />
           ) : (
             <div className="inline-flex bg-[#8B1E2D]/25 p-3 text-[#C9A88B]">
               <UtensilsCrossed className="h-5 w-5" />

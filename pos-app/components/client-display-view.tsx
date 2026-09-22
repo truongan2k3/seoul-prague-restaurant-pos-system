@@ -235,7 +235,7 @@ function CheckoutView({
             <span className="text-xl font-semibold uppercase tracking-wide text-white">
               {translate("total")}
             </span>
-            <span className="landing-serif text-4xl tabular-nums text-[#F5EDE4] sm:text-5xl">
+            <span className="text-4xl font-black tabular-nums text-[#F5EDE4] sm:text-5xl">
               {formatCzk(displayTotal)} CZK
             </span>
           </div>
@@ -250,7 +250,7 @@ function CheckoutView({
               <span className="text-lg font-semibold uppercase tracking-wide text-[#E8D5C4] sm:text-xl">
                 {translate("changeDue")}
               </span>
-              <span className="landing-serif text-4xl tabular-nums text-[#F5EDE4] sm:text-5xl">
+              <span className="text-4xl font-black tabular-nums text-[#F5EDE4] sm:text-5xl">
                 {formatCzk(checkout.changeDue)} CZK
               </span>
             </div>

@@ -4,7 +4,6 @@ import { Maximize2, Minimize2 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useApp } from "@/contexts/app-context";
 import { useFullscreen } from "@/hooks/use-fullscreen";
-import { isPosMainPath, isStationPath } from "@/lib/page-routes";
 
 interface FullscreenToggleProps {
   compact?: boolean;
@@ -29,22 +28,7 @@ export function FullscreenToggle({ compact = false, variant = "sidebar" }: Fulls
   const pathname = usePathname();
 
   if (!supported) return null;
-
-  if (variant === "fab" && hideFullscreenFabOnPath(pathname)) {
-    return null;
-  }
-
-  // Keep FAB on POS main + stations only; skip login/admin/etc. marketing already handled.
-  if (
-    variant === "fab" &&
-    pathname &&
-    !isPosMainPath(pathname) &&
-    !isStationPath(pathname) &&
-    pathname !== "/status" &&
-    !pathname.startsWith("/status/")
-  ) {
-    // Still allow on /app and stations; hide on other non-marketing authenticated pages if any
-  }
+  if (variant === "fab" && hideFullscreenFabOnPath(pathname)) return null;
 
   const label = isFullscreen ? translate("exitFullscreen") : translate("fullscreen");
 

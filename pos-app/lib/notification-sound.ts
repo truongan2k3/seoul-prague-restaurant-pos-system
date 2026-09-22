@@ -32,6 +32,109 @@ export function playNewOrderBell() {
 }
 
 const DEFAULT_SOUND_URL = "/sounds/default-bell.mp3";
+/** Fixed gap after a clip finishes before the next play (no overlap). */
+const ALERT_LOOP_GAP_MS = 2_500;
+/** Approx length used when falling back to Web Audio bells (no ended event). */
+const BELL_FALLBACK_MS = 1_200;
+
+let alertLoopActive = false;
+let alertLoopUrl = "";
+let alertLoopVariant: "ready" | "newOrder" = "newOrder";
+let alertLoopGapMs = ALERT_LOOP_GAP_MS;
+let alertLoopAudio: HTMLAudioElement | null = null;
+let alertLoopTimer: number | null = null;
+
+function clearAlertLoopTimer() {
+  if (alertLoopTimer != null) {
+    window.clearTimeout(alertLoopTimer);
+    alertLoopTimer = null;
+  }
+}
+
+function stopAlertLoopAudio() {
+  if (!alertLoopAudio) return;
+  try {
+    alertLoopAudio.onended = null;
+    alertLoopAudio.onerror = null;
+    alertLoopAudio.pause();
+    alertLoopAudio.removeAttribute("src");
+    alertLoopAudio.load();
+  } catch {
+    /* ignore */
+  }
+  alertLoopAudio = null;
+}
+
+/** Stop any repeating reservation/alert sound loop. Safe to call when idle. */
+export function stopAlertSoundLoop() {
+  alertLoopActive = false;
+  clearAlertLoopTimer();
+  stopAlertLoopAudio();
+}
+
+function scheduleAlertLoopNext(delayMs: number) {
+  clearAlertLoopTimer();
+  if (!alertLoopActive) return;
+  alertLoopTimer = window.setTimeout(() => {
+    alertLoopTimer = null;
+    playAlertLoopOnce();
+  }, delayMs);
+}
+
+function playAlertLoopOnce() {
+  if (!alertLoopActive) return;
+  stopAlertLoopAudio();
+
+  const url = alertLoopUrl;
+  const variant = alertLoopVariant;
+  const gapMs = alertLoopGapMs;
+
+  if (!url || url === DEFAULT_SOUND_URL || url.endsWith(DEFAULT_SOUND_URL)) {
+    if (variant === "newOrder") playNewOrderBell();
+    else playReadyBell();
+    scheduleAlertLoopNext(gapMs + BELL_FALLBACK_MS);
+    return;
+  }
+
+  const audio = new Audio(url);
+  alertLoopAudio = audio;
+  audio.volume = 0.85;
+  audio.onended = () => {
+    if (alertLoopAudio !== audio) return;
+    alertLoopAudio = null;
+    scheduleAlertLoopNext(gapMs);
+  };
+  audio.onerror = () => {
+    if (alertLoopAudio !== audio) return;
+    alertLoopAudio = null;
+    if (variant === "newOrder") playNewOrderBell();
+    else playReadyBell();
+    scheduleAlertLoopNext(gapMs + BELL_FALLBACK_MS);
+  };
+  void audio.play().catch(() => {
+    if (alertLoopAudio !== audio) return;
+    alertLoopAudio = null;
+    if (variant === "newOrder") playNewOrderBell();
+    else playReadyBell();
+    scheduleAlertLoopNext(gapMs + BELL_FALLBACK_MS);
+  });
+}
+
+/**
+ * Play an alert sound on a fixed interval until stopAlertSoundLoop().
+ * Guarantees a single loop (restarts if already running) and no overlapping clips.
+ */
+export function startAlertSoundLoop(
+  url: string,
+  options?: { gapMs?: number; variant?: "ready" | "newOrder" },
+) {
+  stopAlertSoundLoop();
+  alertLoopActive = true;
+  alertLoopUrl = url;
+  alertLoopVariant = options?.variant ?? "newOrder";
+  alertLoopGapMs = options?.gapMs ?? ALERT_LOOP_GAP_MS;
+  playAlertLoopOnce();
+}
 
 export function playCustomAlertSound(
   url: string,

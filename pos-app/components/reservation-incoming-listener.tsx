@@ -10,7 +10,11 @@ import {
   ensureBrowserNotificationPermission,
   showBrowserNotification,
 } from "@/lib/browser-notification";
-import { playCustomAlertSound } from "@/lib/notification-sound";
+import {
+  playCustomAlertSound,
+  startAlertSoundLoop,
+  stopAlertSoundLoop,
+} from "@/lib/notification-sound";
 import {
   classifyReservationUpdate,
   reservationAlertDedupeKey,
@@ -44,8 +48,11 @@ type ScreenAlert =
   | { kind: "no_show"; reservation: ReservationRecord };
 
 const DEDUPE_MS = 12_000;
-/** Phones often suspend realtime while locked — poll + resume catch-up. */
-const RESUME_POLL_MS = 25_000;
+
+type ReservationIncomingListenerProps = {
+  /** Only the main POS should auto-mark late reservations (avoids duplicate writers). */
+  enableLateMarker?: boolean;
+};
 
 function toScreenKind(kind: ReservationChangeAlertKind): ScreenAlert["kind"] {
   return kind;
@@ -57,8 +64,17 @@ function lookbackSince(): Date {
   return since;
 }
 
+/** Pending new/updated alerts keep a single looping sound until Confirm (or local dismiss). */
+function needsConfirmSoundLoop(alert: ScreenAlert | null): boolean {
+  if (!alert) return false;
+  if (alert.kind !== "new" && alert.kind !== "updated") return false;
+  return alert.reservation.status === "pending";
+}
+
 /** Popup + sound + in-app toast + browser notification for reservation changes (not check-in). */
-export function ReservationIncomingListener() {
+export function ReservationIncomingListener({
+  enableLateMarker = true,
+}: ReservationIncomingListenerProps = {}) {
   const { translate, language, soundMainEnabled } = useApp();
   const { settings } = useSettings();
   const { pushNotification } = useNotifications();
@@ -73,6 +89,7 @@ export function ReservationIncomingListener() {
   const recentAlertAtRef = useRef<Map<string, number>>(new Map());
   const suppressUntilRef = useRef<Map<string, number>>(new Map());
   const syncingRef = useRef(false);
+  const loopingIdRef = useRef<string | null>(null);
 
   const formatDateTime = useCallback(
     (date: Date | string) =>
@@ -91,26 +108,56 @@ export function ReservationIncomingListener() {
     [language],
   );
 
-  const playAlertSound = useCallback(() => {
-    if (!soundMainEnabled) return;
-    const soundUrl =
+  const alertSoundUrl = useCallback(() => {
+    return (
       settings.soundConfigs.reservationReminder ||
       settings.soundConfigs.newOrder ||
-      settings.soundConfigs.mainNewOrder;
-    playCustomAlertSound(soundUrl, "newOrder");
+      settings.soundConfigs.mainNewOrder
+    );
   }, [
     settings.soundConfigs.mainNewOrder,
     settings.soundConfigs.newOrder,
     settings.soundConfigs.reservationReminder,
-    soundMainEnabled,
   ]);
 
-  const showNext = useCallback((next: ScreenAlert | null) => {
-    alertRef.current = next;
-    setAlert(next);
-    setError(null);
-    setVisitProfile(null);
+  const stopLoop = useCallback(() => {
+    loopingIdRef.current = null;
+    stopAlertSoundLoop();
   }, []);
+
+  const startLoopFor = useCallback(
+    (next: ScreenAlert) => {
+      if (!soundMainEnabled) {
+        stopLoop();
+        return;
+      }
+      if (!needsConfirmSoundLoop(next)) {
+        stopLoop();
+        playCustomAlertSound(alertSoundUrl(), "newOrder");
+        return;
+      }
+      // One loop per screen — restart only when switching to a different reservation.
+      if (loopingIdRef.current === next.reservation.id) return;
+      loopingIdRef.current = next.reservation.id;
+      startAlertSoundLoop(alertSoundUrl(), { variant: "newOrder" });
+    },
+    [alertSoundUrl, soundMainEnabled, stopLoop],
+  );
+
+  const showNext = useCallback(
+    (next: ScreenAlert | null) => {
+      alertRef.current = next;
+      setAlert(next);
+      setError(null);
+      setVisitProfile(null);
+      if (!next) {
+        stopLoop();
+        return;
+      }
+      startLoopFor(next);
+    },
+    [startLoopFor, stopLoop],
+  );
 
   const markDeduped = useCallback((kind: ReservationChangeAlertKind, id: string) => {
     recentAlertAtRef.current.set(reservationAlertDedupeKey(kind, id), Date.now());
@@ -158,6 +205,23 @@ export function ReservationIncomingListener() {
     [translate],
   );
 
+  /** Drop a reservation from the active popup + queue (cross-screen Confirm sync). */
+  const clearReservationAlert = useCallback(
+    (reservationId: string) => {
+      queueRef.current = queueRef.current.filter((item) => item.reservation.id !== reservationId);
+      const current = alertRef.current;
+      if (current?.reservation.id === reservationId) {
+        const queued = queueRef.current.shift() ?? null;
+        showNext(queued);
+        return;
+      }
+      if (loopingIdRef.current === reservationId) {
+        stopLoop();
+      }
+    },
+    [showNext, stopLoop],
+  );
+
   const enqueueAlert = useCallback(
     (next: ScreenAlert) => {
       if (isSuppressed(next.reservation.id)) return;
@@ -171,6 +235,26 @@ export function ReservationIncomingListener() {
               : "updated";
       if (wasRecentlyAlerted(dedupeKind, next.reservation.id)) return;
       markDeduped(dedupeKind, next.reservation.id);
+
+      // Same pending reservation already showing — refresh payload, keep one loop.
+      const current = alertRef.current;
+      if (
+        current &&
+        current.reservation.id === next.reservation.id &&
+        needsConfirmSoundLoop(current) &&
+        needsConfirmSoundLoop(next)
+      ) {
+        alertRef.current = next;
+        setAlert(next);
+        return;
+      }
+
+      // Same id already queued — replace payload, do not duplicate.
+      const queuedIdx = queueRef.current.findIndex((item) => item.reservation.id === next.reservation.id);
+      if (queuedIdx >= 0) {
+        queueRef.current[queuedIdx] = next;
+        return;
+      }
 
       const title = titleFor(next);
       const body = browserBodyFor(next);
@@ -196,17 +280,15 @@ export function ReservationIncomingListener() {
 
       if (!alertRef.current) {
         showNext(next);
-        playAlertSound();
         return;
       }
       queueRef.current.push(next);
-      playAlertSound();
+      // Do not start a second loop while another alert is already showing.
     },
     [
       browserBodyFor,
       isSuppressed,
       markDeduped,
-      playAlertSound,
       pushNotification,
       showNext,
       titleFor,
@@ -219,6 +301,24 @@ export function ReservationIncomingListener() {
       const previous = cacheRef.current.get(reservation.id);
       cacheRef.current.set(reservation.id, reservation);
       if (!opts?.alert || !readyRef.current) return;
+
+      // Cross-screen Confirm sync: pending → confirmed closes popup + stops sound everywhere.
+      if (previous?.status === "pending" && reservation.status === "confirmed") {
+        clearReservationAlert(reservation.id);
+        return;
+      }
+
+      // If the open alert's reservation is no longer pending, close it (checked-in / late / etc.).
+      const open = alertRef.current;
+      if (
+        open &&
+        open.reservation.id === reservation.id &&
+        needsConfirmSoundLoop(open) &&
+        reservation.status !== "pending"
+      ) {
+        clearReservationAlert(reservation.id);
+        // Still allow cancelled / no_show alerts below when classified.
+      }
 
       if (!previous) {
         if (shouldAlertOnReservationInsert(reservation)) {
@@ -248,7 +348,7 @@ export function ReservationIncomingListener() {
       }
       enqueueAlert({ kind: toScreenKind(kind), reservation } as ScreenAlert);
     },
-    [enqueueAlert, wasRecentlyAlerted],
+    [clearReservationAlert, enqueueAlert, wasRecentlyAlerted],
   );
 
   const syncFromServer = useCallback(
@@ -292,7 +392,7 @@ export function ReservationIncomingListener() {
     };
   }, [syncFromServer]);
 
-  // Catch up after phone lock / tab background (realtime often pauses on mobile).
+  // Catch up only when the tab actually resumes (no continuous poll / heartbeat).
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === "hidden") return;
@@ -306,25 +406,14 @@ export function ReservationIncomingListener() {
     };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pageshow", onResume);
-    window.addEventListener("focus", onResume);
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pageshow", onResume);
-      window.removeEventListener("focus", onResume);
     };
   }, [syncFromServer]);
 
-  // Safety poll while the POS tab is open (helps flaky mobile websockets).
   useEffect(() => {
-    const id = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      if (!readyRef.current) return;
-      void syncFromServer({ alert: true });
-    }, RESUME_POLL_MS);
-    return () => window.clearInterval(id);
-  }, [syncFromServer]);
-
-  useEffect(() => {
+    if (!enableLateMarker) return;
     const holdingMinutes = settings.reservationTableHoldingTime || 30;
     const run = () => {
       void markLateReservations(holdingMinutes);
@@ -332,7 +421,7 @@ export function ReservationIncomingListener() {
     run();
     const intervalId = window.setInterval(run, 60_000);
     return () => window.clearInterval(intervalId);
-  }, [settings.reservationTableHoldingTime]);
+  }, [enableLateMarker, settings.reservationTableHoldingTime]);
 
   useEffect(() => {
     return subscribeToReservationChanges({
@@ -345,12 +434,13 @@ export function ReservationIncomingListener() {
       onDelete: (reservationId) => {
         const previous = cacheRef.current.get(reservationId);
         cacheRef.current.delete(reservationId);
+        clearReservationAlert(reservationId);
         if (!readyRef.current || !previous) return;
         if (previous.status === "checked_in" || previous.status === "completed") return;
         enqueueAlert({ kind: "cancelled", reservation: { ...previous, status: "cancelled" } });
       },
     });
-  }, [applyRemoteRow, enqueueAlert]);
+  }, [applyRemoteRow, clearReservationAlert, enqueueAlert]);
 
   useEffect(() => {
     return subscribeToGuestReservationAlerts((payload) => {
@@ -362,12 +452,14 @@ export function ReservationIncomingListener() {
       };
       cacheRef.current.set(reservation.id, merged);
       if (payload.kind === "cancelled") {
+        // Replace any pending popup for this id with the cancelled alert.
+        clearReservationAlert(merged.id);
         enqueueAlert({ kind: "cancelled", reservation: merged });
         return;
       }
       enqueueAlert({ kind: "updated", reservation: merged, previous: payload.previous });
     });
-  }, [enqueueAlert]);
+  }, [clearReservationAlert, enqueueAlert]);
 
   useEffect(() => {
     if (!alert || alert.kind === "cancelled" || alert.kind === "no_show") {
@@ -389,6 +481,25 @@ export function ReservationIncomingListener() {
     };
   }, [alert]);
 
+  // Stop looping sound on unmount so reconnect/remount cannot leave orphan audio.
+  useEffect(() => {
+    return () => {
+      stopAlertSoundLoop();
+    };
+  }, []);
+
+  // If staff mutes main sound while looping, stop immediately.
+  useEffect(() => {
+    if (!soundMainEnabled) {
+      stopLoop();
+      return;
+    }
+    const current = alertRef.current;
+    if (current && needsConfirmSoundLoop(current)) {
+      startLoopFor(current);
+    }
+  }, [soundMainEnabled, startLoopFor, stopLoop]);
+
   const handleConfirm = async () => {
     if (!alert || (alert.kind !== "new" && alert.kind !== "updated")) return;
     if (alert.reservation.status !== "pending") {
@@ -397,16 +508,24 @@ export function ReservationIncomingListener() {
     }
     setBusy(true);
     setError(null);
-    suppressUntilRef.current.set(alert.reservation.id, Date.now() + DEDUPE_MS);
-    markDeduped("updated", alert.reservation.id);
-    const result = await confirmReservationWithEmail(alert.reservation.id);
+    const reservationId = alert.reservation.id;
+    suppressUntilRef.current.set(reservationId, Date.now() + DEDUPE_MS);
+    markDeduped("updated", reservationId);
+    // Stop local sound immediately; other screens stop via postgres UPDATE.
+    stopLoop();
+    const result = await confirmReservationWithEmail(reservationId);
     setBusy(false);
     if (result.error) {
-      suppressUntilRef.current.delete(alert.reservation.id);
+      suppressUntilRef.current.delete(reservationId);
       setError(result.error);
+      // Resume loop if confirm failed and alert is still showing.
+      if (alertRef.current?.reservation.id === reservationId) {
+        startLoopFor(alertRef.current);
+      }
       return;
     }
-    dismissAlert();
+    // Optimistic local clear; remote UPDATE also clears peers.
+    clearReservationAlert(reservationId);
   };
 
   const reservation = alert?.reservation ?? null;

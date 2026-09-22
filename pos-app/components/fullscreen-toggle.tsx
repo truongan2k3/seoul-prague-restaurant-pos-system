@@ -22,6 +22,11 @@ function hideFullscreenFabOnPath(pathname: string | null): boolean {
   return false;
 }
 
+/** Client Screen totals sit in the bottom footer — keep FAB clear of that area. */
+function isClientDisplayPath(pathname: string | null): boolean {
+  return pathname === "/client" || Boolean(pathname?.startsWith("/client/"));
+}
+
 export function FullscreenToggle({ compact = false, variant = "sidebar" }: FullscreenToggleProps) {
   const { translate } = useApp();
   const { isFullscreen, supported, toggle } = useFullscreen();
@@ -33,13 +38,16 @@ export function FullscreenToggle({ compact = false, variant = "sidebar" }: Fulls
   const label = isFullscreen ? translate("exitFullscreen") : translate("fullscreen");
 
   if (variant === "fab") {
+    const positionClass = isClientDisplayPath(pathname)
+      ? "top-[max(1rem,env(safe-area-inset-top))] right-3"
+      : "bottom-[max(1rem,env(safe-area-inset-bottom))] right-3";
     return (
       <button
         type="button"
         onClick={() => void toggle()}
         title={label}
         aria-label={label}
-        className="pointer-events-auto fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-3 z-[120] flex h-10 w-10 items-center justify-center rounded-full border border-gray-300/80 bg-white/95 text-gray-700 shadow-lg backdrop-blur-sm transition hover:scale-105 hover:bg-white active:scale-95 dark:border-zinc-600 dark:bg-zinc-900/95 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        className={`pointer-events-auto fixed z-[120] flex h-10 w-10 items-center justify-center rounded-full border border-gray-300/80 bg-white/95 text-gray-700 shadow-lg backdrop-blur-sm transition hover:scale-105 hover:bg-white active:scale-95 dark:border-zinc-600 dark:bg-zinc-900/95 dark:text-zinc-200 dark:hover:bg-zinc-800 ${positionClass}`}
       >
         {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
       </button>

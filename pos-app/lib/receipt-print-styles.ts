@@ -439,6 +439,8 @@ export function buildThermalPrintCss(
   .receipt-czech .receipt-items-head {
     display: flex;
     justify-content: space-between;
+    align-items: flex-end;
+    gap: 2mm;
     font-weight: ${typography.itemWeight};
     font-size: var(--receipt-item-size, ${typography.itemPx}px);
     border-bottom: 1px dashed #000;
@@ -448,12 +450,25 @@ export function buildThermalPrintCss(
   .receipt-czech .receipt-item-czech {
     display: flex;
     justify-content: space-between;
-    gap: 3mm;
+    align-items: flex-start;
+    gap: 2mm;
     margin-bottom: 2px;
     font-size: var(--receipt-item-size, ${typography.itemPx}px);
   }
-  .receipt-czech .receipt-item-left { flex: 1; word-break: break-word; }
-  .receipt-czech .receipt-item-right { white-space: nowrap; text-align: right; }
+  .receipt-czech .receipt-items-head-left,
+  .receipt-czech .receipt-item-left { flex: 1; min-width: 0; word-break: break-word; }
+  .receipt-czech .receipt-items-head-qty,
+  .receipt-czech .receipt-item-qty {
+    flex: 0 0 8mm;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .receipt-czech .receipt-items-head-right,
+  .receipt-czech .receipt-item-right {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    text-align: right;
+  }
   .receipt-czech .receipt-total-row,
   .receipt-czech .receipt-celkem-row {
     display: flex;

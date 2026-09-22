@@ -217,11 +217,13 @@ export function ReceiptBodyContent({
       <section className="receipt-items-czech">
         <div className="receipt-items-head">
           <span className="receipt-items-head-left">Položka</span>
+          <span className="receipt-items-head-qty">Ks</span>
           <span className="receipt-items-head-right">Částka</span>
         </div>
         {data.items.map((item, idx) => (
           <div key={`${item.name}-${idx}`} className="receipt-item-czech">
             <span className="receipt-item-left">{item.name}</span>
+            <span className="receipt-item-qty">{item.quantity}</span>
             <span className="receipt-item-right">
               {formatReceiptAmount(item.lineTotal)} {item.taxGroup}
             </span>

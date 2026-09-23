@@ -31,6 +31,10 @@ type PlacedOrder = {
   qrDataUrl?: string | null;
 };
 
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
   const [config, setConfig] = useState<PublicConfig | null>(null);
   const [denomination, setDenomination] = useState(1000);
@@ -63,6 +67,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
   }, []);
 
   const total = denomination * quantity;
+  const detailsReady = buyerName.trim().length > 0 && isValidEmail(buyerEmail);
 
   const refreshPreviewQr = useCallback(async (amount: number) => {
     try {
@@ -75,7 +80,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
   }, []);
 
   useEffect(() => {
-    if (!config?.enabled || paymentMethod !== "czech_qr") {
+    if (!config?.enabled || !detailsReady || paymentMethod !== "czech_qr") {
       setPreviewQr(null);
       return;
     }
@@ -83,7 +88,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
       void refreshPreviewQr(total);
     }, 250);
     return () => window.clearTimeout(handle);
-  }, [config?.enabled, paymentMethod, total, refreshPreviewQr]);
+  }, [config?.enabled, detailsReady, paymentMethod, total, refreshPreviewQr]);
 
   const bankReady = useMemo(() => {
     if (!config) return false;
@@ -91,7 +96,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
   }, [config]);
 
   const placeOrder = async () => {
-    if (!config || busy) return;
+    if (!config || busy || !detailsReady) return;
     setBusy(true);
     setError(null);
     try {
@@ -308,103 +313,126 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
               </p>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block text-xs text-white/45">
-                Your name
-                <input
-                  value={buyerName}
-                  onChange={(e) => setBuyerName(e.target.value)}
-                  className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm text-white outline-none focus:border-[#C9A88B]/60"
-                  placeholder="Full name"
-                />
-              </label>
-              <label className="block text-xs text-white/45">
-                Email for voucher delivery
-                <input
-                  type="email"
-                  value={buyerEmail}
-                  onChange={(e) => setBuyerEmail(e.target.value)}
-                  className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm text-white outline-none focus:border-[#C9A88B]/60"
-                  placeholder="you@email.com"
-                />
-              </label>
-            </div>
-
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-white/40">3 · Payment</p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("czech_qr")}
-                  className={`rounded-2xl border px-4 py-4 text-left text-sm ${
-                    paymentMethod === "czech_qr"
-                      ? "border-[#C9A88B] bg-[#C9A88B]/15"
-                      : "border-white/10 bg-white/[0.03]"
-                  }`}
-                >
-                  <p className="font-semibold text-[#F5EDE4]">Czech bank QR</p>
-                  <p className="mt-1 text-xs text-white/45">SPD payment QR for Czech banking apps</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("bank_transfer")}
-                  className={`rounded-2xl border px-4 py-4 text-left text-sm ${
-                    paymentMethod === "bank_transfer"
-                      ? "border-[#C9A88B] bg-[#C9A88B]/15"
-                      : "border-white/10 bg-white/[0.03]"
-                  }`}
-                >
-                  <p className="font-semibold text-[#F5EDE4]">Bank transfer</p>
-                  <p className="mt-1 text-xs text-white/45">Manual transfer with order ID as note</p>
-                </button>
+              <p className="text-xs uppercase tracking-[0.2em] text-white/40">3 · Your details</p>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                <label className="block text-xs text-white/45">
+                  Your name
+                  <input
+                    value={buyerName}
+                    onChange={(e) => setBuyerName(e.target.value)}
+                    className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm text-white outline-none focus:border-[#C9A88B]/60"
+                    placeholder="Full name"
+                    autoComplete="name"
+                  />
+                </label>
+                <label className="block text-xs text-white/45">
+                  Email for voucher delivery
+                  <input
+                    type="email"
+                    value={buyerEmail}
+                    onChange={(e) => setBuyerEmail(e.target.value)}
+                    className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm text-white outline-none focus:border-[#C9A88B]/60"
+                    placeholder="you@email.com"
+                    autoComplete="email"
+                  />
+                </label>
               </div>
             </div>
 
-            {bankReady ? (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-sm text-white/70">
-                <p className="text-xs uppercase tracking-[0.16em] text-[#C9A88B]">Transfer to</p>
-                <ul className="mt-3 space-y-1">
-                  {config.accountHolder ? <li>{config.accountHolder}</li> : null}
-                  {config.accountNumber ? <li>Account: {config.accountNumber}</li> : null}
-                  {config.iban ? <li>IBAN: {config.iban}</li> : null}
-                  {config.bankName ? <li>{config.bankName}</li> : null}
-                  {config.bicSwift ? <li>BIC: {config.bicSwift}</li> : null}
-                </ul>
-              </div>
-            ) : (
-              <p className="text-sm text-amber-200/80">
-                Bank details are not configured yet. Please contact the restaurant before paying.
+            {!detailsReady ? (
+              <p className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-5 py-6 text-center text-sm text-white/45">
+                Enter your name and email to see payment options and bank details.
               </p>
-            )}
+            ) : (
+              <div className="space-y-6">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-white/40">4 · Payment</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("czech_qr")}
+                      className={`rounded-2xl border px-4 py-4 text-left text-sm ${
+                        paymentMethod === "czech_qr"
+                          ? "border-[#C9A88B] bg-[#C9A88B]/15"
+                          : "border-white/10 bg-white/[0.03]"
+                      }`}
+                    >
+                      <p className="font-semibold text-[#F5EDE4]">Czech bank QR</p>
+                      <p className="mt-1 text-xs text-white/45">
+                        SPD payment QR for Czech banking apps
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("bank_transfer")}
+                      className={`rounded-2xl border px-4 py-4 text-left text-sm ${
+                        paymentMethod === "bank_transfer"
+                          ? "border-[#C9A88B] bg-[#C9A88B]/15"
+                          : "border-white/10 bg-white/[0.03]"
+                      }`}
+                    >
+                      <p className="font-semibold text-[#F5EDE4]">Bank transfer</p>
+                      <p className="mt-1 text-xs text-white/45">
+                        Manual transfer with order ID as note
+                      </p>
+                    </button>
+                  </div>
+                </div>
 
-            {paymentMethod === "czech_qr" && previewQr ? (
-              <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white p-6">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={previewQr} alt="Payment QR preview" className="h-52 w-52" />
-                <p className="text-center text-xs text-zinc-600">
-                  QR amount: {formatVoucherAmount(total)} · final QR uses your Order ID after place
-                </p>
+                {bankReady ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-sm text-white/70">
+                    <p className="text-xs uppercase tracking-[0.16em] text-[#C9A88B]">Transfer to</p>
+                    <ul className="mt-3 space-y-1">
+                      {config.accountHolder ? <li>{config.accountHolder}</li> : null}
+                      {config.accountNumber ? <li>Account: {config.accountNumber}</li> : null}
+                      {config.iban ? <li>IBAN: {config.iban}</li> : null}
+                      {config.bankName ? <li>{config.bankName}</li> : null}
+                      {config.bicSwift ? <li>BIC: {config.bicSwift}</li> : null}
+                    </ul>
+                    {config.bankPaymentNote ? (
+                      <p className="mt-3 text-xs text-white/45">{config.bankPaymentNote}</p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="text-sm text-amber-200/80">
+                    Bank details are not configured yet. Please contact the restaurant before paying.
+                  </p>
+                )}
+
+                {paymentMethod === "czech_qr" && previewQr ? (
+                  <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white p-6">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={previewQr} alt="Payment QR preview" className="h-52 w-52" />
+                    <p className="text-center text-xs text-zinc-600">
+                      QR amount: {formatVoucherAmount(total)} · final QR uses your Order ID after
+                      place
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => downloadQr(previewQr, `voucher-qr-${total}.png`)}
+                      className="inline-flex items-center gap-2 rounded-full border border-zinc-300 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-800"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Save QR
+                    </button>
+                  </div>
+                ) : paymentMethod === "czech_qr" && !previewQr && bankReady ? (
+                  <p className="text-center text-sm text-white/40">Preparing payment QR…</p>
+                ) : null}
+
+                {error ? <p className="text-sm text-red-300">{error}</p> : null}
+
                 <button
                   type="button"
-                  onClick={() => downloadQr(previewQr, `voucher-qr-${total}.png`)}
-                  className="inline-flex items-center gap-2 rounded-full border border-zinc-300 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-800"
+                  disabled={busy || !detailsReady}
+                  onClick={() => void placeOrder()}
+                  className="w-full rounded-2xl bg-[#C9A88B] px-6 py-4 text-sm font-semibold uppercase tracking-[0.14em] text-[#0B0B0C] transition hover:bg-[#d4b69a] disabled:opacity-40"
                 >
-                  <Download className="h-3.5 w-3.5" />
-                  Save QR
+                  {busy ? "Placing order…" : "Place order"}
                 </button>
               </div>
-            ) : null}
-
-            {error ? <p className="text-sm text-red-300">{error}</p> : null}
-
-            <button
-              type="button"
-              disabled={busy || !buyerName.trim() || !buyerEmail.trim()}
-              onClick={() => void placeOrder()}
-              className="w-full rounded-2xl bg-[#C9A88B] px-6 py-4 text-sm font-semibold uppercase tracking-[0.14em] text-[#0B0B0C] transition hover:bg-[#d4b69a] disabled:opacity-40"
-            >
-              {busy ? "Placing order…" : "Place order"}
-            </button>
+            )}
           </section>
         )}
       </main>

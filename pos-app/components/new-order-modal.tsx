@@ -1957,7 +1957,7 @@ export function NewOrderModal({
         ariaLabelledBy="pos-order-title"
         lockScroll
       >
-        <ModalPanel className="flex h-[100dvh] max-h-[100dvh] w-full max-w-[1400px] flex-col overflow-hidden rounded-none border border-gray-200 bg-white shadow-2xl sm:h-[min(94vh,920px)] sm:max-h-[min(94vh,920px)] sm:rounded-2xl dark:border-gray-700 dark:bg-gray-900">
+        <ModalPanel className="flex h-[100dvh] max-h-[100dvh] w-full max-w-[1400px] flex-col overflow-hidden rounded-none border border-gray-200 bg-white pb-[env(safe-area-inset-bottom,0px)] shadow-2xl sm:h-[min(94vh,920px)] sm:max-h-[min(94vh,920px)] sm:rounded-2xl dark:border-gray-700 dark:bg-gray-900">
           <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-3 py-2 dark:border-gray-700 sm:px-5 sm:py-3">
             <div>
               <h2

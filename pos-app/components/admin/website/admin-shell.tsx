@@ -12,6 +12,7 @@ import {
   LayoutList,
   Search,
   Sparkles,
+  Ticket,
   UtensilsCrossed,
 } from "lucide-react";
 
@@ -20,6 +21,7 @@ const LINKS = [
   { href: "/admin/sections", label: "Sections", icon: LayoutList },
   { href: "/admin/signature", label: "Signature dishes", icon: Flame },
   { href: "/admin/reservation", label: "Reservation page", icon: CalendarDays },
+  { href: "/admin/vouchers", label: "Vouchers", icon: Ticket },
   { href: "/admin/media", label: "Media", icon: ImageIcon },
   { href: "/admin/restaurant", label: "Restaurant", icon: Building2 },
   { href: "/admin/hours", label: "Opening hours", icon: Clock },

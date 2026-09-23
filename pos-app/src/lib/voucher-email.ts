@@ -1,0 +1,159 @@
+import { formatVoucherAmount, type VoucherConfig, type VoucherOrder } from "@/lib/voucher";
+import { getReservationAppBaseUrl } from "@/src/lib/reservation-email";
+
+const BRAND_NAME = "SEOUL PRAGUE";
+
+function fromHeader(): string {
+  const raw = process.env.RESEND_FROM_EMAIL?.trim() || "SEOUL PRAGUE <onboarding@resend.dev>";
+  const angled = raw.match(/<([^>]+)>/);
+  const email = angled?.[1]?.trim() || (raw.includes("@") && !raw.includes(" ") ? raw : "onboarding@resend.dev");
+  return `${BRAND_NAME} <${email}>`;
+}
+
+async function sendResendEmail(input: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+}): Promise<{ sent: boolean; error?: string }> {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) {
+    console.warn("[voucher-email] RESEND_API_KEY not set — skipping email");
+    return { sent: false, error: "Email is not configured" };
+  }
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: fromHeader(),
+      to: [input.to],
+      subject: input.subject,
+      html: input.html,
+      text: input.text,
+    }),
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    console.error("[voucher-email] Resend error", response.status, detail);
+    return { sent: false, error: detail || `Resend HTTP ${response.status}` };
+  }
+  return { sent: true };
+}
+
+function bankBlockHtml(config: VoucherConfig, order: VoucherOrder): string {
+  const rows: string[] = [];
+  if (config.accountHolder) rows.push(`<tr><td style="padding:4px 0;color:#71717a">Account holder</td><td style="padding:4px 0;text-align:right;font-weight:600">${escapeHtml(config.accountHolder)}</td></tr>`);
+  if (config.accountNumber) rows.push(`<tr><td style="padding:4px 0;color:#71717a">Account number</td><td style="padding:4px 0;text-align:right;font-weight:600">${escapeHtml(config.accountNumber)}</td></tr>`);
+  if (config.iban) rows.push(`<tr><td style="padding:4px 0;color:#71717a">IBAN</td><td style="padding:4px 0;text-align:right;font-weight:600">${escapeHtml(config.iban)}</td></tr>`);
+  if (config.bankName) rows.push(`<tr><td style="padding:4px 0;color:#71717a">Bank</td><td style="padding:4px 0;text-align:right;font-weight:600">${escapeHtml(config.bankName)}</td></tr>`);
+  if (config.bicSwift) rows.push(`<tr><td style="padding:4px 0;color:#71717a">BIC/SWIFT</td><td style="padding:4px 0;text-align:right;font-weight:600">${escapeHtml(config.bicSwift)}</td></tr>`);
+  rows.push(`<tr><td style="padding:4px 0;color:#71717a">Payment note</td><td style="padding:4px 0;text-align:right;font-weight:600">${escapeHtml(order.paymentMessage || order.orderId)}</td></tr>`);
+  return `<table style="width:100%;border-collapse:collapse;margin-top:12px">${rows.join("")}</table>`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+export async function sendVoucherConfirmationEmail(input: {
+  order: VoucherOrder;
+  config: VoucherConfig;
+  qrDataUrl?: string | null;
+}): Promise<{ sent: boolean; error?: string }> {
+  const { order, config, qrDataUrl } = input;
+  const subject = `${config.confirmationEmailSubject} · ${order.orderId}`;
+  const amount = formatVoucherAmount(order.totalCzk);
+  const unit = formatVoucherAmount(order.denominationCzk);
+  const voucherUrl = `${getReservationAppBaseUrl()}/voucher`;
+
+  const qrBlock = qrDataUrl
+    ? `<p style="margin:20px 0 8px;font-size:13px;color:#71717a">Czech bank payment QR</p>
+       <img src="${qrDataUrl}" alt="Payment QR" width="220" height="220" style="display:block;margin:0 auto;border-radius:12px;border:1px solid #e4e4e7" />`
+    : "";
+
+  const html = `<!DOCTYPE html>
+<html><body style="font-family:system-ui,-apple-system,sans-serif;background:#fafafa;color:#18181b;padding:24px">
+  <div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #e4e4e7;border-radius:16px;padding:28px">
+    <p style="margin:0;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#a1a1aa">${BRAND_NAME}</p>
+    <h1 style="margin:8px 0 12px;font-size:22px">Voucher order received</h1>
+    <p style="line-height:1.55;color:#3f3f46">${escapeHtml(config.processingMessage)}</p>
+    <p style="margin:16px 0 0"><strong>Order ID:</strong> ${escapeHtml(order.orderId)}</p>
+    <p style="margin:6px 0"><strong>Voucher:</strong> ${escapeHtml(unit)} × ${order.quantity}</p>
+    <p style="margin:6px 0"><strong>Total:</strong> ${escapeHtml(amount)}</p>
+    <p style="margin:6px 0"><strong>Email:</strong> ${escapeHtml(order.buyerEmail)}</p>
+    <h2 style="margin:24px 0 8px;font-size:16px">Bank transfer details</h2>
+    ${bankBlockHtml(config, order)}
+    ${config.bankPaymentNote ? `<p style="margin-top:12px;color:#71717a;font-size:13px">${escapeHtml(config.bankPaymentNote)}</p>` : ""}
+    ${qrBlock}
+    <p style="margin-top:24px;font-size:12px;color:#a1a1aa"><a href="${voucherUrl}" style="color:#a16207">Buy another voucher</a></p>
+  </div>
+</body></html>`;
+
+  const text = [
+    `${BRAND_NAME} — Voucher order received`,
+    "",
+    config.processingMessage,
+    "",
+    `Order ID: ${order.orderId}`,
+    `Voucher: ${unit} × ${order.quantity}`,
+    `Total: ${amount}`,
+    `Email: ${order.buyerEmail}`,
+    "",
+    "Bank transfer:",
+    config.accountHolder && `Account holder: ${config.accountHolder}`,
+    config.accountNumber && `Account number: ${config.accountNumber}`,
+    config.iban && `IBAN: ${config.iban}`,
+    config.bankName && `Bank: ${config.bankName}`,
+    `Payment note: ${order.paymentMessage || order.orderId}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return sendResendEmail({ to: order.buyerEmail, subject, html, text });
+}
+
+export async function sendVoucherIssuedEmail(input: {
+  order: VoucherOrder;
+  config: VoucherConfig;
+  vouchers: { code: string; qrDataUrl: string }[];
+}): Promise<{ sent: boolean; error?: string }> {
+  const { order, config, vouchers } = input;
+  const subject = `${config.issuedEmailSubject} · ${order.orderId}`;
+  const unit = formatVoucherAmount(order.denominationCzk);
+
+  const cards = vouchers
+    .map(
+      (v) => `<div style="margin:16px 0;padding:16px;border:1px solid #e4e4e7;border-radius:12px;text-align:center">
+      <p style="margin:0 0 8px;font-size:13px;color:#71717a">${escapeHtml(unit)} voucher</p>
+      <p style="margin:0 0 12px;font-size:18px;font-weight:700;letter-spacing:0.06em">${escapeHtml(v.code)}</p>
+      <img src="${v.qrDataUrl}" alt="Voucher QR ${escapeHtml(v.code)}" width="180" height="180" style="display:block;margin:0 auto;border-radius:8px" />
+    </div>`,
+    )
+    .join("");
+
+  const html = `<!DOCTYPE html>
+<html><body style="font-family:system-ui,-apple-system,sans-serif;background:#fafafa;color:#18181b;padding:24px">
+  <div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #e4e4e7;border-radius:16px;padding:28px">
+    <p style="margin:0;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#a1a1aa">${BRAND_NAME}</p>
+    <h1 style="margin:8px 0 12px;font-size:22px">Your voucher is ready</h1>
+    <p style="line-height:1.55;color:#3f3f46">Payment confirmed for order <strong>${escapeHtml(order.orderId)}</strong>. Present the code or QR at the restaurant to redeem.</p>
+    ${cards}
+  </div>
+</body></html>`;
+
+  const text = [
+    `${BRAND_NAME} — Your voucher is ready`,
+    "",
+    `Order ID: ${order.orderId}`,
+    ...vouchers.map((v) => `Code: ${v.code} (${unit})`),
+  ].join("\n");
+
+  return sendResendEmail({ to: order.buyerEmail, subject, html, text });
+}

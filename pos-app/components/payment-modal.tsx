@@ -12,6 +12,7 @@ import {
   type CfdCheckoutPayload,
 } from "@/lib/cfd-display";
 import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
+import type { VoucherCode } from "@/lib/voucher";
 import { fetchEqualSplitProgress } from "@/src/lib/sales-actions";
 
 interface PaymentModalProps {
@@ -26,6 +27,13 @@ interface PaymentModalProps {
   error?: string | null;
   appliedVouchers?: { code: string; denominationCzk: number }[];
   onRemoveVoucher?: (code: string) => void;
+  applyVoucherCode?: (
+    code: string,
+    tableId?: string,
+    tableLabel?: string,
+  ) => Promise<{ error: string | null; code?: VoucherCode }>;
+  onVoucherApplied?: () => void;
+  onOpenVouchersTab?: () => void;
 }
 
 export function PaymentModal({
@@ -40,6 +48,9 @@ export function PaymentModal({
   error,
   appliedVouchers,
   onRemoveVoucher,
+  applyVoucherCode,
+  onVoucherApplied,
+  onOpenVouchersTab,
 }: PaymentModalProps) {
   const { translate } = useApp();
 
@@ -195,6 +206,9 @@ export function PaymentModal({
           initialEqualSplitCount={equalProgress.splitCount}
           appliedVouchers={appliedVouchers}
           onRemoveVoucher={onRemoveVoucher}
+          applyVoucherCode={applyVoucherCode}
+          onVoucherApplied={onVoucherApplied}
+          onOpenVouchersTab={onOpenVouchersTab}
         />
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-gray-500">

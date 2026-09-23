@@ -41,10 +41,12 @@ export const DEFAULT_VOUCHER_CONFIG: VoucherConfig = {
   bankPaymentNote: "",
   validityDays: 365,
   processingMessage:
-    "Thank you for ordering a voucher. We will process your order within 24 hours. After payment is confirmed, voucher codes will be sent to this email.",
+    "Thank you for ordering a voucher. Please complete payment within 15 minutes and tap “I’ve paid”. After we confirm your payment (within 24 hours), voucher codes will be sent to this email.",
   confirmationEmailSubject: "Voucher order received",
   issuedEmailSubject: "Your Seoul Prague voucher",
 };
+
+export const VOUCHER_PAYMENT_WINDOW_MINUTES = 15;
 
 export interface VoucherOrder {
   id: string;
@@ -59,6 +61,10 @@ export interface VoucherOrder {
   orderStatus: VoucherOrderStatus;
   paymentMessage?: string;
   notes?: string;
+  /** Guest must pay + mark paid before this time, or order auto-cancels. */
+  paymentExpiresAt?: string | null;
+  /** Guest confirmed they transferred / paid. */
+  guestMarkedPaidAt?: string | null;
   verifiedAt?: string | null;
   verifiedByStaffName?: string | null;
   issuedAt?: string | null;

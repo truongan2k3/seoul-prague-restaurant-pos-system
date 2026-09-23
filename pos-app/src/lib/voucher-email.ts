@@ -149,6 +149,9 @@ export async function sendVoucherConfirmationEmail(input: {
     <p style="margin:6px 0"><strong>Voucher:</strong> ${escapeHtml(unit)} × ${order.quantity}</p>
     <p style="margin:6px 0"><strong>Total:</strong> ${escapeHtml(amount)}</p>
     <p style="margin:6px 0"><strong>Email:</strong> ${escapeHtml(order.buyerEmail)}</p>
+    <p style="margin:16px 0 0;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;color:#92400e;font-size:14px;line-height:1.45">
+      Please complete payment within <strong>15 minutes</strong> and tap <strong>I’ve paid</strong> on the confirmation page. Unpaid orders are cancelled automatically after the timer.
+    </p>
     <h2 style="margin:24px 0 8px;font-size:16px">Bank transfer details</h2>
     ${bankBlockHtml(config, order)}
     ${config.bankPaymentNote ? `<p style="margin-top:12px;color:#71717a;font-size:13px">${escapeHtml(config.bankPaymentNote)}</p>` : ""}
@@ -166,6 +169,8 @@ export async function sendVoucherConfirmationEmail(input: {
     `Voucher: ${unit} × ${order.quantity}`,
     `Total: ${amount}`,
     `Email: ${order.buyerEmail}`,
+    "",
+    "Please pay within 15 minutes and tap “I’ve paid” on the website. Unpaid orders are cancelled after the timer.",
     "",
     "Bank transfer:",
     config.accountHolder && `Account holder: ${config.accountHolder}`,

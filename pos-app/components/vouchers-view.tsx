@@ -331,7 +331,14 @@ export function VouchersView() {
                         {order.paymentMethod === "czech_qr" ? "Czech QR" : "Transfer"} ·{" "}
                         {order.paymentStatus}
                       </td>
-                      <td className="px-4 py-3">{order.orderStatus.replaceAll("_", " ")}</td>
+                      <td className="px-4 py-3">
+                        {order.orderStatus.replaceAll("_", " ")}
+                        {order.guestMarkedPaidAt && order.paymentStatus === "pending" ? (
+                          <span className="mt-0.5 block text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                            Guest marked paid
+                          </span>
+                        ) : null}
+                      </td>
                       <td className="px-4 py-3 tabular-nums text-gray-600 dark:text-gray-300">
                         {formatWhen(order.createdAt)}
                       </td>
@@ -384,6 +391,16 @@ export function VouchersView() {
               <div className="flex justify-between gap-3">
                 <dt className="text-gray-500">{translate("voucherCreated")}</dt>
                 <dd>{formatWhen(selected.createdAt)}</dd>
+              </div>
+              {selected.paymentExpiresAt ? (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-gray-500">{translate("voucherPayBy")}</dt>
+                  <dd>{formatWhen(selected.paymentExpiresAt)}</dd>
+                </div>
+              ) : null}
+              <div className="flex justify-between gap-3">
+                <dt className="text-gray-500">{translate("voucherGuestPaid")}</dt>
+                <dd>{formatWhen(selected.guestMarkedPaidAt)}</dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt className="text-gray-500">{translate("voucherVerified")}</dt>

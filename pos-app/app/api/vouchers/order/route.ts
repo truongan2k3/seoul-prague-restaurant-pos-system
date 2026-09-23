@@ -32,5 +32,8 @@ export async function POST(request: Request) {
     order: result.order,
     qrDataUrl: result.qrDataUrl,
     spd: result.spd,
+    publicToken: result.publicToken,
+    paymentExpiresAt: result.order.paymentExpiresAt,
+    paymentWindowMinutes: 15,
   });
 }

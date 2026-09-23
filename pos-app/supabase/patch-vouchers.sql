@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS public.voucher_orders (
     )),
   payment_message text,
   notes text,
+  payment_expires_at timestamptz,
+  guest_marked_paid_at timestamptz,
+  public_token text,
   verified_at timestamptz,
   verified_by_staff_id text,
   verified_by_staff_name text,
@@ -39,6 +42,14 @@ CREATE INDEX IF NOT EXISTS voucher_orders_email_idx
 
 CREATE INDEX IF NOT EXISTS voucher_orders_status_idx
   ON public.voucher_orders (payment_status, order_status, created_at DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS voucher_orders_public_token_uidx
+  ON public.voucher_orders (public_token)
+  WHERE public_token IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS voucher_orders_payment_expires_idx
+  ON public.voucher_orders (payment_expires_at)
+  WHERE payment_status = 'pending' AND guest_marked_paid_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS public.voucher_codes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

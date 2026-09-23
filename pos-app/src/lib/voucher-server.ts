@@ -8,6 +8,7 @@ import {
   parseVoucherConfig,
   variableSymbolFromOrderId,
   voucherConfigToDb,
+  VOUCHER_PAYMENT_WINDOW_MINUTES,
   type VoucherCode,
   type VoucherConfig,
   type VoucherOrder,
@@ -32,6 +33,9 @@ type OrderRow = {
   order_status: string;
   payment_message: string | null;
   notes: string | null;
+  payment_expires_at: string | null;
+  guest_marked_paid_at: string | null;
+  public_token: string | null;
   verified_at: string | null;
   verified_by_staff_id: string | null;
   verified_by_staff_name: string | null;
@@ -68,6 +72,8 @@ function mapOrder(row: OrderRow, codes?: VoucherCode[]): VoucherOrder {
     orderStatus: row.order_status as VoucherOrder["orderStatus"],
     paymentMessage: row.payment_message ?? undefined,
     notes: row.notes ?? undefined,
+    paymentExpiresAt: row.payment_expires_at,
+    guestMarkedPaidAt: row.guest_marked_paid_at,
     verifiedAt: row.verified_at,
     verifiedByStaffName: row.verified_by_staff_name,
     issuedAt: row.issued_at,
@@ -75,6 +81,40 @@ function mapOrder(row: OrderRow, codes?: VoucherCode[]): VoucherOrder {
     updatedAt: row.updated_at,
     codes,
   };
+}
+
+function createPublicToken(): string {
+  const bytes = new Uint8Array(18);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Cancel pending orders past the payment window when guest never marked paid. */
+export async function expireOverdueVoucherOrders(): Promise<number> {
+  const admin = createSupabaseAdmin();
+  const nowIso = new Date().toISOString();
+  const { data, error } = await admin
+    .from("voucher_orders")
+    .update({
+      payment_status: "cancelled",
+      order_status: "cancelled",
+      updated_at: nowIso,
+      notes: "Auto-cancelled: payment window expired",
+    })
+    .eq("payment_status", "pending")
+    .is("guest_marked_paid_at", null)
+    .lt("payment_expires_at", nowIso)
+    .select("id");
+
+  if (error || !data) return 0;
+  for (const row of data as { id: string }[]) {
+    await writeAudit({
+      orderUuid: row.id,
+      action: "cancelled",
+      meta: { reason: "payment_window_expired" },
+    });
+  }
+  return data.length;
 }
 
 function mapCode(row: CodeRow): VoucherCode {
@@ -161,27 +201,59 @@ export async function createVoucherOrder(input: {
   denominationCzk: number;
   quantity: number;
   paymentMethod: VoucherPaymentMethod;
-}): Promise<{ order: VoucherOrder | null; qrDataUrl: string | null; spd: string | null; error: string | null }> {
+}): Promise<{
+  order: VoucherOrder | null;
+  qrDataUrl: string | null;
+  spd: string | null;
+  publicToken: string | null;
+  error: string | null;
+}> {
   const config = await fetchVoucherConfigServer();
   if (!config.enabled) {
-    return { order: null, qrDataUrl: null, spd: null, error: "Voucher sales are currently disabled." };
+    return {
+      order: null,
+      qrDataUrl: null,
+      spd: null,
+      publicToken: null,
+      error: "Voucher sales are currently disabled.",
+    };
   }
 
   const name = input.buyerName.trim();
   const email = input.buyerEmail.trim().toLowerCase();
-  if (!name) return { order: null, qrDataUrl: null, spd: null, error: "Please enter your name." };
+  if (!name) {
+    return { order: null, qrDataUrl: null, spd: null, publicToken: null, error: "Please enter your name." };
+  }
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return { order: null, qrDataUrl: null, spd: null, error: "Please enter a valid email." };
+    return {
+      order: null,
+      qrDataUrl: null,
+      spd: null,
+      publicToken: null,
+      error: "Please enter a valid email.",
+    };
   }
 
   const denomination = Math.round(Number(input.denominationCzk));
   if (!config.denominationsCzk.includes(denomination)) {
-    return { order: null, qrDataUrl: null, spd: null, error: "Invalid voucher amount." };
+    return {
+      order: null,
+      qrDataUrl: null,
+      spd: null,
+      publicToken: null,
+      error: "Invalid voucher amount.",
+    };
   }
 
   const quantity = Math.round(Number(input.quantity));
   if (!Number.isFinite(quantity) || quantity < 1 || quantity > 50) {
-    return { order: null, qrDataUrl: null, spd: null, error: "Quantity must be between 1 and 50." };
+    return {
+      order: null,
+      qrDataUrl: null,
+      spd: null,
+      publicToken: null,
+      error: "Quantity must be between 1 and 50.",
+    };
   }
 
   const paymentMethod: VoucherPaymentMethod =
@@ -190,7 +262,12 @@ export async function createVoucherOrder(input: {
   const totalCzk = denomination * quantity;
   const orderId = createVoucherOrderId();
   const paymentMessage = buildVoucherPaymentMessage(orderId);
-  const now = new Date().toISOString();
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const paymentExpiresAt = new Date(
+    now.getTime() + VOUCHER_PAYMENT_WINDOW_MINUTES * 60 * 1000,
+  ).toISOString();
+  const publicToken = createPublicToken();
 
   const admin = createSupabaseAdmin();
   const { data, error } = await admin
@@ -206,8 +283,10 @@ export async function createVoucherOrder(input: {
       payment_status: "pending",
       order_status: "pending_verification",
       payment_message: paymentMessage,
-      created_at: now,
-      updated_at: now,
+      payment_expires_at: paymentExpiresAt,
+      public_token: publicToken,
+      created_at: nowIso,
+      updated_at: nowIso,
     })
     .select("*")
     .single();
@@ -217,6 +296,7 @@ export async function createVoucherOrder(input: {
       order: null,
       qrDataUrl: null,
       spd: null,
+      publicToken: null,
       error: error?.message ?? "Failed to create order.",
     };
   }
@@ -225,7 +305,7 @@ export async function createVoucherOrder(input: {
   await writeAudit({
     orderUuid: order.id,
     action: "created",
-    meta: { orderId, totalCzk, quantity, denomination },
+    meta: { orderId, totalCzk, quantity, denomination, paymentExpiresAt },
   });
 
   const { spd, qrDataUrl } = await buildPaymentQrDataUrl(config, totalCzk, orderId);
@@ -236,10 +316,11 @@ export async function createVoucherOrder(input: {
     qrDataUrl,
   });
 
-  return { order, qrDataUrl, spd, error: null };
+  return { order, qrDataUrl, spd, publicToken, error: null };
 }
 
 export async function listVoucherOrders(limit = 200): Promise<VoucherOrder[]> {
+  await expireOverdueVoucherOrders();
   const admin = createSupabaseAdmin();
   const { data } = await admin
     .from("voucher_orders")
@@ -289,6 +370,7 @@ export async function verifyVoucherPayment(input: {
   staffId?: string | null;
   staffName?: string | null;
 }): Promise<{ order: VoucherOrder | null; error: string | null }> {
+  await expireOverdueVoucherOrders();
   const admin = createSupabaseAdmin();
   const { data: existing } = await admin
     .from("voucher_orders")
@@ -492,6 +574,98 @@ export async function redeemVoucherCode(input: {
     .eq("id", found.code.orderUuid);
 
   return { code: mapCode(data as CodeRow), error: null };
+}
+
+async function findOrderByPublicToken(
+  orderId: string,
+  token: string,
+): Promise<OrderRow | null> {
+  const admin = createSupabaseAdmin();
+  const { data } = await admin
+    .from("voucher_orders")
+    .select("*")
+    .eq("order_id", orderId.trim())
+    .eq("public_token", token.trim())
+    .maybeSingle();
+  return (data as OrderRow | null) ?? null;
+}
+
+export async function getGuestVoucherOrderStatus(input: {
+  orderId: string;
+  token: string;
+}): Promise<{
+  order: VoucherOrder | null;
+  remainingSeconds: number;
+  error: string | null;
+}> {
+  await expireOverdueVoucherOrders();
+  const row = await findOrderByPublicToken(input.orderId, input.token);
+  if (!row) return { order: null, remainingSeconds: 0, error: "Order not found." };
+  const order = mapOrder(row);
+  let remainingSeconds = 0;
+  if (
+    order.paymentStatus === "pending" &&
+    !order.guestMarkedPaidAt &&
+    order.paymentExpiresAt
+  ) {
+    remainingSeconds = Math.max(
+      0,
+      Math.ceil((new Date(order.paymentExpiresAt).getTime() - Date.now()) / 1000),
+    );
+  }
+  return { order, remainingSeconds, error: null };
+}
+
+export async function markGuestVoucherPaid(input: {
+  orderId: string;
+  token: string;
+}): Promise<{ order: VoucherOrder | null; error: string | null }> {
+  await expireOverdueVoucherOrders();
+  const row = await findOrderByPublicToken(input.orderId, input.token);
+  if (!row) return { order: null, error: "Order not found." };
+
+  if (row.payment_status === "cancelled") {
+    return { order: mapOrder(row), error: "This order has expired and was cancelled." };
+  }
+  if (row.payment_status === "paid") {
+    return { order: mapOrder(row), error: null };
+  }
+  if (row.guest_marked_paid_at) {
+    return { order: mapOrder(row), error: null };
+  }
+
+  if (row.payment_expires_at && new Date(row.payment_expires_at).getTime() < Date.now()) {
+    await expireOverdueVoucherOrders();
+    const fresh = await findOrderByPublicToken(input.orderId, input.token);
+    return {
+      order: fresh ? mapOrder(fresh) : null,
+      error: "Payment window expired. This order was cancelled.",
+    };
+  }
+
+  const nowIso = new Date().toISOString();
+  const admin = createSupabaseAdmin();
+  const { data, error } = await admin
+    .from("voucher_orders")
+    .update({
+      guest_marked_paid_at: nowIso,
+      updated_at: nowIso,
+    })
+    .eq("id", row.id)
+    .eq("payment_status", "pending")
+    .is("guest_marked_paid_at", null)
+    .select("*")
+    .maybeSingle();
+
+  if (error) return { order: null, error: error.message };
+  const updated = (data as OrderRow | null) ?? row;
+  if (data) {
+    await writeAudit({
+      orderUuid: row.id,
+      action: "guest_marked_paid",
+    });
+  }
+  return { order: mapOrder(updated), error: null };
 }
 
 export { DEFAULT_VOUCHER_CONFIG };

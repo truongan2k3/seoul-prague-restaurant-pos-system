@@ -85,7 +85,9 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
   const [markBusy, setMarkBusy] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
   const paymentSectionRef = useRef<HTMLElement | null>(null);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
   const [lang, setLang] = useState<GuestReservationLang>("en");
+  const [showFieldErrors, setShowFieldErrors] = useState(false);
   const copy = guestVoucherCopy(lang);
 
   useEffect(() => {
@@ -136,16 +138,45 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
 
   const total = denomination * quantity;
   const phoneDigits = buyerPhone.replace(/\D/g, "");
-  const detailsReady =
-    buyerName.trim().length > 0 && isValidEmail(buyerEmail) && phoneDigits.length >= 6;
+  const nameMissing = buyerName.trim().length === 0;
+  const emailInvalid = !isValidEmail(buyerEmail);
+  const phoneInvalid = phoneDigits.length < 6;
+  const detailsReady = !nameMissing && !emailInvalid && !phoneInvalid;
+  // Name is always highlighted while empty; other fields after submit/blur attempt.
+  const nameError = nameMissing;
+  const emailError = showFieldErrors && emailInvalid;
+  const phoneError = showFieldErrors && phoneInvalid;
+
+  const fieldClass = (hasError: boolean) =>
+    `mt-1.5 w-full rounded-xl border bg-white/5 px-3 py-3 text-sm text-white outline-none transition ${
+      hasError
+        ? "border-red-500 bg-red-500/10 text-red-50 placeholder:text-red-200/50 focus:border-red-400"
+        : "border-white/15 focus:border-[#C9A88B]/60"
+    }`;
 
   const bankReady = useMemo(() => {
     if (!config) return false;
     return Boolean(config.accountHolder || config.accountNumber || config.iban);
   }, [config]);
 
+  const tryPlaceOrder = () => {
+    if (!config || busy) return;
+    if (!detailsReady) {
+      setShowFieldErrors(true);
+      if (nameMissing) {
+        nameInputRef.current?.focus();
+        nameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      return;
+    }
+    void placeOrder();
+  };
+
   const placeOrder = async () => {
-    if (!config || busy || !detailsReady) return;
+    if (!config || busy || !detailsReady) {
+      setShowFieldErrors(true);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -531,39 +562,64 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
             <div>
               <p className="text-xs uppercase tracking-[0.28em] text-white/40">{copy.stepDetails}</p>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <label className="block text-xs text-white/45 sm:col-span-2">
+                <label
+                  className={`block text-xs sm:col-span-2 ${
+                    nameError ? "text-red-300" : "text-white/45"
+                  }`}
+                >
                   {copy.fullName}
                   <input
+                    ref={nameInputRef}
                     value={buyerName}
-                    onChange={(e) => setBuyerName(e.target.value)}
-                    className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm text-white outline-none focus:border-[#C9A88B]/60"
+                    onChange={(e) => {
+                      setBuyerName(e.target.value);
+                      if (showFieldErrors && e.target.value.trim()) {
+                        /* keep errors until all valid — cleared below */
+                      }
+                    }}
+                    onBlur={() => {
+                      if (nameMissing) setShowFieldErrors(true);
+                    }}
+                    className={fieldClass(nameError)}
                     placeholder={copy.fullNamePlaceholder}
                     autoComplete="name"
                     required
+                    aria-invalid={nameError}
                   />
+                  {nameError ? (
+                    <span className="mt-1.5 block text-xs text-red-300">{copy.fullName} *</span>
+                  ) : null}
                 </label>
-                <label className="block text-xs text-white/45">
+                <label className={`block text-xs ${emailError ? "text-red-300" : "text-white/45"}`}>
                   {copy.email}
                   <input
                     type="email"
                     value={buyerEmail}
                     onChange={(e) => setBuyerEmail(e.target.value)}
-                    className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm text-white outline-none focus:border-[#C9A88B]/60"
+                    onBlur={() => {
+                      if (emailInvalid) setShowFieldErrors(true);
+                    }}
+                    className={fieldClass(emailError)}
                     placeholder={copy.emailPlaceholder}
                     autoComplete="email"
                     required
+                    aria-invalid={emailError}
                   />
                 </label>
-                <label className="block text-xs text-white/45">
+                <label className={`block text-xs ${phoneError ? "text-red-300" : "text-white/45"}`}>
                   {copy.phone}
                   <input
                     type="tel"
                     value={buyerPhone}
                     onChange={(e) => setBuyerPhone(e.target.value)}
-                    className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm text-white outline-none focus:border-[#C9A88B]/60"
+                    onBlur={() => {
+                      if (phoneInvalid) setShowFieldErrors(true);
+                    }}
+                    className={fieldClass(phoneError)}
                     placeholder={copy.phonePlaceholder}
                     autoComplete="tel"
                     required
+                    aria-invalid={phoneError}
                   />
                 </label>
               </div>
@@ -613,16 +669,24 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
 
             <button
               type="button"
-              disabled={busy || !detailsReady || !bankReady}
-              onClick={() => void placeOrder()}
-              className="w-full rounded-2xl bg-[#C9A88B] px-6 py-4 text-sm font-semibold uppercase tracking-[0.14em] text-[#0B0B0C] transition hover:bg-[#d4b69a] disabled:opacity-40"
+              disabled={busy || !bankReady}
+              onClick={() => tryPlaceOrder()}
+              className={`w-full rounded-2xl bg-[#C9A88B] px-6 py-4 text-sm font-semibold uppercase tracking-[0.14em] text-[#0B0B0C] transition hover:bg-[#d4b69a] disabled:opacity-40 ${
+                !detailsReady ? "opacity-50" : ""
+              }`}
             >
               {busy
                 ? copy.placingOrder
                 : `${copy.placeOrder} · ${formatVoucherAmount(total)}`}
             </button>
             {!detailsReady ? (
-              <p className="text-center text-xs text-white/40">{copy.detailsRequired}</p>
+              <p
+                className={`text-center text-xs ${
+                  showFieldErrors ? "text-red-300" : "text-white/40"
+                }`}
+              >
+                {copy.detailsRequired}
+              </p>
             ) : null}
             {!bankReady ? (
               <p className="text-center text-sm text-amber-200/80">{copy.bankNotConfigured}</p>

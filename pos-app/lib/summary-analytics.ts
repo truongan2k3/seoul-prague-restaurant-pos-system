@@ -24,8 +24,12 @@ export interface RevenueStats {
   orderCount: number;
 }
 
-/** Bill amount before tip (subtotal − discount, equals grandTotal − tip). */
+/** Bill amount before tip — food revenue after staff discount (gift vouchers excluded). */
 export function saleNetTotal(sale: SaleRecord): number {
+  const fromFood = Number(sale.subtotal) - Number(sale.discountAmount ?? 0);
+  if (Number.isFinite(fromFood)) {
+    return Math.max(0, fromFood);
+  }
   return Math.max(0, sale.grandTotal - sale.tip);
 }
 

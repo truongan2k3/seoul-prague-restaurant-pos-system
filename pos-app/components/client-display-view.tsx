@@ -190,20 +190,44 @@ function CheckoutView({
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {checkout.items.map((item, index) => (
-                <tr key={`${item.name}-${index}`} className="text-[#F5EDE4]">
-                  <td className="px-4 py-4 text-center text-2xl font-semibold tabular-nums text-[#C9A88B] sm:text-3xl">
-                    {item.quantity}
-                  </td>
-                  <td className="px-4 py-4 text-lg font-medium leading-snug sm:text-xl">{item.name}</td>
-                  <td className="hidden px-4 py-4 text-right text-lg tabular-nums text-white/50 sm:table-cell">
-                    {formatCzk(item.unitPrice)}
-                  </td>
-                  <td className="px-4 py-4 text-right text-xl font-semibold tabular-nums sm:text-2xl">
-                    {formatCzk(item.lineTotal)}
-                  </td>
-                </tr>
-              ))}
+              {checkout.items.map((item, index) => {
+                const isVoucher = item.kind === "voucher" || item.highlight;
+                return (
+                  <tr
+                    key={`${item.name}-${index}`}
+                    className={
+                      isVoucher
+                        ? "bg-emerald-950/50 text-emerald-100"
+                        : "text-[#F5EDE4]"
+                    }
+                  >
+                    <td
+                      className={`px-4 py-4 text-center text-2xl font-semibold tabular-nums sm:text-3xl ${
+                        isVoucher ? "text-emerald-300" : "text-[#C9A88B]"
+                      }`}
+                    >
+                      {item.quantity}
+                    </td>
+                    <td className="px-4 py-4 text-lg font-medium leading-snug sm:text-xl">
+                      {item.name}
+                    </td>
+                    <td
+                      className={`hidden px-4 py-4 text-right text-lg tabular-nums sm:table-cell ${
+                        isVoucher ? "text-emerald-200/80" : "text-white/50"
+                      }`}
+                    >
+                      {formatCzk(item.unitPrice)}
+                    </td>
+                    <td
+                      className={`px-4 py-4 text-right text-xl font-semibold tabular-nums sm:text-2xl ${
+                        isVoucher ? "text-emerald-200" : ""
+                      }`}
+                    >
+                      {formatCzk(item.lineTotal)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -221,6 +245,12 @@ function CheckoutView({
                 <div className="flex justify-between text-[#C9A88B]">
                   <span>{translate("discount")}</span>
                   <span className="tabular-nums">−{formatCzk(checkout.discount)}</span>
+                </div>
+              )}
+              {(checkout.voucherDiscount ?? 0) > 0 && (
+                <div className="flex justify-between font-semibold text-emerald-300">
+                  <span>{translate("voucherLabel")}</span>
+                  <span className="tabular-nums">−{formatCzk(checkout.voucherDiscount ?? 0)}</span>
                 </div>
               )}
               {checkout.tip > 0 && (

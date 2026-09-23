@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
-import { AlertTriangle, ChevronLeft, ChevronRight, Eye, Pencil, Percent } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Eye, Pencil, Percent, Ticket } from "lucide-react";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { DateRangeInputs } from "@/components/date-range-inputs";
 import { OrderHistoryModal } from "@/components/order-history-modal";
@@ -560,6 +560,15 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                                 aria-label={translate("historyDiscountAlert")}
                               >
                                 <Percent className="h-5 w-5" strokeWidth={2.5} />
+                              </span>
+                            )}
+                            {(sale.voucherDiscountAmount ?? 0) > 0 && (
+                              <span
+                                title={translate("historyVoucherAlert")}
+                                className="inline-flex shrink-0 text-amber-600 dark:text-amber-400"
+                                aria-label={translate("historyVoucherAlert")}
+                              >
+                                <Ticket className="h-5 w-5" strokeWidth={2.5} />
                               </span>
                             )}
                           </div>

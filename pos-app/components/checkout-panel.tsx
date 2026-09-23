@@ -522,6 +522,12 @@ export function CheckoutPanel({
     const discount = isSplitSelecting ? 0 : totals.discountAmount;
     const tip = isSplitSelecting ? 0 : totalTipWithKeep;
     const total = isSplitSelecting ? fullSubtotal : payTotal;
+    const voucherLines = isSplitSelecting
+      ? []
+      : appliedVouchers.map((voucher) => ({
+          code: voucher.code,
+          denominationCzk: voucher.denominationCzk,
+        }));
 
     onCfdUpdate(
       buildCfdCheckoutPayload(tableLabel, displayOrders, menuItems, {
@@ -530,6 +536,8 @@ export function CheckoutPanel({
         tip,
         grandTotal: total,
         amountDueNow: total,
+        voucherLines,
+        voucherDiscount: isSplitSelecting ? 0 : voucherDiscountAmount,
         amountGiven:
           !isSplitSelecting &&
           paymentMethod === "cash" &&
@@ -575,6 +583,8 @@ export function CheckoutPanel({
     insufficientPayment,
     cashGivenNum,
     panelView,
+    appliedVouchers,
+    voucherDiscountAmount,
   ]);
 
   const remainingBillLines = useMemo(
@@ -1008,17 +1018,14 @@ export function CheckoutPanel({
               </span>
             </li>
           ))}
-        </ul>
-
-        {appliedVouchers.length > 0 && (
-          <ul className="mt-3 space-y-1.5 border-t border-dashed border-emerald-300/80 pt-3 dark:border-amber-700/60">
-            {appliedVouchers.map((voucher) => (
-              <li
-                key={voucher.code}
-                className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50/90 px-3 py-2 text-sm text-emerald-800 dark:bg-amber-950/40 dark:text-amber-200"
-              >
-                <span className="min-w-0 truncate font-semibold">
-                  {translate("voucherLabel")} −{displayCzkOnly(voucher.denominationCzk)}
+          {appliedVouchers.map((voucher) => (
+            <li
+              key={`voucher-${voucher.code}`}
+              className="grid grid-cols-[minmax(0,1fr)_5.5rem_5.5rem] gap-x-3 rounded-lg bg-emerald-50/90 py-3 text-sm font-semibold text-emerald-800 dark:bg-amber-950/40 dark:text-amber-200 sm:grid-cols-[minmax(0,1fr)_6rem_6rem] sm:text-base"
+            >
+              <span className="flex min-w-0 items-center gap-2 px-2">
+                <span className="min-w-0 truncate">
+                  {translate("voucherLabel")}
                   <span className="ml-2 font-mono text-xs font-normal opacity-80">
                     {voucher.code}
                   </span>
@@ -1032,10 +1039,16 @@ export function CheckoutPanel({
                     {translate("voucherRemove")}
                   </button>
                 ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
+              </span>
+              <span className="text-right tabular-nums">
+                −{displayCzkOnly(voucher.denominationCzk)}
+              </span>
+              <span className="pr-2 text-right tabular-nums">
+                −{displayCzkOnly(voucher.denominationCzk)}
+              </span>
+            </li>
+          ))}
+        </ul>
 
         <div className="mt-4 space-y-2 border-t border-gray-300 pt-4 dark:border-gray-600">
           <div className="flex items-start justify-between gap-3">

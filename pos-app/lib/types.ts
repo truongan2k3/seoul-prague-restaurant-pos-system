@@ -538,6 +538,9 @@ export interface SaleRecord {
   changeDue?: number;
   splitMode?: SplitMode;
   splitCount?: number;
+  /** Gift voucher value applied (reduces amount collected, not food revenue). */
+  voucherDiscountAmount?: number;
+  voucherCodes?: string[];
   items: OrderItem[];
   activityLog?: OrderLogEntry[];
   closedAt: Date;

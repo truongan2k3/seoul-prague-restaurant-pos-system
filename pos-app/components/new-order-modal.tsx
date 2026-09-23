@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronRight, MessageSquare, Minus, Plus, Search, X } from "lucide-react";
+import { Check, ChevronRight, Gift, MessageSquare, Minus, Plus, Search, X } from "lucide-react";
 import { CancelReasonModal } from "@/components/cancel-reason-modal";
 import { ItemCustomizeModal, type CustomizeResult } from "@/components/item-customize-modal";
 import { GrillGuestCountModal } from "@/components/grill-guest-count-modal";
@@ -12,6 +12,7 @@ import { OnScreenKeyboard } from "@/components/on-screen-keyboard";
 import { OrderLineToolbar } from "@/components/order-line-toolbar";
 import { VoucherScanFab } from "@/components/voucher-scan-fab";
 import { ElapsedTimer } from "@/components/live-clock";
+import { buildCfdCheckoutPayload, sendCfdEvent } from "@/lib/cfd-display";
 import type { VoucherCode } from "@/lib/voucher";
 import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
@@ -649,6 +650,56 @@ export function NewOrderModal({
     appliedVouchers.reduce((sum, voucher) => sum + voucher.denominationCzk, 0),
   );
   const amountDueAfterVoucher = Math.max(0, billTotal - voucherDiscountTotal);
+  const hadVouchersOnCfdRef = useRef(false);
+
+  // Show gift vouchers on the customer display as soon as they are applied.
+  useEffect(() => {
+    if (!open) {
+      hadVouchersOnCfdRef.current = false;
+      return;
+    }
+    if (appliedVouchers.length === 0) {
+      if (hadVouchersOnCfdRef.current) {
+        hadVouchersOnCfdRef.current = false;
+        void sendCfdEvent("CANCEL_CHECKOUT", {});
+      }
+      return;
+    }
+    hadVouchersOnCfdRef.current = true;
+    const displayOrders = [
+      ...submittedLines.map((line) => ({
+        ...line,
+        id: line.lineId,
+      })),
+      ...cartLinesToOrders(cart),
+    ] as OrderItem[];
+    void sendCfdEvent(
+      "START_CHECKOUT",
+      buildCfdCheckoutPayload(tableLabel, displayOrders, menuItems, {
+        subtotal: billTotal,
+        discount: 0,
+        tip: 0,
+        grandTotal: amountDueAfterVoucher,
+        amountDueNow: amountDueAfterVoucher,
+        voucherLines: appliedVouchers.map((voucher) => ({
+          code: voucher.code,
+          denominationCzk: voucher.denominationCzk,
+        })),
+        voucherDiscount: voucherDiscountTotal,
+        staffInitiated: true,
+      }),
+    );
+  }, [
+    open,
+    appliedVouchers,
+    billTotal,
+    amountDueAfterVoucher,
+    voucherDiscountTotal,
+    submittedLines,
+    cart,
+    menuItems,
+    tableLabel,
+  ]);
 
   const hasKitchenWork = submittedLines.some((item) => {
     const kitchen = resolveKitchenStatus(item);
@@ -1544,7 +1595,10 @@ export function NewOrderModal({
           </p>
         )}
 
-        {submittedLines.length === 0 && cart.length === 0 && !pendingKitchenMessage ? (
+        {submittedLines.length === 0 &&
+        cart.length === 0 &&
+        appliedVouchers.length === 0 &&
+        !pendingKitchenMessage ? (
           <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
             {translate("cartEmpty")}
           </p>
@@ -1732,6 +1786,41 @@ export function NewOrderModal({
               );
             })}
 
+            {appliedVouchers.map((voucher) => (
+              <li
+                key={`voucher-${voucher.code}`}
+                className="overflow-hidden rounded-xl border border-emerald-400/70 bg-emerald-50 shadow-sm dark:border-amber-700/70 dark:bg-amber-950/50"
+              >
+                <div className="flex w-full items-start gap-2 px-3 py-3 text-emerald-900 dark:text-amber-100">
+                  <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center">
+                    <Gift className="h-5 w-5 text-emerald-600 dark:text-amber-300" strokeWidth={2.5} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-base font-bold leading-snug">
+                      {translate("voucherLabel")} −{formatOrderPrice(voucher.denominationCzk)}
+                    </p>
+                    <p className="mt-0.5 font-mono text-[11px] font-semibold uppercase tracking-wide opacity-80">
+                      {voucher.code}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="text-base font-bold tabular-nums">
+                      −{formatOrderPrice(voucher.denominationCzk)}
+                    </span>
+                    {onRemoveVoucher ? (
+                      <button
+                        type="button"
+                        onClick={() => onRemoveVoucher(voucher.code)}
+                        className="text-xs font-semibold underline opacity-80 hover:opacity-100"
+                      >
+                        {translate("voucherRemove")}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </li>
+            ))}
+
             {pendingKitchenMessage && (
               <li className="overflow-hidden rounded-xl border border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/40">
                 <div className="flex items-start gap-2 px-3 py-3">
@@ -1779,40 +1868,14 @@ export function NewOrderModal({
             </span>
           </div>
           {appliedVouchers.length > 0 && (
-            <>
-              <ul className="space-y-1.5">
-                {appliedVouchers.map((voucher) => (
-                  <li
-                    key={voucher.code}
-                    className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50/90 px-2.5 py-1.5 text-sm font-semibold text-emerald-800 dark:bg-amber-950/40 dark:text-amber-200"
-                  >
-                    <span className="min-w-0 truncate">
-                      {translate("voucherLabel")} −{formatOrderPrice(voucher.denominationCzk)}
-                      <span className="ml-2 font-mono text-xs font-normal opacity-80">
-                        {voucher.code}
-                      </span>
-                    </span>
-                    {onRemoveVoucher ? (
-                      <button
-                        type="button"
-                        onClick={() => onRemoveVoucher(voucher.code)}
-                        className="shrink-0 text-xs font-semibold underline opacity-80 hover:opacity-100"
-                      >
-                        {translate("voucherRemove")}
-                      </button>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-              <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-2.5 py-2 dark:bg-amber-950/30">
-                <span className="text-sm font-bold text-emerald-900 dark:text-amber-100">
-                  {translate("amountDueNow")}
-                </span>
-                <span className="text-xl font-bold tabular-nums text-emerald-900 dark:text-amber-100">
-                  {formatOrderPrice(amountDueAfterVoucher)}
-                </span>
-              </div>
-            </>
+            <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-2.5 py-2 dark:bg-amber-950/30">
+              <span className="text-sm font-bold text-emerald-900 dark:text-amber-100">
+                {translate("amountDueNow")}
+              </span>
+              <span className="text-xl font-bold tabular-nums text-emerald-900 dark:text-amber-100">
+                {formatOrderPrice(amountDueAfterVoucher)}
+              </span>
+            </div>
           )}
         </div>
 

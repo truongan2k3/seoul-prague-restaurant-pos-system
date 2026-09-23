@@ -50,7 +50,7 @@ export const CATEGORY_COLUMNS = "id, name, type, display_order, created_at";
 export const INVENTORY_COLUMNS = "id, name, category, quantity, unit, sold_out";
 
 export const SALES_COLUMNS =
-  "id, table_label, staff_name, subtotal, discount_amount, tip, tip_payment_method, grand_total, payment_method, amount_given, change_due, split_mode, split_count, items, activity_log, closed_at, seated_at, deleted_at, reservation_id, guest_name, guest_phone, party_size, visit_source, service_channel";
+  "id, table_label, staff_name, subtotal, discount_amount, tip, tip_payment_method, grand_total, payment_method, amount_given, change_due, split_mode, split_count, voucher_discount_amount, voucher_codes, items, activity_log, closed_at, seated_at, deleted_at, reservation_id, guest_name, guest_phone, party_size, visit_source, service_channel";
 
 export interface SupabaseTableRow {
   id: string;
@@ -494,6 +494,8 @@ export function mapSalesResponse(
     change_due?: number | null;
     split_mode?: "total" | "equal" | "items" | null;
     split_count?: number | null;
+    voucher_discount_amount?: number | null;
+    voucher_codes?: string[] | null;
     items: OrderItem[];
     activity_log?: OrderLogEntry[] | null;
     closed_at: string;
@@ -523,6 +525,8 @@ export function mapSalesResponse(
     changeDue: s.change_due != null ? Number(s.change_due) : undefined,
     splitMode: s.split_mode ?? undefined,
     splitCount: s.split_count ?? undefined,
+    voucherDiscountAmount: Number(s.voucher_discount_amount ?? 0),
+    voucherCodes: Array.isArray(s.voucher_codes) ? s.voucher_codes.filter(Boolean) : [],
     items: s.items,
     activityLog: ((s.activity_log as Array<{
       id: string;

@@ -77,7 +77,8 @@ export function useTableOrderWorkflow({
   const [appliedVouchersTableId, setAppliedVouchersTableId] = useState<string | null>(null);
 
   const selectedTable = modal ? tables.find((t) => t.id === modal.tableId) : undefined;
-  const activeTableIdForVoucher = modal?.tableId ?? null;
+  const activeTableIdForVoucher =
+    modal?.type === "new-order" || modal?.type === "checkout" ? modal.tableId : null;
 
   const refreshAppliedVouchers = useCallback(async (tableId?: string | null) => {
     const id = tableId ?? activeTableIdForVoucher;

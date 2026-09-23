@@ -7,12 +7,11 @@ import { useApp } from "@/contexts/app-context";
 import { formatVoucherAmount, type VoucherCode } from "@/lib/voucher";
 
 export interface VoucherScanFabProps {
-  activeTableId: string | null;
+  activeTableId: string;
   tableLabel?: string | null;
   staffName?: string | null;
   onApplied?: (code: VoucherCode) => void;
   onOpenVouchersTab?: () => void;
-  /** Apply via parent workflow (POST apply + refresh). */
   applyVoucherCode: (
     code: string,
     tableId?: string,
@@ -20,6 +19,7 @@ export interface VoucherScanFabProps {
   ) => Promise<{ error: string | null; code?: VoucherCode }>;
 }
 
+/** Compact corner control — only mount when an Add Items / Payment order is open. */
 export function VoucherScanFab({
   activeTableId,
   tableLabel,
@@ -59,10 +59,6 @@ export function VoucherScanFab({
     async (raw: string) => {
       const code = raw.trim();
       if (!code || applyingRef.current) return;
-      if (!activeTableId) {
-        setError(translate("voucherScanNeedTable"));
-        return;
-      }
       applyingRef.current = true;
       setBusy(true);
       setError(null);
@@ -87,7 +83,7 @@ export function VoucherScanFab({
         applyingRef.current = false;
       }
     },
-    [activeTableId, applyVoucherCode, onApplied, stopCamera, tableLabel, translate],
+    [activeTableId, applyVoucherCode, onApplied, stopCamera, tableLabel],
   );
 
   useEffect(() => {
@@ -150,12 +146,11 @@ export function VoucherScanFab({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-20 right-4 z-[115] flex min-h-[3.25rem] items-center gap-2 rounded-2xl bg-emerald-700 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-900/30 hover:bg-emerald-600 sm:bottom-24 sm:right-5 sm:min-h-[3.5rem] sm:px-5 sm:text-base"
+        title={translate("voucherScanFab")}
         aria-label={translate("voucherScanFab")}
+        className="fixed bottom-4 right-4 z-[115] inline-flex h-11 w-11 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-700/95 text-white shadow-md shadow-black/30 backdrop-blur-sm transition hover:bg-emerald-600 sm:bottom-5 sm:right-5 sm:h-12 sm:w-12"
       >
-        <Gift className="h-5 w-5 shrink-0" />
-        <Camera className="h-5 w-5 shrink-0 opacity-90" />
-        <span>{translate("voucherScanFab")}</span>
+        <Gift className="h-5 w-5" />
       </button>
 
       <Modal
@@ -165,18 +160,21 @@ export function VoucherScanFab({
         zIndexClass="z-[120]"
       >
         <div className="space-y-4">
-          {!activeTableId ? (
-            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-              {translate("voucherScanNeedTable")}
-            </p>
-          ) : (
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              {translate("table")} {tableLabel ?? activeTableId}
-            </p>
-          )}
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            {translate("table")} {tableLabel ?? activeTableId}
+          </p>
 
-          <div className="overflow-hidden rounded-xl bg-black">
+          <div className="relative overflow-hidden rounded-xl bg-black">
             <video ref={videoRef} className="aspect-square w-full object-cover" playsInline muted />
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="h-40 w-40 rounded-2xl border-2 border-[#C9A88B]/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
+            </div>
+            <div className="absolute bottom-3 left-0 right-0 flex justify-center">
+              <span className="rounded-full bg-black/60 px-3 py-1 text-[11px] font-medium text-white/90">
+                <Camera className="mr-1 inline h-3 w-3" />
+                QR
+              </span>
+            </div>
           </div>
 
           {error ? <p className="text-sm text-red-600">{error}</p> : null}

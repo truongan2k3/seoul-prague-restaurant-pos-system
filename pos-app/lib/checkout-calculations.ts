@@ -29,6 +29,9 @@ export interface CheckoutPaymentRecord {
   cardAuthCode?: string;
   cardLast4?: string;
   cardBrand?: string;
+  /** Gift voucher credit applied to this payment (after discount, before tip). */
+  voucherDiscountAmount?: number;
+  voucherCodes?: string[];
 }
 
 export function lineTotal(line: OrderItem) {

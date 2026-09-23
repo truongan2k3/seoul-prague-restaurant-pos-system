@@ -6,6 +6,7 @@ export async function POST(request: Request) {
   let body: {
     buyerName?: string;
     buyerEmail?: string;
+    buyerPhone?: string;
     denominationCzk?: number;
     quantity?: number;
     paymentMethod?: VoucherPaymentMethod;
@@ -19,6 +20,7 @@ export async function POST(request: Request) {
   const result = await createVoucherOrder({
     buyerName: body.buyerName ?? "",
     buyerEmail: body.buyerEmail ?? "",
+    buyerPhone: body.buyerPhone ?? "",
     denominationCzk: Number(body.denominationCzk),
     quantity: Number(body.quantity),
     paymentMethod: body.paymentMethod === "czech_qr" ? "czech_qr" : "bank_transfer",

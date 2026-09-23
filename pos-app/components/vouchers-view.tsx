@@ -22,7 +22,13 @@ function formatWhen(iso?: string | null): string {
   }
 }
 
-export function VouchersView() {
+export function VouchersView({
+  focusOrderId,
+  onFocusOrderConsumed,
+}: {
+  focusOrderId?: string | null;
+  onFocusOrderConsumed?: () => void;
+} = {}) {
   const { translate, currentStaffUser } = useApp();
   const [orders, setOrders] = useState<VoucherOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,6 +71,16 @@ export function VouchersView() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!focusOrderId || orders.length === 0) return;
+    const match = orders.find((order) => order.id === focusOrderId);
+    if (match) {
+      setSelected(match);
+      setConfirmVerify(false);
+      onFocusOrderConsumed?.();
+    }
+  }, [focusOrderId, orders, onFocusOrderConsumed]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return orders.filter((order) => {
@@ -79,6 +95,7 @@ export function VouchersView() {
         order.orderId.toLowerCase().includes(q) ||
         order.buyerEmail.toLowerCase().includes(q) ||
         order.buyerName.toLowerCase().includes(q) ||
+        (order.buyerPhone ?? "").toLowerCase().includes(q) ||
         codeHit
       );
     });
@@ -165,30 +182,6 @@ export function VouchersView() {
     }
   };
 
-  const redeem = async () => {
-    if (!lookup?.code || busy) return;
-    setBusy(true);
-    setScanError(null);
-    try {
-      const response = await fetch("/api/vouchers/staff/redeem", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: lookup.code.code }),
-      });
-      const payload = (await response.json()) as { code?: VoucherCode; error?: string };
-      if (!response.ok || !payload.code) {
-        setScanError(payload.error || "Redeem failed.");
-        return;
-      }
-      setLookup((prev) => (prev ? { ...prev, code: payload.code! } : prev));
-      void load();
-    } catch {
-      setScanError("Redeem failed.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const verifyPayment = async () => {
     if (!selected || busy) return;
     setBusy(true);
@@ -223,6 +216,9 @@ export function VouchersView() {
           </h1>
           <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
             {translate("vouchersHint")}
+          </p>
+          <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
+            {translate("voucherApplyNote")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -322,6 +318,9 @@ export function VouchersView() {
                       <td className="px-4 py-3">
                         <p className="font-medium">{order.buyerName || "—"}</p>
                         <p className="text-xs text-gray-500">{order.buyerEmail}</p>
+                        {order.buyerPhone ? (
+                          <p className="text-xs text-gray-500">{order.buyerPhone}</p>
+                        ) : null}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums font-semibold">
                         {formatVoucherAmount(order.totalCzk)}
@@ -369,6 +368,14 @@ export function VouchersView() {
                   {selected.buyerName}
                   <br />
                   <span className="text-xs text-gray-500">{selected.buyerEmail}</span>
+                  {selected.buyerPhone ? (
+                    <>
+                      <br />
+                      <span className="text-xs text-gray-500">
+                        {translate("voucherPhone")}: {selected.buyerPhone}
+                      </span>
+                    </>
+                  ) : null}
                 </dd>
               </div>
               <div className="flex justify-between gap-3">
@@ -517,20 +524,16 @@ export function VouchersView() {
                   ? ` · ${translate("voucherExpires")}: ${formatWhen(lookup.code.expiresAt)}`
                   : ""}
               </p>
-              {lookup.code.status === "issued" ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void redeem()}
-                  className="mt-2 w-full rounded-xl bg-emerald-700 py-3 text-sm font-semibold text-white"
-                >
-                  {translate("voucherRedeem")}
-                </button>
+              {lookup.code.status === "issued" || lookup.code.status === "applied" ? (
+                <p className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+                  {translate("voucherRedeemOnPayment")}
+                </p>
               ) : (
                 <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
                   {translate("voucherCannotRedeem")}
                 </p>
               )}
+              <p className="text-xs text-gray-500">{translate("voucherApplyNote")}</p>
             </div>
           ) : null}
 

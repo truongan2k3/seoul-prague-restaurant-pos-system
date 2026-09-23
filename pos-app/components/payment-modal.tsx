@@ -24,6 +24,8 @@ interface PaymentModalProps {
   onConfirm: (payload: CheckoutSubmitPayload) => void | Promise<void>;
   isSaving?: boolean;
   error?: string | null;
+  appliedVouchers?: { code: string; denominationCzk: number }[];
+  onRemoveVoucher?: (code: string) => void;
 }
 
 export function PaymentModal({
@@ -36,6 +38,8 @@ export function PaymentModal({
   onConfirm,
   isSaving = false,
   error,
+  appliedVouchers,
+  onRemoveVoucher,
 }: PaymentModalProps) {
   const { translate } = useApp();
 
@@ -189,6 +193,8 @@ export function PaymentModal({
           sessionResetKey={checkoutSessionKey}
           initialEqualPaymentsMade={equalProgress.paymentsMade}
           initialEqualSplitCount={equalProgress.splitCount}
+          appliedVouchers={appliedVouchers}
+          onRemoveVoucher={onRemoveVoucher}
         />
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-gray-500">

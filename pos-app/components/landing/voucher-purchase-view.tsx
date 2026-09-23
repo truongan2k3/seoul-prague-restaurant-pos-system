@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Download } from "lucide-react";
 import { LandingNavbar } from "@/components/landing/landing-navbar";
 import { LandingFooter } from "@/components/landing/landing-menu-gallery";
@@ -55,8 +55,8 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
   const [quantity, setQuantity] = useState(1);
   const [buyerName, setBuyerName] = useState("");
   const [buyerEmail, setBuyerEmail] = useState("");
+  const [buyerPhone, setBuyerPhone] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<VoucherPaymentMethod>("czech_qr");
-  const [previewQr, setPreviewQr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [placed, setPlaced] = useState<PlacedOrder | null>(null);
@@ -64,6 +64,12 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
   const [guestPaid, setGuestPaid] = useState(false);
   const [orderCancelled, setOrderCancelled] = useState(false);
   const [markBusy, setMarkBusy] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const paymentSectionRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" in window ? "instant" : "auto" });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,28 +91,9 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
   }, []);
 
   const total = denomination * quantity;
-  const detailsReady = buyerName.trim().length > 0 && isValidEmail(buyerEmail);
-
-  const refreshPreviewQr = useCallback(async (amount: number) => {
-    try {
-      const response = await fetch(`/api/vouchers/payment-qr?amount=${encodeURIComponent(amount)}`);
-      const payload = (await response.json()) as { qrDataUrl?: string | null };
-      setPreviewQr(payload.qrDataUrl ?? null);
-    } catch {
-      setPreviewQr(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!config?.enabled || !detailsReady || paymentMethod !== "czech_qr") {
-      setPreviewQr(null);
-      return;
-    }
-    const handle = window.setTimeout(() => {
-      void refreshPreviewQr(total);
-    }, 250);
-    return () => window.clearTimeout(handle);
-  }, [config?.enabled, detailsReady, paymentMethod, total, refreshPreviewQr]);
+  const phoneDigits = buyerPhone.replace(/\D/g, "");
+  const detailsReady =
+    buyerName.trim().length > 0 && isValidEmail(buyerEmail) && phoneDigits.length >= 6;
 
   const bankReady = useMemo(() => {
     if (!config) return false;
@@ -124,6 +111,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
         body: JSON.stringify({
           buyerName,
           buyerEmail,
+          buyerPhone,
           denominationCzk: denomination,
           quantity,
           paymentMethod,
@@ -161,6 +149,9 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
       setRemainingSeconds(
         Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000)),
       );
+      window.setTimeout(() => {
+        paymentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
     } catch {
       setError("Could not place order.");
     } finally {
@@ -226,6 +217,29 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
     }
   };
 
+  const cancelOrder = async () => {
+    if (!placed || cancelBusy || guestPaid || orderCancelled) return;
+    setCancelBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/vouchers/guest/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: placed.orderId, token: placed.publicToken }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setError(payload.error || "Could not cancel order.");
+        return;
+      }
+      setOrderCancelled(true);
+    } catch {
+      setError("Could not cancel order.");
+    } finally {
+      setCancelBusy(false);
+    }
+  };
+
   const downloadQr = (dataUrl: string, filename: string) => {
     const a = document.createElement("a");
     a.href = dataUrl;
@@ -253,7 +267,10 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
             Voucher sales are temporarily unavailable.
           </p>
         ) : placed ? (
-          <section className="mt-12 space-y-6 rounded-2xl border border-[#C9A88B]/30 bg-[#121214] p-6 sm:p-8">
+          <section
+            ref={paymentSectionRef}
+            className="mt-12 scroll-mt-28 space-y-6 rounded-2xl border border-[#C9A88B]/30 bg-[#121214] p-6 sm:p-8"
+          >
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#C9A88B]/20 text-[#C9A88B]">
               <Check className="h-6 w-6" />
             </div>
@@ -376,14 +393,24 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
             {error ? <p className="text-sm text-red-300">{error}</p> : null}
 
             {!orderCancelled && !guestPaid ? (
-              <button
-                type="button"
-                disabled={markBusy || remainingSeconds <= 0}
-                onClick={() => void markPaid()}
-                className="w-full rounded-2xl bg-[#C9A88B] px-6 py-4 text-sm font-semibold uppercase tracking-[0.14em] text-[#0B0B0C] transition hover:bg-[#d4b69a] disabled:opacity-40"
-              >
-                {markBusy ? "Confirming…" : "I’ve paid"}
-              </button>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  disabled={markBusy || remainingSeconds <= 0}
+                  onClick={() => void markPaid()}
+                  className="w-full rounded-2xl bg-[#C9A88B] px-6 py-4 text-sm font-semibold uppercase tracking-[0.14em] text-[#0B0B0C] transition hover:bg-[#d4b69a] disabled:opacity-40"
+                >
+                  {markBusy ? "Confirming…" : "I’ve paid"}
+                </button>
+                <button
+                  type="button"
+                  disabled={cancelBusy}
+                  onClick={() => void cancelOrder()}
+                  className="w-full rounded-2xl border border-red-400/40 px-6 py-4 text-sm font-semibold uppercase tracking-[0.14em] text-red-200/90 transition hover:bg-red-500/10 disabled:opacity-40"
+                >
+                  {cancelBusy ? "Cancelling…" : "Cancel order"}
+                </button>
+              </div>
             ) : null}
 
             {orderCancelled ? (
@@ -429,7 +456,50 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
             />
 
             <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-white/40">3 · Payment method</p>
+              <p className="text-xs uppercase tracking-[0.28em] text-white/40">
+                3 · Your details
+              </p>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <label className="block text-xs text-white/45 sm:col-span-2">
+                  Full name
+                  <input
+                    value={buyerName}
+                    onChange={(e) => setBuyerName(e.target.value)}
+                    className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm text-white outline-none focus:border-[#C9A88B]/60"
+                    placeholder="Full name"
+                    autoComplete="name"
+                    required
+                  />
+                </label>
+                <label className="block text-xs text-white/45">
+                  Email
+                  <input
+                    type="email"
+                    value={buyerEmail}
+                    onChange={(e) => setBuyerEmail(e.target.value)}
+                    className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm text-white outline-none focus:border-[#C9A88B]/60"
+                    placeholder="you@email.com"
+                    autoComplete="email"
+                    required
+                  />
+                </label>
+                <label className="block text-xs text-white/45">
+                  Phone number
+                  <input
+                    type="tel"
+                    value={buyerPhone}
+                    onChange={(e) => setBuyerPhone(e.target.value)}
+                    className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm text-white outline-none focus:border-[#C9A88B]/60"
+                    placeholder="+420 …"
+                    autoComplete="tel"
+                    required
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-white/40">4 · Payment method</p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
@@ -442,7 +512,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
                 >
                   <p className="font-semibold text-[#F5EDE4]">Czech bank QR</p>
                   <p className="mt-1 text-xs text-white/45">
-                    SPD payment QR for Czech banking apps
+                    Payment QR appears after you place the order
                   </p>
                 </button>
                 <button
@@ -456,108 +526,52 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
                 >
                   <p className="font-semibold text-[#F5EDE4]">Bank transfer</p>
                   <p className="mt-1 text-xs text-white/45">
-                    Manual transfer with order ID as note
+                    Transfer details appear after you place the order
                   </p>
                 </button>
               </div>
             </div>
 
-            <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-white/40">
-                4 · Your details
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-sm text-white/65">
+              <p className="text-xs uppercase tracking-[0.24em] text-[#C9A88B]">
+                Voucher Terms &amp; Conditions
               </p>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <label className="block text-xs text-white/45">
-                  Your name
-                  <input
-                    value={buyerName}
-                    onChange={(e) => setBuyerName(e.target.value)}
-                    className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm text-white outline-none focus:border-[#C9A88B]/60"
-                    placeholder="Full name"
-                    autoComplete="name"
-                  />
-                </label>
-                <label className="block text-xs text-white/45">
-                  Email for voucher delivery
-                  <input
-                    type="email"
-                    value={buyerEmail}
-                    onChange={(e) => setBuyerEmail(e.target.value)}
-                    className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm text-white outline-none focus:border-[#C9A88B]/60"
-                    placeholder="you@email.com"
-                    autoComplete="email"
-                  />
-                </label>
-              </div>
+              <ul className="mt-3 list-disc space-y-2 pl-5 leading-relaxed">
+                <li>
+                  Voucher có giá trị sử dụng trong vòng 12 tháng kể từ ngày cấp.
+                </li>
+                <li>
+                  Voucher được áp dụng tại quầy khi thanh toán. Vui lòng đưa mã voucher cho nhân viên
+                  quét trước khi thanh toán đơn hàng.
+                </li>
+                <li>Trong mọi trường hợp, voucher không có giá trị quy đổi thành tiền mặt.</li>
+                <li>
+                  Mọi thắc mắc vui lòng sử dụng Chat with us hoặc liên hệ nhà hàng qua email / số
+                  điện thoại.
+                </li>
+              </ul>
             </div>
 
+            {error && !placed ? <p className="text-sm text-red-300">{error}</p> : null}
+
+            <button
+              type="button"
+              disabled={busy || !detailsReady || !bankReady}
+              onClick={() => void placeOrder()}
+              className="w-full rounded-2xl bg-[#C9A88B] px-6 py-4 text-sm font-semibold uppercase tracking-[0.14em] text-[#0B0B0C] transition hover:bg-[#d4b69a] disabled:opacity-40"
+            >
+              {busy ? "Placing order…" : `Place order · ${formatVoucherAmount(total)}`}
+            </button>
             {!detailsReady ? (
-              <p className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-5 py-6 text-center text-sm text-white/45">
-                Enter your name and email to unlock payment details and place your order.
+              <p className="text-center text-xs text-white/40">
+                Full name, email, and phone are required before placing an order.
               </p>
-            ) : (
-              <div className="space-y-6">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.28em] text-white/40">5 · Payment</p>
-                  <p className="mt-2 text-sm text-white/45">
-                    Transfer {formatVoucherAmount(total)} using the details below, then place your
-                    order. You’ll have 15 minutes to confirm payment.
-                  </p>
-                </div>
-
-                {bankReady ? (
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-sm text-white/70">
-                    <p className="text-xs uppercase tracking-[0.16em] text-[#C9A88B]">Transfer to</p>
-                    <ul className="mt-3 space-y-1">
-                      {config.accountHolder ? <li>{config.accountHolder}</li> : null}
-                      {config.accountNumber ? <li>Account: {config.accountNumber}</li> : null}
-                      {config.iban ? <li>IBAN: {config.iban}</li> : null}
-                      {config.bankName ? <li>{config.bankName}</li> : null}
-                      {config.bicSwift ? <li>BIC: {config.bicSwift}</li> : null}
-                    </ul>
-                    {config.bankPaymentNote ? (
-                      <p className="mt-3 text-xs text-white/45">{config.bankPaymentNote}</p>
-                    ) : null}
-                  </div>
-                ) : (
-                  <p className="text-sm text-amber-200/80">
-                    Bank details are not configured yet. Please contact the restaurant before paying.
-                  </p>
-                )}
-
-                {paymentMethod === "czech_qr" && previewQr ? (
-                  <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white p-6">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={previewQr} alt="Payment QR preview" className="h-52 w-52" />
-                    <p className="text-center text-xs text-zinc-600">
-                      QR amount: {formatVoucherAmount(total)} · final QR uses your Order ID after
-                      place
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => downloadQr(previewQr, `voucher-qr-${total}.png`)}
-                      className="inline-flex items-center gap-2 rounded-full border border-zinc-300 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-800"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      Save QR
-                    </button>
-                  </div>
-                ) : paymentMethod === "czech_qr" && !previewQr && bankReady ? (
-                  <p className="text-center text-sm text-white/40">Preparing payment QR…</p>
-                ) : null}
-
-                {error ? <p className="text-sm text-red-300">{error}</p> : null}
-
-                <button
-                  type="button"
-                  disabled={busy || !detailsReady}
-                  onClick={() => void placeOrder()}
-                  className="w-full rounded-2xl bg-[#C9A88B] px-6 py-4 text-sm font-semibold uppercase tracking-[0.14em] text-[#0B0B0C] transition hover:bg-[#d4b69a] disabled:opacity-40"
-                >
-                  {busy ? "Placing order…" : `Place order · ${formatVoucherAmount(total)}`}
-                </button>
-              </div>
-            )}
+            ) : null}
+            {!bankReady ? (
+              <p className="text-center text-sm text-amber-200/80">
+                Bank details are not configured yet. Please contact the restaurant.
+              </p>
+            ) : null}
           </section>
         )}
       </main>

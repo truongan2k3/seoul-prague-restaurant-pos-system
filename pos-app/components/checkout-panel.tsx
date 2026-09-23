@@ -50,6 +50,8 @@ type CheckoutPanelView = "main" | "split";
 type AdjustmentMode = "tip" | "discount" | null;
 type SplitPhase = "pick-items" | "checkout";
 
+export type AppliedCheckoutVoucher = { code: string; denominationCzk: number };
+
 interface CheckoutPanelProps {
   lines: CheckoutLine[];
   orderSummary: OrderItem[];
@@ -65,6 +67,9 @@ interface CheckoutPanelProps {
   /** Restore in-progress equal-split after reopening payment. */
   initialEqualPaymentsMade?: number;
   initialEqualSplitCount?: number;
+  /** Gift vouchers applied to this table (redeemed after payment succeeds). */
+  appliedVouchers?: AppliedCheckoutVoucher[];
+  onRemoveVoucher?: (code: string) => void;
 }
 
 function SummaryRow({
@@ -114,6 +119,8 @@ export function CheckoutPanel({
   sessionResetKey = 0,
   initialEqualPaymentsMade = 0,
   initialEqualSplitCount = 0,
+  appliedVouchers = [],
+  onRemoveVoucher,
 }: CheckoutPanelProps) {
   const { translate, staff } = useApp();
   const { printProvisionalBill } = useReceiptPrint();
@@ -431,7 +438,26 @@ export function CheckoutPanel({
     equalAdjustScope,
   ]);
 
-  const chargeTotal = totals.amountDueNow;
+  const voucherRawTotal = useMemo(
+    () =>
+      appliedVouchers.reduce(
+        (sum, voucher) => sum + Math.max(0, Number(voucher.denominationCzk) || 0),
+        0,
+      ),
+    [appliedVouchers],
+  );
+  // After discount, before tip — cap at remaining subtotal−discount for this payment share.
+  const voucherDiscountAmount = Math.min(
+    voucherRawTotal,
+    Math.max(0, totals.afterDiscount),
+  );
+  const voucherCodes = useMemo(
+    () => appliedVouchers.map((voucher) => voucher.code).filter(Boolean),
+    [appliedVouchers],
+  );
+  const voucherActive = voucherDiscountAmount > 0;
+
+  const chargeTotal = Math.max(0, totals.amountDueNow - voucherDiscountAmount);
   const totalTip = tipAmount;
   const rawChangeDue =
     usingCashGiven && !usingRoundUp ? Math.max(0, cashGivenNum - chargeTotal) : 0;
@@ -447,7 +473,9 @@ export function CheckoutPanel({
   const insufficientPayment =
     paymentMethod === "cash" &&
     ((usingCashGiven && cashGivenNum < chargeTotal) ||
-      (usingRoundUp && roundUpNum < billAmount));
+      (usingRoundUp &&
+        roundUpNum != null &&
+        roundUpNum < Math.max(0, billAmount - voucherDiscountAmount)));
 
   const splitCheckoutOrders = useMemo(() => {
     if (splitMode === "items") {
@@ -671,6 +699,12 @@ export function CheckoutPanel({
             : undefined,
       splitMode,
       splitCount: splitMode === "equal" ? splitCount : 1,
+      ...(voucherDiscountAmount > 0
+        ? {
+            voucherDiscountAmount,
+            voucherCodes,
+          }
+        : {}),
     };
 
     const closeTable =
@@ -929,7 +963,9 @@ export function CheckoutPanel({
     totalsBlock: {
       subtotal: number;
       discountAmount: number;
+      voucherDiscountAmount: number;
       grandTotal: number;
+      amountDue: number;
     },
   ) => (
     <aside className="flex min-h-0 w-full flex-col border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-950/20 lg:w-1/2 lg:border-b-0 lg:border-r">
@@ -962,6 +998,33 @@ export function CheckoutPanel({
           ))}
         </ul>
 
+        {appliedVouchers.length > 0 && (
+          <ul className="mt-3 space-y-1.5 border-t border-dashed border-emerald-300/80 pt-3 dark:border-amber-700/60">
+            {appliedVouchers.map((voucher) => (
+              <li
+                key={voucher.code}
+                className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50/90 px-3 py-2 text-sm text-emerald-800 dark:bg-amber-950/40 dark:text-amber-200"
+              >
+                <span className="min-w-0 truncate font-semibold">
+                  {translate("voucherLabel")} −{displayCzkOnly(voucher.denominationCzk)}
+                  <span className="ml-2 font-mono text-xs font-normal opacity-80">
+                    {voucher.code}
+                  </span>
+                </span>
+                {onRemoveVoucher ? (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveVoucher(voucher.code)}
+                    className="shrink-0 text-xs font-semibold underline opacity-80 hover:opacity-100"
+                  >
+                    {translate("voucherRemove")}
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+
         <div className="mt-4 space-y-2 border-t border-gray-300 pt-4 dark:border-gray-600">
           <div className="flex items-start justify-between gap-3">
             <span className="text-base font-semibold text-gray-700 dark:text-gray-300">
@@ -982,6 +1045,14 @@ export function CheckoutPanel({
             <div className="flex items-center justify-between gap-3 text-orange-700 dark:text-orange-400">
               <span>{translate("discount")}</span>
               <span className="tabular-nums">−{displayCzkOnly(totalsBlock.discountAmount)}</span>
+            </div>
+          )}
+          {voucherActive && (
+            <div className="flex items-center justify-between gap-3 font-semibold text-emerald-700 dark:text-amber-300">
+              <span>{translate("voucherLabel")}</span>
+              <span className="tabular-nums">
+                −{displayCzkOnly(totalsBlock.voucherDiscountAmount)}
+              </span>
             </div>
           )}
           {tipActive && (
@@ -1005,6 +1076,16 @@ export function CheckoutPanel({
               )}
             </div>
           </div>
+          {voucherActive && (
+            <div className="flex items-start justify-between gap-3 rounded-xl bg-emerald-50 px-3 py-2 dark:bg-amber-950/30">
+              <span className="text-base font-bold text-emerald-900 dark:text-amber-100">
+                {translate("amountDueNow")}
+              </span>
+              <p className="text-base font-bold tabular-nums text-emerald-900 dark:text-amber-100">
+                {displayCzkOnly(totalsBlock.amountDue + keepAsTipAmount)}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </aside>
@@ -1336,7 +1417,9 @@ export function CheckoutPanel({
         {renderOrderSummaryAside(rows, header, {
           subtotal: totals.subtotal,
           discountAmount: totals.discountAmount,
+          voucherDiscountAmount,
           grandTotal: totals.grandTotal,
+          amountDue: chargeTotal,
         })}
         <div className="flex min-h-0 w-full flex-col lg:w-1/2">
           {onBack && (

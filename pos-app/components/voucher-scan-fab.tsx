@@ -18,10 +18,9 @@ export interface VoucherScanFabProps {
     tableLabel?: string,
   ) => Promise<{ error: string | null; code?: VoucherCode }>;
   /**
-   * `inline` — compact button for the order action row (next to kitchen messages).
-   * `fab` — fixed corner control (legacy; prefer inline inside Add Items / Payment).
+   * `inline` only — never a floating corner FAB (that covered Pay / the Windows taskbar).
    */
-  variant?: "inline" | "fab";
+  variant?: "inline";
   className?: string;
 }
 
@@ -32,7 +31,7 @@ export function VoucherScanFab({
   onApplied,
   onOpenVouchersTab,
   applyVoucherCode,
-  variant = "inline",
+  variant: _variant = "inline",
   className = "",
 }: VoucherScanFabProps) {
   const { translate } = useApp();
@@ -149,29 +148,18 @@ export function VoucherScanFab({
     };
   }, [open, stopCamera, handleApply, translate]);
 
-  const trigger =
-    variant === "fab" ? (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        title={translate("voucherScanFab")}
-        aria-label={translate("voucherScanFab")}
-        className={`fixed bottom-4 right-4 z-[115] inline-flex h-11 w-11 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-700/95 text-white shadow-md shadow-black/30 backdrop-blur-sm transition hover:bg-emerald-600 sm:bottom-5 sm:right-5 sm:h-12 sm:w-12 ${className}`}
-      >
-        <Gift className="h-5 w-5" />
-      </button>
-    ) : (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        title={translate("voucherScanFab")}
-        aria-label={translate("voucherScanFab")}
-        className={`inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-700/90 px-2 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-600 sm:min-h-[44px] sm:gap-2 sm:text-sm ${className}`}
-      >
-        <Gift className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
-        <span className="truncate">{translate("voucherScanFab")}</span>
-      </button>
-    );
+  const trigger = (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      title={translate("voucherScanFab")}
+      aria-label={translate("voucherScanFab")}
+      className={`inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-700/90 px-2 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-600 sm:min-h-[44px] sm:gap-2 sm:text-sm ${className}`}
+    >
+      <Gift className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
+      <span className="truncate">{translate("voucherScanFab")}</span>
+    </button>
+  );
 
   return (
     <>

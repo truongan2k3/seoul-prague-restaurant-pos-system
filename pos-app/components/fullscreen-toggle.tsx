@@ -14,6 +14,8 @@ interface FullscreenToggleProps {
 
 const FAB_SIZE = 32;
 const FAB_MARGIN = 12;
+/** Keep clear of Pay / Windows taskbar / sticky footers. */
+const FAB_BOTTOM_SAFE = 96;
 const DRAG_THRESHOLD_PX = 6;
 const FAB_POS_KEY = "pos-fullscreen-fab-pos";
 
@@ -30,32 +32,27 @@ function hideFullscreenFabOnPath(pathname: string | null): boolean {
   return false;
 }
 
-/** Client Screen totals sit in the bottom footer — default FAB to top-right. */
-function isClientDisplayPath(pathname: string | null): boolean {
-  return pathname === "/client" || Boolean(pathname?.startsWith("/client/"));
-}
-
 function clampFabPos(pos: FabPos): FabPos {
   if (typeof window === "undefined") return pos;
   const maxX = Math.max(FAB_MARGIN, window.innerWidth - FAB_SIZE - FAB_MARGIN);
-  const maxY = Math.max(FAB_MARGIN, window.innerHeight - FAB_SIZE - FAB_MARGIN);
+  const maxY = Math.max(
+    FAB_MARGIN,
+    window.innerHeight - FAB_SIZE - Math.max(FAB_MARGIN, FAB_BOTTOM_SAFE),
+  );
   return {
     x: Math.min(maxX, Math.max(FAB_MARGIN, pos.x)),
     y: Math.min(maxY, Math.max(FAB_MARGIN, pos.y)),
   };
 }
 
-function defaultFabPos(pathname: string | null): FabPos {
+/** Always default top-right — never sit on Pay / message / Windows taskbar. */
+function defaultFabPos(_pathname: string | null): FabPos {
   if (typeof window === "undefined") {
     return { x: FAB_MARGIN, y: FAB_MARGIN };
   }
-  const x = window.innerWidth - FAB_SIZE - FAB_MARGIN;
-  if (isClientDisplayPath(pathname)) {
-    return clampFabPos({ x, y: FAB_MARGIN });
-  }
   return clampFabPos({
-    x,
-    y: window.innerHeight - FAB_SIZE - FAB_MARGIN,
+    x: window.innerWidth - FAB_SIZE - FAB_MARGIN,
+    y: FAB_MARGIN,
   });
 }
 
@@ -68,7 +65,13 @@ function readStoredFabPos(pathname: string | null): FabPos {
     if (typeof parsed.x !== "number" || typeof parsed.y !== "number") {
       return defaultFabPos(pathname);
     }
-    return clampFabPos({ x: parsed.x, y: parsed.y });
+    const clamped = clampFabPos({ x: parsed.x, y: parsed.y });
+    // Migrate old bottom-right saves that covered the action bar.
+    const bottomZone = window.innerHeight - FAB_BOTTOM_SAFE - FAB_SIZE;
+    if (clamped.y >= bottomZone) {
+      return defaultFabPos(pathname);
+    }
+    return clamped;
   } catch {
     return defaultFabPos(pathname);
   }

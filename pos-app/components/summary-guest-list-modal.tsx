@@ -9,7 +9,6 @@ import { formatPrice } from "@/lib/i18n/translations";
 import {
   formatSummaryDate,
   getPeriodRange,
-  toDateInputValue,
   type DateRange,
   type SummaryPeriod,
 } from "@/lib/summary-analytics";

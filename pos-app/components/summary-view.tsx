@@ -27,6 +27,10 @@ import { computeTaxSummaryReport } from "@/lib/tax-summary";
 import { printTaxSummaryReport } from "@/src/lib/printTaxSummary";
 import { filterButtonClass, segmentButtonClass } from "@/lib/theme-classes";
 import type { MenuItem, SaleRecord } from "@/lib/types";
+import {
+  SummaryGuestListButton,
+  SummaryGuestListModal,
+} from "@/components/summary-guest-list-modal";
 
 const PERIOD_OPTIONS = ["today", "yesterday", "week", "month", "custom"] as const;
 
@@ -149,6 +153,7 @@ export function SummaryView({
   const [sellerGroup, setSellerGroup] = useState<TopSellerGroup>("all");
   const [taxPrinting, setTaxPrinting] = useState(false);
   const [excelExporting, setExcelExporting] = useState(false);
+  const [guestListOpen, setGuestListOpen] = useState(false);
 
   const todayRange = useMemo(() => getPeriodRange("today"), []);
   const yesterdayRange = useMemo(() => getPeriodRange("yesterday"), []);
@@ -274,6 +279,7 @@ export function SummaryView({
           <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{periodLabel}</p>
         </div>
         <div className="flex items-center gap-3">
+          <SummaryGuestListButton onClick={() => setGuestListOpen(true)} />
           <button
             type="button"
             onClick={onRefresh}
@@ -284,6 +290,16 @@ export function SummaryView({
           <HeaderClockWithStatus />
         </div>
       </header>
+
+      <SummaryGuestListModal
+        open={guestListOpen}
+        onClose={() => setGuestListOpen(false)}
+        sales={sales}
+        menuItems={menuItems}
+        initialPeriod={period}
+        initialCustomFrom={customFrom}
+        initialCustomTo={customTo}
+      />
 
       <div className="flex-1 overflow-auto p-6">
         <div className="mx-auto max-w-6xl space-y-6">

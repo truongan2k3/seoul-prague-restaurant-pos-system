@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useApp } from "@/contexts/app-context";
@@ -12,12 +18,11 @@ interface FullscreenToggleProps {
   variant?: "sidebar" | "fab";
 }
 
-const FAB_SIZE = 32;
+const FAB_SIZE = 36;
 const FAB_MARGIN = 12;
-/** Keep clear of Pay / Windows taskbar / sticky footers. */
-const FAB_BOTTOM_SAFE = 96;
-const DRAG_THRESHOLD_PX = 6;
-const FAB_POS_KEY = "pos-fullscreen-fab-pos";
+const DRAG_THRESHOLD_PX = 5;
+/** Bump when default/clamp rules change so old stuck positions reset. */
+const FAB_POS_KEY = "pos-fullscreen-fab-pos-v2";
 
 type FabPos = { x: number; y: number };
 
@@ -32,21 +37,19 @@ function hideFullscreenFabOnPath(pathname: string | null): boolean {
   return false;
 }
 
+/** Free drag anywhere in the viewport (same idea as CFD). */
 function clampFabPos(pos: FabPos): FabPos {
   if (typeof window === "undefined") return pos;
   const maxX = Math.max(FAB_MARGIN, window.innerWidth - FAB_SIZE - FAB_MARGIN);
-  const maxY = Math.max(
-    FAB_MARGIN,
-    window.innerHeight - FAB_SIZE - Math.max(FAB_MARGIN, FAB_BOTTOM_SAFE),
-  );
+  const maxY = Math.max(FAB_MARGIN, window.innerHeight - FAB_SIZE - FAB_MARGIN);
   return {
     x: Math.min(maxX, Math.max(FAB_MARGIN, pos.x)),
     y: Math.min(maxY, Math.max(FAB_MARGIN, pos.y)),
   };
 }
 
-/** Always default top-right — never sit on Pay / message / Windows taskbar. */
-function defaultFabPos(_pathname: string | null): FabPos {
+/** Default top-right so it does not cover Pay / Windows taskbar on first load. */
+function defaultFabPos(): FabPos {
   if (typeof window === "undefined") {
     return { x: FAB_MARGIN, y: FAB_MARGIN };
   }
@@ -56,24 +59,18 @@ function defaultFabPos(_pathname: string | null): FabPos {
   });
 }
 
-function readStoredFabPos(pathname: string | null): FabPos {
-  if (typeof window === "undefined") return defaultFabPos(pathname);
+function readStoredFabPos(): FabPos {
+  if (typeof window === "undefined") return defaultFabPos();
   try {
     const raw = localStorage.getItem(FAB_POS_KEY);
-    if (!raw) return defaultFabPos(pathname);
+    if (!raw) return defaultFabPos();
     const parsed = JSON.parse(raw) as Partial<FabPos>;
     if (typeof parsed.x !== "number" || typeof parsed.y !== "number") {
-      return defaultFabPos(pathname);
+      return defaultFabPos();
     }
-    const clamped = clampFabPos({ x: parsed.x, y: parsed.y });
-    // Migrate old bottom-right saves that covered the action bar.
-    const bottomZone = window.innerHeight - FAB_BOTTOM_SAFE - FAB_SIZE;
-    if (clamped.y >= bottomZone) {
-      return defaultFabPos(pathname);
-    }
-    return clamped;
+    return clampFabPos({ x: parsed.x, y: parsed.y });
   } catch {
-    return defaultFabPos(pathname);
+    return defaultFabPos();
   }
 }
 
@@ -90,6 +87,7 @@ export function FullscreenToggle({ compact = false, variant = "sidebar" }: Fulls
   const { isFullscreen, supported, toggle } = useFullscreen();
   const pathname = usePathname();
   const [pos, setPos] = useState<FabPos | null>(null);
+  const [dragging, setDragging] = useState(false);
   const dragRef = useRef<{
     pointerId: number;
     startX: number;
@@ -102,7 +100,7 @@ export function FullscreenToggle({ compact = false, variant = "sidebar" }: Fulls
   posRef.current = pos;
 
   useEffect(() => {
-    setPos(readStoredFabPos(pathname));
+    setPos(readStoredFabPos());
   }, [pathname]);
 
   useEffect(() => {
@@ -113,10 +111,54 @@ export function FullscreenToggle({ compact = false, variant = "sidebar" }: Fulls
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // Window-level move/up so drag stays smooth on Windows tablets even if the
+  // pointer briefly leaves the small FAB hit target (same feel as CFD).
+  useEffect(() => {
+    const onMove = (event: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const dx = event.clientX - drag.startX;
+      const dy = event.clientY - drag.startY;
+      if (!drag.moved && dx * dx + dy * dy < DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) return;
+      if (!drag.moved) {
+        drag.moved = true;
+        setDragging(true);
+      }
+      const next = clampFabPos({
+        x: drag.originX + dx,
+        y: drag.originY + dy,
+      });
+      setPos(next);
+    };
+
+    const onUp = (event: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      dragRef.current = null;
+      setDragging(false);
+      if (drag.moved) {
+        const current = posRef.current;
+        if (current) storeFabPos(current);
+        return;
+      }
+      void toggle();
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [toggle]);
+
   const onPointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return;
     const current = posRef.current;
     if (!current) return;
+    event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = {
       pointerId: event.pointerId,
@@ -127,40 +169,6 @@ export function FullscreenToggle({ compact = false, variant = "sidebar" }: Fulls
       moved: false,
     };
   }, []);
-
-  const onPointerMove = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    const dx = event.clientX - drag.startX;
-    const dy = event.clientY - drag.startY;
-    if (!drag.moved && dx * dx + dy * dy < DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) return;
-    drag.moved = true;
-    const next = clampFabPos({
-      x: drag.originX + dx,
-      y: drag.originY + dy,
-    });
-    setPos(next);
-  }, []);
-
-  const endPointer = useCallback(
-    (event: ReactPointerEvent<HTMLButtonElement>) => {
-      const drag = dragRef.current;
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      dragRef.current = null;
-      try {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      } catch {
-        /* ignore */
-      }
-      if (drag.moved) {
-        const current = posRef.current;
-        if (current) storeFabPos(current);
-        return;
-      }
-      void toggle();
-    },
-    [toggle],
-  );
 
   if (!supported) return null;
   if (variant === "fab" && hideFullscreenFabOnPath(pathname)) return null;
@@ -173,18 +181,17 @@ export function FullscreenToggle({ compact = false, variant = "sidebar" }: Fulls
       <button
         type="button"
         onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endPointer}
-        onPointerCancel={endPointer}
         title={`${label} · drag to move`}
         aria-label={label}
         style={{ left: pos.x, top: pos.y, width: FAB_SIZE, height: FAB_SIZE }}
-        className="pointer-events-auto fixed z-[120] flex touch-none items-center justify-center rounded-full border border-white/25 bg-white/25 text-white/70 shadow-none backdrop-blur-[2px] transition-opacity hover:bg-white/40 hover:text-white active:bg-white/45 dark:border-white/20 dark:bg-zinc-950/30 dark:text-zinc-200/70 dark:hover:bg-zinc-950/45"
+        className={`pointer-events-auto fixed z-[120] flex touch-none items-center justify-center rounded-full border border-white/25 bg-white/30 text-white/80 shadow-md backdrop-blur-[2px] transition-opacity hover:bg-white/45 hover:text-white active:bg-white/50 dark:border-white/20 dark:bg-zinc-950/40 dark:text-zinc-100/80 dark:hover:bg-zinc-950/55 ${
+          dragging ? "cursor-grabbing opacity-90" : "cursor-grab"
+        }`}
       >
         {isFullscreen ? (
-          <Minimize2 className="h-3.5 w-3.5" strokeWidth={2} />
+          <Minimize2 className="h-4 w-4" strokeWidth={2} />
         ) : (
-          <Maximize2 className="h-3.5 w-3.5" strokeWidth={2} />
+          <Maximize2 className="h-4 w-4" strokeWidth={2} />
         )}
       </button>
     );

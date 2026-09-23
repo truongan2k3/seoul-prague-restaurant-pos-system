@@ -590,20 +590,20 @@ export function DashboardShell() {
             onTableClick={tableOrder.handleTableClick}
             actionError={tableOrder.actionError}
             scanFab={
-              <VoucherScanFab
-                activeTableId={tableOrder.activeTableIdForVoucher}
-                tableLabel={
-                  tableOrder.activeTableIdForVoucher
-                    ? tables.find((t) => t.id === tableOrder.activeTableIdForVoucher)?.label
-                    : null
-                }
-                staffName={currentStaffUser?.name}
-                applyVoucherCode={tableOrder.applyVoucherCode}
-                onApplied={() => {
-                  void tableOrder.refreshAppliedVouchers();
-                }}
-                onOpenVouchersTab={() => setActiveTab("vouchers")}
-              />
+              tableOrder.activeTableIdForVoucher ? (
+                <VoucherScanFab
+                  activeTableId={tableOrder.activeTableIdForVoucher}
+                  tableLabel={
+                    tables.find((t) => t.id === tableOrder.activeTableIdForVoucher)?.label ?? null
+                  }
+                  staffName={currentStaffUser?.name}
+                  applyVoucherCode={tableOrder.applyVoucherCode}
+                  onApplied={() => {
+                    void tableOrder.refreshAppliedVouchers();
+                  }}
+                  onOpenVouchersTab={() => setActiveTab("vouchers")}
+                />
+              ) : null
             }
           />
         );

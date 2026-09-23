@@ -1,16 +1,35 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Download } from "lucide-react";
+import { Check, Download, Globe } from "lucide-react";
 import { LandingNavbar } from "@/components/landing/landing-navbar";
 import { LandingFooter } from "@/components/landing/landing-menu-gallery";
+import { GuestChatWidget } from "@/components/landing/guest-chat-widget";
 import {
   VoucherDenominationSelector,
   VoucherLivePreview,
   VoucherOrderSummary,
 } from "@/components/landing/voucher-denomination-selector";
+import {
+  GUEST_RESERVATION_LANGS,
+  type GuestReservationLang,
+} from "@/lib/reservation-guest-form";
+import {
+  GUEST_LANG_SESSION_KEY,
+  parseGuestReservationLang,
+  resolveInitialGuestReservationLang,
+} from "@/lib/i18n/guest-reservation";
+import { guestVoucherCopy } from "@/lib/i18n/guest-voucher";
 import { formatVoucherAmount, type VoucherPaymentMethod } from "@/lib/voucher";
 import type { WebsiteContent } from "@/lib/website/types";
+
+const GUEST_LANG_LABELS: Record<GuestReservationLang, string> = {
+  en: "English",
+  cs: "Čeština",
+  vi: "Tiếng Việt",
+  de: "Deutsch",
+  ko: "한국어",
+};
 
 type PublicConfig = {
   enabled: boolean;
@@ -66,6 +85,31 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
   const [markBusy, setMarkBusy] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
   const paymentSectionRef = useRef<HTMLElement | null>(null);
+  const [lang, setLang] = useState<GuestReservationLang>("en");
+  const copy = guestVoucherCopy(lang);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.removeItem("reservation-guest-lang");
+    } catch {
+      /* ignore */
+    }
+    const stored = sessionStorage.getItem(GUEST_LANG_SESSION_KEY);
+    const navigatorLangs =
+      typeof navigator !== "undefined"
+        ? [
+            ...(Array.isArray(navigator.languages) ? navigator.languages : []),
+            navigator.language,
+          ].filter(Boolean)
+        : [];
+    setLang(resolveInitialGuestReservationLang(stored, navigatorLangs));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    sessionStorage.setItem(GUEST_LANG_SESSION_KEY, lang);
+  }, [lang]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" in window ? "instant" : "auto" });
@@ -83,7 +127,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
         }
       })
       .catch(() => {
-        if (!cancelled) setError("Could not load voucher settings.");
+        if (!cancelled) setError(guestVoucherCopy("en").loadError);
       });
     return () => {
       cancelled = true;
@@ -128,7 +172,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
         error?: string;
       };
       if (!response.ok || !payload.order || !payload.publicToken || !payload.paymentExpiresAt) {
-        setError(payload.error || "Could not place order.");
+        setError(payload.error || copy.placeError);
         return;
       }
       const expiresAt = payload.paymentExpiresAt;
@@ -153,7 +197,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
         paymentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 80);
     } catch {
-      setError("Could not place order.");
+      setError(copy.placeError);
     } finally {
       setBusy(false);
     }
@@ -202,16 +246,16 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
       };
       if (payload.order?.paymentStatus === "cancelled" || response.status === 410) {
         setOrderCancelled(true);
-        setError(payload.error || "Payment window expired.");
+        setError(payload.error || copy.windowExpired);
         return;
       }
       if (!response.ok) {
-        setError(payload.error || "Could not confirm payment.");
+        setError(payload.error || copy.confirmError);
         return;
       }
       setGuestPaid(true);
     } catch {
-      setError("Could not confirm payment.");
+      setError(copy.confirmError);
     } finally {
       setMarkBusy(false);
     }
@@ -229,12 +273,12 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) {
-        setError(payload.error || "Could not cancel order.");
+        setError(payload.error || copy.cancelError);
         return;
       }
       setOrderCancelled(true);
     } catch {
-      setError("Could not cancel order.");
+      setError(copy.cancelError);
     } finally {
       setCancelBusy(false);
     }
@@ -251,20 +295,38 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
     <div className="landing-theme min-h-screen bg-[#0B0B0C] text-white">
       <LandingNavbar content={content} hideBookCta />
       <main className="mx-auto max-w-3xl px-5 pb-24 pt-28 lg:px-8 lg:pt-32">
-        <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">Gift vouchers</p>
-        <h1 className="landing-serif mt-4 text-4xl tracking-wide text-[#F5EDE4] lg:text-6xl">
-          Give Seoul Prague
-        </h1>
-        <p className="mt-4 max-w-xl text-sm leading-relaxed text-white/55 lg:text-base">
-          Purchase a gift voucher for friends or family. Pay by bank transfer or Czech banking QR —
-          codes arrive by email after we confirm your payment (within 24 hours).
-        </p>
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">{copy.eyebrow}</p>
+            <h1 className="landing-serif mt-4 text-4xl tracking-wide text-[#F5EDE4] lg:text-6xl">
+              {copy.title}
+            </h1>
+            <p className="mt-4 max-w-xl text-sm leading-relaxed text-white/55 lg:text-base">
+              {copy.subtitle}
+            </p>
+          </div>
+          <label className="inline-flex items-center gap-2 border border-white/15 bg-[#121214] px-3 py-2 text-sm">
+            <Globe className="h-4 w-4 text-[#C9A88B]" />
+            <select
+              value={lang}
+              onChange={(event) => setLang(parseGuestReservationLang(event.target.value))}
+              className="bg-transparent text-white outline-none"
+              aria-label="Language"
+            >
+              {GUEST_RESERVATION_LANGS.map((code) => (
+                <option key={code} value={code} className="bg-[#121214]">
+                  {GUEST_LANG_LABELS[code]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         {!config ? (
-          <p className="mt-16 text-sm text-white/45">Loading…</p>
+          <p className="mt-16 text-sm text-white/45">{copy.loading}</p>
         ) : !config.enabled ? (
           <p className="mt-16 rounded-2xl border border-white/10 bg-white/5 px-6 py-10 text-center text-sm text-white/60">
-            Voucher sales are temporarily unavailable.
+            {copy.unavailable}
           </p>
         ) : placed ? (
           <section
@@ -275,29 +337,31 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
               <Check className="h-6 w-6" />
             </div>
             <h2 className="landing-serif text-2xl text-[#F5EDE4]">
-              {orderCancelled ? "Order cancelled" : guestPaid ? "Payment submitted" : "Complete payment"}
+              {orderCancelled
+                ? copy.orderCancelled
+                : guestPaid
+                  ? copy.paymentSubmitted
+                  : copy.completePayment}
             </h2>
 
             {orderCancelled ? (
-              <p className="text-sm leading-relaxed text-white/70">
-                The 15-minute payment window ended before you confirmed payment. This order was
-                cancelled. You can place a new voucher order anytime.
-              </p>
+              <p className="text-sm leading-relaxed text-white/70">{copy.cancelledBody}</p>
             ) : guestPaid ? (
               <p className="text-sm leading-relaxed text-white/70">
-                Thank you. We will verify your transfer and email voucher codes to{" "}
-                <span className="text-[#F5EDE4]">{placed.buyerEmail}</span> within 24 hours.
+                {copy.paidBodyBefore}{" "}
+                <span className="text-[#F5EDE4]">{placed.buyerEmail}</span> {copy.paidBodyAfter}
               </p>
             ) : (
               <p className="text-sm leading-relaxed text-white/70">
-                Pay now using the details below, then tap <strong className="text-[#F5EDE4]">I’ve paid</strong>{" "}
-                before the timer ends. Unpaid orders are cancelled automatically after 15 minutes.
+                {copy.payNowBodyBefore}{" "}
+                <strong className="text-[#F5EDE4]">{copy.payNowBodyStrong}</strong>{" "}
+                {copy.payNowBodyAfter}
               </p>
             )}
 
             {!orderCancelled && !guestPaid ? (
               <div className="rounded-2xl border border-[#C9A88B]/40 bg-[#C9A88B]/10 px-5 py-4 text-center">
-                <p className="text-xs uppercase tracking-[0.2em] text-[#C9A88B]">Time left to pay</p>
+                <p className="text-xs uppercase tracking-[0.2em] text-[#C9A88B]">{copy.timeLeft}</p>
                 <p className="landing-serif mt-1 text-4xl tabular-nums text-[#F5EDE4]">
                   {formatCountdown(remainingSeconds)}
                 </p>
@@ -306,21 +370,21 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
 
             <dl className="space-y-2 text-sm text-white/75">
               <div className="flex justify-between gap-4">
-                <dt className="text-white/45">Order ID</dt>
+                <dt className="text-white/45">{copy.orderId}</dt>
                 <dd className="font-semibold tabular-nums text-[#F5EDE4]">{placed.orderId}</dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-white/45">Voucher</dt>
+                <dt className="text-white/45">{copy.voucher}</dt>
                 <dd>
                   {formatVoucherAmount(placed.denominationCzk)} × {placed.quantity}
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-white/45">Total</dt>
+                <dt className="text-white/45">{copy.total}</dt>
                 <dd className="font-semibold text-[#C9A88B]">{formatVoucherAmount(placed.totalCzk)}</dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-white/45">Email</dt>
+                <dt className="text-white/45">{copy.email}</dt>
                 <dd>{placed.buyerEmail}</dd>
               </div>
             </dl>
@@ -328,34 +392,36 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
             {!orderCancelled ? (
               <>
                 <div className="rounded-xl border border-white/10 bg-black/30 p-4 text-sm">
-                  <p className="text-xs uppercase tracking-[0.16em] text-[#C9A88B]">Bank transfer</p>
+                  <p className="text-xs uppercase tracking-[0.16em] text-[#C9A88B]">
+                    {copy.bankTransferTitle}
+                  </p>
                   <ul className="mt-3 space-y-1.5 text-white/75">
                     {config.accountHolder ? (
                       <li>
-                        <span className="text-white/40">Account holder · </span>
+                        <span className="text-white/40">{copy.accountHolder} · </span>
                         {config.accountHolder}
                       </li>
                     ) : null}
                     {config.accountNumber ? (
                       <li>
-                        <span className="text-white/40">Account · </span>
+                        <span className="text-white/40">{copy.account} · </span>
                         {config.accountNumber}
                       </li>
                     ) : null}
                     {config.iban ? (
                       <li>
-                        <span className="text-white/40">IBAN · </span>
+                        <span className="text-white/40">{copy.iban} · </span>
                         {config.iban}
                       </li>
                     ) : null}
                     {config.bankName ? (
                       <li>
-                        <span className="text-white/40">Bank · </span>
+                        <span className="text-white/40">{copy.bank} · </span>
                         {config.bankName}
                       </li>
                     ) : null}
                     <li>
-                      <span className="text-white/40">Message · </span>
+                      <span className="text-white/40">{copy.message} · </span>
                       {placed.paymentMessage || placed.orderId}
                     </li>
                   </ul>
@@ -373,7 +439,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
                       className="h-56 w-56"
                     />
                     <p className="text-center text-xs text-zinc-600">
-                      Scan with your Czech banking app · {formatVoucherAmount(placed.totalCzk)}
+                      {copy.scanQrHint} · {formatVoucherAmount(placed.totalCzk)}
                     </p>
                     <button
                       type="button"
@@ -383,7 +449,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
                       className="inline-flex items-center gap-2 rounded-full border border-zinc-300 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-800"
                     >
                       <Download className="h-3.5 w-3.5" />
-                      Save QR
+                      {copy.saveQr}
                     </button>
                   </div>
                 ) : null}
@@ -400,7 +466,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
                   onClick={() => void markPaid()}
                   className="w-full rounded-2xl bg-[#C9A88B] px-6 py-4 text-sm font-semibold uppercase tracking-[0.14em] text-[#0B0B0C] transition hover:bg-[#d4b69a] disabled:opacity-40"
                 >
-                  {markBusy ? "Confirming…" : "I’ve paid"}
+                  {markBusy ? copy.confirming : copy.ivePaid}
                 </button>
                 <button
                   type="button"
@@ -408,7 +474,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
                   onClick={() => void cancelOrder()}
                   className="w-full rounded-2xl border border-red-400/40 px-6 py-4 text-sm font-semibold uppercase tracking-[0.14em] text-red-200/90 transition hover:bg-red-500/10 disabled:opacity-40"
                 >
-                  {cancelBusy ? "Cancelling…" : "Cancel order"}
+                  {cancelBusy ? copy.cancelling : copy.cancelOrder}
                 </button>
               </div>
             ) : null}
@@ -424,7 +490,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
                 }}
                 className="w-full rounded-2xl border border-white/20 px-6 py-4 text-sm font-semibold uppercase tracking-[0.14em] text-white/80"
               >
-                Place a new order
+                {copy.placeNewOrder}
               </button>
             ) : null}
           </section>
@@ -439,6 +505,11 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
                 setQuantity(1);
               }}
               onQuantityChange={setQuantity}
+              stepChooseLabel={copy.stepChoose}
+              stepChooseHint={copy.stepChooseHint}
+              stepQuantityLabel={copy.stepQuantity}
+              quantityLabel={copy.quantityLabel}
+              giftVoucherLabel={copy.voucher}
             />
 
             <VoucherLivePreview
@@ -453,44 +524,44 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
               denomination={denomination}
               quantity={quantity}
               total={total}
+              totalLabel={copy.total}
+              voucherLabel={copy.voucher}
             />
 
             <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-white/40">
-                3 · Your details
-              </p>
+              <p className="text-xs uppercase tracking-[0.28em] text-white/40">{copy.stepDetails}</p>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <label className="block text-xs text-white/45 sm:col-span-2">
-                  Full name
+                  {copy.fullName}
                   <input
                     value={buyerName}
                     onChange={(e) => setBuyerName(e.target.value)}
                     className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm text-white outline-none focus:border-[#C9A88B]/60"
-                    placeholder="Full name"
+                    placeholder={copy.fullNamePlaceholder}
                     autoComplete="name"
                     required
                   />
                 </label>
                 <label className="block text-xs text-white/45">
-                  Email
+                  {copy.email}
                   <input
                     type="email"
                     value={buyerEmail}
                     onChange={(e) => setBuyerEmail(e.target.value)}
                     className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm text-white outline-none focus:border-[#C9A88B]/60"
-                    placeholder="you@email.com"
+                    placeholder={copy.emailPlaceholder}
                     autoComplete="email"
                     required
                   />
                 </label>
                 <label className="block text-xs text-white/45">
-                  Phone number
+                  {copy.phone}
                   <input
                     type="tel"
                     value={buyerPhone}
                     onChange={(e) => setBuyerPhone(e.target.value)}
                     className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm text-white outline-none focus:border-[#C9A88B]/60"
-                    placeholder="+420 …"
+                    placeholder={copy.phonePlaceholder}
                     autoComplete="tel"
                     required
                   />
@@ -499,7 +570,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
             </div>
 
             <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-white/40">4 · Payment method</p>
+              <p className="text-xs uppercase tracking-[0.28em] text-white/40">{copy.stepPayment}</p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
@@ -510,10 +581,8 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
                       : "border-white/10 bg-white/[0.03] hover:border-white/25"
                   }`}
                 >
-                  <p className="font-semibold text-[#F5EDE4]">Czech bank QR</p>
-                  <p className="mt-1 text-xs text-white/45">
-                    Payment QR appears after you place the order
-                  </p>
+                  <p className="font-semibold text-[#F5EDE4]">{copy.czechQrTitle}</p>
+                  <p className="mt-1 text-xs text-white/45">{copy.czechQrHint}</p>
                 </button>
                 <button
                   type="button"
@@ -524,31 +593,19 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
                       : "border-white/10 bg-white/[0.03] hover:border-white/25"
                   }`}
                 >
-                  <p className="font-semibold text-[#F5EDE4]">Bank transfer</p>
-                  <p className="mt-1 text-xs text-white/45">
-                    Transfer details appear after you place the order
-                  </p>
+                  <p className="font-semibold text-[#F5EDE4]">{copy.bankTransferTitle}</p>
+                  <p className="mt-1 text-xs text-white/45">{copy.bankTransferHint}</p>
                 </button>
               </div>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-sm text-white/65">
-              <p className="text-xs uppercase tracking-[0.24em] text-[#C9A88B]">
-                Voucher Terms &amp; Conditions
-              </p>
+              <p className="text-xs uppercase tracking-[0.24em] text-[#C9A88B]">{copy.termsTitle}</p>
               <ul className="mt-3 list-disc space-y-2 pl-5 leading-relaxed">
-                <li>
-                  Voucher có giá trị sử dụng trong vòng 12 tháng kể từ ngày cấp.
-                </li>
-                <li>
-                  Voucher được áp dụng tại quầy khi thanh toán. Vui lòng đưa mã voucher cho nhân viên
-                  quét trước khi thanh toán đơn hàng.
-                </li>
-                <li>Trong mọi trường hợp, voucher không có giá trị quy đổi thành tiền mặt.</li>
-                <li>
-                  Mọi thắc mắc vui lòng sử dụng Chat with us hoặc liên hệ nhà hàng qua email / số
-                  điện thoại.
-                </li>
+                <li>{copy.termValidity}</li>
+                <li>{copy.termCounter}</li>
+                <li>{copy.termNoCash}</li>
+                <li>{copy.termContact}</li>
               </ul>
             </div>
 
@@ -560,22 +617,21 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
               onClick={() => void placeOrder()}
               className="w-full rounded-2xl bg-[#C9A88B] px-6 py-4 text-sm font-semibold uppercase tracking-[0.14em] text-[#0B0B0C] transition hover:bg-[#d4b69a] disabled:opacity-40"
             >
-              {busy ? "Placing order…" : `Place order · ${formatVoucherAmount(total)}`}
+              {busy
+                ? copy.placingOrder
+                : `${copy.placeOrder} · ${formatVoucherAmount(total)}`}
             </button>
             {!detailsReady ? (
-              <p className="text-center text-xs text-white/40">
-                Full name, email, and phone are required before placing an order.
-              </p>
+              <p className="text-center text-xs text-white/40">{copy.detailsRequired}</p>
             ) : null}
             {!bankReady ? (
-              <p className="text-center text-sm text-amber-200/80">
-                Bank details are not configured yet. Please contact the restaurant.
-              </p>
+              <p className="text-center text-sm text-amber-200/80">{copy.bankNotConfigured}</p>
             ) : null}
           </section>
         )}
       </main>
       <LandingFooter content={content} showBookCta={false} />
+      <GuestChatWidget page="voucher" />
     </div>
   );
 }

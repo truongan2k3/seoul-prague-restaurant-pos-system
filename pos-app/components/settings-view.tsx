@@ -130,31 +130,64 @@ export function SettingsView({
   const [bridgeTestMessage, setBridgeTestMessage] = useState<string | null>(null);
   const [bridgeTesting, setBridgeTesting] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
-  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTabId>("printing");
+  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTabId>("branding");
 
-  const settingsTabs: { id: SettingsTabId; labelKey: TranslationKey }[] = [
-    { id: "branding", labelKey: "settingsTabBranding" },
-    { id: "printing", labelKey: "settingsTabPrinting" },
-    { id: "display", labelKey: "settingsTabDisplay" },
-    { id: "menu", labelKey: "settingsTabMenu" },
-    { id: "marquee", labelKey: "settingsTabMarquee" },
-    { id: "reservations", labelKey: "settingsTabReservations" },
-    { id: "chat", labelKey: "guestChatSettingsTitle" },
-    { id: "vouchers", labelKey: "voucherSettingsTitle" },
-    { id: "sounds", labelKey: "settingsTabSounds" },
-    { id: "cfd", labelKey: "settingsTabCfd" },
-    { id: "devices", labelKey: "settingsTabDevices" },
-    { id: "general", labelKey: "settingsTabGeneral" },
-    { id: "staff", labelKey: "settingsTabStaff" },
-    { id: "security", labelKey: "settingsTabSecurity" },
+  const settingsTabGroups: {
+    id: string;
+    labelKey: TranslationKey;
+    tabs: { id: SettingsTabId; labelKey: TranslationKey }[];
+  }[] = [
+    {
+      id: "brand",
+      labelKey: "settingsGroupBrand",
+      tabs: [
+        { id: "branding", labelKey: "settingsTabBranding" },
+        { id: "display", labelKey: "settingsTabDisplay" },
+        { id: "marquee", labelKey: "settingsTabMarquee" },
+      ],
+    },
+    {
+      id: "operations",
+      labelKey: "settingsGroupOperations",
+      tabs: [
+        { id: "printing", labelKey: "settingsTabPrinting" },
+        { id: "menu", labelKey: "settingsTabMenu" },
+        { id: "devices", labelKey: "settingsTabDevices" },
+        { id: "sounds", labelKey: "settingsTabSounds" },
+        { id: "cfd", labelKey: "settingsTabCfd" },
+      ],
+    },
+    {
+      id: "guest",
+      labelKey: "settingsGroupGuest",
+      tabs: [
+        { id: "reservations", labelKey: "settingsTabReservations" },
+        { id: "chat", labelKey: "guestChatSettingsTitle" },
+        { id: "vouchers", labelKey: "voucherSettingsTitle" },
+      ],
+    },
+    {
+      id: "admin",
+      labelKey: "settingsGroupAdmin",
+      tabs: [
+        { id: "general", labelKey: "settingsTabGeneral" },
+        { id: "staff", labelKey: "settingsTabStaff" },
+        { id: "security", labelKey: "settingsTabSecurity" },
+      ],
+    },
   ];
 
-  const visibleSettingsTabs = settingsTabs.filter((tab) => {
-    if (tab.id === "security" || tab.id === "staff") {
-      return canManageStaff(currentStaffUser?.role);
-    }
-    return true;
-  });
+  const visibleSettingsTabGroups = settingsTabGroups
+    .map((group) => ({
+      ...group,
+      tabs: group.tabs.filter((tab) => {
+        if (tab.id === "security" || tab.id === "staff") {
+          return canManageStaff(currentStaffUser?.role);
+        }
+        return true;
+      }),
+    }))
+    .filter((group) => group.tabs.length > 0);
 
   const weekdayLabels: Record<WeekdayKey, string> = {
     monday: translate("settingsDayMonday"),
@@ -379,30 +412,40 @@ export function SettingsView({
         </div>
       </header>
 
-      <div className="shrink-0 border-b border-gray-200/80 bg-background px-3 dark:border-gray-800 dark:bg-gray-900 sm:px-6">
-        <nav
-          className="-mb-px flex gap-1 overflow-x-auto pb-px pt-1"
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <aside
+          className="shrink-0 border-b border-gray-200/80 bg-background dark:border-gray-800 dark:bg-gray-900 md:w-56 md:border-b-0 md:border-r lg:w-64"
           aria-label={translate("settings")}
         >
-          {visibleSettingsTabs.map((tab) => {
-            const active = activeSettingsTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveSettingsTab(tab.id)}
-                className={`shrink-0 rounded-t-lg px-3 py-2.5 text-sm font-semibold transition-colors ${
-                  active
-                    ? "bg-gray-50 text-emerald-700 ring-1 ring-inset ring-gray-200 dark:bg-gray-950 dark:text-emerald-400 dark:ring-gray-700"
-                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-                }`}
-              >
-                {translate(tab.labelKey)}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
+          <nav className="flex gap-1 overflow-x-auto px-3 py-2 md:flex-col md:gap-4 md:overflow-y-auto md:px-3 md:py-4">
+            {visibleSettingsTabGroups.map((group) => (
+              <div key={group.id} className="flex shrink-0 items-center gap-1 md:block md:shrink">
+                <p className="hidden px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500 md:block">
+                  {translate(group.labelKey)}
+                </p>
+                <div className="flex gap-1 md:flex-col md:gap-0.5">
+                  {group.tabs.map((tab) => {
+                    const active = activeSettingsTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setActiveSettingsTab(tab.id)}
+                        className={`shrink-0 rounded-lg px-3 py-2 text-left text-sm font-semibold transition-colors ${
+                          active
+                            ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+                            : "text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                        }`}
+                      >
+                        {translate(tab.labelKey)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
+        </aside>
 
       <div className="flex-1 overflow-auto p-4 md:p-6">
         {settingsError && (
@@ -2114,6 +2157,63 @@ export function SettingsView({
 
           <section className="rounded-xl border border-gray-200 bg-white p-6 md:col-span-2 dark:border-gray-700 dark:bg-gray-800">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">
+              {translate("settingsNavVisibilityTitle")}
+            </h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {translate("settingsNavVisibilityHint")}
+            </p>
+            <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+              {(
+                [
+                  { id: "map" as const, labelKey: "map" as const },
+                  { id: "order" as const, labelKey: "order" as const },
+                  { id: "reservations" as const, labelKey: "reservations" as const },
+                  { id: "guestChat" as const, labelKey: "guestChatTitle" as const },
+                  { id: "vouchers" as const, labelKey: "vouchersTitle" as const },
+                  { id: "history" as const, labelKey: "history" as const },
+                  { id: "summary" as const, labelKey: "summary" as const },
+                  { id: "storage" as const, labelKey: "storage" as const },
+                  { id: "dynamicQr" as const, labelKey: "dynamicQrServices" as const },
+                  { id: "about" as const, labelKey: "about" as const },
+                ] as const
+              ).map((item) => {
+                const visible = !draft.hiddenSidebarNav.includes(item.id);
+                return (
+                  <li key={item.id}>
+                    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
+                      <span className="text-sm text-gray-800 dark:text-gray-200">
+                        {translate(item.labelKey)}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={visible}
+                        onChange={(event) => {
+                          const next = event.target.checked
+                            ? draft.hiddenSidebarNav.filter((tab) => tab !== item.id)
+                            : [...draft.hiddenSidebarNav, item.id];
+                          updateDraft("hiddenSidebarNav", next);
+                        }}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                    </label>
+                  </li>
+                );
+              })}
+              <li>
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-gray-200 px-4 py-3 opacity-80 dark:border-gray-700">
+                  <span className="text-sm text-gray-800 dark:text-gray-200">
+                    {translate("settings")}
+                  </span>
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                    {translate("settingsNavAlwaysVisible")}
+                  </span>
+                </div>
+              </li>
+            </ul>
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-6 md:col-span-2 dark:border-gray-700 dark:bg-gray-800">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">
               {translate("settingsAutoSyncTitle")}
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-gray-400">
@@ -2203,6 +2303,7 @@ export function SettingsView({
           </section>
         </div>
         )}
+      </div>
       </div>
     </div>
   );

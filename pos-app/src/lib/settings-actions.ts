@@ -5,11 +5,13 @@ import type {
   KitchenPrintLanguage,
   MenuItemLayout,
   MenuSortMode,
+  NavId,
   NetworkPrinter,
   PrinterRole,
   ReservationOperatingHours,
   SoundConfigs,
 } from "@/lib/types";
+import { ALL_NAV_TABS } from "@/lib/staff-roles";
 import { DEFAULT_SOUND_CONFIGS, parseSoundConfigs, soundConfigsToDb } from "@/lib/auto-serve";
 import {
   DEFAULT_GUEST_CHAT_CONFIG,
@@ -181,6 +183,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   changelogPopupBody: "",
   guestChat: { ...DEFAULT_GUEST_CHAT_CONFIG },
   voucher: { ...DEFAULT_VOUCHER_CONFIG },
+  hiddenSidebarNav: [],
 };
 
 type SettingsRow = {
@@ -260,7 +263,25 @@ type SettingsRow = {
   changelog_popup_body?: string | null;
   guest_chat_config?: unknown;
   voucher_config?: unknown;
+  sidebar_nav_hidden?: unknown;
 };
+
+function parseHiddenSidebarNav(value: unknown): NavId[] {
+  if (!Array.isArray(value)) return [];
+  const allowed = new Set<string>(ALL_NAV_TABS.filter((tab) => tab !== "settings"));
+  // about is hideable even though it is not in ALL_NAV_TABS role defaults.
+  allowed.add("about");
+  const seen = new Set<string>();
+  const result: NavId[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string") continue;
+    const tab = entry.trim();
+    if (tab === "settings" || !allowed.has(tab) || seen.has(tab)) continue;
+    seen.add(tab);
+    result.push(tab as NavId);
+  }
+  return result;
+}
 
 function parseNumericSetting(value: number | string | null | undefined, fallback: number): number {
   if (value == null) return fallback;
@@ -519,6 +540,7 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
       row.changelog_popup_body ?? DEFAULT_APP_SETTINGS.changelogPopupBody,
     guestChat: parseGuestChatConfig(row.guest_chat_config),
     voucher: parseVoucherConfig(row.voucher_config),
+    hiddenSidebarNav: parseHiddenSidebarNav(row.sidebar_nav_hidden),
   };
 }
 
@@ -686,6 +708,9 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   }
   if (partial.voucher !== undefined) {
     payload.voucher_config = voucherConfigToDb(partial.voucher);
+  }
+  if (partial.hiddenSidebarNav !== undefined) {
+    payload.sidebar_nav_hidden = parseHiddenSidebarNav(partial.hiddenSidebarNav);
   }
   return payload;
 }
@@ -914,6 +939,7 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "changelogPopupBody"
     | "guestChat"
     | "voucher"
+    | "hiddenSidebarNav"
   >;
 
 export function pickPrinterBillDraft(settings: AppSettings): PrinterBillSettingsDraft {
@@ -992,5 +1018,6 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     changelogPopupBody: settings.changelogPopupBody,
     guestChat: { ...settings.guestChat },
     voucher: { ...settings.voucher },
+    hiddenSidebarNav: [...settings.hiddenSidebarNav],
   };
 }

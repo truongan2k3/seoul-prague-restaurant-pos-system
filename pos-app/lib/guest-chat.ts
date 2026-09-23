@@ -1,6 +1,6 @@
 /** Guest "Chat With Us" — shared types + client session helpers. */
 
-export type GuestChatPage = "landing" | "reservation" | "other";
+export type GuestChatPage = "landing" | "reservation" | "voucher" | "other";
 
 export type GuestChatSessionStatus =
   | "open"

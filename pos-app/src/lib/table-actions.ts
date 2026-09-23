@@ -781,6 +781,8 @@ export async function checkoutTable(
     card_brand: payment.cardBrand ?? null,
     split_mode: payment.splitMode,
     split_count: payment.splitCount,
+    voucher_discount_amount: Number(payment.voucherDiscountAmount ?? 0),
+    voucher_codes: payment.voucherCodes?.length ? payment.voucherCodes : [],
     items: orders,
     activity_log: activityLog.map((entry) => ({
       id: entry.id,

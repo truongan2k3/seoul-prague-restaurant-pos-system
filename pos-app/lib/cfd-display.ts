@@ -25,6 +25,9 @@ export interface CfdCheckoutItem {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  /** Highlight gift voucher (and similar) lines for the guest. */
+  highlight?: boolean;
+  kind?: "item" | "voucher";
 }
 
 export interface CfdCheckoutPayload {
@@ -35,6 +38,8 @@ export interface CfdCheckoutPayload {
   tip: number;
   total: number;
   amountDueNow: number;
+  /** Gift voucher total applied (reduces amount due; food subtotal unchanged). */
+  voucherDiscount?: number;
   /** Cash tendered by guest (staff entered). */
   amountGiven?: number;
   /** Change to return when amountGiven exceeds the charge. */
@@ -106,6 +111,8 @@ export function buildCfdCheckoutPayload(
     staffInitiated?: boolean;
     deferIfThankYou?: boolean;
     mode?: "checkout" | "split-select";
+    voucherLines?: Array<{ code: string; denominationCzk: number }>;
+    voucherDiscount?: number;
   },
 ): CfdCheckoutPayload {
   const menuById = new Map(menuItems.map((item) => [item.id, item]));
@@ -129,18 +136,41 @@ export function buildCfdCheckoutPayload(
         quantity: order.quantity,
         unitPrice,
         lineTotal,
+        kind: "item",
       });
     }
   }
 
+  const items = [...merged.values()];
+  for (const voucher of totals.voucherLines ?? []) {
+    const amount = Math.max(0, Number(voucher.denominationCzk) || 0);
+    if (amount <= 0) continue;
+    items.push({
+      name: `Voucher ${voucher.code}`.trim(),
+      quantity: 1,
+      unitPrice: -amount,
+      lineTotal: -amount,
+      highlight: true,
+      kind: "voucher",
+    });
+  }
+
+  const voucherDiscount =
+    totals.voucherDiscount ??
+    (totals.voucherLines ?? []).reduce(
+      (sum, voucher) => sum + Math.max(0, Number(voucher.denominationCzk) || 0),
+      0,
+    );
+
   return {
     tableNumber,
-    items: [...merged.values()],
+    items,
     subtotal: totals.subtotal,
     discount: totals.discount,
     tip: totals.tip,
     total: totals.grandTotal,
     amountDueNow: totals.amountDueNow,
+    voucherDiscount: voucherDiscount > 0 ? voucherDiscount : undefined,
     amountGiven: totals.amountGiven,
     changeDue: totals.changeDue,
     staffInitiated: totals.staffInitiated,

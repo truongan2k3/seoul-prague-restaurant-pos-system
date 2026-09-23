@@ -37,6 +37,11 @@ import type { NavId } from "@/lib/types";
 import { useSettings } from "@/contexts/settings-context";
 
 const SIDEBAR_COLLAPSED_KEY = "pos-sidebar-collapsed";
+/**
+ * Match Tailwind `md` (768px). Below this: phone drawer + dim overlay.
+ * At md+ (tablets/desktop): inline sidebar so Floor Map is never covered.
+ */
+const SIDEBAR_DESKTOP_MIN_PX = 768;
 
 export const navItems = [
   { id: "map" as const, labelKey: "map" as const, icon: Map },
@@ -57,9 +62,20 @@ interface SidebarProps {
   onTabChange: (tab: NavId) => void;
 }
 
+function isDesktopSidebarViewport(): boolean {
+  return typeof window !== "undefined" && window.innerWidth >= SIDEBAR_DESKTOP_MIN_PX;
+}
+
+/**
+ * Phone drawer mode: always start collapsed so the map is not covered on open.
+ * Tablet/desktop (inline sidebar): restore saved preference (default expanded).
+ */
 function readCollapsedPreference(): boolean {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
+  if (typeof window === "undefined") return true;
+  if (!isDesktopSidebarViewport()) return true;
+  const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+  if (stored === null) return false;
+  return stored === "true";
 }
 
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
@@ -77,12 +93,28 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const pendingReservationCount = usePendingReservationCount();
   const guestChatUnreadCount = useGuestChatUnreadCount();
   const voucherUnreadCount = useVoucherUnreadCount(activeTab === "vouchers");
-  const [collapsed, setCollapsed] = useState(false);
+  // Start collapsed to avoid a one-frame drawer/overlay flash on phones.
+  const [collapsed, setCollapsed] = useState(true);
   const [selfProfileOpen, setSelfProfileOpen] = useState(false);
   const [quickSwitchOpen, setQuickSwitchOpen] = useState(false);
 
   useEffect(() => {
     setCollapsed(readCollapsedPreference());
+  }, []);
+
+  // Crossing down into phone drawer mode: collapse so the overlay doesn't cover the map.
+  useEffect(() => {
+    let wasDesktop = isDesktopSidebarViewport();
+    const onResize = () => {
+      const desktop = isDesktopSidebarViewport();
+      if (wasDesktop && !desktop) {
+        setCollapsed(true);
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "true");
+      }
+      wasDesktop = desktop;
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   const { settings } = useSettings();
@@ -114,14 +146,15 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
 
   const handleTabChange = (tab: NavId) => {
     onTabChange(tab);
-    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+    // Only auto-collapse in phone drawer mode (overlay).
+    if (typeof window !== "undefined" && window.innerWidth < SIDEBAR_DESKTOP_MIN_PX) {
       collapseSidebar();
     }
   };
 
   const expandedWidth = "w-64";
   /** Keep rail wide enough for a full-size logo when collapsed. */
-  const collapsedWidth = "w-16 lg:w-[4.5rem]";
+  const collapsedWidth = "w-16 md:w-[4.5rem]";
   const asideWidth = isExpanded ? expandedWidth : collapsedWidth;
 
   return (
@@ -130,18 +163,18 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         <button
           type="button"
           aria-label="Close sidebar overlay"
-          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
           onClick={collapseSidebar}
         />
       )}
 
       <div
-        className={`relative h-full shrink-0 transition-[width] duration-200 ease-out w-16 lg:w-[4.5rem] ${
-          isExpanded ? "lg:w-64" : "lg:w-[4.5rem]"
+        className={`relative h-full shrink-0 transition-[width] duration-200 ease-out w-16 md:w-[4.5rem] ${
+          isExpanded ? "md:w-64" : "md:w-[4.5rem]"
         }`}
       >
         <aside
-          className={`fixed inset-y-0 left-0 z-40 flex h-full flex-col border-r bg-[var(--pos-raised)] text-[var(--foreground)] transition-[width] duration-200 ease-out lg:static lg:z-auto ${asideWidth}`}
+          className={`fixed inset-y-0 left-0 z-40 flex h-full flex-col border-r bg-[var(--pos-raised)] text-[var(--foreground)] transition-[width] duration-200 ease-out md:static md:z-auto ${asideWidth}`}
           style={{ borderColor: "var(--border)" }}
         >
           <div

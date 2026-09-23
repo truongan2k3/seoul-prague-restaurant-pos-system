@@ -52,12 +52,8 @@ export function useVoucherUnreadCount(activeTabIsVouchers = false) {
     const unsub = subscribeToVoucherOrderAlerts(() => {
       void refresh();
     });
-    const interval = window.setInterval(() => {
-      void refresh();
-    }, 60_000);
     return () => {
       unsub();
-      window.clearInterval(interval);
     };
   }, [refresh]);
 

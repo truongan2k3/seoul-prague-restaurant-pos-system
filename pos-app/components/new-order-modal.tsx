@@ -145,6 +145,8 @@ interface NewOrderModalProps {
   ) => void | Promise<void>;
   onRefreshExistingOrders?: () => void;
   isSaving?: boolean;
+  appliedVouchers?: { code: string; denominationCzk: number }[];
+  onRemoveVoucher?: (code: string) => void;
 }
 
 function cartLinesToOrders(lines: CartLine[]): OrderItem[] {
@@ -334,6 +336,8 @@ export function NewOrderModal({
   onSaveExistingOrders,
   onRefreshExistingOrders,
   isSaving = false,
+  appliedVouchers = [],
+  onRemoveVoucher,
 }: NewOrderModalProps) {
   const { translate, language, currentStaffUser } = useApp();
   const { requestPin } = usePinGate();
@@ -628,6 +632,11 @@ export function NewOrderModal({
     0,
   );
   const billTotal = submittedTotal + cartTotal;
+  const voucherDiscountTotal = Math.min(
+    billTotal,
+    appliedVouchers.reduce((sum, voucher) => sum + voucher.denominationCzk, 0),
+  );
+  const amountDueAfterVoucher = Math.max(0, billTotal - voucherDiscountTotal);
 
   const hasKitchenWork = submittedLines.some((item) => {
     const kitchen = resolveKitchenStatus(item);
@@ -1748,13 +1757,51 @@ export function NewOrderModal({
       </div>
 
       <div className="shrink-0 border-t border-gray-200 p-3 dark:border-gray-700">
-        <div className="mb-3 flex items-center justify-between px-1">
-          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            {translate("total")}
-          </span>
-          <span className="text-2xl font-bold tabular-nums text-gray-900 dark:text-gray-100">
-            {formatOrderPrice(billTotal)}
-          </span>
+        <div className="mb-3 space-y-2 px-1">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              {translate("total")}
+            </span>
+            <span className="text-2xl font-bold tabular-nums text-gray-900 dark:text-gray-100">
+              {formatOrderPrice(billTotal)}
+            </span>
+          </div>
+          {appliedVouchers.length > 0 && (
+            <>
+              <ul className="space-y-1.5">
+                {appliedVouchers.map((voucher) => (
+                  <li
+                    key={voucher.code}
+                    className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50/90 px-2.5 py-1.5 text-sm font-semibold text-emerald-800 dark:bg-amber-950/40 dark:text-amber-200"
+                  >
+                    <span className="min-w-0 truncate">
+                      {translate("voucherLabel")} −{formatOrderPrice(voucher.denominationCzk)}
+                      <span className="ml-2 font-mono text-xs font-normal opacity-80">
+                        {voucher.code}
+                      </span>
+                    </span>
+                    {onRemoveVoucher ? (
+                      <button
+                        type="button"
+                        onClick={() => onRemoveVoucher(voucher.code)}
+                        className="shrink-0 text-xs font-semibold underline opacity-80 hover:opacity-100"
+                      >
+                        {translate("voucherRemove")}
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-2.5 py-2 dark:bg-amber-950/30">
+                <span className="text-sm font-bold text-emerald-900 dark:text-amber-100">
+                  {translate("amountDueNow")}
+                </span>
+                <span className="text-xl font-bold tabular-nums text-emerald-900 dark:text-amber-100">
+                  {formatOrderPrice(amountDueAfterVoucher)}
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-2">

@@ -428,7 +428,13 @@ export function useTableOrderWorkflow({
     if (!modal || modal.type !== "new-order") return;
     setIsSaving(true);
     setActionError(null);
-    const { data, error } = await forceCloseTable(modal.tableId);
+    const tableId = modal.tableId;
+    // Release applied vouchers so they remain usable (close ≠ redeem).
+    const appliedSnapshot = [...appliedVouchers];
+    for (const voucher of appliedSnapshot) {
+      await removeVoucher(voucher.code);
+    }
+    const { data, error } = await forceCloseTable(tableId);
     setIsSaving(false);
     if (error) {
       setActionError(error.message);
@@ -437,7 +443,7 @@ export function useTableOrderWorkflow({
     logAction("close table", `Table ${selectedTable?.label}`);
     if (data) {
       const updatedTable = mapTableRow(data);
-      setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
+      setTables((prev) => prev.map((t) => (t.id === tableId ? updatedTable : t)));
     }
     setModal(null);
     refreshAfterAction();
@@ -470,7 +476,11 @@ export function useTableOrderWorkflow({
       `Table ${selectedTable.label} · ${payload.payment.paymentMethod} · ${payload.payment.amountDueNow.toFixed(2)} Kč`,
     );
 
-    if (payload.closeTable || (payload.payment.voucherDiscountAmount ?? 0) > 0) {
+    if (
+      payload.closeTable ||
+      (payload.payment.voucherDiscountAmount ?? 0) > 0 ||
+      appliedVouchers.length > 0
+    ) {
       void redeemAppliedVouchers(modal.tableId, selectedTable.label);
     }
 
@@ -673,6 +683,10 @@ export function useTableOrderWorkflow({
           }
           onRefreshExistingOrders={refreshAfterAction}
           isSaving={isSaving}
+          appliedVouchers={appliedVouchers}
+          onRemoveVoucher={(code) => {
+            void removeVoucher(code);
+          }}
         />
       )}
     </>

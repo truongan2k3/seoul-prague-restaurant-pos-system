@@ -281,6 +281,11 @@ export interface AppSettings {
   guestChat: GuestChatConfig;
   /** Gift voucher sales + bank / Czech QR configuration */
   voucher: VoucherConfig;
+  /**
+   * Sidebar nav tabs hidden restaurant-wide (UI only).
+   * `settings` is never hideable and must not appear here.
+   */
+  hiddenSidebarNav: NavId[];
 }
 
 export type StaffRole = "admin" | "manager" | "server" | "kitchen" | "bar";

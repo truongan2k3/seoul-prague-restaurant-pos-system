@@ -14,6 +14,7 @@ import {
   type VoucherOrder,
   type VoucherPaymentMethod,
 } from "@/lib/voucher";
+import { broadcastVoucherOrderAlert } from "@/lib/voucher-order-alert";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 import {
   sendVoucherConfirmationEmail,
@@ -25,6 +26,7 @@ type OrderRow = {
   order_id: string;
   buyer_name: string;
   buyer_email: string;
+  buyer_phone: string | null;
   denomination_czk: number;
   quantity: number;
   total_czk: number;
@@ -51,10 +53,15 @@ type CodeRow = {
   denomination_czk: number;
   status: string;
   expires_at: string | null;
+  applied_table_id: string | null;
+  applied_at: string | null;
+  applied_by_staff_id: string | null;
+  applied_by_staff_name: string | null;
   redeemed_at: string | null;
   redeemed_by_staff_id: string | null;
   redeemed_by_staff_name: string | null;
   redeemed_table_label: string | null;
+  redeemed_sale_id: string | null;
   created_at: string;
 };
 
@@ -64,6 +71,7 @@ function mapOrder(row: OrderRow, codes?: VoucherCode[]): VoucherOrder {
     orderId: row.order_id,
     buyerName: row.buyer_name,
     buyerEmail: row.buyer_email,
+    buyerPhone: row.buyer_phone ?? "",
     denominationCzk: row.denomination_czk,
     quantity: row.quantity,
     totalCzk: row.total_czk,
@@ -125,9 +133,13 @@ function mapCode(row: CodeRow): VoucherCode {
     denominationCzk: row.denomination_czk,
     status: row.status as VoucherCode["status"],
     expiresAt: row.expires_at,
+    appliedTableId: row.applied_table_id,
+    appliedAt: row.applied_at,
+    appliedByStaffName: row.applied_by_staff_name,
     redeemedAt: row.redeemed_at,
     redeemedByStaffName: row.redeemed_by_staff_name,
     redeemedTableLabel: row.redeemed_table_label,
+    redeemedSaleId: row.redeemed_sale_id,
     createdAt: row.created_at,
   };
 }
@@ -198,6 +210,7 @@ export async function buildPaymentQrDataUrl(
 export async function createVoucherOrder(input: {
   buyerName: string;
   buyerEmail: string;
+  buyerPhone: string;
   denominationCzk: number;
   quantity: number;
   paymentMethod: VoucherPaymentMethod;
@@ -221,6 +234,7 @@ export async function createVoucherOrder(input: {
 
   const name = input.buyerName.trim();
   const email = input.buyerEmail.trim().toLowerCase();
+  const phone = input.buyerPhone.trim();
   if (!name) {
     return { order: null, qrDataUrl: null, spd: null, publicToken: null, error: "Please enter your name." };
   }
@@ -231,6 +245,15 @@ export async function createVoucherOrder(input: {
       spd: null,
       publicToken: null,
       error: "Please enter a valid email.",
+    };
+  }
+  if (!phone || phone.replace(/\D/g, "").length < 6) {
+    return {
+      order: null,
+      qrDataUrl: null,
+      spd: null,
+      publicToken: null,
+      error: "Please enter a valid phone number.",
     };
   }
 
@@ -276,6 +299,7 @@ export async function createVoucherOrder(input: {
       order_id: orderId,
       buyer_name: name,
       buyer_email: email,
+      buyer_phone: phone,
       denomination_czk: denomination,
       quantity,
       total_czk: totalCzk,
@@ -315,6 +339,8 @@ export async function createVoucherOrder(input: {
     config,
     qrDataUrl,
   });
+
+  void broadcastVoucherOrderAlert(order);
 
   return { order, qrDataUrl, spd, publicToken, error: null };
 }
@@ -521,12 +547,31 @@ export async function redeemVoucherCode(input: {
   staffId?: string | null;
   staffName?: string | null;
   tableLabel?: string | null;
+  saleId?: string | null;
+  /** When set, only redeem if voucher is applied to this table. */
+  requireAppliedToTableId?: string | null;
 }): Promise<{ code: VoucherCode | null; error: string | null }> {
   const found = await lookupVoucherCode(input.code);
   if (!found.code) return { code: null, error: found.error ?? "Voucher not found." };
   if (found.code.status === "redeemed") return { code: found.code, error: "Voucher already redeemed." };
   if (found.code.status === "cancelled") return { code: found.code, error: "Voucher is cancelled." };
   if (found.code.status === "expired") return { code: found.code, error: "Voucher has expired." };
+  if (found.code.status === "issued") {
+    return {
+      code: found.code,
+      error: "Apply the voucher to an order first. It is redeemed only after payment succeeds.",
+    };
+  }
+  if (found.code.status !== "applied") {
+    return { code: found.code, error: "Voucher cannot be redeemed." };
+  }
+  if (
+    input.requireAppliedToTableId &&
+    found.code.appliedTableId &&
+    found.code.appliedTableId !== input.requireAppliedToTableId
+  ) {
+    return { code: found.code, error: "Voucher is applied to another order." };
+  }
 
   const now = new Date().toISOString();
   const admin = createSupabaseAdmin();
@@ -538,10 +583,11 @@ export async function redeemVoucherCode(input: {
       redeemed_by_staff_id: input.staffId ?? null,
       redeemed_by_staff_name: input.staffName ?? "Staff",
       redeemed_table_label: input.tableLabel ?? null,
+      redeemed_sale_id: input.saleId ?? null,
       updated_at: now,
     })
     .eq("id", found.code.id)
-    .eq("status", "issued")
+    .eq("status", "applied")
     .select("*")
     .maybeSingle();
 
@@ -554,7 +600,12 @@ export async function redeemVoucherCode(input: {
     action: "redeemed",
     staffId: input.staffId,
     staffName: input.staffName,
-    meta: { code: found.code.code, tableLabel: input.tableLabel },
+    meta: {
+      code: found.code.code,
+      tableLabel: input.tableLabel,
+      saleId: input.saleId,
+      orderId: found.order?.orderId,
+    },
   });
 
   // Refresh order aggregate status
@@ -666,6 +717,205 @@ export async function markGuestVoucherPaid(input: {
     });
   }
   return { order: mapOrder(updated), error: null };
+}
+
+export async function cancelGuestVoucherOrder(input: {
+  orderId: string;
+  token: string;
+}): Promise<{ order: VoucherOrder | null; error: string | null }> {
+  await expireOverdueVoucherOrders();
+  const row = await findOrderByPublicToken(input.orderId, input.token);
+  if (!row) return { order: null, error: "Order not found." };
+  if (row.payment_status === "cancelled") {
+    return { order: mapOrder(row), error: null };
+  }
+  if (row.payment_status === "paid" || row.order_status === "issued") {
+    return { order: mapOrder(row), error: "This order can no longer be cancelled." };
+  }
+  if (row.guest_marked_paid_at) {
+    return {
+      order: mapOrder(row),
+      error: "Payment already marked. Contact the restaurant to cancel.",
+    };
+  }
+
+  const nowIso = new Date().toISOString();
+  const admin = createSupabaseAdmin();
+  const { data, error } = await admin
+    .from("voucher_orders")
+    .update({
+      payment_status: "cancelled",
+      order_status: "cancelled",
+      updated_at: nowIso,
+      notes: "Cancelled by guest",
+    })
+    .eq("id", row.id)
+    .eq("payment_status", "pending")
+    .is("guest_marked_paid_at", null)
+    .select("*")
+    .maybeSingle();
+
+  if (error) return { order: null, error: error.message };
+  if (!data) {
+    const fresh = await findOrderByPublicToken(input.orderId, input.token);
+    return {
+      order: fresh ? mapOrder(fresh) : null,
+      error: "Order could not be cancelled.",
+    };
+  }
+  await writeAudit({
+    orderUuid: row.id,
+    action: "cancelled",
+    meta: { reason: "guest_cancelled" },
+  });
+  return { order: mapOrder(data as OrderRow), error: null };
+}
+
+/** Apply voucher to a table bill — does NOT redeem. */
+export async function applyVoucherToTable(input: {
+  code: string;
+  tableId: string;
+  tableLabel?: string | null;
+  staffId?: string | null;
+  staffName?: string | null;
+}): Promise<{ code: VoucherCode | null; error: string | null }> {
+  const found = await lookupVoucherCode(input.code);
+  if (!found.code) return { code: null, error: found.error ?? "Voucher not found." };
+  if (found.code.status === "redeemed") {
+    return { code: found.code, error: "Voucher already redeemed." };
+  }
+  if (found.code.status === "cancelled") {
+    return { code: found.code, error: "Voucher is cancelled." };
+  }
+  if (found.code.status === "expired") {
+    return { code: found.code, error: "Voucher has expired." };
+  }
+  if (found.code.status === "applied") {
+    if (found.code.appliedTableId === input.tableId) {
+      return { code: found.code, error: null }; // already on this table
+    }
+    return { code: found.code, error: "Voucher is already applied to another order." };
+  }
+  if (found.code.status !== "issued") {
+    return { code: found.code, error: "Voucher cannot be applied." };
+  }
+
+  const nowIso = new Date().toISOString();
+  const admin = createSupabaseAdmin();
+  const { data, error } = await admin
+    .from("voucher_codes")
+    .update({
+      status: "applied",
+      applied_table_id: input.tableId,
+      applied_at: nowIso,
+      applied_by_staff_id: input.staffId ?? null,
+      applied_by_staff_name: input.staffName ?? "Staff",
+      updated_at: nowIso,
+    })
+    .eq("id", found.code.id)
+    .eq("status", "issued")
+    .select("*")
+    .maybeSingle();
+
+  if (error) return { code: null, error: error.message };
+  if (!data) return { code: found.code, error: "Voucher could not be applied." };
+
+  await writeAudit({
+    orderUuid: found.code.orderUuid,
+    voucherCodeId: found.code.id,
+    action: "applied",
+    staffId: input.staffId,
+    staffName: input.staffName,
+    meta: { tableId: input.tableId, tableLabel: input.tableLabel },
+  });
+
+  return { code: mapCode(data as CodeRow), error: null };
+}
+
+/** Release applied voucher back to issued (usable again). */
+export async function releaseVoucherFromTable(input: {
+  code: string;
+  tableId: string;
+  staffId?: string | null;
+  staffName?: string | null;
+}): Promise<{ code: VoucherCode | null; error: string | null }> {
+  const found = await lookupVoucherCode(input.code);
+  if (!found.code) return { code: null, error: found.error ?? "Voucher not found." };
+  if (found.code.status !== "applied") {
+    return { code: found.code, error: "Voucher is not applied." };
+  }
+  if (found.code.appliedTableId && found.code.appliedTableId !== input.tableId) {
+    return { code: found.code, error: "Voucher is applied to another order." };
+  }
+
+  const nowIso = new Date().toISOString();
+  const admin = createSupabaseAdmin();
+  const { data, error } = await admin
+    .from("voucher_codes")
+    .update({
+      status: "issued",
+      applied_table_id: null,
+      applied_at: null,
+      applied_by_staff_id: null,
+      applied_by_staff_name: null,
+      updated_at: nowIso,
+    })
+    .eq("id", found.code.id)
+    .eq("status", "applied")
+    .select("*")
+    .maybeSingle();
+
+  if (error) return { code: null, error: error.message };
+  if (!data) return { code: found.code, error: "Could not release voucher." };
+
+  await writeAudit({
+    orderUuid: found.code.orderUuid,
+    voucherCodeId: found.code.id,
+    action: "released",
+    staffId: input.staffId,
+    staffName: input.staffName,
+    meta: { tableId: input.tableId },
+  });
+
+  return { code: mapCode(data as CodeRow), error: null };
+}
+
+export async function listAppliedVouchersForTable(tableId: string): Promise<VoucherCode[]> {
+  if (!tableId.trim()) return [];
+  const admin = createSupabaseAdmin();
+  const { data } = await admin
+    .from("voucher_codes")
+    .select("*")
+    .eq("applied_table_id", tableId)
+    .eq("status", "applied")
+    .order("applied_at", { ascending: true });
+  return ((data as CodeRow[] | null) ?? []).map(mapCode);
+}
+
+/** Redeem all applied vouchers for a table after successful payment. */
+export async function redeemAppliedVouchersForTable(input: {
+  tableId: string;
+  tableLabel?: string | null;
+  saleId?: string | null;
+  staffId?: string | null;
+  staffName?: string | null;
+}): Promise<{ redeemed: VoucherCode[]; error: string | null }> {
+  const applied = await listAppliedVouchersForTable(input.tableId);
+  if (applied.length === 0) return { redeemed: [], error: null };
+
+  const redeemed: VoucherCode[] = [];
+  for (const code of applied) {
+    const result = await redeemVoucherCode({
+      code: code.code,
+      staffId: input.staffId,
+      staffName: input.staffName,
+      tableLabel: input.tableLabel,
+      saleId: input.saleId,
+      requireAppliedToTableId: input.tableId,
+    });
+    if (result.code && !result.error) redeemed.push(result.code);
+  }
+  return { redeemed, error: null };
 }
 
 export { DEFAULT_VOUCHER_CONFIG };

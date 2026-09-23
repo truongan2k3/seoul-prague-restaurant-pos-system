@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChangeTableModal } from "@/components/change-table-modal";
 import { NewOrderModal } from "@/components/new-order-modal";
 import { PaymentModal } from "@/components/payment-modal";
@@ -19,6 +19,7 @@ import { finalizeBillOnlyOrder, isBillOnlyOrderLine } from "@/lib/menu-item-disp
 import { filterItemsForBoard } from "@/lib/order-board";
 import { sendCfdEvent } from "@/lib/cfd-display";
 import type { MenuCategoryRecord, MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
+import type { VoucherCode } from "@/lib/voucher";
 import {
   appendOrdersToTable,
   checkoutTable,
@@ -29,6 +30,8 @@ import {
   updateTableOrders,
 } from "@/src/lib/table-actions";
 import { mapTableRow } from "@/src/lib/supabase-data";
+
+export type AppliedVoucherLine = { code: string; denominationCzk: number };
 
 export type TableOrderModalState =
   | { type: "new-order"; tableId: string; mode: "new" | "append" }
@@ -44,6 +47,13 @@ interface UseTableOrderWorkflowOptions {
   orderItems: OrderItem[];
   onRefresh: () => void;
   onRefreshFloor?: () => void;
+}
+
+function mapAppliedCodes(codes: VoucherCode[]): AppliedVoucherLine[] {
+  return codes.map((code) => ({
+    code: code.code,
+    denominationCzk: Number(code.denominationCzk) || 0,
+  }));
 }
 
 export function useTableOrderWorkflow({
@@ -63,8 +73,114 @@ export function useTableOrderWorkflow({
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const actionLockRef = useRef(false);
+  const [appliedVouchers, setAppliedVouchers] = useState<AppliedVoucherLine[]>([]);
+  const [appliedVouchersTableId, setAppliedVouchersTableId] = useState<string | null>(null);
 
   const selectedTable = modal ? tables.find((t) => t.id === modal.tableId) : undefined;
+  const activeTableIdForVoucher = modal?.tableId ?? null;
+
+  const refreshAppliedVouchers = useCallback(async (tableId?: string | null) => {
+    const id = tableId ?? activeTableIdForVoucher;
+    if (!id) {
+      setAppliedVouchers([]);
+      setAppliedVouchersTableId(null);
+      return;
+    }
+    try {
+      const response = await fetch(
+        `/api/vouchers/staff/apply?tableId=${encodeURIComponent(id)}`,
+      );
+      const payload = (await response.json()) as { codes?: VoucherCode[]; error?: string };
+      if (!response.ok) {
+        setAppliedVouchers([]);
+        setAppliedVouchersTableId(id);
+        return;
+      }
+      setAppliedVouchers(mapAppliedCodes(payload.codes ?? []));
+      setAppliedVouchersTableId(id);
+    } catch {
+      setAppliedVouchers([]);
+      setAppliedVouchersTableId(id);
+    }
+  }, [activeTableIdForVoucher]);
+
+  useEffect(() => {
+    if (!activeTableIdForVoucher) {
+      setAppliedVouchers([]);
+      setAppliedVouchersTableId(null);
+      return;
+    }
+    if (appliedVouchersTableId === activeTableIdForVoucher) return;
+    void refreshAppliedVouchers(activeTableIdForVoucher);
+  }, [activeTableIdForVoucher, appliedVouchersTableId, refreshAppliedVouchers]);
+
+  const applyVoucherCode = useCallback(
+    async (code: string, tableId?: string, tableLabel?: string) => {
+      const id = tableId ?? activeTableIdForVoucher;
+      if (!id) return { error: "No active table." };
+      const label =
+        tableLabel ??
+        tables.find((table) => table.id === id)?.label ??
+        undefined;
+      try {
+        const response = await fetch("/api/vouchers/staff/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "apply",
+            code,
+            tableId: id,
+            tableLabel: label,
+          }),
+        });
+        const payload = (await response.json()) as { code?: VoucherCode; error?: string };
+        if (!response.ok) {
+          return { error: payload.error || "Could not apply voucher." };
+        }
+        await refreshAppliedVouchers(id);
+        return { error: null, code: payload.code };
+      } catch {
+        return { error: "Could not apply voucher." };
+      }
+    },
+    [activeTableIdForVoucher, refreshAppliedVouchers, tables],
+  );
+
+  const removeVoucher = useCallback(
+    async (code: string) => {
+      const id = activeTableIdForVoucher;
+      if (!id) return;
+      try {
+        await fetch("/api/vouchers/staff/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "release", code, tableId: id }),
+        });
+      } catch {
+        /* ignore — refresh will show current state */
+      }
+      await refreshAppliedVouchers(id);
+    },
+    [activeTableIdForVoucher, refreshAppliedVouchers],
+  );
+
+  const redeemAppliedVouchers = useCallback(
+    async (tableId: string, tableLabel: string) => {
+      try {
+        await fetch("/api/vouchers/staff/redeem-applied", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tableId, tableLabel }),
+        });
+      } catch {
+        /* payment already succeeded — redeem is best-effort */
+      }
+      if (activeTableIdForVoucher === tableId) {
+        setAppliedVouchers([]);
+      }
+    },
+    [activeTableIdForVoucher],
+  );
 
   const openChangeTable = (tableId: string, returnTo?: "new-order-append") => {
     setActionError(null);
@@ -312,7 +428,13 @@ export function useTableOrderWorkflow({
     if (!modal || modal.type !== "new-order") return;
     setIsSaving(true);
     setActionError(null);
-    const { data, error } = await forceCloseTable(modal.tableId);
+    const tableId = modal.tableId;
+    // Release applied vouchers so they remain usable (close ≠ redeem).
+    const appliedSnapshot = [...appliedVouchers];
+    for (const voucher of appliedSnapshot) {
+      await removeVoucher(voucher.code);
+    }
+    const { data, error } = await forceCloseTable(tableId);
     setIsSaving(false);
     if (error) {
       setActionError(error.message);
@@ -321,7 +443,7 @@ export function useTableOrderWorkflow({
     logAction("close table", `Table ${selectedTable?.label}`);
     if (data) {
       const updatedTable = mapTableRow(data);
-      setTables((prev) => prev.map((t) => (t.id === modal.tableId ? updatedTable : t)));
+      setTables((prev) => prev.map((t) => (t.id === tableId ? updatedTable : t)));
     }
     setModal(null);
     refreshAfterAction();
@@ -353,6 +475,14 @@ export function useTableOrderWorkflow({
       "checkout",
       `Table ${selectedTable.label} · ${payload.payment.paymentMethod} · ${payload.payment.amountDueNow.toFixed(2)} Kč`,
     );
+
+    if (
+      payload.closeTable ||
+      (payload.payment.voucherDiscountAmount ?? 0) > 0 ||
+      appliedVouchers.length > 0
+    ) {
+      void redeemAppliedVouchers(modal.tableId, selectedTable.label);
+    }
 
     if (payload.printReceipt ?? settings.autoPrintOnPayment) {
       printReceipt({
@@ -526,6 +656,10 @@ export function useTableOrderWorkflow({
           onConfirm={handleCheckout}
           isSaving={isSaving}
           error={actionError}
+          appliedVouchers={appliedVouchers}
+          onRemoveVoucher={(code) => {
+            void removeVoucher(code);
+          }}
         />
       )}
 
@@ -549,6 +683,10 @@ export function useTableOrderWorkflow({
           }
           onRefreshExistingOrders={refreshAfterAction}
           isSaving={isSaving}
+          appliedVouchers={appliedVouchers}
+          onRemoveVoucher={(code) => {
+            void removeVoucher(code);
+          }}
         />
       )}
     </>
@@ -570,5 +708,10 @@ export function useTableOrderWorkflow({
     handleTableClick,
     tableOrderModals: modals,
     isSaving,
+    activeTableIdForVoucher,
+    appliedVouchers,
+    refreshAppliedVouchers,
+    applyVoucherCode,
+    removeVoucher,
   };
 }

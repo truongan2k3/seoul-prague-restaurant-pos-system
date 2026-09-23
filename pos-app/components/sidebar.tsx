@@ -29,10 +29,12 @@ import { useApp } from "@/contexts/app-context";
 import { useAuth } from "@/contexts/auth-context";
 import { usePendingReservationCount } from "@/hooks/use-pending-reservation-count";
 import { useGuestChatUnreadCount } from "@/hooks/use-guest-chat-unread-count";
+import { useVoucherUnreadCount } from "@/hooks/use-voucher-unread-count";
 import { useNotifications } from "@/contexts/notification-context";
 import { navButtonClass } from "@/lib/theme-classes";
 import { canAccessNavTabForMember } from "@/lib/staff-roles";
 import type { NavId } from "@/lib/types";
+import { useSettings } from "@/contexts/settings-context";
 
 const SIDEBAR_COLLAPSED_KEY = "pos-sidebar-collapsed";
 
@@ -74,6 +76,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const { business, session, logout } = useAuth();
   const pendingReservationCount = usePendingReservationCount();
   const guestChatUnreadCount = useGuestChatUnreadCount();
+  const voucherUnreadCount = useVoucherUnreadCount(activeTab === "vouchers");
   const [collapsed, setCollapsed] = useState(false);
   const [selfProfileOpen, setSelfProfileOpen] = useState(false);
   const [quickSwitchOpen, setQuickSwitchOpen] = useState(false);
@@ -82,9 +85,12 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
     setCollapsed(readCollapsedPreference());
   }, []);
 
-  const visibleNavItems = navItems.filter((item) =>
-    canAccessNavTabForMember(currentStaffUser, item.id),
-  );
+  const { settings } = useSettings();
+  const visibleNavItems = navItems.filter((item) => {
+    if (!canAccessNavTabForMember(currentStaffUser, item.id)) return false;
+    if (item.id === "settings") return true;
+    return !settings.hiddenSidebarNav.includes(item.id);
+  });
 
   const isExpanded = !collapsed;
 
@@ -114,8 +120,8 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   };
 
   const expandedWidth = "w-64";
-  /** Compact rail on phones/tablets — was 4.25rem and felt oversized. */
-  const collapsedWidth = "w-12 lg:w-14";
+  /** Keep rail wide enough for a full-size logo when collapsed. */
+  const collapsedWidth = "w-16 lg:w-[4.5rem]";
   const asideWidth = isExpanded ? expandedWidth : collapsedWidth;
 
   return (
@@ -130,8 +136,8 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       )}
 
       <div
-        className={`relative h-full shrink-0 transition-[width] duration-200 ease-out w-12 lg:w-14 ${
-          isExpanded ? "lg:w-64" : "lg:w-14"
+        className={`relative h-full shrink-0 transition-[width] duration-200 ease-out w-16 lg:w-[4.5rem] ${
+          isExpanded ? "lg:w-64" : "lg:w-[4.5rem]"
         }`}
       >
         <aside
@@ -142,7 +148,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             className={`flex items-center border-b ${
               isExpanded
                 ? "gap-2 px-3 py-2.5 lg:gap-3 lg:px-4 lg:py-4"
-                : "justify-center px-1 py-2 lg:px-2 lg:py-3"
+                : "flex-col justify-center gap-2 px-1 py-2.5 lg:px-2 lg:py-3"
             }`}
             style={{ borderColor: "var(--border)" }}
           >
@@ -153,12 +159,12 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
                   <img
                     src={business.logoUrl}
                     alt={business.name}
-                    className="h-8 w-8 shrink-0 rounded-lg border object-cover lg:h-11 lg:w-11"
+                    className="h-11 w-11 shrink-0 rounded-lg border object-contain"
                     style={{ borderColor: "var(--border)" }}
                   />
                 ) : (
                   <div
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white lg:h-11 lg:w-11 lg:text-sm"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-sm font-bold text-white"
                     style={{ backgroundColor: "var(--pos-brand)" }}
                   >
                     {(business?.name ?? "P").charAt(0)}
@@ -182,12 +188,12 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
               <img
                 src={business.logoUrl}
                 alt={business.name}
-                className="h-7 w-7 rounded-md border object-cover lg:h-9 lg:w-9 lg:rounded-lg"
+                className="h-11 w-11 rounded-lg border object-contain"
                 style={{ borderColor: "var(--border)" }}
               />
             ) : (
               <div
-                className="flex h-7 w-7 items-center justify-center rounded-md text-[10px] font-bold text-white lg:h-9 lg:w-9 lg:rounded-lg lg:text-xs"
+                className="flex h-11 w-11 items-center justify-center rounded-lg text-sm font-bold text-white"
                 style={{ backgroundColor: "var(--pos-brand)" }}
               >
                 {(business?.name ?? "P").charAt(0)}
@@ -238,6 +244,16 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
                             : "right-0.5 top-0.5 h-1.5 w-1.5 lg:right-1 lg:top-1 lg:h-2 lg:w-2"
                         }`}
                         aria-label={`${guestChatUnreadCount} unread guest chats`}
+                      />
+                    )}
+                    {id === "vouchers" && voucherUnreadCount > 0 && (
+                      <span
+                        className={`absolute rounded-full bg-red-500 ${
+                          isExpanded
+                            ? "right-2 top-1/2 h-2 w-2 -translate-y-1/2"
+                            : "right-0.5 top-0.5 h-1.5 w-1.5 lg:right-1 lg:top-1 lg:h-2 lg:w-2"
+                        }`}
+                        aria-label={`${voucherUnreadCount} unread voucher orders`}
                       />
                     )}
                   </button>

@@ -57,6 +57,11 @@ type DenominationSelectorProps = {
   quantity: number;
   onDenominationChange: (value: number) => void;
   onQuantityChange: (value: number) => void;
+  stepChooseLabel?: string;
+  stepChooseHint?: string;
+  stepQuantityLabel?: string;
+  quantityLabel?: string;
+  giftVoucherLabel?: string;
 };
 
 export function VoucherDenominationSelector({
@@ -65,11 +70,16 @@ export function VoucherDenominationSelector({
   quantity,
   onDenominationChange,
   onQuantityChange,
+  stepChooseLabel = "1 · Choose amount",
+  stepChooseHint = "Select a luxury gift voucher denomination.",
+  stepQuantityLabel = "2 · Quantity",
+  quantityLabel = "Quantity",
+  giftVoucherLabel = "Gift voucher",
 }: DenominationSelectorProps) {
   return (
     <div>
-      <p className="text-xs uppercase tracking-[0.28em] text-white/40">1 · Choose amount</p>
-      <p className="mt-2 text-sm text-white/45">Select a luxury gift voucher denomination.</p>
+      <p className="text-xs uppercase tracking-[0.28em] text-white/40">{stepChooseLabel}</p>
+      <p className="mt-2 text-sm text-white/45">{stepChooseHint}</p>
       <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-3 lg:gap-4">
         {denominations.map((value) => {
           const active = denomination === value;
@@ -107,7 +117,7 @@ export function VoucherDenominationSelector({
                         className="text-[10px] font-semibold uppercase tracking-[0.28em]"
                         style={{ color: theme.gem }}
                       >
-                        Gift voucher
+                        {giftVoucherLabel}
                       </p>
                       <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-white/35">
                         {theme.label}
@@ -147,9 +157,9 @@ export function VoucherDenominationSelector({
       <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 sm:px-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-white/40">2 · Quantity</p>
+            <p className="text-xs uppercase tracking-[0.24em] text-white/40">{stepQuantityLabel}</p>
             <p className="mt-1 text-sm text-white/50">
-              How many {formatVoucherAmount(denomination)} vouchers?
+              {quantityLabel}: {formatVoucherAmount(denomination)}
             </p>
           </div>
           <div className="inline-flex items-center gap-3 self-start rounded-full border border-white/12 bg-black/30 px-2 py-1.5">
@@ -294,33 +304,36 @@ type SummaryProps = {
   denomination: number;
   quantity: number;
   total: number;
+  totalLabel?: string;
+  voucherLabel?: string;
 };
 
 /** Clear cart-style summary for the selected denomination × quantity. */
-export function VoucherOrderSummary({ denomination, quantity, total }: SummaryProps) {
+export function VoucherOrderSummary({
+  denomination,
+  quantity,
+  total,
+  totalLabel = "Total",
+  voucherLabel = "Voucher",
+}: SummaryProps) {
   return (
     <div className="rounded-2xl border border-[#C9A88B]/25 bg-[#C9A88B]/[0.06] px-5 py-4">
-      <p className="text-xs uppercase tracking-[0.24em] text-[#C9A88B]">Your selection</p>
+      <p className="text-xs uppercase tracking-[0.24em] text-[#C9A88B]">{voucherLabel}</p>
       <div className="mt-3 flex items-end justify-between gap-4">
         <div>
           <p className="text-sm text-white/70">
             <span className="landing-serif text-lg text-[#F5EDE4]">
               {formatVoucherAmount(denomination)}
             </span>
-            <span className="text-white/40"> × </span>
-            <span className="tabular-nums text-[#F5EDE4]">{quantity}</span>
-          </p>
-          <p className="mt-1 text-xs text-white/40">
-            {quantity === 1 ? "1 gift voucher" : `${quantity} gift vouchers`} · same denomination
+            <span className="text-white/40"> × {quantity}</span>
           </p>
         </div>
         <div className="text-right">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-white/40">Total</p>
-          <p className="landing-serif text-2xl text-[#C9A88B] sm:text-3xl">
-            {formatVoucherAmount(total)}
-          </p>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-white/40">{totalLabel}</p>
+          <p className="landing-serif text-2xl text-[#C9A88B]">{formatVoucherAmount(total)}</p>
         </div>
       </div>
     </div>
   );
 }
+

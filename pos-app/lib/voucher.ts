@@ -12,7 +12,7 @@ export type VoucherOrderStatus =
   | "fully_redeemed"
   | "cancelled";
 
-export type VoucherCodeStatus = "issued" | "redeemed" | "cancelled" | "expired";
+export type VoucherCodeStatus = "issued" | "applied" | "redeemed" | "cancelled" | "expired";
 
 export interface VoucherConfig {
   enabled: boolean;
@@ -53,6 +53,7 @@ export interface VoucherOrder {
   orderId: string;
   buyerName: string;
   buyerEmail: string;
+  buyerPhone?: string;
   denominationCzk: number;
   quantity: number;
   totalCzk: number;
@@ -80,9 +81,13 @@ export interface VoucherCode {
   denominationCzk: number;
   status: VoucherCodeStatus;
   expiresAt?: string | null;
+  appliedTableId?: string | null;
+  appliedAt?: string | null;
+  appliedByStaffName?: string | null;
   redeemedAt?: string | null;
   redeemedByStaffName?: string | null;
   redeemedTableLabel?: string | null;
+  redeemedSaleId?: string | null;
   createdAt: string;
 }
 

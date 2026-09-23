@@ -25,7 +25,9 @@ export async function POST(request: Request) {
   }
 
   const page: GuestChatPage =
-    body.page === "reservation" || body.page === "other" ? body.page : "landing";
+    body.page === "reservation" || body.page === "voucher" || body.page === "other"
+      ? body.page
+      : "landing";
 
   const action: GuestChatSessionAction =
     body.action === "start" || body.action === "need_help" ? body.action : "resume";

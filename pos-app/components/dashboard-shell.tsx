@@ -13,6 +13,8 @@ import { DynamicQrServicesView } from "@/components/dynamic-qr-services-view";
 import { GuestChatView } from "@/components/guest-chat-view";
 import { GuestChatListener } from "@/components/guest-chat-listener";
 import { VouchersView } from "@/components/vouchers-view";
+import { VoucherOrderListener } from "@/components/voucher-order-listener";
+import { VoucherScanFab } from "@/components/voucher-scan-fab";
 import { ReadyNotificationListener } from "@/components/ready-notification-listener";
 import { MainNewOrderNotificationListener } from "@/components/main-new-order-notification-listener";
 import { CallWaiterListener } from "@/components/call-waiter-listener";
@@ -221,6 +223,7 @@ function salesSince(days: number) {
 export function DashboardShell() {
   const { currentStaffUser, refreshStaffList, translate } = useApp();
   const [activeTab, setActiveTab] = useState<NavId>("map");
+  const [voucherFocusOrderId, setVoucherFocusOrderId] = useState<string | null>(null);
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<MenuCategoryRecord[]>([]);
@@ -586,6 +589,22 @@ export function DashboardShell() {
             onRefresh={refreshPosData}
             onTableClick={tableOrder.handleTableClick}
             actionError={tableOrder.actionError}
+            scanFab={
+              <VoucherScanFab
+                activeTableId={tableOrder.activeTableIdForVoucher}
+                tableLabel={
+                  tableOrder.activeTableIdForVoucher
+                    ? tables.find((t) => t.id === tableOrder.activeTableIdForVoucher)?.label
+                    : null
+                }
+                staffName={currentStaffUser?.name}
+                applyVoucherCode={tableOrder.applyVoucherCode}
+                onApplied={() => {
+                  void tableOrder.refreshAppliedVouchers();
+                }}
+                onOpenVouchersTab={() => setActiveTab("vouchers")}
+              />
+            }
           />
         );
       case "order":
@@ -632,7 +651,12 @@ export function DashboardShell() {
       case "guestChat":
         return <GuestChatView />;
       case "vouchers":
-        return <VouchersView />;
+        return (
+          <VouchersView
+            focusOrderId={voucherFocusOrderId}
+            onFocusOrderConsumed={() => setVoucherFocusOrderId(null)}
+          />
+        );
       case "settings":
         return (
           <SettingsView
@@ -659,6 +683,12 @@ export function DashboardShell() {
       <PrintFailedListener />
       <TableGuestRequestListener />
       <GuestChatListener />
+      <VoucherOrderListener
+        onOpenOrder={(orderUuid) => {
+          setVoucherFocusOrderId(orderUuid);
+          setActiveTab("vouchers");
+        }}
+      />
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <AnnouncementMarquee surface="pos" />

@@ -12,6 +12,7 @@ import { AboutView } from "@/components/about-view";
 import { DynamicQrServicesView } from "@/components/dynamic-qr-services-view";
 import { GuestChatView } from "@/components/guest-chat-view";
 import { GuestChatListener } from "@/components/guest-chat-listener";
+import { VouchersView } from "@/components/vouchers-view";
 import { ReadyNotificationListener } from "@/components/ready-notification-listener";
 import { MainNewOrderNotificationListener } from "@/components/main-new-order-notification-listener";
 import { CallWaiterListener } from "@/components/call-waiter-listener";
@@ -630,6 +631,8 @@ export function DashboardShell() {
         return <DynamicQrServicesView tables={tables} />;
       case "guestChat":
         return <GuestChatView />;
+      case "vouchers":
+        return <VouchersView />;
       case "settings":
         return (
           <SettingsView

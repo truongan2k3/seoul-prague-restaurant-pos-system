@@ -45,6 +45,7 @@ import { draftToReceiptTemplate } from "@/src/components/ReceiptPrint";
 import { MarqueeSettingsEditor } from "@/components/marquee-settings-editor";
 import { StaffView } from "@/components/staff-view";
 import { ManagerPasscodeChangeForm } from "@/components/manager-passcode-change-form";
+import { VoucherSettingsFields } from "@/components/voucher-settings-fields";
 import type { TranslationKey } from "@/lib/i18n/translations";
 import { pingPrintBridge } from "@/src/lib/print-bridge-client";
 import type { NetworkPrinter, PrinterRole, ReceiptFontFamily, WeekdayKey } from "@/lib/types";
@@ -74,6 +75,7 @@ type SettingsTabId =
   | "marquee"
   | "reservations"
   | "chat"
+  | "vouchers"
   | "sounds"
   | "cfd"
   | "devices"
@@ -138,6 +140,7 @@ export function SettingsView({
     { id: "marquee", labelKey: "settingsTabMarquee" },
     { id: "reservations", labelKey: "settingsTabReservations" },
     { id: "chat", labelKey: "guestChatSettingsTitle" },
+    { id: "vouchers", labelKey: "voucherSettingsTitle" },
     { id: "sounds", labelKey: "settingsTabSounds" },
     { id: "cfd", labelKey: "settingsTabCfd" },
     { id: "devices", labelKey: "settingsTabDevices" },
@@ -1711,6 +1714,39 @@ export function SettingsView({
               />
               {translate("guestChatOnlineHours")}
             </label>
+          </section>
+        </div>
+        )}
+
+        {activeSettingsTab === "vouchers" && (
+        <div className="mx-auto grid max-w-3xl grid-cols-1 gap-6">
+          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">
+              {translate("voucherSettingsTitle")}
+            </h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {translate("voucherSettingsHint")}
+            </p>
+            <div className="mt-4">
+              <VoucherSettingsFields
+                value={draft.voucher}
+                onChange={(next) => updateDraft("voucher", next)}
+                labels={{
+                  enabled: translate("voucherEnabled"),
+                  denominations: translate("voucherDenominations"),
+                  accountHolder: translate("voucherAccountHolder"),
+                  accountNumber: translate("voucherAccountNumber"),
+                  iban: translate("voucherIban"),
+                  bankName: translate("voucherBankName"),
+                  bicSwift: translate("voucherBicSwift"),
+                  validityDays: translate("voucherValidityDays"),
+                  bankPaymentNote: translate("voucherBankPaymentNote"),
+                  processingMessage: translate("voucherProcessingMessage"),
+                  confirmationEmailSubject: translate("voucherConfirmEmailSubject"),
+                  issuedEmailSubject: translate("voucherIssuedEmailSubject"),
+                }}
+              />
+            </div>
           </section>
         </div>
         )}

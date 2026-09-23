@@ -12,6 +12,7 @@ import type {
   ReservationRequiredFields,
 } from "@/lib/reservation-guest-form";
 import type { GuestChatConfig } from "@/lib/guest-chat";
+import type { VoucherConfig } from "@/lib/voucher";
 
 export type TableStatus = "empty" | "waiting" | "ready";
 export type TableShape = "square" | "round";
@@ -35,6 +36,7 @@ export type NavId =
   | "storage"
   | "dynamicQr"
   | "guestChat"
+  | "vouchers"
   | "staff"
   | "settings"
   | "about";
@@ -277,6 +279,8 @@ export interface AppSettings {
   changelogPopupBody: string;
   /** Website Chat With Us configuration */
   guestChat: GuestChatConfig;
+  /** Gift voucher sales + bank / Czech QR configuration */
+  voucher: VoucherConfig;
 }
 
 export type StaffRole = "admin" | "manager" | "server" | "kitchen" | "bar";

@@ -7,6 +7,7 @@ export const ALL_NAV_TABS: NavId[] = [
   "order",
   "reservations",
   "guestChat",
+  "vouchers",
   "history",
   "summary",
   "storage",
@@ -34,7 +35,7 @@ export function staffBypassesManagerPasscode(role: StaffRole | undefined): boole
 export function defaultNavTabsForRole(role: StaffRole | undefined): NavId[] {
   if (!role) return ["map"];
   if (role === "admin" || role === "manager") return [...ALL_NAV_TABS];
-  if (role === "server") return ["map", "order", "reservations", "guestChat"];
+  if (role === "server") return ["map", "order", "reservations", "guestChat", "vouchers"];
   // Kitchen / bar primarily use dedicated screens; POS map is the fallback home.
   return ["map"];
 }
@@ -88,6 +89,13 @@ export function canAccessNavTabForMember(
   // Guest Chat always visible for admin / manager / server (website inbox).
   if (
     tab === "guestChat" &&
+    (member?.role === "admin" || member?.role === "manager" || member?.role === "server")
+  ) {
+    return true;
+  }
+  // Vouchers tab for floor / management staff who verify payment and redeem.
+  if (
+    tab === "vouchers" &&
     (member?.role === "admin" || member?.role === "manager" || member?.role === "server")
   ) {
     return true;

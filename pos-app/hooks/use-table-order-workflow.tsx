@@ -661,6 +661,10 @@ export function useTableOrderWorkflow({
           onRemoveVoucher={(code) => {
             void removeVoucher(code);
           }}
+          applyVoucherCode={applyVoucherCode}
+          onVoucherApplied={() => {
+            void refreshAppliedVouchers();
+          }}
         />
       )}
 
@@ -687,6 +691,10 @@ export function useTableOrderWorkflow({
           appliedVouchers={appliedVouchers}
           onRemoveVoucher={(code) => {
             void removeVoucher(code);
+          }}
+          applyVoucherCode={applyVoucherCode}
+          onVoucherApplied={() => {
+            void refreshAppliedVouchers();
           }}
         />
       )}

@@ -14,7 +14,6 @@ import { GuestChatView } from "@/components/guest-chat-view";
 import { GuestChatListener } from "@/components/guest-chat-listener";
 import { VouchersView } from "@/components/vouchers-view";
 import { VoucherOrderListener } from "@/components/voucher-order-listener";
-import { VoucherScanFab } from "@/components/voucher-scan-fab";
 import { ReadyNotificationListener } from "@/components/ready-notification-listener";
 import { MainNewOrderNotificationListener } from "@/components/main-new-order-notification-listener";
 import { CallWaiterListener } from "@/components/call-waiter-listener";
@@ -589,22 +588,6 @@ export function DashboardShell() {
             onRefresh={refreshPosData}
             onTableClick={tableOrder.handleTableClick}
             actionError={tableOrder.actionError}
-            scanFab={
-              tableOrder.activeTableIdForVoucher ? (
-                <VoucherScanFab
-                  activeTableId={tableOrder.activeTableIdForVoucher}
-                  tableLabel={
-                    tables.find((t) => t.id === tableOrder.activeTableIdForVoucher)?.label ?? null
-                  }
-                  staffName={currentStaffUser?.name}
-                  applyVoucherCode={tableOrder.applyVoucherCode}
-                  onApplied={() => {
-                    void tableOrder.refreshAppliedVouchers();
-                  }}
-                  onOpenVouchersTab={() => setActiveTab("vouchers")}
-                />
-              ) : null
-            }
           />
         );
       case "order":

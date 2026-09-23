@@ -10,7 +10,9 @@ import { Modal } from "@/components/modal";
 import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { OnScreenKeyboard } from "@/components/on-screen-keyboard";
 import { OrderLineToolbar } from "@/components/order-line-toolbar";
+import { VoucherScanFab } from "@/components/voucher-scan-fab";
 import { ElapsedTimer } from "@/components/live-clock";
+import type { VoucherCode } from "@/lib/voucher";
 import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
@@ -147,6 +149,13 @@ interface NewOrderModalProps {
   isSaving?: boolean;
   appliedVouchers?: { code: string; denominationCzk: number }[];
   onRemoveVoucher?: (code: string) => void;
+  applyVoucherCode?: (
+    code: string,
+    tableId?: string,
+    tableLabel?: string,
+  ) => Promise<{ error: string | null; code?: VoucherCode }>;
+  onVoucherApplied?: () => void;
+  onOpenVouchersTab?: () => void;
 }
 
 function cartLinesToOrders(lines: CartLine[]): OrderItem[] {
@@ -338,6 +347,9 @@ export function NewOrderModal({
   isSaving = false,
   appliedVouchers = [],
   onRemoveVoucher,
+  applyVoucherCode,
+  onVoucherApplied,
+  onOpenVouchersTab,
 }: NewOrderModalProps) {
   const { translate, language, currentStaffUser } = useApp();
   const { requestPin } = usePinGate();
@@ -1804,23 +1816,39 @@ export function NewOrderModal({
           )}
         </div>
 
-        <div className="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div
+          className={`mb-2 grid gap-1.5 ${
+            applyVoucherCode && table?.id ? "grid-cols-3" : "grid-cols-2"
+          }`}
+        >
           <button
             type="button"
             onClick={() => openKitchenMessageModal("table")}
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-200"
+            title={translate("kitchenMessageTable")}
+            className="inline-flex min-h-[40px] items-center justify-center gap-1 rounded-lg border border-orange-200 bg-orange-50 px-1.5 py-1.5 text-[11px] font-semibold leading-tight text-orange-800 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-200 sm:min-h-[44px] sm:gap-1.5 sm:px-2 sm:text-xs"
           >
-            <MessageSquare className="h-4 w-4 shrink-0" />
-            {translate("kitchenMessageTable")}
+            <MessageSquare className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
+            <span className="truncate">{translate("kitchenMessageTable")}</span>
           </button>
           <button
             type="button"
             onClick={() => openKitchenMessageModal("general")}
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200"
+            title={translate("kitchenMessageGeneral")}
+            className="inline-flex min-h-[40px] items-center justify-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-1.5 py-1.5 text-[11px] font-semibold leading-tight text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200 sm:min-h-[44px] sm:gap-1.5 sm:px-2 sm:text-xs"
           >
-            <MessageSquare className="h-4 w-4 shrink-0" />
-            {translate("kitchenMessageGeneral")}
+            <MessageSquare className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
+            <span className="truncate">{translate("kitchenMessageGeneral")}</span>
           </button>
+          {applyVoucherCode && table?.id ? (
+            <VoucherScanFab
+              variant="inline"
+              activeTableId={table.id}
+              tableLabel={tableLabel}
+              applyVoucherCode={applyVoucherCode}
+              onApplied={() => onVoucherApplied?.()}
+              onOpenVouchersTab={onOpenVouchersTab}
+            />
+          ) : null}
         </div>
 
         <div className="grid grid-cols-3 gap-2">

@@ -11,6 +11,7 @@ import {
   CHECKOUT_PERCENT_PRESETS,
   PercentPresetButtons,
 } from "@/components/percent-preset-buttons";
+import { VoucherScanFab } from "@/components/voucher-scan-fab";
 import { useApp } from "@/contexts/app-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { useSettings } from "@/contexts/settings-context";
@@ -44,6 +45,7 @@ import {
   persistItemSplitSession,
 } from "@/lib/item-split-session";
 import type { MenuItem, OrderItem, PaymentMethod } from "@/lib/types";
+import type { VoucherCode } from "@/lib/voucher";
 import { filterButtonClass } from "@/lib/theme-classes";
 
 type CheckoutPanelView = "main" | "split";
@@ -70,6 +72,13 @@ interface CheckoutPanelProps {
   /** Gift vouchers applied to this table (redeemed after payment succeeds). */
   appliedVouchers?: AppliedCheckoutVoucher[];
   onRemoveVoucher?: (code: string) => void;
+  applyVoucherCode?: (
+    code: string,
+    tableId?: string,
+    tableLabel?: string,
+  ) => Promise<{ error: string | null; code?: VoucherCode }>;
+  onVoucherApplied?: () => void;
+  onOpenVouchersTab?: () => void;
 }
 
 function SummaryRow({
@@ -121,6 +130,9 @@ export function CheckoutPanel({
   initialEqualSplitCount = 0,
   appliedVouchers = [],
   onRemoveVoucher,
+  applyVoucherCode,
+  onVoucherApplied,
+  onOpenVouchersTab,
 }: CheckoutPanelProps) {
   const { translate, staff } = useApp();
   const { printProvisionalBill } = useReceiptPrint();
@@ -1297,6 +1309,16 @@ export function CheckoutPanel({
 
   const mainPaymentFooter = (
     <div className="shrink-0 space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700">
+      {applyVoucherCode && tableId ? (
+        <VoucherScanFab
+          variant="inline"
+          activeTableId={tableId}
+          tableLabel={tableLabel}
+          applyVoucherCode={applyVoucherCode}
+          onApplied={() => onVoucherApplied?.()}
+          onOpenVouchersTab={onOpenVouchersTab}
+        />
+      ) : null}
       <button
         type="button"
         disabled={isSaving || orderSummary.length === 0}

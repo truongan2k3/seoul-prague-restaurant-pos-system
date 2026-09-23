@@ -20,8 +20,6 @@ interface MapViewProps {
   onRefresh: () => void;
   onTableClick: (table: RestaurantTable) => void;
   actionError?: string | null;
-  /** Optional FAB overlay (e.g. Scan Voucher). */
-  scanFab?: React.ReactNode;
 }
 
 type DragState = {
@@ -38,7 +36,6 @@ export function MapView({
   onRefresh,
   onTableClick,
   actionError,
-  scanFab,
 }: MapViewProps) {
   const { translate } = useApp();
   const mapRef = useRef<HTMLDivElement>(null);
@@ -260,7 +257,6 @@ export function MapView({
         onClose={() => setEditingTable(null)}
         onSaved={onRefresh}
       />
-      {scanFab}
     </div>
   );
 }

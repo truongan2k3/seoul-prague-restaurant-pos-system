@@ -1,9 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Download, Gift, Minus, Plus } from "lucide-react";
+import { Check, Download } from "lucide-react";
 import { LandingNavbar } from "@/components/landing/landing-navbar";
 import { LandingFooter } from "@/components/landing/landing-menu-gallery";
+import {
+  VoucherDenominationSelector,
+  VoucherLivePreview,
+  VoucherOrderSummary,
+} from "@/components/landing/voucher-denomination-selector";
 import { formatVoucherAmount, type VoucherPaymentMethod } from "@/lib/voucher";
 import type { WebsiteContent } from "@/lib/website/types";
 
@@ -397,71 +402,71 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
             ) : null}
           </section>
         ) : (
-          <section className="mt-12 space-y-8">
+          <section className="mt-12 space-y-10 lg:space-y-12">
+            <VoucherDenominationSelector
+              denominations={config.denominationsCzk}
+              denomination={denomination}
+              quantity={quantity}
+              onDenominationChange={(value) => {
+                setDenomination(value);
+                setQuantity(1);
+              }}
+              onQuantityChange={setQuantity}
+            />
+
+            <VoucherLivePreview
+              brandName={content.settings.restaurantName || "Seoul Prague"}
+              logoUrl={content.media.logo?.fileUrl}
+              denomination={denomination}
+              quantity={quantity}
+              total={total}
+            />
+
+            <VoucherOrderSummary
+              denomination={denomination}
+              quantity={quantity}
+              total={total}
+            />
+
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-white/40">1 · Amount</p>
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                {config.denominationsCzk.map((value) => {
-                  const active = denomination === value;
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setDenomination(value)}
-                      className={`rounded-2xl border px-4 py-5 text-left transition ${
-                        active
-                          ? "border-[#C9A88B] bg-[#C9A88B]/15 text-[#F5EDE4]"
-                          : "border-white/10 bg-white/[0.03] text-white/70 hover:border-white/25"
-                      }`}
-                    >
-                      <Gift className={`mb-3 h-4 w-4 ${active ? "text-[#C9A88B]" : "text-white/35"}`} />
-                      <p className="landing-serif text-2xl">{formatVoucherAmount(value)}</p>
-                    </button>
-                  );
-                })}
+              <p className="text-xs uppercase tracking-[0.28em] text-white/40">3 · Payment method</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("czech_qr")}
+                  className={`rounded-2xl border px-4 py-4 text-left text-sm transition duration-300 ${
+                    paymentMethod === "czech_qr"
+                      ? "border-[#C9A88B] bg-[#C9A88B]/15"
+                      : "border-white/10 bg-white/[0.03] hover:border-white/25"
+                  }`}
+                >
+                  <p className="font-semibold text-[#F5EDE4]">Czech bank QR</p>
+                  <p className="mt-1 text-xs text-white/45">
+                    SPD payment QR for Czech banking apps
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("bank_transfer")}
+                  className={`rounded-2xl border px-4 py-4 text-left text-sm transition duration-300 ${
+                    paymentMethod === "bank_transfer"
+                      ? "border-[#C9A88B] bg-[#C9A88B]/15"
+                      : "border-white/10 bg-white/[0.03] hover:border-white/25"
+                  }`}
+                >
+                  <p className="font-semibold text-[#F5EDE4]">Bank transfer</p>
+                  <p className="mt-1 text-xs text-white/45">
+                    Manual transfer with order ID as note
+                  </p>
+                </button>
               </div>
             </div>
 
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-white/40">2 · Quantity</p>
-              <div className="mt-3 inline-flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                <button
-                  type="button"
-                  aria-label="Decrease"
-                  disabled={quantity <= 1}
-                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 text-white/80 disabled:opacity-30"
-                >
-                  <Minus className="h-4 w-4" />
-                </button>
-                <span className="min-w-[2rem] text-center text-xl font-semibold tabular-nums">{quantity}</span>
-                <button
-                  type="button"
-                  aria-label="Increase"
-                  disabled={quantity >= 50}
-                  onClick={() => setQuantity((q) => Math.min(50, q + 1))}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 text-white/80 disabled:opacity-30"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-end justify-between border-y border-white/10 py-5">
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-white/40">Total</p>
-                <p className="landing-serif mt-1 text-3xl text-[#C9A88B] sm:text-4xl">
-                  {formatVoucherAmount(total)}
-                </p>
-              </div>
-              <p className="text-sm text-white/45">
-                {quantity} × {formatVoucherAmount(denomination)}
+              <p className="text-xs uppercase tracking-[0.28em] text-white/40">
+                4 · Your details
               </p>
-            </div>
-
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-white/40">3 · Your details</p>
-              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <label className="block text-xs text-white/45">
                   Your name
                   <input
@@ -488,42 +493,16 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
 
             {!detailsReady ? (
               <p className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-5 py-6 text-center text-sm text-white/45">
-                Enter your name and email to see payment options and bank details.
+                Enter your name and email to unlock payment details and place your order.
               </p>
             ) : (
               <div className="space-y-6">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-white/40">4 · Payment</p>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod("czech_qr")}
-                      className={`rounded-2xl border px-4 py-4 text-left text-sm ${
-                        paymentMethod === "czech_qr"
-                          ? "border-[#C9A88B] bg-[#C9A88B]/15"
-                          : "border-white/10 bg-white/[0.03]"
-                      }`}
-                    >
-                      <p className="font-semibold text-[#F5EDE4]">Czech bank QR</p>
-                      <p className="mt-1 text-xs text-white/45">
-                        SPD payment QR for Czech banking apps
-                      </p>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod("bank_transfer")}
-                      className={`rounded-2xl border px-4 py-4 text-left text-sm ${
-                        paymentMethod === "bank_transfer"
-                          ? "border-[#C9A88B] bg-[#C9A88B]/15"
-                          : "border-white/10 bg-white/[0.03]"
-                      }`}
-                    >
-                      <p className="font-semibold text-[#F5EDE4]">Bank transfer</p>
-                      <p className="mt-1 text-xs text-white/45">
-                        Manual transfer with order ID as note
-                      </p>
-                    </button>
-                  </div>
+                  <p className="text-xs uppercase tracking-[0.28em] text-white/40">5 · Payment</p>
+                  <p className="mt-2 text-sm text-white/45">
+                    Transfer {formatVoucherAmount(total)} using the details below, then place your
+                    order. You’ll have 15 minutes to confirm payment.
+                  </p>
                 </div>
 
                 {bankReady ? (
@@ -575,7 +554,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
                   onClick={() => void placeOrder()}
                   className="w-full rounded-2xl bg-[#C9A88B] px-6 py-4 text-sm font-semibold uppercase tracking-[0.14em] text-[#0B0B0C] transition hover:bg-[#d4b69a] disabled:opacity-40"
                 >
-                  {busy ? "Placing order…" : "Place order"}
+                  {busy ? "Placing order…" : `Place order · ${formatVoucherAmount(total)}`}
                 </button>
               </div>
             )}

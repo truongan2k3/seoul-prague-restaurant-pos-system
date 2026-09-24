@@ -20,7 +20,6 @@ export interface GuestAnnouncementBanner {
 }
 
 export const GUEST_ANNOUNCEMENT_CSS_VAR = "--guest-announcement-h";
-export const GUEST_ANNOUNCEMENT_DISMISS_PREFIX = "guest-announcement-dismissed:";
 
 function emptyLocalizedText(): LocalizedGuestText {
   return { en: "", cs: "", vi: "", de: "", ko: "" };
@@ -135,17 +134,6 @@ export function resolveGuestAnnouncementCopy(
     title: pickLocalizedText(config.title, lang),
     message: pickLocalizedText(config.message, lang),
   };
-}
-
-/** Stable dismiss key so a new campaign can show again after edit. */
-export function guestAnnouncementDismissKey(config: GuestAnnouncementBanner): string {
-  const fingerprint = [
-    config.startAt.trim(),
-    config.endAt.trim(),
-    config.title.en.trim(),
-    config.message.en.trim(),
-  ].join("|");
-  return `${GUEST_ANNOUNCEMENT_DISMISS_PREFIX}${fingerprint}`;
 }
 
 export function msUntilAnnouncementEnds(config: GuestAnnouncementBanner, now = Date.now()): number | null {

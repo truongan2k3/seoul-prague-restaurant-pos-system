@@ -4,7 +4,6 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Megaphone, X } from "lucide-react";
 import {
   GUEST_ANNOUNCEMENT_CSS_VAR,
-  guestAnnouncementDismissKey,
   isGuestAnnouncementActiveOn,
   msUntilAnnouncementEnds,
   msUntilAnnouncementStarts,
@@ -27,20 +26,23 @@ export function GuestAnnouncementBar({
   message,
   onDismiss,
   preview = false,
+  barRef,
 }: {
   title: string;
   message: string;
   onDismiss?: () => void;
   preview?: boolean;
+  barRef?: React.Ref<HTMLDivElement>;
 }) {
   if (!title && !message) return null;
 
   return (
     <div
+      ref={barRef}
       role={preview ? "presentation" : "status"}
       aria-live={preview ? undefined : "polite"}
       className={`guest-announcement-enter border-b border-white/10 bg-[#121214] text-[#E8D5C4] ${
-        preview ? "relative" : "fixed inset-x-0 top-0 z-[60]"
+        preview ? "relative" : "w-full"
       }`}
     >
       <div className="mx-auto flex max-w-7xl items-start gap-3 px-4 py-2.5 sm:items-center sm:px-5 lg:px-8">
@@ -105,9 +107,11 @@ export function GuestAnnouncementBannerHost({
     configProp ?? DEFAULT_APP_SETTINGS.guestAnnouncementBanner,
   );
   const [lang, setLang] = useState<GuestReservationLang>(langProp ?? "en");
+  /** In-memory only — F5 / full reload shows the banner again. */
   const [dismissed, setDismissed] = useState(false);
   const [ready, setReady] = useState(Boolean(configProp));
   const [tick, setTick] = useState(0);
+  const [barHeight, setBarHeight] = useState(0);
   const barRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -149,16 +153,6 @@ export function GuestAnnouncementBannerHost({
     return () => window.removeEventListener(GUEST_LANG_CHANGE_EVENT, onLangChange);
   }, [langProp]);
 
-  useEffect(() => {
-    if (!ready) return;
-    const dismissKey = guestAnnouncementDismissKey(config);
-    try {
-      setDismissed(sessionStorage.getItem(dismissKey) === "1");
-    } catch {
-      setDismissed(false);
-    }
-  }, [config, ready]);
-
   // Re-evaluate when start/end window crosses.
   useEffect(() => {
     if (!ready || !config.enabled) return;
@@ -184,9 +178,11 @@ export function GuestAnnouncementBannerHost({
 
   const active = ready && !dismissed && isGuestAnnouncementActiveOn(config, surface);
   const copy = resolveGuestAnnouncementCopy(config, lang);
+  const visible = active && Boolean(copy.title || copy.message);
 
   useLayoutEffect(() => {
-    if (!active) {
+    if (!visible) {
+      setBarHeight(0);
       clearAnnouncementOffset();
       return;
     }
@@ -194,7 +190,11 @@ export function GuestAnnouncementBannerHost({
     const node = barRef.current;
     if (!node) return;
 
-    const sync = () => setAnnouncementOffset(node.getBoundingClientRect().height);
+    const sync = () => {
+      const height = Math.ceil(node.getBoundingClientRect().height);
+      setBarHeight(height);
+      setAnnouncementOffset(height);
+    };
     sync();
 
     const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
@@ -205,28 +205,30 @@ export function GuestAnnouncementBannerHost({
       window.removeEventListener("resize", sync);
       clearAnnouncementOffset();
     };
-  }, [active, copy.title, copy.message]);
+  }, [visible, copy.title, copy.message]);
 
   useEffect(() => {
     return () => clearAnnouncementOffset();
   }, []);
 
-  if (!active || (!copy.title && !copy.message)) return null;
-
-  const handleDismiss = () => {
-    const dismissKey = guestAnnouncementDismissKey(config);
-    try {
-      sessionStorage.setItem(dismissKey, "1");
-    } catch {
-      /* ignore quota / private mode */
-    }
-    setDismissed(true);
-    clearAnnouncementOffset();
-  };
+  if (!visible) return null;
 
   return (
-    <div ref={barRef}>
-      <GuestAnnouncementBar title={copy.title} message={copy.message} onDismiss={handleDismiss} />
-    </div>
+    <>
+      {/* In-flow spacer so fixed chrome never covers page content */}
+      <div aria-hidden className="w-full shrink-0" style={{ height: barHeight }} />
+      <div className="fixed inset-x-0 top-0 z-[60]">
+        <GuestAnnouncementBar
+          barRef={barRef}
+          title={copy.title}
+          message={copy.message}
+          onDismiss={() => {
+            setDismissed(true);
+            setBarHeight(0);
+            clearAnnouncementOffset();
+          }}
+        />
+      </div>
+    </>
   );
 }

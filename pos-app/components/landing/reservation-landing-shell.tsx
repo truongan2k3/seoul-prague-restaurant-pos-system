@@ -19,9 +19,7 @@ export function ReservationLandingShell({
       <div className="relative z-10">
         <GuestAnnouncementBannerHost surface="reservation" />
         <LandingNavbar content={content} hideBookCta />
-        <div className="[padding-top:calc(6rem+var(--guest-announcement-h,0px))] lg:[padding-top:calc(7rem+var(--guest-announcement-h,0px))]">
-          {children}
-        </div>
+        <div className="pt-24 lg:pt-28">{children}</div>
         <LandingFooter content={content} showBookCta={false} />
       </div>
       <GuestChatWidget page="reservation" />

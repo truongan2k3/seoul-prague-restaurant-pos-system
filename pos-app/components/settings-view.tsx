@@ -39,6 +39,7 @@ import {
 } from "@/src/lib/settings-actions";
 import { WEEKDAY_KEYS } from "@/lib/reservation-slots";
 import { ReservationGuestFormSettingsEditor } from "@/components/reservation-guest-form-settings-editor";
+import { GuestAnnouncementSettingsEditor } from "@/components/guest-announcement-settings-editor";
 import { buildTestReceiptData } from "@/lib/receipt-calculations";
 import { RECEIPT_FONT_OPTIONS } from "@/lib/receipt-print-styles";
 import { draftToReceiptTemplate } from "@/src/components/ReceiptPrint";
@@ -1544,6 +1545,22 @@ export function SettingsView({
                   </div>
                 );
               })}
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">
+              {translate("settingsAnnouncementTitleSection")}
+            </h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {translate("settingsAnnouncementHint")}
+            </p>
+            <div className="mt-4">
+              <GuestAnnouncementSettingsEditor
+                value={draft.guestAnnouncementBanner}
+                onChange={(next) => updateDraft("guestAnnouncementBanner", next)}
+                translate={translate}
+              />
             </div>
           </section>
 

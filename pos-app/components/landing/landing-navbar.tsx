@@ -38,11 +38,12 @@ export function LandingNavbar({ content, hideBookCta = false }: LandingNavbarPro
   return (
     <>
       <header
-        className={`fixed inset-x-0 top-0 z-50 transition-all duration-500 ${
+        className={`fixed inset-x-0 z-50 transition-all duration-500 ${
           scrolled
             ? "border-b border-white/10 bg-[#0B0B0C]/95 backdrop-blur-md"
             : "bg-gradient-to-b from-black/60 to-transparent"
         }`}
+        style={{ top: "var(--guest-announcement-h, 0px)" }}
       >
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 lg:px-8">
           <Link href="/#home" className="flex items-center gap-3">

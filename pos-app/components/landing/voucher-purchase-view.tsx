@@ -17,6 +17,7 @@ import {
 import {
   GUEST_LANG_SESSION_KEY,
   parseGuestReservationLang,
+  persistGuestReservationLang,
   resolveInitialGuestReservationLang,
 } from "@/lib/i18n/guest-reservation";
 import { guestVoucherCopy } from "@/lib/i18n/guest-voucher";
@@ -110,7 +111,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    sessionStorage.setItem(GUEST_LANG_SESSION_KEY, lang);
+    persistGuestReservationLang(lang);
   }, [lang]);
 
   useEffect(() => {

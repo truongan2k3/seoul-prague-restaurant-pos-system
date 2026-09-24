@@ -22,6 +22,7 @@ import {
   detectGuestReservationLangFromNavigator,
   guestReservationCopy,
   parseGuestReservationLang,
+  persistGuestReservationLang,
   resolveInitialGuestReservationLang,
 } from "@/lib/i18n/guest-reservation";
 import type { AppSettings } from "@/lib/types";
@@ -118,7 +119,7 @@ export function ReservationBookingView({
   }, []);
 
   useEffect(() => {
-    sessionStorage.setItem(GUEST_LANG_SESSION_KEY, lang);
+    persistGuestReservationLang(lang);
   }, [lang]);
 
   useEffect(() => {

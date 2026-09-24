@@ -232,7 +232,8 @@ export function canCheckIn(status: ReservationStatus): boolean {
 }
 
 export function canAssignTable(status: ReservationStatus): boolean {
-  return status === "confirmed" || status === "checked_in" || status === "late";
+  // Soft plan for staff only — official table bind happens at check-in.
+  return status === "confirmed" || status === "late";
 }
 
 export function canEditReservation(status: ReservationStatus): boolean {

@@ -78,7 +78,7 @@ export function ReservationReminderModal({
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-gray-500 dark:text-gray-400">{translate("table")}</dt>
+              <dt className="text-gray-500 dark:text-gray-400">{translate("resTablePlanned")}</dt>
               <dd className="text-right font-semibold text-gray-900 dark:text-gray-100">
                 {reservation.tableLabel?.trim() || translate("resReminderNoTable")}
               </dd>

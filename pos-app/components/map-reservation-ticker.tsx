@@ -206,7 +206,7 @@ export function MapReservationTicker() {
               title={noteText || undefined}
             >
               {current.tableLabel
-                ? `${translate("table")} ${current.tableLabel}`
+                ? `${translate("resTablePlanned")}: ${current.tableLabel}`
                 : translate("mapResTickerNoTable")}
               {current.bookingCode ? ` · ${current.bookingCode}` : ""}
               {noteText ? ` · ${translate("mapResTickerNotes")}: ${noteText}` : ""}

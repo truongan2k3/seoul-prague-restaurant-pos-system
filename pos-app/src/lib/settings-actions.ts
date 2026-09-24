@@ -19,6 +19,11 @@ import {
   parseGuestChatConfig,
 } from "@/lib/guest-chat";
 import {
+  DEFAULT_GUEST_ANNOUNCEMENT_BANNER,
+  guestAnnouncementBannerToDb,
+  parseGuestAnnouncementBanner,
+} from "@/lib/guest-announcement";
+import {
   DEFAULT_VOUCHER_CONFIG,
   parseVoucherConfig,
   voucherConfigToDb,
@@ -182,6 +187,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   changelogPopupTitle: "What's new",
   changelogPopupBody: "",
   guestChat: { ...DEFAULT_GUEST_CHAT_CONFIG },
+  guestAnnouncementBanner: {
+    ...DEFAULT_GUEST_ANNOUNCEMENT_BANNER,
+    title: { ...DEFAULT_GUEST_ANNOUNCEMENT_BANNER.title },
+    message: { ...DEFAULT_GUEST_ANNOUNCEMENT_BANNER.message },
+  },
   voucher: { ...DEFAULT_VOUCHER_CONFIG },
   hiddenSidebarNav: [],
 };
@@ -262,6 +272,7 @@ type SettingsRow = {
   changelog_popup_title?: string | null;
   changelog_popup_body?: string | null;
   guest_chat_config?: unknown;
+  guest_announcement_banner?: unknown;
   voucher_config?: unknown;
   sidebar_nav_hidden?: unknown;
 };
@@ -539,6 +550,7 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     changelogPopupBody:
       row.changelog_popup_body ?? DEFAULT_APP_SETTINGS.changelogPopupBody,
     guestChat: parseGuestChatConfig(row.guest_chat_config),
+    guestAnnouncementBanner: parseGuestAnnouncementBanner(row.guest_announcement_banner),
     voucher: parseVoucherConfig(row.voucher_config),
     hiddenSidebarNav: parseHiddenSidebarNav(row.sidebar_nav_hidden),
   };
@@ -705,6 +717,9 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   }
   if (partial.guestChat !== undefined) {
     payload.guest_chat_config = guestChatConfigToDb(partial.guestChat);
+  }
+  if (partial.guestAnnouncementBanner !== undefined) {
+    payload.guest_announcement_banner = guestAnnouncementBannerToDb(partial.guestAnnouncementBanner);
   }
   if (partial.voucher !== undefined) {
     payload.voucher_config = voucherConfigToDb(partial.voucher);
@@ -938,6 +953,7 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "changelogPopupTitle"
     | "changelogPopupBody"
     | "guestChat"
+    | "guestAnnouncementBanner"
     | "voucher"
     | "hiddenSidebarNav"
   >;
@@ -1017,6 +1033,11 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     changelogPopupTitle: settings.changelogPopupTitle,
     changelogPopupBody: settings.changelogPopupBody,
     guestChat: { ...settings.guestChat },
+    guestAnnouncementBanner: {
+      ...settings.guestAnnouncementBanner,
+      title: { ...settings.guestAnnouncementBanner.title },
+      message: { ...settings.guestAnnouncementBanner.message },
+    },
     voucher: { ...settings.voucher },
     hiddenSidebarNav: [...settings.hiddenSidebarNav],
   };

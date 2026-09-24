@@ -11,6 +11,7 @@ import type {
   ReservationGuestVenue,
   ReservationRequiredFields,
 } from "@/lib/reservation-guest-form";
+import type { GuestAnnouncementBanner } from "@/lib/guest-announcement";
 import type { GuestChatConfig } from "@/lib/guest-chat";
 import type { VoucherConfig } from "@/lib/voucher";
 
@@ -279,6 +280,8 @@ export interface AppSettings {
   changelogPopupBody: string;
   /** Website Chat With Us configuration */
   guestChat: GuestChatConfig;
+  /** Temporary guest announcement bar on landing / reservation */
+  guestAnnouncementBanner: GuestAnnouncementBanner;
   /** Gift voucher sales + bank / Czech QR configuration */
   voucher: VoucherConfig;
   /**

@@ -20,6 +20,7 @@ import {
 } from "@/components/landing/landing-custom-blocks";
 import { LandingPromoSlideshow } from "@/components/landing/landing-promo-slideshow";
 import { GuestChatWidget } from "@/components/landing/guest-chat-widget";
+import { GuestAnnouncementBannerHost } from "@/components/landing/guest-announcement-banner";
 import {
   normalizePageLayout,
   sectionVisibilityClass,
@@ -121,6 +122,7 @@ export function LandingPageView({ content }: LandingPageViewProps) {
 
   return (
     <div className="landing-theme min-h-screen bg-[#0B0B0C] text-white">
+      <GuestAnnouncementBannerHost surface="landing" />
       <LandingNavbar content={content} />
       <main>
         {layout.map((section) => {

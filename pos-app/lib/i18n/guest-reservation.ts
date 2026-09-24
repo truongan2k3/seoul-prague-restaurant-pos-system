@@ -295,6 +295,17 @@ export function guestReservationCopy(lang: GuestReservationLang): GuestReservati
 }
 
 export const GUEST_LANG_SESSION_KEY = "reservation-guest-lang";
+export const GUEST_LANG_CHANGE_EVENT = "guest-reservation-lang-change";
+
+export function persistGuestReservationLang(lang: GuestReservationLang) {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(GUEST_LANG_SESSION_KEY, lang);
+  } catch {
+    /* ignore */
+  }
+  window.dispatchEvent(new CustomEvent(GUEST_LANG_CHANGE_EVENT, { detail: lang }));
+}
 
 export function parseGuestReservationLang(value: string | null | undefined): GuestReservationLang {
   if (

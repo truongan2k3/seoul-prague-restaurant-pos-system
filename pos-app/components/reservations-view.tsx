@@ -758,9 +758,17 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                         {row.bookingCode ? ` · ${row.bookingCode}` : ""}
                       </p>
                       {row.tableLabel && (
-                        <p className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                        <p
+                          className={`mt-1 inline-flex items-center gap-1 text-sm font-medium ${
+                            row.status === "checked_in"
+                              ? "text-emerald-700 dark:text-emerald-300"
+                              : "text-gray-600 dark:text-gray-300"
+                          }`}
+                        >
                           <MapPin className="h-4 w-4" />
-                          {translate("table")} {row.tableLabel}
+                          {row.status === "checked_in"
+                            ? `${translate("table")} ${row.tableLabel}`
+                            : `${translate("resTablePlanned")}: ${row.tableLabel}`}
                         </p>
                       )}
                       {row.eventType ? (
@@ -1051,6 +1059,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           <p className="text-sm text-gray-600 dark:text-gray-300">
             {assignTarget?.guestName} · {assignTarget?.partySize} {translate("partySize").toLowerCase()}
           </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{translate("assignTableHint")}</p>
           <ReservationTableSelect
             tables={tables}
             value={assignTableId}

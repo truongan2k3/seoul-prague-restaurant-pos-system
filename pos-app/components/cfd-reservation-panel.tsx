@@ -183,16 +183,11 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
   const handleCheckInClick = useCallback(() => {
     if (!selected || !canCheckIn(selected.status) || busyId != null) return;
     setError(null);
-
-    if (selected.tableId) {
-      void completeCheckIn(selected, selected.tableId);
-      return;
-    }
-
-    setCheckInTableId("");
+    // Always confirm table at check-in. Assigned table is a staff preview only.
+    setCheckInTableId(selected.tableId ?? "");
     setTablePickerOpen(true);
     void loadTables();
-  }, [selected, busyId, completeCheckIn, loadTables]);
+  }, [selected, busyId, loadTables]);
 
   const handleConfirmTableCheckIn = useCallback(() => {
     if (!selected || !checkInTableId) return;
@@ -286,7 +281,9 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                     hour12: language === "en",
                   });
                   const tableText = row.tableLabel?.trim()
-                    ? `Table ${row.tableLabel}`
+                    ? row.status === "checked_in"
+                      ? `Table ${row.tableLabel}`
+                      : `${translate("resTablePlanned")}: ${row.tableLabel}`
                     : "Table: Unassigned";
                   return (
                     <li key={row.id}>
@@ -319,7 +316,11 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                           </span>
                           <span
                             className={
-                              row.tableLabel?.trim() ? "text-[#C9A88B]/90" : "text-amber-200/80"
+                              row.tableLabel?.trim()
+                                ? row.status === "checked_in"
+                                  ? "text-[#C9A88B]/90"
+                                  : "text-white/55"
+                                : "text-amber-200/80"
                             }
                           >
                             {tableText}
@@ -349,7 +350,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
             <p className="mt-2 text-center text-[11px] text-white/35">
               {canCheckInSelected
                 ? selected?.tableLabel
-                  ? `Seats at ${selected.tableLabel}`
+                  ? `${translate("resTablePlanned")}: ${selected.tableLabel}`
                   : translate("selectTable")
                 : "Select a confirmed or late reservation"}
             </p>

@@ -77,7 +77,7 @@ interface CheckoutPanelProps {
     tableId?: string,
     tableLabel?: string,
   ) => Promise<{ error: string | null; code?: VoucherCode }>;
-  onVoucherApplied?: () => void;
+  onVoucherApplied?: (code: VoucherCode) => void;
   onOpenVouchersTab?: () => void;
 }
 
@@ -1328,7 +1328,7 @@ export function CheckoutPanel({
           activeTableId={tableId}
           tableLabel={tableLabel}
           applyVoucherCode={applyVoucherCode}
-          onApplied={() => onVoucherApplied?.()}
+          onApplied={(code) => onVoucherApplied?.(code)}
           onOpenVouchersTab={onOpenVouchersTab}
         />
       ) : null}

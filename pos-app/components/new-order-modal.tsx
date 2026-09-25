@@ -155,7 +155,7 @@ interface NewOrderModalProps {
     tableId?: string,
     tableLabel?: string,
   ) => Promise<{ error: string | null; code?: VoucherCode }>;
-  onVoucherApplied?: () => void;
+  onVoucherApplied?: (code: VoucherCode) => void;
   onOpenVouchersTab?: () => void;
 }
 
@@ -1908,7 +1908,7 @@ export function NewOrderModal({
               activeTableId={table.id}
               tableLabel={tableLabel}
               applyVoucherCode={applyVoucherCode}
-              onApplied={() => onVoucherApplied?.()}
+              onApplied={(code) => onVoucherApplied?.(code)}
               onOpenVouchersTab={onOpenVouchersTab}
             />
           ) : null}

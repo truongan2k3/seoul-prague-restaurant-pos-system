@@ -1,16 +1,26 @@
 import webpush from "web-push";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 import { getVapidPublicKey } from "@/lib/push-vapid-public";
+import { formatVoucherAmount } from "@/lib/voucher";
 
 export type ReservationPushKind = "new" | "updated" | "cancelled" | "no_show";
 
-export type ReservationPushPayload = {
-  kind: ReservationPushKind;
+export type PosPushKind =
+  | ReservationPushKind
+  | "voucher_order"
+  | "voucher_guest_paid"
+  | "guest_chat"
+  | "guest_chat_follow_up";
+
+export type PosPushPayload = {
+  kind: PosPushKind;
   title: string;
   body: string;
   tag?: string;
   url?: string;
 };
+
+export type ReservationPushPayload = PosPushPayload & { kind: ReservationPushKind };
 
 type StoredSubscription = {
   id: string;
@@ -83,8 +93,8 @@ async function listSubscriptions(): Promise<StoredSubscription[]> {
   return data as StoredSubscription[];
 }
 
-/** Fan-out a reservation alert to all saved device subscriptions. */
-export async function sendReservationPush(payload: ReservationPushPayload): Promise<{
+/** Fan-out a POS alert to all saved device subscriptions (phone / closed tab). */
+export async function sendPosPush(payload: PosPushPayload): Promise<{
   sent: number;
   failed: number;
 }> {
@@ -96,7 +106,7 @@ export async function sendReservationPush(payload: ReservationPushPayload): Prom
   const body = JSON.stringify({
     title: payload.title,
     body: payload.body,
-    tag: payload.tag ?? `reservation-${payload.kind}`,
+    tag: payload.tag ?? `pos-${payload.kind}`,
     url: payload.url ?? "/app",
     kind: payload.kind,
   });
@@ -122,7 +132,6 @@ export async function sendReservationPush(payload: ReservationPushPayload): Prom
           typeof error === "object" && error && "statusCode" in error
             ? Number((error as { statusCode?: number }).statusCode)
             : 0;
-        // Gone / expired subscription
         if (statusCode === 404 || statusCode === 410) {
           await deletePushSubscription(sub.endpoint);
         } else {
@@ -135,13 +144,18 @@ export async function sendReservationPush(payload: ReservationPushPayload): Prom
   return { sent, failed };
 }
 
+/** Reservation fan-out — same transport as sendPosPush. */
+export async function sendReservationPush(payload: ReservationPushPayload) {
+  return sendPosPush(payload);
+}
+
 export function reservationPushCopy(input: {
   kind: ReservationPushKind;
   guestName: string;
   partySize: number;
   reservedAt: string | Date;
   bookingCode?: string | null;
-}): Omit<ReservationPushPayload, "kind"> & { kind: ReservationPushKind } {
+}): ReservationPushPayload {
   const when = new Date(input.reservedAt).toLocaleString("en-GB", {
     timeZone: "Europe/Prague",
     weekday: "short",
@@ -167,6 +181,53 @@ export function reservationPushCopy(input: {
     title,
     body,
     tag: `reservation-${input.kind}-${input.guestName}`.slice(0, 64),
+    url: "/app",
+  };
+}
+
+export function voucherOrderPushCopy(input: {
+  orderId: string;
+  buyerName: string;
+  buyerEmail?: string;
+  totalCzk: number;
+}): PosPushPayload {
+  const who = input.buyerName.trim() || input.buyerEmail?.trim() || "Guest";
+  return {
+    kind: "voucher_order",
+    title: "New voucher order",
+    body: `${input.orderId} · ${formatVoucherAmount(input.totalCzk)} · ${who}`,
+    tag: `voucher-order-${input.orderId}`.slice(0, 64),
+    url: "/app",
+  };
+}
+
+export function voucherGuestPaidPushCopy(input: {
+  orderId: string;
+  buyerName: string;
+  buyerEmail?: string;
+  totalCzk: number;
+}): PosPushPayload {
+  const who = input.buyerName.trim() || input.buyerEmail?.trim() || "Guest";
+  return {
+    kind: "voucher_guest_paid",
+    title: "Guest marked voucher as paid",
+    body: `${input.orderId} · ${formatVoucherAmount(input.totalCzk)} · ${who}`,
+    tag: `voucher-paid-${input.orderId}`.slice(0, 64),
+    url: "/app",
+  };
+}
+
+export function guestChatPushCopy(input: {
+  kind?: "new_message" | "follow_up";
+  sessionId: string;
+  preview?: string | null;
+}): PosPushPayload {
+  const followUp = input.kind === "follow_up";
+  return {
+    kind: followUp ? "guest_chat_follow_up" : "guest_chat",
+    title: followUp ? "Chat follow-up request" : "New guest chat",
+    body: (input.preview ?? "").trim() || "A guest sent a message on the website.",
+    tag: `guest-chat-${input.sessionId}`.slice(0, 64),
     url: "/app",
   };
 }

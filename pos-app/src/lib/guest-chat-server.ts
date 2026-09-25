@@ -10,6 +10,7 @@ import {
 } from "@/lib/guest-chat";
 import { broadcastGuestChatAlert } from "@/src/lib/guest-chat-alert-server";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
+import { guestChatPushCopy, sendPosPush } from "@/src/lib/push-server";
 
 type SessionRow = {
   id: string;
@@ -382,6 +383,13 @@ export async function postGuestChatMessage(input: {
     status: session.status,
     unreadByStaff: true,
   });
+  void sendPosPush(
+    guestChatPushCopy({
+      kind: "new_message",
+      sessionId: session.id,
+      preview: body.slice(0, 120),
+    }),
+  );
 
   return { message: mapMessage(msg as MessageRow), session: mapSession(session, body.slice(0, 120)), error: null };
 }
@@ -445,6 +453,13 @@ export async function submitGuestChatFollowUp(input: {
     status: "follow_up",
     unreadByStaff: true,
   });
+  void sendPosPush(
+    guestChatPushCopy({
+      kind: "follow_up",
+      sessionId: session.id,
+      preview: `Follow-up: ${email}`,
+    }),
+  );
 
   return { session: mapSession(updated as SessionRow), error: null };
 }

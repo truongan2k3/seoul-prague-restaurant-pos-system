@@ -100,6 +100,9 @@ const en = {
   voucherLabel: "Voucher",
   voucherOrderAlertTitle: "New voucher order",
   voucherOrderAlertOk: "Open order",
+  voucherGuestPaidAlertTitle: "Guest marked voucher as paid",
+  voucherGuestPaidAlertBody:
+    "The guest tapped “I’ve paid”. Verify the bank transfer, then confirm payment to issue codes.",
   voucherPaymentReceived: "Payment Received",
   voucherConfirmPayment: "Confirm payment & issue codes",
   voucherVerifyConfirm:
@@ -1405,6 +1408,9 @@ const cs: Record<TranslationKey, string> = {
   voucherLabel: "Voucher",
   voucherOrderAlertTitle: "Nová objednávka voucheru",
   voucherOrderAlertOk: "Otevřít objednávku",
+  voucherGuestPaidAlertTitle: "Host označil voucher jako zaplacený",
+  voucherGuestPaidAlertBody:
+    "Host klepl na „Zaplatil jsem“. Ověřte bankovní převod a potvrďte platbu pro vydání kódů.",
   voucherPaymentReceived: "Platba přijata",
   voucherConfirmPayment: "Potvrdit platbu a vydat kódy",
   voucherVerifyConfirm:
@@ -2709,6 +2715,8 @@ const zh: Record<TranslationKey, string> = {
   voucherLabel: "礼品券",
   voucherOrderAlertTitle: "新礼品券订单",
   voucherOrderAlertOk: "打开订单",
+  voucherGuestPaidAlertTitle: "客人标记礼品券已付款",
+  voucherGuestPaidAlertBody: "客人点击了“我已付款”。请核对银行转账，再确认付款以发放券码。",
   voucherPaymentReceived: "已收到付款",
   voucherConfirmPayment: "确认付款并发放券码",
   voucherVerifyConfirm: "确认银行转账已到账？将发放券码并发送邮件给客人。",

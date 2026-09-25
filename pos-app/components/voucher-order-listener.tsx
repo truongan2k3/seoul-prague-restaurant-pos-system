@@ -12,13 +12,13 @@ import {
   type VoucherOrderAlertPayload,
 } from "@/lib/voucher-order-alert";
 
-const seenOrderIds = new Set<string>();
+const seenKeys = new Set<string>();
 
 interface VoucherOrderListenerProps {
   onOpenOrder?: (orderUuid: string) => void;
 }
 
-/** POS popup + toast when a guest places a voucher order. */
+/** POS popup + toast when a guest places a voucher order or marks payment. */
 export function VoucherOrderListener({ onOpenOrder }: VoucherOrderListenerProps) {
   const { soundMainEnabled, translate } = useApp();
   const { settings } = useSettings();
@@ -40,12 +40,18 @@ export function VoucherOrderListener({ onOpenOrder }: VoucherOrderListenerProps)
 
   useEffect(() => {
     return subscribeToVoucherOrderAlerts((payload) => {
-      if (seenOrderIds.has(payload.orderId)) return;
-      seenOrderIds.add(payload.orderId);
+      const kind = payload.kind === "guest_marked_paid" ? "guest_marked_paid" : "new_order";
+      const dedupeKey = `${kind}:${payload.orderId}`;
+      if (seenKeys.has(dedupeKey)) return;
+      seenKeys.add(dedupeKey);
 
-      const message = `${translate("voucherOrderAlertTitle")}: ${payload.orderId} · ${formatVoucherAmount(payload.totalCzk)} · ${payload.buyerName || payload.buyerEmail}`;
+      const title =
+        kind === "guest_marked_paid"
+          ? translate("voucherGuestPaidAlertTitle")
+          : translate("voucherOrderAlertTitle");
+      const message = `${title}: ${payload.orderId} · ${formatVoucherAmount(payload.totalCzk)} · ${payload.buyerName || payload.buyerEmail}`;
       pushToast({
-        id: `voucher-order-${payload.orderId}`,
+        id: `voucher-${kind}-${payload.orderId}`,
         message,
       });
 
@@ -61,15 +67,26 @@ export function VoucherOrderListener({ onOpenOrder }: VoucherOrderListenerProps)
     });
   }, [playAlertSound, pushToast, translate]);
 
+  const isGuestPaid = alert?.kind === "guest_marked_paid";
+
   return (
     <Modal
       open={alert != null}
       onClose={dismiss}
-      title={translate("voucherOrderAlertTitle")}
+      title={
+        isGuestPaid
+          ? translate("voucherGuestPaidAlertTitle")
+          : translate("voucherOrderAlertTitle")
+      }
       zIndexClass="z-[110]"
     >
       {alert ? (
         <div className="space-y-4">
+          {isGuestPaid ? (
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              {translate("voucherGuestPaidAlertBody")}
+            </p>
+          ) : null}
           <dl className="space-y-1.5 text-sm">
             <div className="flex justify-between gap-3">
               <dt className="text-gray-500">{translate("voucherOrderId")}</dt>

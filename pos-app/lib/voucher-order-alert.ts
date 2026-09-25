@@ -5,7 +5,10 @@ import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 export const VOUCHER_ORDER_ALERT_CHANNEL = "pos-voucher-order-alerts";
 export const VOUCHER_ORDER_ALERT_EVENT = "voucher-order";
 
+export type VoucherOrderAlertKind = "new_order" | "guest_marked_paid";
+
 export type VoucherOrderAlertPayload = {
+  kind: VoucherOrderAlertKind;
   orderId: string;
   orderUuid: string;
   buyerName: string;
@@ -26,7 +29,10 @@ export function subscribeToVoucherOrderAlerts(
     .on("broadcast", { event: VOUCHER_ORDER_ALERT_EVENT }, ({ payload }) => {
       const data = payload as VoucherOrderAlertPayload | undefined;
       if (!data?.orderId || !data.orderUuid) return;
-      onEvent(data);
+      onEvent({
+        ...data,
+        kind: data.kind === "guest_marked_paid" ? "guest_marked_paid" : "new_order",
+      });
     })
     .subscribe();
 
@@ -49,8 +55,12 @@ function realtimeKey(): string | null {
   );
 }
 
-export async function broadcastVoucherOrderAlert(order: VoucherOrder): Promise<void> {
+export async function broadcastVoucherOrderAlert(
+  order: VoucherOrder,
+  kind: VoucherOrderAlertKind = "new_order",
+): Promise<void> {
   const payload: VoucherOrderAlertPayload = {
+    kind,
     orderId: order.orderId,
     orderUuid: order.id,
     buyerName: order.buyerName,

@@ -17,6 +17,11 @@ import {
 import { broadcastVoucherOrderAlert } from "@/lib/voucher-order-alert";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 import {
+  sendPosPush,
+  voucherGuestPaidPushCopy,
+  voucherOrderPushCopy,
+} from "@/src/lib/push-server";
+import {
   sendVoucherConfirmationEmail,
   sendVoucherIssuedEmail,
 } from "@/src/lib/voucher-email";
@@ -341,6 +346,14 @@ export async function createVoucherOrder(input: {
   });
 
   void broadcastVoucherOrderAlert(order);
+  void sendPosPush(
+    voucherOrderPushCopy({
+      orderId: order.orderId,
+      buyerName: order.buyerName,
+      buyerEmail: order.buyerEmail,
+      totalCzk: order.totalCzk,
+    }),
+  );
 
   return { order, qrDataUrl, spd, publicToken, error: null };
 }
@@ -715,6 +728,17 @@ export async function markGuestVoucherPaid(input: {
       orderUuid: row.id,
       action: "guest_marked_paid",
     });
+    const order = mapOrder(data as OrderRow);
+    void broadcastVoucherOrderAlert(order, "guest_marked_paid");
+    void sendPosPush(
+      voucherGuestPaidPushCopy({
+        orderId: order.orderId,
+        buyerName: order.buyerName,
+        buyerEmail: order.buyerEmail,
+        totalCzk: order.totalCzk,
+      }),
+    );
+    return { order, error: null };
   }
   return { order: mapOrder(updated), error: null };
 }

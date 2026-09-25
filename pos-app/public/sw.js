@@ -14,9 +14,9 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     (async () => {
       let payload = {
-        title: "Reservation update",
+        title: "POS update",
         body: "",
-        tag: "reservation",
+        tag: "pos",
         url: "/app",
       };
       try {
@@ -43,9 +43,9 @@ self.addEventListener("push", (event) => {
       });
       if (hasVisible) return;
 
-      await self.registration.showNotification(payload.title || "Reservation update", {
+      await self.registration.showNotification(payload.title || "POS update", {
         body: payload.body || "",
-        tag: payload.tag || "reservation",
+        tag: payload.tag || "pos",
         renotify: true,
         data: { url: payload.url || "/app" },
         vibrate: [120, 60, 120],

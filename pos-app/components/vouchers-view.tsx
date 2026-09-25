@@ -24,7 +24,13 @@ function formatWhen(iso?: string | null): string {
   }
 }
 
-/** Full-row status tint for the vouchers list. */
+/**
+ * Full-row status tint for the vouchers list:
+ * - green  = issued, not yet used
+ * - blue   = redeemed (partially / fully)
+ * - yellow = paid or pending, not yet issued
+ * - rose   = cancelled / refunded
+ */
 function voucherRowTone(order: VoucherOrder): string {
   if (
     order.paymentStatus === "cancelled" ||
@@ -33,21 +39,14 @@ function voucherRowTone(order: VoucherOrder): string {
   ) {
     return "border-l-4 border-l-rose-400 bg-rose-50/95 hover:bg-rose-100/90 dark:border-l-rose-500 dark:bg-rose-950/40 dark:hover:bg-rose-950/55";
   }
-  if (order.paymentStatus === "pending" && order.guestMarkedPaidAt) {
+  if (order.orderStatus === "partially_redeemed" || order.orderStatus === "fully_redeemed") {
+    return "border-l-4 border-l-blue-500 bg-blue-50/95 hover:bg-blue-100/90 dark:border-l-blue-400 dark:bg-blue-950/40 dark:hover:bg-blue-950/55";
+  }
+  if (order.orderStatus === "issued") {
     return "border-l-4 border-l-emerald-500 bg-emerald-50/95 hover:bg-emerald-100/90 dark:border-l-emerald-400 dark:bg-emerald-950/40 dark:hover:bg-emerald-950/55";
   }
-  if (order.paymentStatus === "pending") {
-    return "border-l-4 border-l-amber-400 bg-amber-50/95 hover:bg-amber-100/90 dark:border-l-amber-500 dark:bg-amber-950/35 dark:hover:bg-amber-950/50";
-  }
-  if (
-    order.orderStatus === "issued" ||
-    order.orderStatus === "partially_redeemed" ||
-    order.orderStatus === "fully_redeemed"
-  ) {
-    return "border-l-4 border-l-sky-400 bg-sky-50/95 hover:bg-sky-100/90 dark:border-l-sky-500 dark:bg-sky-950/35 dark:hover:bg-sky-950/50";
-  }
-  // paid / verified, codes not yet issued
-  return "border-l-4 border-l-blue-400 bg-blue-50/95 hover:bg-blue-100/90 dark:border-l-blue-500 dark:bg-blue-950/35 dark:hover:bg-blue-950/50";
+  // pending payment, guest marked paid, or paid but codes not issued yet
+  return "border-l-4 border-l-amber-400 bg-amber-50/95 hover:bg-amber-100/90 dark:border-l-amber-500 dark:bg-amber-950/35 dark:hover:bg-amber-950/50";
 }
 
 export function VouchersView({

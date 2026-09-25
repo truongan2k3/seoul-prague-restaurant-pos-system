@@ -527,8 +527,26 @@ export function LandingFooter({
           </div>
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-white/50">Contact</p>
-            <p className="mt-4 text-sm text-white/70">{settings.address}</p>
-            <p className="mt-2 text-sm text-white/70">{settings.phone}</p>
+            <div className="mt-4 space-y-2 text-sm text-white/70">
+              {settings.address?.trim() ? <p>{settings.address}</p> : null}
+              {settings.phone?.trim() ? (
+                <p>
+                  <a
+                    href={`tel:${settings.phone.replace(/\s+/g, "")}`}
+                    className="hover:text-white"
+                  >
+                    {settings.phone}
+                  </a>
+                </p>
+              ) : null}
+              {settings.email?.trim() ? (
+                <p>
+                  <a href={`mailto:${settings.email.trim()}`} className="hover:text-white">
+                    {settings.email.trim()}
+                  </a>
+                </p>
+              ) : null}
+            </div>
           </div>
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-white/50">Links</p>

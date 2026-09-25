@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Camera, CheckCircle2, Gift, Search, X } from "lucide-react";
+import { Camera, CheckCircle2, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { Modal } from "@/components/modal";
 import { useApp } from "@/contexts/app-context";
 import { formatVoucherAmount, type VoucherCode, type VoucherOrder } from "@/lib/voucher";
+
+const VOUCHER_PAGE_SIZE = 20;
 
 function formatWhen(iso?: string | null): string {
   if (!iso) return "—";
@@ -22,6 +24,32 @@ function formatWhen(iso?: string | null): string {
   }
 }
 
+/** Full-row status tint for the vouchers list. */
+function voucherRowTone(order: VoucherOrder): string {
+  if (
+    order.paymentStatus === "cancelled" ||
+    order.paymentStatus === "refunded" ||
+    order.orderStatus === "cancelled"
+  ) {
+    return "border-l-4 border-l-rose-400 bg-rose-50/95 hover:bg-rose-100/90 dark:border-l-rose-500 dark:bg-rose-950/40 dark:hover:bg-rose-950/55";
+  }
+  if (order.paymentStatus === "pending" && order.guestMarkedPaidAt) {
+    return "border-l-4 border-l-emerald-500 bg-emerald-50/95 hover:bg-emerald-100/90 dark:border-l-emerald-400 dark:bg-emerald-950/40 dark:hover:bg-emerald-950/55";
+  }
+  if (order.paymentStatus === "pending") {
+    return "border-l-4 border-l-amber-400 bg-amber-50/95 hover:bg-amber-100/90 dark:border-l-amber-500 dark:bg-amber-950/35 dark:hover:bg-amber-950/50";
+  }
+  if (
+    order.orderStatus === "issued" ||
+    order.orderStatus === "partially_redeemed" ||
+    order.orderStatus === "fully_redeemed"
+  ) {
+    return "border-l-4 border-l-sky-400 bg-sky-50/95 hover:bg-sky-100/90 dark:border-l-sky-500 dark:bg-sky-950/35 dark:hover:bg-sky-950/50";
+  }
+  // paid / verified, codes not yet issued
+  return "border-l-4 border-l-blue-400 bg-blue-50/95 hover:bg-blue-100/90 dark:border-l-blue-500 dark:bg-blue-950/35 dark:hover:bg-blue-950/50";
+}
+
 export function VouchersView({
   focusOrderId,
   onFocusOrderConsumed,
@@ -35,6 +63,7 @@ export function VouchersView({
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "paid" | "issued">("all");
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<VoucherOrder | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmVerify, setConfirmVerify] = useState(false);
@@ -100,6 +129,17 @@ export function VouchersView({
       );
     });
   }, [orders, query, statusFilter]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / VOUCHER_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paged = useMemo(() => {
+    const start = (currentPage - 1) * VOUCHER_PAGE_SIZE;
+    return filtered.slice(start, start + VOUCHER_PAGE_SIZE);
+  }, [filtered, currentPage]);
 
   const stopCamera = useCallback(() => {
     if (scanLoopRef.current != null) {
@@ -291,60 +331,105 @@ export function VouchersView({
               {translate("voucherEmpty")}
             </p>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
-              <table className="w-full min-w-[960px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700">
-                    <th className="px-4 py-3">{translate("voucherOrderId")}</th>
-                    <th className="px-4 py-3">{translate("voucherCustomer")}</th>
-                    <th className="px-4 py-3 text-right">{translate("voucherAmount")}</th>
-                    <th className="px-4 py-3 text-right">{translate("voucherQty")}</th>
-                    <th className="px-4 py-3">{translate("voucherPayment")}</th>
-                    <th className="px-4 py-3">{translate("voucherStatus")}</th>
-                    <th className="px-4 py-3">{translate("voucherCreated")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((order) => (
-                    <tr
-                      key={order.id}
-                      className="cursor-pointer border-b border-gray-100 hover:bg-gray-50 dark:border-gray-700/60 dark:hover:bg-gray-900/40"
-                      onClick={() => {
-                        setSelected(order);
-                        setConfirmVerify(false);
-                      }}
-                    >
-                      <td className="px-4 py-3 font-semibold tabular-nums">{order.orderId}</td>
-                      <td className="px-4 py-3">
-                        <p className="font-medium">{order.buyerName || "—"}</p>
-                        <p className="text-xs text-gray-500">{order.buyerEmail}</p>
-                        {order.buyerPhone ? (
-                          <p className="text-xs text-gray-500">{order.buyerPhone}</p>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums font-semibold">
-                        {formatVoucherAmount(order.totalCzk)}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">{order.quantity}</td>
-                      <td className="px-4 py-3 capitalize">
-                        {order.paymentMethod === "czech_qr" ? "Czech QR" : "Transfer"} ·{" "}
-                        {order.paymentStatus}
-                      </td>
-                      <td className="px-4 py-3">
-                        {order.orderStatus.replaceAll("_", " ")}
-                        {order.guestMarkedPaidAt && order.paymentStatus === "pending" ? (
-                          <span className="mt-0.5 block text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                            Guest marked paid
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-3 tabular-nums text-gray-600 dark:text-gray-300">
-                        {formatWhen(order.createdAt)}
-                      </td>
+            <div className="space-y-3">
+              <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+                <table className="w-full min-w-[960px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700">
+                      <th className="px-4 py-3">{translate("voucherOrderId")}</th>
+                      <th className="px-4 py-3">{translate("voucherCustomer")}</th>
+                      <th className="px-4 py-3 text-right">{translate("voucherAmount")}</th>
+                      <th className="px-4 py-3 text-right">{translate("voucherQty")}</th>
+                      <th className="px-4 py-3">{translate("voucherPayment")}</th>
+                      <th className="px-4 py-3">{translate("voucherStatus")}</th>
+                      <th className="px-4 py-3">{translate("voucherCreated")}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {paged.map((order) => (
+                      <tr
+                        key={order.id}
+                        className={`cursor-pointer border-b border-gray-100/80 dark:border-gray-700/50 ${voucherRowTone(order)}`}
+                        onClick={() => {
+                          setSelected(order);
+                          setConfirmVerify(false);
+                        }}
+                      >
+                        <td className="px-4 py-3 font-semibold tabular-nums">{order.orderId}</td>
+                        <td className="px-4 py-3">
+                          <p className="font-medium">{order.buyerName || "—"}</p>
+                          <p className="text-xs text-gray-500">{order.buyerEmail}</p>
+                          {order.buyerPhone ? (
+                            <p className="text-xs text-gray-500">{order.buyerPhone}</p>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums font-semibold">
+                          {formatVoucherAmount(order.totalCzk)}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums">{order.quantity}</td>
+                        <td className="px-4 py-3 capitalize">
+                          {order.paymentMethod === "czech_qr" ? "Czech QR" : "Transfer"} ·{" "}
+                          {order.paymentStatus}
+                        </td>
+                        <td className="px-4 py-3">
+                          {order.orderStatus.replaceAll("_", " ")}
+                          {order.guestMarkedPaidAt && order.paymentStatus === "pending" ? (
+                            <span className="mt-0.5 block text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                              {translate("voucherGuestPaid")}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-3 tabular-nums text-gray-600 dark:text-gray-300">
+                          {formatWhen(order.createdAt)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {filtered.length > VOUCHER_PAGE_SIZE ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    {translate("historyPageOf")
+                      .replace("{page}", String(currentPage))
+                      .replace("{total}", String(totalPages))}
+                    <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                      (
+                      {translate("historyPageShowing")
+                        .replace("{from}", String((currentPage - 1) * VOUCHER_PAGE_SIZE + 1))
+                        .replace(
+                          "{to}",
+                          String(Math.min(currentPage * VOUCHER_PAGE_SIZE, filtered.length)),
+                        )
+                        .replace("{count}", String(filtered.length))}
+                      )
+                    </span>
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPage((prev) => Math.max(1, Math.min(prev, totalPages) - 1))}
+                      disabled={currentPage <= 1}
+                      className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 enabled:hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:text-gray-200 dark:enabled:hover:bg-gray-700"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      {translate("historyPrevPage")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPage((prev) => Math.min(totalPages, Math.min(prev, totalPages) + 1))
+                      }
+                      disabled={currentPage >= totalPages}
+                      className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 enabled:hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:text-gray-200 dark:enabled:hover:bg-gray-700"
+                    >
+                      {translate("historyNextPage")}
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
         </div>

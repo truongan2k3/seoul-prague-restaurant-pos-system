@@ -51,7 +51,7 @@ export function VoucherSettingsFields({ value, onChange, labels }: Props) {
             onChange({ ...value, denominationsCzk: next });
           }}
           className="pos-input mt-1"
-          placeholder="1000, 2000, 5000"
+          placeholder="1000, 2000, 3000, 5000"
         />
       </label>
 

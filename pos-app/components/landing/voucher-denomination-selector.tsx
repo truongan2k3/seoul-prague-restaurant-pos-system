@@ -24,6 +24,13 @@ const CARD_THEMES: Record<
     gem: "#E8D5C4",
     foil: "from-[#E8D5C4]/20 via-transparent to-[#C9A88B]/12",
   },
+  3000: {
+    label: "Reserve",
+    wash: "from-[#161418] via-[#121214] to-[#0B0B0C]",
+    edge: "rgba(186,170,150,0.42)",
+    gem: "#BAAA96",
+    foil: "from-[#BAAA96]/24 via-transparent to-[#C9A88B]/12",
+  },
   5000: {
     label: "Prestige",
     wash: "from-[#1c1610] via-[#16120e] to-[#0B0B0C]",

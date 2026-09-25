@@ -825,6 +825,33 @@ export async function checkoutTable(
   return settlePaidTable(tableId);
 }
 
+/**
+ * When staff moves/merges a floor table, keep checked-in guest data with the party:
+ * reservation.table_id, applied vouchers, and activity logs.
+ */
+async function reassignCheckedInGuestData(fromTableId: string, toTableId: string) {
+  if (!fromTableId || !toTableId || fromTableId === toTableId) return;
+
+  const now = new Date().toISOString();
+
+  await supabase
+    .from("reservations")
+    .update({ table_id: toTableId, updated_at: now })
+    .eq("table_id", fromTableId)
+    .eq("status", "checked_in");
+
+  await supabase
+    .from("voucher_codes")
+    .update({ applied_table_id: toTableId, updated_at: now })
+    .eq("applied_table_id", fromTableId)
+    .eq("status", "applied");
+
+  await supabase
+    .from("table_activity_logs")
+    .update({ table_id: toTableId })
+    .eq("table_id", fromTableId);
+}
+
 export async function transferTable(fromId: string, toId: string) {
   const { data: fromTable, error: fetchError } = await supabase
     .from("tables")
@@ -835,6 +862,7 @@ export async function transferTable(fromId: string, toId: string) {
   if (!fromTable) return { error: new Error("Source table not found") };
 
   await supabase.from("order_items").update({ table_id: toId }).eq("table_id", fromId);
+  await reassignCheckedInGuestData(fromId, toId);
 
   const { error: updateError } = await supabase
     .from("tables")
@@ -860,6 +888,7 @@ export async function mergeTables(sourceIds: string[], targetId: string) {
     const mergedOrders = [...(target?.orders ?? []), ...(source.orders ?? [])];
 
     await supabase.from("order_items").update({ table_id: targetId }).eq("table_id", sourceId);
+    await reassignCheckedInGuestData(sourceId, targetId);
     await supabase
       .from("tables")
       .update({

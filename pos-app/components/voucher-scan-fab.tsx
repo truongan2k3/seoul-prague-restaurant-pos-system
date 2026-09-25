@@ -83,8 +83,13 @@ export function VoucherScanFab({
         if (result.code) {
           setLastApplied(result.code);
           onApplied?.(result.code);
+          // Close scanner so the cinematic success overlay can take over.
+          setOpen(false);
+          setManualCode("");
+          setError(null);
+        } else {
+          setManualCode(code);
         }
-        setManualCode(result.code?.code ?? code);
       } finally {
         setBusy(false);
         applyingRef.current = false;

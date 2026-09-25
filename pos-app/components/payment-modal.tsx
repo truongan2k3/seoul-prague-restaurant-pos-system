@@ -32,7 +32,7 @@ interface PaymentModalProps {
     tableId?: string,
     tableLabel?: string,
   ) => Promise<{ error: string | null; code?: VoucherCode }>;
-  onVoucherApplied?: () => void;
+  onVoucherApplied?: (code: VoucherCode) => void;
   onOpenVouchersTab?: () => void;
 }
 

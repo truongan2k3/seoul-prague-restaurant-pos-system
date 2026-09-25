@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChangeTableModal } from "@/components/change-table-modal";
 import { NewOrderModal } from "@/components/new-order-modal";
 import { PaymentModal } from "@/components/payment-modal";
+import { PosVoucherAppliedOverlay } from "@/components/pos-voucher-applied-overlay";
 import type { CheckoutSubmitPayload } from "@/components/checkout-panel";
 import { useApp } from "@/contexts/app-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
@@ -75,6 +76,7 @@ export function useTableOrderWorkflow({
   const actionLockRef = useRef(false);
   const [appliedVouchers, setAppliedVouchers] = useState<AppliedVoucherLine[]>([]);
   const [appliedVouchersTableId, setAppliedVouchersTableId] = useState<string | null>(null);
+  const [voucherAppliedFlash, setVoucherAppliedFlash] = useState<VoucherCode | null>(null);
 
   const selectedTable = modal ? tables.find((t) => t.id === modal.tableId) : undefined;
   const activeTableIdForVoucher =
@@ -114,6 +116,14 @@ export function useTableOrderWorkflow({
     if (appliedVouchersTableId === activeTableIdForVoucher) return;
     void refreshAppliedVouchers(activeTableIdForVoucher);
   }, [activeTableIdForVoucher, appliedVouchersTableId, refreshAppliedVouchers]);
+
+  const handleVoucherApplied = useCallback(
+    (code: VoucherCode) => {
+      void refreshAppliedVouchers();
+      setVoucherAppliedFlash(code);
+    },
+    [refreshAppliedVouchers],
+  );
 
   const applyVoucherCode = useCallback(
     async (code: string, tableId?: string, tableLabel?: string) => {
@@ -662,9 +672,7 @@ export function useTableOrderWorkflow({
             void removeVoucher(code);
           }}
           applyVoucherCode={applyVoucherCode}
-          onVoucherApplied={() => {
-            void refreshAppliedVouchers();
-          }}
+          onVoucherApplied={handleVoucherApplied}
         />
       )}
 
@@ -693,11 +701,20 @@ export function useTableOrderWorkflow({
             void removeVoucher(code);
           }}
           applyVoucherCode={applyVoucherCode}
-          onVoucherApplied={() => {
-            void refreshAppliedVouchers();
-          }}
+          onVoucherApplied={handleVoucherApplied}
         />
       )}
+
+      {voucherAppliedFlash ? (
+        <PosVoucherAppliedOverlay
+          content={{
+            amountCzk: Number(voucherAppliedFlash.denominationCzk) || 0,
+            code: voucherAppliedFlash.code,
+          }}
+          title={translate("voucherAppliedFlashTitle")}
+          onDone={() => setVoucherAppliedFlash(null)}
+        />
+      ) : null}
     </>
   );
 

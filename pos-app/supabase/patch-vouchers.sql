@@ -116,7 +116,7 @@ CREATE POLICY "voucher_audit_service"
 ALTER TABLE public.settings
   ADD COLUMN IF NOT EXISTS voucher_config jsonb NOT NULL DEFAULT '{
     "enabled": true,
-    "denominationsCzk": [1000, 2000, 5000],
+    "denominationsCzk": [1000, 2000, 3000, 5000],
     "bankName": "",
     "accountHolder": "",
     "accountNumber": "",

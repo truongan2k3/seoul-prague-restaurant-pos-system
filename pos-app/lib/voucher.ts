@@ -32,7 +32,7 @@ export interface VoucherConfig {
 
 export const DEFAULT_VOUCHER_CONFIG: VoucherConfig = {
   enabled: true,
-  denominationsCzk: [1000, 2000, 5000],
+  denominationsCzk: [1000, 2000, 3000, 5000],
   bankName: "",
   accountHolder: "",
   accountNumber: "",

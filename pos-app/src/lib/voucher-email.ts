@@ -268,9 +268,6 @@ export async function sendVoucherIssuedEmail(input: {
     <p style="margin:0;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#a1a1aa">${BRAND_NAME}</p>
     <h1 style="margin:8px 0 12px;font-size:22px">Your voucher is ready</h1>
     <p style="line-height:1.55;color:#3f3f46">Payment confirmed for order <strong>${escapeHtml(order.orderId)}</strong>. Present the code or QR at the restaurant to redeem.</p>
-    <p style="margin:12px 0 0;padding:12px;background:#fef3c7;border:1px solid #f59e0b;border-radius:10px;color:#92400e;font-size:14px;line-height:1.45;font-weight:600">
-      If you did not see this email in your inbox, please check your spam / junk folder.
-    </p>
     ${cards}
     ${voucherTermsHtml(config)}
   </div>
@@ -280,7 +277,6 @@ export async function sendVoucherIssuedEmail(input: {
     `${BRAND_NAME} — Your voucher is ready`,
     "",
     `Order ID: ${order.orderId}`,
-    "If you did not see this email in your inbox, please check your spam / junk folder.",
     "",
     ...vouchers.map((v) => `Code: ${v.code} (${unit})`),
     "",

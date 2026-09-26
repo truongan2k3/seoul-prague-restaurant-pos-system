@@ -356,7 +356,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                           {hasTable ? (
                             <div
                               title={tableTitle}
-                              className={`flex w-[5.5rem] shrink-0 flex-col items-center justify-center rounded-xl border px-2 py-2.5 sm:w-[6.25rem] sm:px-2.5 sm:py-3 ${receptionTableBadgeClass(row.status, true)}`}
+                              className={`flex w-[5.5rem] shrink-0 flex-col items-center justify-center rounded-xl border px-2 py-2.5 sm:w-[6.25rem] sm:px-2.5 sm:py-3 ${receptionTableBadgeClass(row.status)}`}
                             >
                               <span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-current/50 sm:text-[10px]">
                                 Table

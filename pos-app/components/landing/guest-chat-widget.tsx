@@ -70,6 +70,7 @@ export function GuestChatWidget({ page, liftAboveBookCta = false }: Props) {
   const [followSaved, setFollowSaved] = useState(false);
   const [hiddenForMenuBook, setHiddenForMenuBook] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const draftRef = useRef<HTMLTextAreaElement | null>(null);
   const followTimerRef = useRef<number | null>(null);
   const bootingRef = useRef(false);
 
@@ -78,6 +79,20 @@ export function GuestChatWidget({ page, liftAboveBookCta = false }: Props) {
   const chatClosed =
     session != null && (session.status === "closed" || session.status === "resolved");
   const canSend = session != null && isActiveGuestChatStatus(session.status) && !busy;
+
+  const resizeDraft = useCallback(() => {
+    const el = draftRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    // Grow with content; cap so the message list still has room in the panel.
+    const maxPx = Math.round(Math.min(window.innerHeight * 0.28, 220));
+    el.style.height = `${Math.min(el.scrollHeight, maxPx)}px`;
+    el.style.overflowY = el.scrollHeight > maxPx ? "auto" : "hidden";
+  }, []);
+
+  useEffect(() => {
+    resizeDraft();
+  }, [draft, open, phase, resizeDraft]);
 
   useEffect(() => {
     return subscribeGuestChatHiddenForMenuBook(setHiddenForMenuBook);
@@ -657,12 +672,14 @@ export function GuestChatWidget({ page, liftAboveBookCta = false }: Props) {
                     }}
                   >
                     <textarea
+                      ref={draftRef}
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
                       rows={1}
                       placeholder="Write a message…"
                       disabled={!canSend}
-                      className="max-h-28 min-h-[42px] flex-1 resize-none rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-sm text-white outline-none placeholder:text-white/35 focus:border-[#C9A88B]/60 disabled:opacity-50"
+                      className="min-h-[42px] flex-1 resize-none overflow-hidden rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-sm leading-snug text-white outline-none placeholder:text-white/35 focus:border-[#C9A88B]/60 disabled:opacity-50"
+                      onInput={resizeDraft}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.shiftKey) {
                           e.preventDefault();

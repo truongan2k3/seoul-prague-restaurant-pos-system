@@ -61,6 +61,8 @@ export type GuestVoucherCopy = {
   confirmError: string;
   cancelError: string;
   windowExpired: string;
+  /** Highlight: confirmation / codes email may land in spam. */
+  checkSpamNote: string;
 };
 
 const en: GuestVoucherCopy = {
@@ -128,6 +130,8 @@ const en: GuestVoucherCopy = {
   confirmError: "Could not confirm payment.",
   cancelError: "Could not cancel order.",
   windowExpired: "Payment window expired.",
+  checkSpamNote:
+    "Please also check your spam / junk folder — our emails (order confirmation and voucher codes) may appear there.",
 };
 
 const cs: GuestVoucherCopy = {
@@ -193,6 +197,8 @@ const cs: GuestVoucherCopy = {
   confirmError: "Platbu se nepodařilo potvrdit.",
   cancelError: "Objednávku se nepodařilo zrušit.",
   windowExpired: "Platební okno vypršelo.",
+  checkSpamNote:
+    "Prosím zkontrolujte i složku spam / nevyžádaná pošta — naše e-maily (potvrzení objednávky a kódy voucherů) tam mohou skončit.",
 };
 
 const vi: GuestVoucherCopy = {
@@ -258,6 +264,8 @@ const vi: GuestVoucherCopy = {
   confirmError: "Không xác nhận được thanh toán.",
   cancelError: "Không hủy được đơn.",
   windowExpired: "Hết thời gian thanh toán.",
+  checkSpamNote:
+    "Vui lòng kiểm tra cả thư mục spam trong email vì thư xác nhận và mã voucher có thể nằm ở đó.",
 };
 
 const de: GuestVoucherCopy = {
@@ -323,6 +331,8 @@ const de: GuestVoucherCopy = {
   confirmError: "Zahlung konnte nicht bestätigt werden.",
   cancelError: "Bestellung konnte nicht storniert werden.",
   windowExpired: "Zahlungsfenster abgelaufen.",
+  checkSpamNote:
+    "Bitte prüfen Sie auch Ihren Spam-/Junk-Ordner — unsere E-Mails (Bestellbestätigung und Gutscheincodes) können dort landen.",
 };
 
 const ko: GuestVoucherCopy = {
@@ -388,6 +398,8 @@ const ko: GuestVoucherCopy = {
   confirmError: "결제를 확인할 수 없습니다.",
   cancelError: "주문을 취소할 수 없습니다.",
   windowExpired: "결제 시간이 만료되었습니다.",
+  checkSpamNote:
+    "스팸/정크 메일함도 확인해 주세요 — 주문 확인 및 바우처 코드 메일이 그곳에 있을 수 있습니다.",
 };
 
 const GUEST_VOUCHER_COPY: Record<GuestReservationLang, GuestVoucherCopy> = {

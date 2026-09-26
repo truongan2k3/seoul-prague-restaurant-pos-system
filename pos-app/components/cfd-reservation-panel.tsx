@@ -334,9 +334,16 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                       >
                         <div className="flex items-center gap-3 sm:gap-4">
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-2xl font-semibold leading-tight tracking-tight text-white sm:text-3xl">
-                              {row.guestName}
-                            </p>
+                            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+                              <p className="min-w-0 truncate text-2xl font-semibold leading-tight tracking-tight text-white sm:text-3xl">
+                                {row.guestName}
+                              </p>
+                              <span
+                                className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] sm:text-[11px] ${receptionStatusTone(row.status)}`}
+                              >
+                                {statusLabel(row.status, language)}
+                              </span>
+                            </div>
                             <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-white/55">
                               <span className="tabular-nums tracking-wide">{time}</span>
                               <span className="text-white/20" aria-hidden>
@@ -349,22 +356,15 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                             </p>
                           </div>
 
-                          <div className="flex min-w-[6.75rem] shrink-0 flex-col items-center gap-2 sm:min-w-[7.5rem]">
-                            <div
-                              title={tableTitle}
-                              className={`flex w-full flex-col items-center justify-center rounded-xl border px-2 py-2.5 sm:px-2.5 sm:py-3 ${receptionTableBadgeClass(row.status, hasTable)}`}
-                            >
-                              <span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-current/50 sm:text-[10px]">
-                                Table
-                              </span>
-                              <span className="mt-1 text-[2rem] font-bold leading-none tracking-wide tabular-nums sm:text-[2.35rem]">
-                                {hasTable ? tableLabel : "—"}
-                              </span>
-                            </div>
-                            <span
-                              className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] sm:text-[11px] ${receptionStatusTone(row.status)}`}
-                            >
-                              {statusLabel(row.status, language)}
+                          <div
+                            title={tableTitle}
+                            className={`flex w-[5.5rem] shrink-0 flex-col items-center justify-center rounded-xl border px-2 py-2.5 sm:w-[6.25rem] sm:px-2.5 sm:py-3 ${receptionTableBadgeClass(row.status, hasTable)}`}
+                          >
+                            <span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-current/50 sm:text-[10px]">
+                              Table
+                            </span>
+                            <span className="mt-1 text-[2rem] font-bold leading-none tracking-wide tabular-nums sm:text-[2.35rem]">
+                              {hasTable ? tableLabel : "—"}
                             </span>
                           </div>
                         </div>

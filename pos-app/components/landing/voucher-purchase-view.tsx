@@ -391,12 +391,6 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
               </p>
             )}
 
-            {!orderCancelled ? (
-              <p className="rounded-xl border border-amber-400/50 bg-amber-500/15 px-4 py-3 text-sm font-semibold leading-relaxed text-amber-100">
-                {copy.checkSpamNote}
-              </p>
-            ) : null}
-
             {!orderCancelled && !guestPaid ? (
               <div className="rounded-2xl border border-[#C9A88B]/40 bg-[#C9A88B]/10 px-5 py-4 text-center">
                 <p className="text-xs uppercase tracking-[0.2em] text-[#C9A88B]">{copy.timeLeft}</p>

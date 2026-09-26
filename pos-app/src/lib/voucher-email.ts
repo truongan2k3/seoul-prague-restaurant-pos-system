@@ -113,6 +113,41 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function validityTermLine(validityDays: number): string {
+  if (validityDays <= 0) return "This voucher does not expire.";
+  if (validityDays === 365 || validityDays === 366) {
+    return "Voucher is valid for 12 months from the issue date.";
+  }
+  if (validityDays % 30 === 0) {
+    return `Voucher is valid for ${validityDays / 30} months from the issue date.`;
+  }
+  return `Voucher is valid for ${validityDays} days from the issue date.`;
+}
+
+/** Same guest-facing T&C as /voucher (English — emails are EN). */
+function voucherTermsLines(config: VoucherConfig): string[] {
+  return [
+    validityTermLine(config.validityDays),
+    "Vouchers are applied at the counter at payment. Please present the voucher code for staff to scan before paying your bill.",
+    "In all cases, vouchers have no cash redemption value.",
+    "For questions, please use Chat with us or contact the restaurant by email / phone.",
+  ];
+}
+
+function voucherTermsHtml(config: VoucherConfig): string {
+  const items = voucherTermsLines(config)
+    .map((line) => `<li style="margin:0 0 8px;line-height:1.5">${escapeHtml(line)}</li>`)
+    .join("");
+  return `<div style="margin-top:24px;padding:16px;background:#fafafa;border:1px solid #e4e4e7;border-radius:12px">
+    <p style="margin:0 0 10px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#a1a1aa;font-weight:600">Voucher Terms &amp; Conditions</p>
+    <ul style="margin:0;padding-left:18px;color:#3f3f46;font-size:13px">${items}</ul>
+  </div>`;
+}
+
+function voucherTermsText(config: VoucherConfig): string[] {
+  return ["Voucher Terms & Conditions", ...voucherTermsLines(config).map((line) => `• ${line}`)];
+}
+
 export async function sendVoucherConfirmationEmail(input: {
   order: VoucherOrder;
   config: VoucherConfig;
@@ -159,6 +194,7 @@ export async function sendVoucherConfirmationEmail(input: {
     ${bankBlockHtml(config, order)}
     ${config.bankPaymentNote ? `<p style="margin-top:12px;color:#71717a;font-size:13px">${escapeHtml(config.bankPaymentNote)}</p>` : ""}
     ${qrBlock}
+    ${voucherTermsHtml(config)}
     <p style="margin-top:24px;font-size:12px;color:#a1a1aa"><a href="${voucherUrl}" style="color:#a16207">Buy another voucher</a></p>
   </div>
 </body></html>`;
@@ -183,6 +219,8 @@ export async function sendVoucherConfirmationEmail(input: {
     config.iban && `IBAN: ${config.iban}`,
     config.bankName && `Bank: ${config.bankName}`,
     `Payment note: ${order.paymentMessage || order.orderId}`,
+    "",
+    ...voucherTermsText(config),
   ]
     .filter(Boolean)
     .join("\n");
@@ -234,6 +272,7 @@ export async function sendVoucherIssuedEmail(input: {
       If you did not see this email in your inbox, please check your spam / junk folder.
     </p>
     ${cards}
+    ${voucherTermsHtml(config)}
   </div>
 </body></html>`;
 
@@ -244,6 +283,8 @@ export async function sendVoucherIssuedEmail(input: {
     "If you did not see this email in your inbox, please check your spam / junk folder.",
     "",
     ...vouchers.map((v) => `Code: ${v.code} (${unit})`),
+    "",
+    ...voucherTermsText(config),
   ].join("\n");
 
   return sendResendEmail({

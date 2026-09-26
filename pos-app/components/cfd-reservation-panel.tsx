@@ -334,7 +334,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                       >
                         <div className="flex items-center gap-3 sm:gap-4">
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-[1.15rem] font-semibold leading-tight tracking-tight text-white sm:text-xl">
+                            <p className="truncate text-2xl font-semibold leading-tight tracking-tight text-white sm:text-3xl">
                               {row.guestName}
                             </p>
                             <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-white/55">

@@ -349,20 +349,20 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                             </p>
                           </div>
 
-                          <div className="flex w-[4.75rem] shrink-0 flex-col items-center gap-2 sm:w-[5.25rem]">
+                          <div className="flex min-w-[6.75rem] shrink-0 flex-col items-center gap-2 sm:min-w-[7.5rem]">
                             <div
                               title={tableTitle}
-                              className={`flex w-full flex-col items-center justify-center rounded-xl border px-1.5 py-2 sm:py-2.5 ${receptionTableBadgeClass(row.status, hasTable)}`}
+                              className={`flex w-full flex-col items-center justify-center rounded-xl border px-2 py-2.5 sm:px-2.5 sm:py-3 ${receptionTableBadgeClass(row.status, hasTable)}`}
                             >
-                              <span className="text-[8px] font-semibold uppercase tracking-[0.22em] text-current/45 sm:text-[9px]">
+                              <span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-current/50 sm:text-[10px]">
                                 Table
                               </span>
-                              <span className="mt-0.5 text-[1.65rem] font-bold leading-none tracking-wide tabular-nums sm:text-[1.85rem]">
+                              <span className="mt-1 text-[2rem] font-bold leading-none tracking-wide tabular-nums sm:text-[2.35rem]">
                                 {hasTable ? tableLabel : "—"}
                               </span>
                             </div>
                             <span
-                              className={`max-w-full truncate rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] sm:text-[10px] ${receptionStatusTone(row.status)}`}
+                              className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] sm:text-[11px] ${receptionStatusTone(row.status)}`}
                             >
                               {statusLabel(row.status, language)}
                             </span>

@@ -285,6 +285,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                       ? `Table ${row.tableLabel}`
                       : `${translate("resTablePlanned")}: ${row.tableLabel}`
                     : "Table: Unassigned";
+                  const tableLabel = row.tableLabel?.trim() || "";
                   return (
                     <li key={row.id}>
                       <button
@@ -296,34 +297,40 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                             : "border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.05]"
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
+                        <div className="flex items-center gap-3">
+                          <div className="min-w-0 flex-1">
                             <p className="truncate text-xl font-semibold text-white sm:text-2xl">
                               {row.guestName}
                             </p>
                             <p className="mt-1 text-sm tabular-nums text-white/60">{time}</p>
+                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/50">
+                              <span className="inline-flex items-center gap-1">
+                                <Users className="h-3.5 w-3.5" />
+                                {row.partySize}
+                              </span>
+                              {!tableLabel ? (
+                                <span className="text-amber-200/80">Table: Unassigned</span>
+                              ) : null}
+                            </div>
                           </div>
+
+                          {tableLabel ? (
+                            <span
+                              title={tableText}
+                              className={`inline-flex min-w-[3.25rem] shrink-0 items-center justify-center border px-2.5 py-1.5 text-3xl font-bold leading-none tracking-wide tabular-nums sm:min-w-[3.75rem] sm:px-3 sm:py-2 sm:text-4xl ${
+                                row.status === "checked_in"
+                                  ? "border-[#C9A88B]/70 bg-[#C9A88B]/15 text-[#E8D5C4]"
+                                  : "border-white/35 bg-white/[0.04] text-white"
+                              }`}
+                            >
+                              {tableLabel}
+                            </span>
+                          ) : null}
+
                           <span
-                            className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${reservationStatusTone(row.status)}`}
+                            className={`shrink-0 self-start rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${reservationStatusTone(row.status)}`}
                           >
                             {statusLabel(row.status, language)}
-                          </span>
-                        </div>
-                        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/50">
-                          <span className="inline-flex items-center gap-1">
-                            <Users className="h-3.5 w-3.5" />
-                            {row.partySize}
-                          </span>
-                          <span
-                            className={
-                              row.tableLabel?.trim()
-                                ? row.status === "checked_in"
-                                  ? "text-[#C9A88B]/90"
-                                  : "text-white/55"
-                                : "text-amber-200/80"
-                            }
-                          >
-                            {tableText}
                           </span>
                         </div>
                       </button>

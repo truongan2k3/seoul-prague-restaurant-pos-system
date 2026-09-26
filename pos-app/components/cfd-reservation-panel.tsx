@@ -59,10 +59,7 @@ function receptionStatusTone(status: ReservationRecord["status"]): string {
   }
 }
 
-function receptionTableBadgeClass(status: ReservationRecord["status"], hasTable: boolean): string {
-  if (!hasTable) {
-    return "border-dashed border-white/15 bg-white/[0.02] text-white/30";
-  }
+function receptionTableBadgeClass(status: ReservationRecord["status"]): string {
   if (status === "checked_in") {
     return "border-[#C9A88B]/45 bg-gradient-to-b from-[#C9A88B]/20 to-[#C9A88B]/05 text-[#F5EDE4] shadow-[0_0_24px_rgba(201,168,139,0.12)]";
   }
@@ -356,17 +353,19 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                             </p>
                           </div>
 
-                          <div
-                            title={tableTitle}
-                            className={`flex w-[5.5rem] shrink-0 flex-col items-center justify-center rounded-xl border px-2 py-2.5 sm:w-[6.25rem] sm:px-2.5 sm:py-3 ${receptionTableBadgeClass(row.status, hasTable)}`}
-                          >
-                            <span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-current/50 sm:text-[10px]">
-                              Table
-                            </span>
-                            <span className="mt-1 text-[2rem] font-bold leading-none tracking-wide tabular-nums sm:text-[2.35rem]">
-                              {hasTable ? tableLabel : "—"}
-                            </span>
-                          </div>
+                          {hasTable ? (
+                            <div
+                              title={tableTitle}
+                              className={`flex w-[5.5rem] shrink-0 flex-col items-center justify-center rounded-xl border px-2 py-2.5 sm:w-[6.25rem] sm:px-2.5 sm:py-3 ${receptionTableBadgeClass(row.status, true)}`}
+                            >
+                              <span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-current/50 sm:text-[10px]">
+                                Table
+                              </span>
+                              <span className="mt-1 text-[2rem] font-bold leading-none tracking-wide tabular-nums sm:text-[2.35rem]">
+                                {tableLabel}
+                              </span>
+                            </div>
+                          ) : null}
                         </div>
                       </button>
                     </li>

@@ -6,7 +6,6 @@ import {
   canCheckIn,
   filterReservationsByPeriod,
   reservationStatusLabelKey,
-  reservationStatusTone,
   sortReservationsForDayList,
 } from "@/lib/reservation-analytics";
 import type { CfdWelcomePayload } from "@/lib/cfd-display";
@@ -36,6 +35,41 @@ type Props = {
 
 function statusLabel(status: ReservationRecord["status"], language: LanguageCode): string {
   return t(language, reservationStatusLabelKey(status) as TranslationKey);
+}
+
+/** Dark/premium status chips for Reception cards only (presentation). */
+function receptionStatusTone(status: ReservationRecord["status"]): string {
+  switch (status) {
+    case "pending":
+      return "bg-amber-400/12 text-amber-100/90 ring-1 ring-inset ring-amber-300/25";
+    case "confirmed":
+      return "bg-emerald-400/12 text-emerald-100/90 ring-1 ring-inset ring-emerald-300/25";
+    case "checked_in":
+      return "bg-[#C9A88B]/18 text-[#E8D5C4] ring-1 ring-inset ring-[#C9A88B]/35";
+    case "late":
+      return "bg-orange-400/15 text-orange-100 ring-1 ring-inset ring-orange-300/30";
+    case "no_show":
+      return "bg-rose-400/12 text-rose-100/90 ring-1 ring-inset ring-rose-300/25";
+    case "cancelled":
+      return "bg-white/[0.04] text-white/45 ring-1 ring-inset ring-white/10";
+    case "completed":
+      return "bg-white/[0.06] text-white/65 ring-1 ring-inset ring-white/12";
+    default:
+      return "bg-white/[0.05] text-white/55 ring-1 ring-inset ring-white/10";
+  }
+}
+
+function receptionTableBadgeClass(status: ReservationRecord["status"], hasTable: boolean): string {
+  if (!hasTable) {
+    return "border-dashed border-white/15 bg-white/[0.02] text-white/30";
+  }
+  if (status === "checked_in") {
+    return "border-[#C9A88B]/45 bg-gradient-to-b from-[#C9A88B]/20 to-[#C9A88B]/05 text-[#F5EDE4] shadow-[0_0_24px_rgba(201,168,139,0.12)]";
+  }
+  if (status === "late") {
+    return "border-orange-400/35 bg-gradient-to-b from-orange-400/15 to-orange-400/[0.04] text-orange-50";
+  }
+  return "border-white/15 bg-gradient-to-b from-white/[0.08] to-white/[0.02] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]";
 }
 
 export function CfdReservationPanel({ open, onClose, language, onWelcome, website }: Props) {
@@ -272,7 +306,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                 </button>
               </div>
             ) : (
-              <ul className="space-y-2">
+              <ul className="space-y-2.5">
                 {rows.map((row) => {
                   const active = row.id === selectedId;
                   const time = formatInVenueTz(row.reservedAt, language === "cs" ? "cs-CZ" : "en-GB", {
@@ -280,58 +314,59 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                     minute: "2-digit",
                     hour12: language === "en",
                   });
-                  const tableText = row.tableLabel?.trim()
-                    ? row.status === "checked_in"
-                      ? `Table ${row.tableLabel}`
-                      : `${translate("resTablePlanned")}: ${row.tableLabel}`
-                    : "Table: Unassigned";
                   const tableLabel = row.tableLabel?.trim() || "";
+                  const hasTable = tableLabel.length > 0;
+                  const tableTitle = hasTable
+                    ? row.status === "checked_in"
+                      ? `Table ${tableLabel}`
+                      : `${translate("resTablePlanned")}: ${tableLabel}`
+                    : "Table: Unassigned";
                   return (
                     <li key={row.id}>
                       <button
                         type="button"
                         onClick={() => setSelectedId(row.id)}
-                        className={`w-full rounded-none border px-4 py-3.5 text-left transition ${
+                        className={`group w-full rounded-2xl border px-4 py-3.5 text-left transition duration-200 sm:px-5 sm:py-4 ${
                           active
-                            ? "border-[#C9A88B]/55 bg-[#8B1E2D]/25"
-                            : "border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.05]"
+                            ? "border-[#C9A88B]/50 bg-[#8B1E2D]/20 shadow-[0_0_0_1px_rgba(201,168,139,0.12),0_12px_32px_rgba(0,0,0,0.35)]"
+                            : "border-white/10 bg-white/[0.035] hover:border-white/20 hover:bg-white/[0.055]"
                         }`}
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 sm:gap-4">
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-xl font-semibold text-white sm:text-2xl">
+                            <p className="truncate text-[1.15rem] font-semibold leading-tight tracking-tight text-white sm:text-xl">
                               {row.guestName}
                             </p>
-                            <p className="mt-1 text-sm tabular-nums text-white/60">{time}</p>
-                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/50">
-                              <span className="inline-flex items-center gap-1">
-                                <Users className="h-3.5 w-3.5" />
-                                {row.partySize}
+                            <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-white/55">
+                              <span className="tabular-nums tracking-wide">{time}</span>
+                              <span className="text-white/20" aria-hidden>
+                                ·
                               </span>
-                              {!tableLabel ? (
-                                <span className="text-amber-200/80">Table: Unassigned</span>
-                              ) : null}
-                            </div>
+                              <span className="inline-flex items-center gap-1">
+                                <Users className="h-3.5 w-3.5 opacity-70" aria-hidden />
+                                <span className="tabular-nums">{row.partySize}</span>
+                              </span>
+                            </p>
                           </div>
 
-                          {tableLabel ? (
-                            <span
-                              title={tableText}
-                              className={`inline-flex min-w-[3.25rem] shrink-0 items-center justify-center border px-2.5 py-1.5 text-3xl font-bold leading-none tracking-wide tabular-nums sm:min-w-[3.75rem] sm:px-3 sm:py-2 sm:text-4xl ${
-                                row.status === "checked_in"
-                                  ? "border-[#C9A88B]/70 bg-[#C9A88B]/15 text-[#E8D5C4]"
-                                  : "border-white/35 bg-white/[0.04] text-white"
-                              }`}
+                          <div className="flex w-[4.75rem] shrink-0 flex-col items-center gap-2 sm:w-[5.25rem]">
+                            <div
+                              title={tableTitle}
+                              className={`flex w-full flex-col items-center justify-center rounded-xl border px-1.5 py-2 sm:py-2.5 ${receptionTableBadgeClass(row.status, hasTable)}`}
                             >
-                              {tableLabel}
+                              <span className="text-[8px] font-semibold uppercase tracking-[0.22em] text-current/45 sm:text-[9px]">
+                                Table
+                              </span>
+                              <span className="mt-0.5 text-[1.65rem] font-bold leading-none tracking-wide tabular-nums sm:text-[1.85rem]">
+                                {hasTable ? tableLabel : "—"}
+                              </span>
+                            </div>
+                            <span
+                              className={`max-w-full truncate rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] sm:text-[10px] ${receptionStatusTone(row.status)}`}
+                            >
+                              {statusLabel(row.status, language)}
                             </span>
-                          ) : null}
-
-                          <span
-                            className={`shrink-0 self-start rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${reservationStatusTone(row.status)}`}
-                          >
-                            {statusLabel(row.status, language)}
-                          </span>
+                          </div>
                         </div>
                       </button>
                     </li>

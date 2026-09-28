@@ -21,9 +21,9 @@ export const SERVER_SCREEN_LANG_ROTATE_MS = 10_000;
 export type { ServerScreenConfig, ServerScreenLanguageMode };
 
 export const DEFAULT_SERVER_SCREEN_CONFIG: ServerScreenConfig = {
-  languageMode: "single",
-  languages: ["en"],
-  autoRotateLanguage: false,
+  languageMode: "bilingual",
+  languages: ["en", "cs"],
+  autoRotateLanguage: true,
 };
 
 const LANG_SET = new Set<LanguageCode>(["en", "cs", "zh"]);

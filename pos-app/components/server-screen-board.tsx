@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   type TouchEvent as ReactTouchEvent,
 } from "react";
 import {
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { ServerScreenOrderCards } from "@/components/server-screen-order-cards";
+import { ServerScreenPaymentOverlay } from "@/components/server-screen-payment-overlay";
 import { ServerScreenPrepStatsPanel } from "@/components/server-screen-prep-stats";
 import { ServerScreenReservationPanel } from "@/components/server-screen-reservation-panel";
 import { useApp } from "@/contexts/app-context";
@@ -745,21 +747,41 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         return (a.id ?? "").localeCompare(b.id ?? "");
       });
 
-    const rows: BoardRow[] = [];
-    const attachedParents = new Set<string>();
-
-    for (const item of pending) {
-      if (!item.id) continue;
-      const tableLabel = tableLabelById.get(item.tableId) ?? "—";
-      rows.push({
-        key: item.id,
-        kind: "item",
-        item,
-        tableLabel,
+    // Resolve grill-set parent per table (companions belong under that set).
+    const parentByTable = new Map<
+      string,
+      { parentId: string; host: StationOrderItem; createdAt: string }
+    >();
+    for (const [tableId, tableSession] of itemsByTable) {
+      const anchor = companionStore.anchors[tableId];
+      const firstId =
+        tableSession.find((item) => shouldShowGrillCompanions(item, tableSession, menuItems))?.id ??
+        anchor?.parentId;
+      if (!firstId) continue;
+      if (pendingCompanionIds(companionStore, firstId).length === 0) continue;
+      const host =
+        tableSession.find((item) => item.id === firstId) ??
+        ({
+          id: firstId,
+          name: "Grill",
+          quantity: 1,
+          price: 0,
+          tableId,
+          createdAt: anchor?.createdAt,
+          kitchenStatus: "pending",
+          status: "preparing",
+        } satisfies StationOrderItem);
+      parentByTable.set(tableId, {
+        parentId: firstId,
+        host,
+        createdAt: host.createdAt ?? anchor?.createdAt ?? "",
       });
     }
 
-    const appendCompanions = (parentId: string, hostItem: StationOrderItem, tableLabel: string) => {
+    const rows: BoardRow[] = [];
+    const attachedParents = new Set<string>();
+
+    const pushCompanions = (parentId: string, hostItem: StationOrderItem, tableLabel: string) => {
       if (attachedParents.has(parentId)) return;
       attachedParents.add(parentId);
       for (const companion of GRILL_FIRST_ORDER_COMPANIONS) {
@@ -777,40 +799,49 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       }
     };
 
-    // Attach companions for live first-grill (even when grill itself is no longer pending).
-    for (const [tableId, tableSession] of itemsByTable) {
-      const tableLabel = tableLabelById.get(tableId) ?? "—";
-      const anchor = companionStore.anchors[tableId];
-      const firstId =
-        tableSession.find((item) => shouldShowGrillCompanions(item, tableSession, menuItems))?.id ??
-        anchor?.parentId;
-      if (!firstId) continue;
+    for (const item of pending) {
+      if (!item.id) continue;
+      const tableLabel = tableLabelById.get(item.tableId) ?? "—";
+      rows.push({
+        key: item.id,
+        kind: "item",
+        item,
+        tableLabel,
+      });
 
-      const host =
-        tableSession.find((item) => item.id === firstId) ??
-        ({
-          id: firstId,
-          name: "Grill",
-          quantity: 1,
-          price: 0,
-          tableId,
-          createdAt: anchor?.createdAt,
-          kitchenStatus: "pending",
-          status: "preparing",
-        } satisfies StationOrderItem);
-
-      // Keep companions on preparing while any remain — grill done/cancelled must not remove them.
-      if (pendingCompanionIds(companionStore, firstId).length === 0) continue;
-      appendCompanions(firstId, host, tableLabel);
+      const parent = parentByTable.get(item.tableId);
+      // Insert companions immediately under the grill set row.
+      if (parent && parent.parentId === item.id) {
+        pushCompanions(parent.parentId, parent.host, tableLabel);
+      }
     }
 
-    return rows.sort((a, b) => {
-      const at = a.item.createdAt ?? "";
-      const bt = b.item.createdAt ?? "";
-      if (at !== bt) return at < bt ? -1 : 1;
-      if (a.kind !== b.kind) return a.kind === "item" ? -1 : 1;
-      return a.key.localeCompare(b.key);
-    });
+    // Grill set already done/cancelled but companions still pending — place by createdAt.
+    for (const [tableId, parent] of parentByTable) {
+      if (attachedParents.has(parent.parentId)) continue;
+      const tableLabel = tableLabelById.get(tableId) ?? "—";
+      const companionRows: BoardRow[] = [];
+      for (const companion of GRILL_FIRST_ORDER_COMPANIONS) {
+        const key = companionKeyFor(parent.parentId, companion.id);
+        if (companionStore.done[key]) continue;
+        companionRows.push({
+          key,
+          kind: "companion",
+          item: parent.host,
+          parentId: parent.parentId,
+          companionId: companion.id,
+          tableLabel,
+          companionName: companion.names[language] || companion.names.en,
+        });
+      }
+      if (companionRows.length === 0) continue;
+      attachedParents.add(parent.parentId);
+      const insertAt = rows.findIndex((row) => (row.item.createdAt ?? "") > parent.createdAt);
+      if (insertAt < 0) rows.push(...companionRows);
+      else rows.splice(insertAt, 0, ...companionRows);
+    }
+
+    return rows;
   }, [items, itemsByTable, menuItems, tableLabelById, language, companionStore]);
 
   const orderCards = useMemo(
@@ -1229,9 +1260,17 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const shellClass =
     "flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#0B0B0C] text-[#f5f2ef]";
   const selectedCount = selectedKeys.size;
+  const paymentOverlayEnabled =
+    station === "kitchen" && Boolean(serverScreen.showPaymentOverlayOnKds);
+
+  const withPaymentOverlay = (node: ReactNode) => (
+    <ServerScreenPaymentOverlay enabled={paymentOverlayEnabled} translate={translate}>
+      {node}
+    </ServerScreenPaymentOverlay>
+  );
 
   if (!screenEnabled) {
-    return (
+    return withPaymentOverlay(
       <div className={shellClass}>
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
           <p className="max-w-md text-lg font-medium text-zinc-300">
@@ -1242,12 +1281,12 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
           </p>
         </div>
         <ServerScreenFooter language={language} />
-      </div>
+      </div>,
     );
   }
 
   if (historyOpen) {
-    return (
+    return withPaymentOverlay(
       <div className={shellClass} data-server-interactive>
         <header className="flex shrink-0 items-center gap-3 border-b border-white/10 px-4 py-3">
           <button
@@ -1365,11 +1404,11 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
           layoutActive={layoutMode === "cards"}
         />
         <ServerScreenFooter language={language} />
-      </div>
+      </div>,
     );
   }
 
-  return (
+  return withPaymentOverlay(
     <div
       className={shellClass}
       onPointerDown={onBackgroundPointerDown}
@@ -1545,7 +1584,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         layoutActive={layoutMode === "cards"}
       />
       <ServerScreenFooter language={language} />
-    </div>
+    </div>,
   );
 }
 

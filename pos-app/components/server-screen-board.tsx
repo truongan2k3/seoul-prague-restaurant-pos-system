@@ -239,7 +239,12 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [animatingOut, setAnimatingOut] = useState<Set<string>>(new Set());
   const rotateResetRef = useRef(Date.now());
+  const languageRef = useRef(language);
+  const languagesRef = useRef(languages);
   const seenPreparingRef = useRef<Set<string> | null>(null);
+
+  languageRef.current = language;
+  languagesRef.current = languages;
 
   const actor = currentStaffUser?.name?.trim() || (station === "kitchen" ? "Kitchen" : "Bar");
   const realtimeOpts = { debounceMs: POS_EGRESS.REALTIME_DEBOUNCE_MS };
@@ -268,15 +273,24 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     }
   }, [languages, language, setLanguage]);
 
+  // Stable auto-rotate — refs avoid resetting the timer on every language change.
   useEffect(() => {
-    if (!serverScreen.autoRotateLanguage || languages.length < 2) return;
+    if (!serverScreen.autoRotateLanguage) return;
+    if (languages.length < 2) return;
+
     const id = window.setInterval(() => {
-      if (Date.now() - rotateResetRef.current < SERVER_SCREEN_LANG_ROTATE_MS - 200) return;
-      setLanguage(nextServerScreenLanguage(language, languages));
-      rotateResetRef.current = Date.now();
+      const list = languagesRef.current;
+      if (list.length < 2) return;
+      // Manual tap resets the clock so we don't flip immediately after a tap.
+      if (Date.now() - rotateResetRef.current < SERVER_SCREEN_LANG_ROTATE_MS - 400) return;
+      const next = nextServerScreenLanguage(languageRef.current, list);
+      if (next === languageRef.current) return;
+      languageRef.current = next;
+      setLanguage(next);
     }, SERVER_SCREEN_LANG_ROTATE_MS);
+
     return () => window.clearInterval(id);
-  }, [serverScreen.autoRotateLanguage, languages, language, setLanguage]);
+  }, [serverScreen.autoRotateLanguage, languages.length, setLanguage]);
 
   useEffect(() => {
     const id = window.setInterval(() => setNowMs(Date.now()), 15_000);
@@ -577,16 +591,20 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   };
 
   const cycleLanguage = useCallback(() => {
-    if (languages.length < 2) return;
-    setLanguage(nextServerScreenLanguage(language, languages));
+    const list = languagesRef.current;
+    if (list.length < 2) return;
+    const next = nextServerScreenLanguage(languageRef.current, list);
+    languageRef.current = next;
+    setLanguage(next);
     rotateResetRef.current = Date.now();
-  }, [languages, language, setLanguage]);
+  }, [setLanguage]);
 
   const onBackgroundPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null;
     if (!target) return;
+    // Don't steal taps from buttons / toolbar / list rows.
     if (target.closest("[data-server-interactive]")) return;
-    if (target.closest("[data-server-scroll]")) return;
+    if (target.closest("button, a, input, select, textarea, [role='button']")) return;
     cycleLanguage();
   };
 
@@ -622,7 +640,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             <ArrowLeft className="h-4 w-4" />
             {translate("serverScreenHistoryBack")}
           </button>
-          <h1 className="landing-serif text-2xl tracking-wide text-[#C9A88B]">
+          <h1 className="text-xl font-semibold uppercase tracking-[0.14em] text-[#C9A88B] sm:text-2xl">
             {translate("history")}
           </h1>
           <span className="text-sm tabular-nums text-white/40">{historyRows.length}</span>
@@ -682,8 +700,15 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       <AnnouncementMarquee surface={station === "kitchen" ? "kds" : "bar"} tone="dark" />
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
-          <h1 className="landing-serif text-2xl tracking-[0.08em] text-[#C9A88B] sm:text-3xl">
+        <header
+          className="flex shrink-0 cursor-pointer items-center justify-between gap-3 border-b border-white/10 px-4 py-3"
+          onPointerDown={(event) => {
+            // Tapping the title area cycles language (manual override).
+            event.stopPropagation();
+            cycleLanguage();
+          }}
+        >
+          <h1 className="text-xl font-semibold uppercase tracking-[0.14em] text-[#C9A88B] sm:text-2xl">
             {translate("preparing")}
           </h1>
           <span className="text-sm tabular-nums text-white/40">

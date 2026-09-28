@@ -11,35 +11,49 @@ function getAudioContext(): AudioContext | null {
   return audioContext;
 }
 
-/** Call after user interaction so autoplay policies allow sounds. */
-export function unlockNotificationAudio() {
-  const ctx = getAudioContext();
-  if (!ctx) return;
-
-  const markUnlocked = () => {
-    unlocked = true;
-  };
-
-  void ctx.resume().then(markUnlocked).catch(() => {
-    /* ignore */
-  });
-
-  // Silent buffer kick — required on some browsers even after resume().
+function kickSilentBuffer(ctx: AudioContext) {
   try {
     const buffer = ctx.createBuffer(1, 1, ctx.sampleRate || 22050);
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.connect(ctx.destination);
     source.start(0);
-    markUnlocked();
   } catch {
     /* ignore */
   }
 }
 
+/** Call after user interaction so autoplay policies allow sounds. */
+export function unlockNotificationAudio() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  const markIfRunning = () => {
+    if (ctx.state === "running") unlocked = true;
+  };
+
+  kickSilentBuffer(ctx);
+  markIfRunning();
+
+  if (ctx.state === "running") return;
+
+  void ctx.resume()
+    .then(() => {
+      kickSilentBuffer(ctx);
+      markIfRunning();
+    })
+    .catch(() => {
+      /* ignore — need a real user gesture */
+    });
+}
+
 export function isNotificationAudioUnlocked(): boolean {
   const ctx = getAudioContext();
-  return unlocked && Boolean(ctx && ctx.state === "running");
+  if (ctx?.state === "running") {
+    unlocked = true;
+    return true;
+  }
+  return false;
 }
 
 /** Short pleasant bell "ting" via Web Audio API. */
@@ -51,6 +65,17 @@ export function playReadyBell() {
 export function playNewOrderBell() {
   playBellTone([660, 990, 1320], 0.45);
   window.setTimeout(() => playBellTone([880, 1320, 1760], 0.55), 220);
+}
+
+/**
+ * Louder, longer alert for dedicated Kitchen/Bar screens.
+ * Always uses Web Audio (ignores missing /sounds/*.mp3 presets).
+ */
+export function playServerScreenNewOrderAlert() {
+  unlockNotificationAudio();
+  playBellTone([740, 988, 1174], 0.55, 0.7);
+  window.setTimeout(() => playBellTone([880, 1174, 1480], 0.65, 0.75), 200);
+  window.setTimeout(() => playBellTone([988, 1318, 1760], 0.7, 0.8), 420);
 }
 
 /** Urgent triple beep for pending reservation alerts (works without MP3 files). */
@@ -279,16 +304,17 @@ export function playCancelAlertSound() {
   playBellTone([440, 330, 220], 0.5);
 }
 
-function playBellTone(frequencies: number[], durationSec: number) {
+function playBellTone(frequencies: number[], durationSec: number, peakGain = 0.4) {
   const ctx = getAudioContext();
   if (!ctx) return;
 
   const run = () => {
     const now = ctx.currentTime;
+    const peak = Math.max(0.05, Math.min(peakGain, 0.9));
 
     const master = ctx.createGain();
     master.gain.setValueAtTime(0.0001, now);
-    master.gain.exponentialRampToValueAtTime(0.4, now + 0.015);
+    master.gain.exponentialRampToValueAtTime(peak, now + 0.015);
     master.gain.exponentialRampToValueAtTime(0.0001, now + durationSec);
     master.connect(ctx.destination);
 
@@ -314,12 +340,19 @@ function playBellTone(frequencies: number[], durationSec: number) {
   };
 
   if (ctx.state === "running") {
+    unlocked = true;
     run();
     return;
   }
 
-  void ctx.resume().then(() => {
-    unlocked = true;
-    run();
-  });
+  void ctx
+    .resume()
+    .then(() => {
+      if (ctx.state !== "running") return;
+      unlocked = true;
+      run();
+    })
+    .catch(() => {
+      /* autoplay blocked until user gesture */
+    });
 }

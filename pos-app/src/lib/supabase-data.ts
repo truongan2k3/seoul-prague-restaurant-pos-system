@@ -58,6 +58,9 @@ export const INVENTORY_COLUMNS = "id, name, category, quantity, unit, sold_out";
 export const SALES_COLUMNS =
   "id, table_label, staff_name, subtotal, discount_amount, tip, tip_payment_method, grand_total, payment_method, amount_given, change_due, split_mode, split_count, voucher_discount_amount, voucher_codes, items, activity_log, closed_at, seated_at, deleted_at, reservation_id, guest_name, guest_phone, party_size, visit_source, service_channel";
 
+/** PostgREST/Supabase default max rows is 1000 — page past it. */
+const SALES_PAGE_SIZE = 1000;
+
 /** Lean sales payload for prep-time stats (items JSON + labels only). */
 export const SALES_PREP_COLUMNS = "id, table_label, items, closed_at, deleted_at";
 
@@ -516,15 +519,34 @@ export async function fetchPrepTimeSamples(options: {
 
   if (options.station) liveQuery = liveQuery.eq("station", options.station);
 
-  const salesQuery = supabase
-    .from("sales")
-    .select(SALES_PREP_COLUMNS)
-    .is("deleted_at", null)
-    .gte("closed_at", salesSince)
-    .lt("closed_at", salesUntil)
-    .order("closed_at", { ascending: false });
+  const fetchSalesPrepPages = async () => {
+    const salesRows: Array<{
+      id: string;
+      table_label: string | null;
+      items: unknown;
+      closed_at: string;
+      deleted_at?: string | null;
+    }> = [];
+    let salesFrom = 0;
+    for (;;) {
+      const pageRes = await supabase
+        .from("sales")
+        .select(SALES_PREP_COLUMNS)
+        .is("deleted_at", null)
+        .gte("closed_at", salesSince)
+        .lt("closed_at", salesUntil)
+        .order("closed_at", { ascending: false })
+        .range(salesFrom, salesFrom + SALES_PAGE_SIZE - 1);
+      if (pageRes.error) return { data: salesRows, error: pageRes.error };
+      const page = (pageRes.data as typeof salesRows | null) ?? [];
+      salesRows.push(...page);
+      if (page.length < SALES_PAGE_SIZE) break;
+      salesFrom += SALES_PAGE_SIZE;
+    }
+    return { data: salesRows, error: null };
+  };
 
-  const [liveRes, salesRes] = await Promise.all([liveQuery, salesQuery]);
+  const [liveRes, salesRes] = await Promise.all([liveQuery, fetchSalesPrepPages()]);
 
   if (liveRes.error && salesRes.error) {
     return { data: [], error: new Error(liveRes.error.message || salesRes.error.message) };
@@ -594,32 +616,116 @@ export async function fetchStaff() {
   return supabase.from("staff").select("*").order("name");
 }
 
+/** PostgREST/Supabase default max rows is 1000 — page past it. */
+export type SupabaseSaleRow = {
+  id: string;
+  table_label: string | null;
+  staff_name: string | null;
+  subtotal: number;
+  discount_amount?: number | null;
+  tip: number;
+  tip_payment_method?: "cash" | "card" | null;
+  grand_total?: number | null;
+  payment_method: "cash" | "card";
+  amount_given?: number | null;
+  change_due?: number | null;
+  split_mode?: "total" | "equal" | "items" | null;
+  split_count?: number | null;
+  voucher_discount_amount?: number | null;
+  voucher_codes?: string[] | null;
+  items: OrderItem[];
+  activity_log?: OrderLogEntry[] | null;
+  closed_at: string;
+  seated_at?: string | null;
+  deleted_at?: string | null;
+  reservation_id?: string | null;
+  guest_name?: string | null;
+  guest_phone?: string | null;
+  party_size?: number | null;
+  visit_source?: "reservation" | "walk_in" | "phone_call" | "online" | null;
+  service_channel?: "dine_in" | "takeaway" | null;
+};
+
+/**
+ * Fetch every matching sales row (paginated). Without `since`, returns full history.
+ * A bare `.select()` silently truncates at ~1000 newest rows and made older bills
+ * "disappear" from History / Summary.
+ */
 export async function fetchSales(since?: Date) {
-  let query = supabase.from("sales").select(SALES_COLUMNS).order("closed_at", { ascending: false });
-  if (since) query = query.gte("closed_at", since.toISOString());
-  return query;
+  const rows: SupabaseSaleRow[] = [];
+  let from = 0;
+
+  for (;;) {
+    let query = supabase
+      .from("sales")
+      .select(SALES_COLUMNS)
+      .order("closed_at", { ascending: false })
+      .range(from, from + SALES_PAGE_SIZE - 1);
+    if (since) query = query.gte("closed_at", since.toISOString());
+
+    const { data, error } = await query;
+    if (error) return { data: null, error };
+
+    const page = (data as SupabaseSaleRow[] | null) ?? [];
+    rows.push(...page);
+    if (page.length < SALES_PAGE_SIZE) break;
+    from += SALES_PAGE_SIZE;
+  }
+
+  return { data: rows, error: null };
 }
 
 /** Cancel / qty-reduce logs still on open (unpaid) tables. */
 export async function fetchOpenTableCancelLogs(since?: Date) {
-  let query = supabase
-    .from("table_activity_logs")
-    .select("id, table_label, item_name, action, staff_name, meta, created_at")
-    .in("action", ["cancel_item", "qty_reduced", "removed_from_order"])
-    .order("created_at", { ascending: false })
-    .limit(2000);
-  if (since) query = query.gte("created_at", since.toISOString());
-  const { data, error } = await query;
-  if (error) return { data: [] as const, error };
+  const pageSize = 1000;
+  const rows: Array<{
+    id: string;
+    table_label: string | null;
+    item_name: string | null;
+    action: string;
+    staff_name: string | null;
+    meta: Record<string, unknown> | null;
+    created_at: string;
+  }> = [];
+  let from = 0;
+
+  for (;;) {
+    let query = supabase
+      .from("table_activity_logs")
+      .select("id, table_label, item_name, action, staff_name, meta, created_at")
+      .in("action", ["cancel_item", "qty_reduced", "removed_from_order"])
+      .order("created_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (since) query = query.gte("created_at", since.toISOString());
+
+    const { data, error } = await query;
+    if (error) return { data: [] as const, error };
+
+    const page = data ?? [];
+    rows.push(
+      ...page.map((row) => ({
+        id: String(row.id),
+        table_label: (row.table_label as string | null) ?? null,
+        item_name: (row.item_name as string | null) ?? null,
+        action: String(row.action),
+        staff_name: (row.staff_name as string | null) ?? null,
+        meta: (row.meta as Record<string, unknown> | null) ?? null,
+        created_at: String(row.created_at),
+      })),
+    );
+    if (page.length < pageSize) break;
+    from += pageSize;
+  }
+
   return {
-    data: (data ?? []).map((row) => ({
-      id: String(row.id),
-      tableLabel: (row.table_label as string | null) ?? "",
-      itemName: (row.item_name as string | null) ?? "Item",
-      action: String(row.action),
-      staffName: (row.staff_name as string | null) ?? "Staff",
-      meta: (row.meta as Record<string, unknown> | null) ?? undefined,
-      createdAt: new Date(row.created_at as string),
+    data: rows.map((row) => ({
+      id: row.id,
+      tableLabel: row.table_label ?? "",
+      itemName: row.item_name ?? "Item",
+      action: row.action,
+      staffName: row.staff_name ?? "Staff",
+      meta: row.meta ?? undefined,
+      createdAt: new Date(row.created_at),
     })),
     error: null,
   };
@@ -655,36 +761,7 @@ export function mapStaffResponse(
   }));
 }
 
-export function mapSalesResponse(
-  data: {
-    id: string;
-    table_label: string | null;
-    staff_name: string | null;
-    subtotal: number;
-    discount_amount?: number | null;
-    tip: number;
-    tip_payment_method?: "cash" | "card" | null;
-    grand_total?: number | null;
-    payment_method: "cash" | "card";
-    amount_given?: number | null;
-    change_due?: number | null;
-    split_mode?: "total" | "equal" | "items" | null;
-    split_count?: number | null;
-    voucher_discount_amount?: number | null;
-    voucher_codes?: string[] | null;
-    items: OrderItem[];
-    activity_log?: OrderLogEntry[] | null;
-    closed_at: string;
-    seated_at?: string | null;
-    deleted_at?: string | null;
-    reservation_id?: string | null;
-    guest_name?: string | null;
-    guest_phone?: string | null;
-    party_size?: number | null;
-    visit_source?: "reservation" | "walk_in" | "phone_call" | "online" | null;
-    service_channel?: "dine_in" | "takeaway" | null;
-  }[] | null,
-): SaleRecord[] {
+export function mapSalesResponse(data: SupabaseSaleRow[] | null): SaleRecord[] {
   return (data ?? []).map((s) => ({
     id: s.id,
     tableLabel: s.table_label ?? "",

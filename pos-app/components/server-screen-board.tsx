@@ -136,11 +136,11 @@ function ServerScreenFooter({ language }: { language: LanguageCode }) {
   }, []);
 
   return (
-    <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-white/15 bg-[#0B0B0C] px-4 py-2.5 text-sm tabular-nums text-white/60 sm:px-5">
+    <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-white/15 bg-[#0B0B0C] px-4 py-2.5 text-sm tabular-nums text-white sm:px-5">
       <span className="min-w-0 truncate capitalize">
         {now ? formatServerScreenFooterDate(now, language) : "\u00a0"}
       </span>
-      <span className="shrink-0 text-base font-semibold tracking-wide text-white/80">
+      <span className="shrink-0 text-base font-semibold tracking-wide text-white">
         {now ? formatServerScreenFooterTime(now, language) : "\u00a0"}
       </span>
     </footer>
@@ -640,7 +640,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             <ArrowLeft className="h-4 w-4" />
             {translate("serverScreenHistoryBack")}
           </button>
-          <h1 className="text-xl font-semibold uppercase tracking-[0.14em] text-[#C9A88B] sm:text-2xl">
+          <h1 className="text-xl font-semibold uppercase tracking-[0.14em] text-white sm:text-2xl">
             {translate("history")}
           </h1>
           <span className="text-sm tabular-nums text-white/40">{historyRows.length}</span>
@@ -708,7 +708,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             cycleLanguage();
           }}
         >
-          <h1 className="text-xl font-semibold uppercase tracking-[0.14em] text-[#C9A88B] sm:text-2xl">
+          <h1 className="text-xl font-semibold uppercase tracking-[0.14em] text-white sm:text-2xl">
             {translate("preparing")}
           </h1>
           <span className="text-sm tabular-nums text-white/40">

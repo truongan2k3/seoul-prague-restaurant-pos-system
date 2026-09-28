@@ -28,6 +28,11 @@ import {
   parseVoucherConfig,
   voucherConfigToDb,
 } from "@/lib/voucher";
+import {
+  DEFAULT_SERVER_SCREEN_CONFIG,
+  parseServerScreenConfig,
+  serverScreenConfigToDb,
+} from "@/lib/server-screen";
 import { parseReservationReminderMode } from "@/lib/reservation-reminder";
 import { DEFAULT_RESERVATION_OPERATING_HOURS } from "@/lib/reservation-slots";
 import {
@@ -193,6 +198,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     message: { ...DEFAULT_GUEST_ANNOUNCEMENT_BANNER.message },
   },
   voucher: { ...DEFAULT_VOUCHER_CONFIG },
+  serverScreen: {
+    ...DEFAULT_SERVER_SCREEN_CONFIG,
+    languages: [...DEFAULT_SERVER_SCREEN_CONFIG.languages],
+  },
   hiddenSidebarNav: [],
 };
 
@@ -274,6 +283,7 @@ type SettingsRow = {
   guest_chat_config?: unknown;
   guest_announcement_banner?: unknown;
   voucher_config?: unknown;
+  server_screen_config?: unknown;
   sidebar_nav_hidden?: unknown;
 };
 
@@ -552,6 +562,7 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     guestChat: parseGuestChatConfig(row.guest_chat_config),
     guestAnnouncementBanner: parseGuestAnnouncementBanner(row.guest_announcement_banner),
     voucher: parseVoucherConfig(row.voucher_config),
+    serverScreen: parseServerScreenConfig(row.server_screen_config),
     hiddenSidebarNav: parseHiddenSidebarNav(row.sidebar_nav_hidden),
   };
 }
@@ -723,6 +734,9 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   }
   if (partial.voucher !== undefined) {
     payload.voucher_config = voucherConfigToDb(partial.voucher);
+  }
+  if (partial.serverScreen !== undefined) {
+    payload.server_screen_config = serverScreenConfigToDb(partial.serverScreen);
   }
   if (partial.hiddenSidebarNav !== undefined) {
     payload.sidebar_nav_hidden = parseHiddenSidebarNav(partial.hiddenSidebarNav);
@@ -955,6 +969,7 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "guestChat"
     | "guestAnnouncementBanner"
     | "voucher"
+    | "serverScreen"
     | "hiddenSidebarNav"
   >;
 
@@ -1039,6 +1054,10 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
       message: { ...settings.guestAnnouncementBanner.message },
     },
     voucher: { ...settings.voucher },
+    serverScreen: {
+      ...settings.serverScreen,
+      languages: [...settings.serverScreen.languages],
+    },
     hiddenSidebarNav: [...settings.hiddenSidebarNav],
   };
 }

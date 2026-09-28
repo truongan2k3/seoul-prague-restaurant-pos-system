@@ -47,7 +47,9 @@ import { MarqueeSettingsEditor } from "@/components/marquee-settings-editor";
 import { StaffView } from "@/components/staff-view";
 import { ManagerPasscodeChangeForm } from "@/components/manager-passcode-change-form";
 import { VoucherSettingsFields } from "@/components/voucher-settings-fields";
+import { ServerScreenSettingsEditor } from "@/components/server-screen-settings-editor";
 import type { TranslationKey } from "@/lib/i18n/translations";
+import { DEFAULT_SERVER_SCREEN_CONFIG } from "@/lib/server-screen";
 import { pingPrintBridge } from "@/src/lib/print-bridge-client";
 import type { NetworkPrinter, PrinterRole, ReceiptFontFamily, WeekdayKey } from "@/lib/types";
 import { formatPrinterEndpoint } from "@/lib/print-dispatch";
@@ -79,6 +81,7 @@ type SettingsTabId =
   | "vouchers"
   | "sounds"
   | "cfd"
+  | "serverScreen"
   | "devices"
   | "general"
   | "staff"
@@ -156,6 +159,7 @@ export function SettingsView({
         { id: "devices", labelKey: "settingsTabDevices" },
         { id: "sounds", labelKey: "settingsTabSounds" },
         { id: "cfd", labelKey: "settingsTabCfd" },
+        { id: "serverScreen", labelKey: "settingsTabServerScreen" },
       ],
     },
     {
@@ -2036,6 +2040,21 @@ export function SettingsView({
                 />
               </div>
             </div>
+          </section>
+        </div>
+        )}
+
+        {activeSettingsTab === "serverScreen" && (
+        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6">
+          <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+            <ServerScreenSettingsEditor
+              value={draft.serverScreen ?? {
+                ...DEFAULT_SERVER_SCREEN_CONFIG,
+                languages: [...DEFAULT_SERVER_SCREEN_CONFIG.languages],
+              }}
+              onChange={(serverScreen) => updateDraft("serverScreen", serverScreen)}
+              translate={translate}
+            />
           </section>
         </div>
         )}

@@ -31,6 +31,7 @@ import {
   SummaryGuestListButton,
   SummaryGuestListModal,
 } from "@/components/summary-guest-list-modal";
+import { SummaryPrepTimeSection } from "@/components/summary-prep-time-section";
 
 const PERIOD_OPTIONS = ["today", "yesterday", "week", "month", "custom"] as const;
 
@@ -515,6 +516,8 @@ export function SummaryView({
               </div>
             )}
           </section>
+
+          <SummaryPrepTimeSection />
         </div>
       </div>
     </div>

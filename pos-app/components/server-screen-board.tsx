@@ -10,6 +10,7 @@ import {
 } from "react";
 import { ArrowLeft, ArrowRight, History, Loader2, RefreshCw } from "lucide-react";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
+import { ServerScreenPrepStatsPanel } from "@/components/server-screen-prep-stats";
 import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
 import { useStationScreen } from "@/contexts/station-screen-context";
@@ -25,6 +26,15 @@ import {
   playServerScreenNewOrderAlert,
   unlockNotificationAudio,
 } from "@/lib/notification-sound";
+import {
+  computePrepTimeStats,
+  emptyPrepTimeStats,
+  PREP_STATS_EMPTY_WAIT_MS,
+  PREP_STATS_GAP_MS,
+  PREP_STATS_VISIBLE_MS,
+  venueTodayRange,
+  type PrepTimeStats,
+} from "@/lib/prep-time-stats";
 import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
 import {
   applyStationOrderItemRealtimeEvent,
@@ -58,6 +68,7 @@ import {
 import {
   fetchStationOrderItems,
   fetchTableSummaries,
+  fetchPrepTimeSamples,
   loadMenuItemsResolved,
   mapOrderItemRow,
   mapTablesResponse,
@@ -245,6 +256,10 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const [animatingOut, setAnimatingOut] = useState<Set<string>>(new Set());
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [bootstrapped, setBootstrapped] = useState(false);
+  const [prepStats, setPrepStats] = useState<PrepTimeStats>(() => emptyPrepTimeStats());
+  const [prepStatsLoading, setPrepStatsLoading] = useState(false);
+  const [prepStatsVisible, setPrepStatsVisible] = useState(false);
+  const [prepStatsFadingOut, setPrepStatsFadingOut] = useState(false);
   const rotateResetRef = useRef(Date.now());
   const languageRef = useRef(language);
   const languagesRef = useRef(languages);
@@ -254,6 +269,10 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const preparingSeededRef = useRef(false);
   const lastAlertAtRef = useRef(0);
   const playNewOrderAlertRef = useRef<() => void>(() => {});
+  const prepStatsPhaseRef = useRef<"idle" | "waiting" | "showing" | "gap">("idle");
+  const prepStatsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prepStatsCacheRef = useRef<{ key: string; stats: PrepTimeStats; at: number } | null>(null);
+  const tableLabelByIdRef = useRef(new Map<string, string>());
 
   languageRef.current = language;
   languagesRef.current = languages;
@@ -525,6 +544,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     for (const table of tables) map.set(table.id, table.label);
     return map;
   }, [tables]);
+  tableLabelByIdRef.current = tableLabelById;
 
   const itemsByTable = useMemo(() => {
     const map = new Map<string, StationOrderItem[]>();
@@ -613,6 +633,110 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
 
     return rows.sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
   }, [items, menuItems, language, tableLabelById, companionDone]);
+
+  const clearPrepStatsTimer = useCallback(() => {
+    if (prepStatsTimerRef.current) {
+      clearTimeout(prepStatsTimerRef.current);
+      prepStatsTimerRef.current = null;
+    }
+  }, []);
+
+  const hidePrepStatsImmediate = useCallback(() => {
+    clearPrepStatsTimer();
+    prepStatsPhaseRef.current = "idle";
+    setPrepStatsVisible(false);
+    setPrepStatsFadingOut(false);
+  }, [clearPrepStatsTimer]);
+
+  const loadTodayPrepStats = useCallback(async () => {
+    const { dateIso, startIso, endExclusiveIso } = venueTodayRange();
+    const cacheKey = `${station}:${dateIso}`;
+    const cached = prepStatsCacheRef.current;
+    if (cached && cached.key === cacheKey && Date.now() - cached.at < 90_000) {
+      setPrepStats(cached.stats);
+      return cached.stats;
+    }
+
+    setPrepStatsLoading(true);
+    try {
+      const { data, error } = await fetchPrepTimeSamples({
+        startIso,
+        endExclusiveIso,
+        station,
+        tableLabelById: tableLabelByIdRef.current,
+      });
+      if (error) {
+        console.warn("[PrepStats] Failed:", error.message);
+        const empty = emptyPrepTimeStats();
+        setPrepStats(empty);
+        return empty;
+      }
+      const next = computePrepTimeStats(data);
+      prepStatsCacheRef.current = { key: cacheKey, stats: next, at: Date.now() };
+      setPrepStats(next);
+      return next;
+    } finally {
+      setPrepStatsLoading(false);
+    }
+  }, [station]);
+  const loadTodayPrepStatsRef = useRef(loadTodayPrepStats);
+  loadTodayPrepStatsRef.current = loadTodayPrepStats;
+
+  const boardEmpty = preparingRows.length === 0;
+
+  // Empty-board cycle: wait 2m → show 1m → fade → wait 5m → repeat.
+  useEffect(() => {
+    if (!boardEmpty) {
+      hidePrepStatsImmediate();
+      return;
+    }
+
+    let cancelled = false;
+
+    const schedule = (ms: number, fn: () => void) => {
+      clearPrepStatsTimer();
+      prepStatsTimerRef.current = setTimeout(() => {
+        prepStatsTimerRef.current = null;
+        if (!cancelled) fn();
+      }, ms);
+    };
+
+    const startGap = () => {
+      prepStatsPhaseRef.current = "gap";
+      setPrepStatsFadingOut(true);
+      schedule(700, () => {
+        setPrepStatsVisible(false);
+        setPrepStatsFadingOut(false);
+        schedule(PREP_STATS_GAP_MS, () => {
+          void showStats();
+        });
+      });
+    };
+
+    const showStats = async () => {
+      prepStatsPhaseRef.current = "showing";
+      await loadTodayPrepStatsRef.current();
+      if (cancelled) return;
+      setPrepStatsFadingOut(false);
+      setPrepStatsVisible(true);
+      schedule(PREP_STATS_VISIBLE_MS, startGap);
+    };
+
+    prepStatsPhaseRef.current = "waiting";
+    schedule(PREP_STATS_EMPTY_WAIT_MS, () => {
+      void showStats();
+    });
+
+    return () => {
+      cancelled = true;
+      clearPrepStatsTimer();
+      prepStatsPhaseRef.current = "idle";
+    };
+  }, [boardEmpty, clearPrepStatsTimer, hidePrepStatsImmediate]);
+
+  useEffect(() => {
+    return () => clearPrepStatsTimer();
+  }, [clearPrepStatsTimer]);
 
   useEffect(() => {
     const valid = new Set(preparingRows.map((row) => row.key));
@@ -855,78 +979,96 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
           </span>
         </header>
 
-        <div data-server-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          {preparingRows.length === 0 ? (
-            <p className="px-4 py-10 text-center text-base text-white/35">{translate("noOrders")}</p>
-          ) : (
-            <ul className="divide-y divide-white/[0.06]">
-              {preparingRows.map((row) => {
-                const selected = selectedKeys.has(row.key);
-                const age = preparationAgeMinutes(row.item.createdAt, nowMs);
-                const tone = preparationHighlightTone(age);
-                const leaving = animatingOut.has(row.key);
-                const name =
-                  row.kind === "companion"
-                    ? row.companionName ?? ""
-                    : orderItemDisplayName(row.item, menuItems, language);
-                const note = row.kind === "item" ? itemNote(row.item, language) : null;
+        <div className="relative min-h-0 flex-1">
+          <div data-server-scroll className="absolute inset-0 overflow-y-auto overscroll-contain">
+            {preparingRows.length === 0 ? (
+              <p className="px-4 py-10 text-center text-base text-white/35">{translate("noOrders")}</p>
+            ) : (
+              <ul className="divide-y divide-white/[0.06]">
+                {preparingRows.map((row) => {
+                  const selected = selectedKeys.has(row.key);
+                  const age = preparationAgeMinutes(row.item.createdAt, nowMs);
+                  const tone = preparationHighlightTone(age);
+                  const leaving = animatingOut.has(row.key);
+                  const name =
+                    row.kind === "companion"
+                      ? row.companionName ?? ""
+                      : orderItemDisplayName(row.item, menuItems, language);
+                  const note = row.kind === "item" ? itemNote(row.item, language) : null;
 
-                return (
-                  <li key={row.key} className={selected ? "bg-amber-300/85" : undefined}>
-                    <button
-                      type="button"
-                      data-server-interactive
-                      onClick={() => toggleSelect(row.key)}
-                      className={`flex w-full flex-nowrap items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ${prepRowClass(
-                        tone,
-                        selected,
-                      )} ${leaving ? "translate-x-4 opacity-0 transition-all duration-200" : ""} ${
-                        row.kind === "companion" ? "pl-8" : ""
-                      }`}
-                    >
-                      <span
-                        className={`min-w-0 flex-1 truncate text-[1.35rem] font-semibold leading-tight sm:text-[1.5rem] ${
-                          row.kind === "companion" ? "font-medium" : ""
-                        }`}
-                        title={name}
-                      >
-                        {row.kind === "companion" ? (
-                          <span className="mr-1.5 opacity-50">↳</span>
-                        ) : null}
-                        {name}
-                      </span>
-                      <span
-                        className={`shrink-0 whitespace-nowrap text-sm tabular-nums sm:text-[0.95rem] ${
-                          selected ? "text-zinc-800/75" : "text-white/45"
-                        }`}
-                      >
-                        {formatPreparationMinutes(row.item.createdAt, nowMs, minLabel)}
-                      </span>
-                      <span
-                        className={`shrink-0 whitespace-nowrap text-right text-base font-bold tabular-nums sm:text-lg ${
-                          selected ? "text-zinc-950" : "text-[#E8D5C4]"
-                        }`}
-                      >
-                        {row.tableLabel}
-                      </span>
-                    </button>
-                    {note ? (
+                  return (
+                    <li key={row.key} className={selected ? "bg-amber-300/85" : undefined}>
                       <button
                         type="button"
                         data-server-interactive
                         onClick={() => toggleSelect(row.key)}
-                        className={`w-full px-4 pb-2.5 text-left text-sm leading-relaxed whitespace-pre-wrap break-words ${
-                          row.kind === "companion" ? "pl-8" : "pl-4"
-                        } ${selected ? "text-zinc-800" : "text-white/55"}`}
+                        className={`flex w-full flex-nowrap items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ${prepRowClass(
+                          tone,
+                          selected,
+                        )} ${leaving ? "translate-x-4 opacity-0 transition-all duration-200" : ""} ${
+                          row.kind === "companion" ? "pl-8" : ""
+                        }`}
                       >
-                        {note}
+                        <span
+                          className={`min-w-0 flex-1 truncate text-[1.35rem] font-semibold leading-tight sm:text-[1.5rem] ${
+                            row.kind === "companion" ? "font-medium" : ""
+                          }`}
+                          title={name}
+                        >
+                          {row.kind === "companion" ? (
+                            <span className="mr-1.5 opacity-50">↳</span>
+                          ) : null}
+                          {name}
+                        </span>
+                        <span
+                          className={`shrink-0 whitespace-nowrap text-sm tabular-nums sm:text-[0.95rem] ${
+                            selected ? "text-zinc-800/75" : "text-white/45"
+                          }`}
+                        >
+                          {formatPreparationMinutes(row.item.createdAt, nowMs, minLabel)}
+                        </span>
+                        <span
+                          className={`shrink-0 whitespace-nowrap text-right text-base font-bold tabular-nums sm:text-lg ${
+                            selected ? "text-zinc-950" : "text-[#E8D5C4]"
+                          }`}
+                        >
+                          {row.tableLabel}
+                        </span>
                       </button>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+                      {note ? (
+                        <button
+                          type="button"
+                          data-server-interactive
+                          onClick={() => toggleSelect(row.key)}
+                          className={`w-full px-4 pb-2.5 text-left text-sm leading-relaxed whitespace-pre-wrap break-words ${
+                            row.kind === "companion" ? "pl-8" : "pl-4"
+                          } ${selected ? "text-zinc-800" : "text-white/55"}`}
+                        >
+                          {note}
+                        </button>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          <ServerScreenPrepStatsPanel
+            stats={prepStats}
+            loading={prepStatsLoading}
+            visible={prepStatsVisible}
+            fadingOut={prepStatsFadingOut}
+            title={translate("prepStatsTodayTitle")}
+            averageLabel={translate("prepStatsAverage")}
+            fastestLabel={translate("prepStatsFastest")}
+            slowestLabel={translate("prepStatsSlowest")}
+            fastestItemsLabel={translate("prepStatsFastestItems")}
+            slowestItemsLabel={translate("prepStatsSlowestItems")}
+            emptyLabel={translate("prepStatsNoData")}
+            sampleCountLabel={translate("prepStatsSampleCount")}
+            minLabel={minLabel}
+          />
         </div>
       </section>
 

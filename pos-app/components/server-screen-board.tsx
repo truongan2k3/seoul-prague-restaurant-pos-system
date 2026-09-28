@@ -20,6 +20,7 @@ import { isGrillGuestPrepOrder } from "@/lib/grill-guest-count";
 import { usesKitchenScreen } from "@/lib/kitchen-fulfillment-mode";
 import { orderItemDisplayName } from "@/lib/menu-display";
 import {
+  isNotificationAudioUnlocked,
   playCustomAlertSound,
   unlockNotificationAudio,
 } from "@/lib/notification-sound";
@@ -46,6 +47,7 @@ import {
   shouldShowGrillCompanions,
   type PrepHighlightTone,
 } from "@/lib/server-screen";
+import { normalizeOrderItemStatus } from "@/lib/order-status";
 import type { LanguageCode, MenuItem, RestaurantTable, Station } from "@/lib/types";
 import {
   autoFirePendingItems,
@@ -59,10 +61,13 @@ import {
   mapOrderItemRow,
   mapTablesResponse,
   subscribeToMenuChanges,
+  subscribeToOrderItemInserts,
   type SupabaseOrderItemRow,
 } from "@/src/lib/supabase-data";
 
 const COMPANION_DONE_KEY = "pos-server-screen-companion-done";
+/** Collapse multi-line inserts from one Send into a single alert. */
+const NEW_ORDER_SOUND_DEBOUNCE_MS = 700;
 
 type BoardRow = {
   key: string;
@@ -238,10 +243,13 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [animatingOut, setAnimatingOut] = useState<Set<string>>(new Set());
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
   const rotateResetRef = useRef(Date.now());
   const languageRef = useRef(language);
   const languagesRef = useRef(languages);
-  const seenPreparingRef = useRef<Set<string> | null>(null);
+  const newOrderSoundTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingNewOrderSoundRef = useRef(false);
+  const playStationSoundRef = useRef<(variant: "newOrder" | "ready") => void>(() => {});
 
   languageRef.current = language;
   languagesRef.current = languages;
@@ -254,14 +262,49 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     (variant: "newOrder" | "ready") => {
       if (!soundKitchenEnabled) return;
       unlockNotificationAudio();
+      if (!isNotificationAudioUnlocked()) {
+        if (variant === "newOrder") pendingNewOrderSoundRef.current = true;
+      }
       const url =
         variant === "newOrder"
           ? settings.soundConfigs.newOrder
           : settings.soundConfigs.itemReady;
       playCustomAlertSound(url, variant === "newOrder" ? "newOrder" : "ready");
+      if (isNotificationAudioUnlocked()) setAudioUnlocked(true);
     },
     [soundKitchenEnabled, settings.soundConfigs.newOrder, settings.soundConfigs.itemReady],
   );
+  playStationSoundRef.current = playStationSound;
+
+  const flushPendingNewOrderSound = useCallback(() => {
+    unlockNotificationAudio();
+    if (isNotificationAudioUnlocked()) setAudioUnlocked(true);
+    if (!pendingNewOrderSoundRef.current) return;
+    if (!isNotificationAudioUnlocked()) return;
+    pendingNewOrderSoundRef.current = false;
+    playStationSoundRef.current("newOrder");
+  }, []);
+
+  // Browser autoplay: unlock on any interaction; replay missed new-order alert once unlocked.
+  useEffect(() => {
+    const unlock = () => flushPendingNewOrderSound();
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    window.addEventListener("touchstart", unlock, { passive: true });
+    const poll = window.setInterval(() => {
+      if (isNotificationAudioUnlocked()) {
+        setAudioUnlocked(true);
+        flushPendingNewOrderSound();
+        window.clearInterval(poll);
+      }
+    }, 800);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("touchstart", unlock);
+      window.clearInterval(poll);
+    };
+  }, [flushPendingNewOrderSound]);
 
   useEffect(() => {
     setCompanionDone(readCompanionDone(station));
@@ -375,24 +418,41 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     };
   }, [station, reloadStationItems]);
 
+  // Direct INSERT listener — more reliable than diffing React state (and avoids
+  // false positives on first load / soft refresh).
   useEffect(() => {
-    const pendingIds = new Set(
-      items.filter((item) => isPreparingColumnVisible(item) && item.id).map((item) => item.id!),
-    );
-    if (seenPreparingRef.current == null) {
-      seenPreparingRef.current = pendingIds;
-      return;
-    }
-    let hasNew = false;
-    for (const id of pendingIds) {
-      if (!seenPreparingRef.current.has(id)) {
-        hasNew = true;
-        break;
+    if (!soundKitchenEnabled) return;
+
+    const scheduleNewOrderSound = () => {
+      if (newOrderSoundTimerRef.current) clearTimeout(newOrderSoundTimerRef.current);
+      newOrderSoundTimerRef.current = setTimeout(() => {
+        newOrderSoundTimerRef.current = null;
+        playStationSoundRef.current("newOrder");
+      }, NEW_ORDER_SOUND_DEBOUNCE_MS);
+    };
+
+    return subscribeToOrderItemInserts((row) => {
+      if (row.station !== station) return;
+      if (row.hide_on_kds) return;
+      if (
+        row.kitchen_status === "ready" ||
+        row.kitchen_status === "served" ||
+        row.kitchen_status === "cancelled" ||
+        row.kitchen_status === "archived"
+      ) {
+        return;
       }
-    }
-    if (hasNew) playStationSound("newOrder");
-    seenPreparingRef.current = pendingIds;
-  }, [items, playStationSound]);
+      const status = normalizeOrderItemStatus(row.status);
+      if (status !== "preparing" && status !== "pending") return;
+      scheduleNewOrderSound();
+    }, `server-screen-new-order-sound-${station}`);
+  }, [station, soundKitchenEnabled]);
+
+  useEffect(() => {
+    return () => {
+      if (newOrderSoundTimerRef.current) clearTimeout(newOrderSoundTimerRef.current);
+    };
+  }, []);
 
   const tableLabelById = useMemo(() => {
     const map = new Map<string, string>();
@@ -600,6 +660,8 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   }, [setLanguage]);
 
   const onBackgroundPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    unlockNotificationAudio();
+    flushPendingNewOrderSound();
     const target = event.target as HTMLElement | null;
     if (!target) return;
     // Don't steal taps from buttons / toolbar / list rows.
@@ -698,6 +760,21 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   return (
     <div className={shellClass} onPointerDown={onBackgroundPointerDown}>
       <AnnouncementMarquee surface={station === "kitchen" ? "kds" : "bar"} tone="dark" />
+
+      {soundKitchenEnabled && !audioUnlocked ? (
+        <button
+          type="button"
+          data-server-interactive
+          onClick={() => {
+            unlockNotificationAudio();
+            flushPendingNewOrderSound();
+            setAudioUnlocked(isNotificationAudioUnlocked());
+          }}
+          className="shrink-0 border-b border-amber-400/30 bg-amber-500/15 px-4 py-2.5 text-center text-sm font-medium text-amber-100 transition hover:bg-amber-500/25"
+        >
+          {translate("serverScreenEnableSound")}
+        </button>
+      ) : null}
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header

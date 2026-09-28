@@ -29,7 +29,6 @@ import {
 } from "@/lib/summary-analytics";
 import { formatHistoryDateTime, resolveGuestSeatedAt } from "@/lib/sale-history";
 import { filterButtonClass, paymentFilterClass } from "@/lib/theme-classes";
-import { POS_EGRESS } from "@/lib/egress-config";
 import type { MenuItem, SaleRecord } from "@/lib/types";
 import {
   fetchOpenTableCancelLogs,
@@ -105,12 +104,10 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   const loadSales = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const since = new Date();
-    since.setDate(since.getDate() - POS_EGRESS.HISTORY_SALES_DAYS);
-    since.setHours(0, 0, 0, 0);
+    // Full history — fetchSales pages past the PostgREST 1000-row cap.
     const [{ data, error: fetchError }, openResult] = await Promise.all([
-      fetchSales(since),
-      fetchOpenTableCancelLogs(since),
+      fetchSales(),
+      fetchOpenTableCancelLogs(),
     ]);
     if (fetchError) {
       setError(fetchError.message);

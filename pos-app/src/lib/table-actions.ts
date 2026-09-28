@@ -827,18 +827,34 @@ export async function checkoutTable(
 
 /**
  * When staff moves/merges a floor table, keep checked-in guest data with the party:
- * reservation.table_id, applied vouchers, and activity logs.
+ * reservation primary/secondary table links, applied vouchers, and activity logs.
  */
 async function reassignCheckedInGuestData(fromTableId: string, toTableId: string) {
   if (!fromTableId || !toTableId || fromTableId === toTableId) return;
 
   const now = new Date().toISOString();
 
-  await supabase
+  const { data: linked } = await supabase
     .from("reservations")
-    .update({ table_id: toTableId, updated_at: now })
-    .eq("table_id", fromTableId)
-    .eq("status", "checked_in");
+    .select("id, table_id, secondary_table_id")
+    .eq("status", "checked_in")
+    .or(`table_id.eq.${fromTableId},secondary_table_id.eq.${fromTableId}`);
+
+  for (const row of linked ?? []) {
+    let primary = row.table_id === fromTableId ? toTableId : row.table_id;
+    let secondary =
+      row.secondary_table_id === fromTableId ? toTableId : row.secondary_table_id;
+    if (secondary && secondary === primary) secondary = null;
+
+    await supabase
+      .from("reservations")
+      .update({
+        table_id: primary,
+        secondary_table_id: secondary,
+        updated_at: now,
+      })
+      .eq("id", row.id);
+  }
 
   await supabase
     .from("voucher_codes")
@@ -882,21 +898,33 @@ export async function mergeTables(sourceIds: string[], targetId: string) {
   for (const sourceId of sourceIds) {
     if (sourceId === targetId) continue;
     const { data: source } = await supabase.from("tables").select("*").eq("id", sourceId).single();
-    if (!source?.orders) continue;
+    if (!source) continue;
 
-    const { data: target } = await supabase.from("tables").select("*").eq("id", targetId).single();
-    const mergedOrders = [...(target?.orders ?? []), ...(source.orders ?? [])];
+    const sourceOrders = Array.isArray(source.orders) ? source.orders : [];
+    const hasOrders = sourceOrders.length > 0;
+    const sourceOccupied = source.status !== "empty";
 
-    await supabase.from("order_items").update({ table_id: targetId }).eq("table_id", sourceId);
+    // Always move linked reservation / voucher / activity onto the surviving table,
+    // even when the source has no items yet (common for dual-table large parties).
     await reassignCheckedInGuestData(sourceId, targetId);
-    await supabase
-      .from("tables")
-      .update({
-        status: "waiting",
-        orders: mergedOrders,
-        occupied_at: target?.occupied_at ?? source.occupied_at,
-      })
-      .eq("id", targetId);
+
+    if (!hasOrders && !sourceOccupied) continue;
+
+    if (hasOrders) {
+      const { data: target } = await supabase.from("tables").select("*").eq("id", targetId).single();
+      const mergedOrders = [...(target?.orders ?? []), ...sourceOrders];
+
+      await supabase.from("order_items").update({ table_id: targetId }).eq("table_id", sourceId);
+      await supabase
+        .from("tables")
+        .update({
+          status: "waiting",
+          orders: mergedOrders,
+          occupied_at: target?.occupied_at ?? source.occupied_at,
+        })
+        .eq("id", targetId);
+    }
+
     await clearTable(sourceId);
   }
   // Rebuild JSON from live unit rows so IDs stay consistent (avoids false cancel logs later).

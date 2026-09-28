@@ -36,7 +36,10 @@ import {
 } from "@/lib/reservation-undo";
 import { pickEventTypeLabel, parseReservationBbqNotes } from "@/lib/reservation-guest-form";
 import type { ReservationRecord, RestaurantTable } from "@/lib/types";
-import { ReservationTableSelect, isOccupiedTable } from "@/components/reservation-table-select";
+import {
+  ReservationDualTableSelect,
+  isAnyOccupiedTable,
+} from "@/components/reservation-table-select";
 import { ReservationUndoBar } from "@/components/reservation-undo-bar";
 import { PartySizeStepper } from "@/components/reservation-party-size-stepper";
 import { ReservationDateTimeFields } from "@/components/reservation-datetime-fields";
@@ -46,9 +49,9 @@ import {
   type StaffBookingSource,
 } from "@/components/reservation-source-ui";
 import {
-  assignReservationTable,
+  assignReservationTables,
   cancelReservation,
-  checkInReservationWithTable,
+  checkInReservationWithTables,
   createReservation,
   fetchReservationSnapshot,
   fetchReservations,
@@ -61,6 +64,7 @@ import {
   subscribeToReservationChanges,
   updateReservationDetails,
 } from "@/src/lib/reservation-actions";
+import { formatReservationTableLabels } from "@/lib/reservation-tables";
 import { fetchGuestVisitProfile } from "@/src/lib/guest-history-actions";
 import { sendCfdEvent } from "@/lib/cfd-display";
 
@@ -201,8 +205,8 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const [formTableId, setFormTableId] = useState("");
   const [formEventType, setFormEventType] = useState("");
   const [formSource, setFormSource] = useState<StaffBookingSource>("reservation");
-  const [assignTableId, setAssignTableId] = useState("");
-  const [checkInTableId, setCheckInTableId] = useState("");
+  const [assignTableIds, setAssignTableIds] = useState<string[]>([]);
+  const [checkInTableIds, setCheckInTableIds] = useState<string[]>([]);
   const [undoEntry, setUndoEntry] = useState<ReservationUndoEntry | null>(null);
   const [undoBusy, setUndoBusy] = useState(false);
 
@@ -309,8 +313,8 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     [tables],
   );
 
-  const assignOccupied = assignTableId ? isOccupiedTable(tables, assignTableId) : false;
-  const checkInOccupied = checkInTableId ? isOccupiedTable(tables, checkInTableId) : false;
+  const assignOccupied = isAnyOccupiedTable(tables, assignTableIds);
+  const checkInOccupied = isAnyOccupiedTable(tables, checkInTableIds);
 
   const queueUndo = useCallback(
     (entry: Omit<ReservationUndoEntry, "expiresAt">) => {
@@ -334,13 +338,21 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       return;
     }
 
-    if (entry.table) {
-      const { error: tableError } = await restoreTableSnapshot(entry.table);
-      if (tableError) {
-        setUndoBusy(false);
-        setError(translate("resUndoFailed"));
-        setUndoEntry(null);
-        return;
+    const tableSnapshots = [
+      ...(entry.tables ?? []),
+      ...(entry.table && !(entry.tables ?? []).some((row) => row.id === entry.table?.id)
+        ? [entry.table]
+        : []),
+    ];
+    if (tableSnapshots.length > 0) {
+      for (const snapshot of tableSnapshots) {
+        const { error: tableError } = await restoreTableSnapshot(snapshot);
+        if (tableError) {
+          setUndoBusy(false);
+          setError(translate("resUndoFailed"));
+          setUndoEntry(null);
+          return;
+        }
       }
       onRefreshTables?.();
     }
@@ -443,7 +455,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   };
 
   const handleAssign = async () => {
-    if (!assignTarget || !assignTableId) return;
+    if (!assignTarget || assignTableIds.length === 0) return;
 
     const snapshot = await fetchReservationSnapshot(assignTarget.id);
     if (!snapshot) {
@@ -452,7 +464,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     }
 
     setBusyId(assignTarget.id);
-    const { error: assignError } = await assignReservationTable(assignTarget.id, assignTableId, {
+    const { error: assignError } = await assignReservationTables(assignTarget.id, assignTableIds, {
       allowOccupied: assignOccupied,
     });
     setBusyId(null);
@@ -468,12 +480,12 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       reservation: snapshot,
     });
     setAssignTarget(null);
-    setAssignTableId("");
+    setAssignTableIds([]);
     void loadReservations();
   };
 
   const handleCheckIn = async () => {
-    if (!checkInTarget || !checkInTableId) return;
+    if (!checkInTarget || checkInTableIds.length === 0) return;
 
     const snapshot = await fetchReservationSnapshot(checkInTarget.id);
     if (!snapshot) {
@@ -481,7 +493,13 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       return;
     }
 
-    const tableSnapshot = checkInOccupied ? undefined : (await fetchTableSnapshot(checkInTableId)) ?? undefined;
+    const tableSnapshots: Awaited<ReturnType<typeof fetchTableSnapshot>>[] = [];
+    if (!checkInOccupied) {
+      for (const tableId of checkInTableIds) {
+        const snap = await fetchTableSnapshot(tableId);
+        if (snap) tableSnapshots.push(snap);
+      }
+    }
 
     const { data: visitProfile } = await fetchGuestVisitProfile({
       email: checkInTarget.guestEmail,
@@ -491,9 +509,9 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     });
 
     setBusyId(checkInTarget.id);
-    const { error: checkInError } = await checkInReservationWithTable(
+    const { error: checkInError } = await checkInReservationWithTables(
       checkInTarget.id,
-      checkInTableId,
+      checkInTableIds,
       { allowOccupied: checkInOccupied },
     );
     setBusyId(null);
@@ -503,22 +521,24 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       return;
     }
 
-    const assignedTable = tables.find((table) => table.id === checkInTableId);
+    const labels = checkInTableIds
+      .map((id) => tables.find((table) => table.id === id)?.label)
+      .filter(Boolean);
     void sendCfdEvent("GUEST_WELCOME", {
       reservationId: checkInTarget.id,
       guestName: checkInTarget.guestName,
       isReturning: visitProfile.isReturning,
-      tableLabel: assignedTable?.label ?? checkInTarget.tableLabel ?? null,
+      tableLabel: labels.join(" · ") || checkInTarget.tableLabel || null,
     });
 
     queueUndo({
       id: `${checkInTarget.id}-checkin-${Date.now()}`,
       action: "check_in",
       reservation: snapshot,
-      table: tableSnapshot,
+      tables: tableSnapshots.filter((row): row is NonNullable<typeof row> => row != null),
     });
     setCheckInTarget(null);
-    setCheckInTableId("");
+    setCheckInTableIds([]);
     void loadReservations();
     onRefreshTables?.();
   };
@@ -757,7 +777,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                         {row.guestPhone ? ` · ${row.guestPhone}` : ""}
                         {row.bookingCode ? ` · ${row.bookingCode}` : ""}
                       </p>
-                      {row.tableLabel && (
+                      {formatReservationTableLabels(row) ? (
                         <p
                           className={`mt-1 inline-flex items-center gap-1 text-sm font-medium ${
                             row.status === "checked_in"
@@ -767,10 +787,10 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                         >
                           <MapPin className="h-4 w-4" />
                           {row.status === "checked_in"
-                            ? `${translate("table")} ${row.tableLabel}`
-                            : `${translate("resTablePlanned")}: ${row.tableLabel}`}
+                            ? `${translate("table")} ${formatReservationTableLabels(row)}`
+                            : `${translate("resTablePlanned")}: ${formatReservationTableLabels(row)}`}
                         </p>
-                      )}
+                      ) : null}
                       {row.eventType ? (
                         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                           {pickEventTypeLabel(
@@ -857,7 +877,9 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           disabled={busyId === row.id}
                           onClick={() => {
                             setCheckInTarget(row);
-                            setCheckInTableId(row.tableId ?? "");
+                            setCheckInTableIds(
+                              [row.tableId, row.secondaryTableId].filter(Boolean) as string[],
+                            );
                           }}
                           className="rounded-md bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-sky-500 sm:rounded-lg sm:px-3 sm:py-1.5 sm:text-xs"
                         >
@@ -870,7 +892,9 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           disabled={busyId === row.id}
                           onClick={() => {
                             setAssignTarget(row);
-                            setAssignTableId(row.tableId ?? "");
+                            setAssignTableIds(
+                              [row.tableId, row.secondaryTableId].filter(Boolean) as string[],
+                            );
                           }}
                           className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-semibold dark:border-gray-600"
                         >
@@ -1020,9 +1044,9 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                   ))}
                 </select>
               </label>
-            ) : editTarget.tableLabel ? (
+            ) : formatReservationTableLabels(editTarget) ? (
               <p className="text-sm text-gray-600 dark:text-gray-300">
-                {translate("table")} {editTarget.tableLabel}
+                {translate("table")} {formatReservationTableLabels(editTarget)}
               </p>
             ) : null}
             {settings.reservationEventTypes.length > 0 ? (
@@ -1060,17 +1084,17 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             {assignTarget?.guestName} · {assignTarget?.partySize} {translate("partySize").toLowerCase()}
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-400">{translate("assignTableHint")}</p>
-          <ReservationTableSelect
+          <ReservationDualTableSelect
             tables={tables}
-            value={assignTableId}
-            onChange={setAssignTableId}
+            value={assignTableIds}
+            onChange={setAssignTableIds}
           />
           {assignOccupied ? (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
               {translate("tableOccupiedWarning")}
             </p>
           ) : null}
-          <button type="button" disabled={!assignTableId || busyId === assignTarget?.id} onClick={() => void handleAssign()} className="w-full rounded-xl bg-[var(--pos-brand)] py-3 text-sm font-semibold text-white hover:bg-[var(--pos-brand-hover)] disabled:opacity-50">
+          <button type="button" disabled={assignTableIds.length === 0 || busyId === assignTarget?.id} onClick={() => void handleAssign()} className="w-full rounded-xl bg-[var(--pos-brand)] py-3 text-sm font-semibold text-white hover:bg-[var(--pos-brand-hover)] disabled:opacity-50">
             {translate("assignTable")}
           </button>
         </div>
@@ -1080,7 +1104,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
         open={checkInTarget !== null}
         onClose={() => {
           setCheckInTarget(null);
-          setCheckInTableId("");
+          setCheckInTableIds([]);
         }}
         title={translate("checkIn")}
       >
@@ -1088,15 +1112,12 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           <p className="text-sm text-gray-600 dark:text-gray-300">
             {checkInTarget?.guestName} · {checkInTarget?.partySize} {translate("partySize").toLowerCase()}
           </p>
-          <label className="block text-sm">
-            <span className="text-gray-500">{translate("selectTable")}</span>
-            <ReservationTableSelect
-              tables={tables}
-              value={checkInTableId}
-              onChange={setCheckInTableId}
-              className="pos-input mt-1"
-            />
-          </label>
+          <ReservationDualTableSelect
+            tables={tables}
+            value={checkInTableIds}
+            onChange={setCheckInTableIds}
+            className="pos-input"
+          />
           {checkInOccupied ? (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
               {translate("tableOccupiedWarning")}
@@ -1104,7 +1125,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           ) : null}
           <button
             type="button"
-            disabled={!checkInTableId || busyId === checkInTarget?.id}
+            disabled={checkInTableIds.length === 0 || busyId === checkInTarget?.id}
             onClick={() => void handleCheckIn()}
             className="w-full rounded-xl bg-[var(--pos-brand)] py-3 text-sm font-semibold text-white hover:bg-[var(--pos-brand-hover)] disabled:opacity-50"
           >

@@ -15,15 +15,22 @@ import type { LanguageCode, ReservationRecord, RestaurantTable } from "@/lib/typ
 import { formatInVenueTz, todayIsoDateInVenue, venueDayRangeUtc } from "@/lib/venue-timezone";
 import type { WebsiteContent } from "@/lib/website/types";
 import { ReservationBookingView } from "@/components/reservation-booking-view";
-import { ReservationTableSelect, isOccupiedTable } from "@/components/reservation-table-select";
+import {
+  ReservationDualTableSelect,
+  isAnyOccupiedTable,
+} from "@/components/reservation-table-select";
 import { fetchGuestVisitProfile } from "@/src/lib/guest-history-actions";
 import {
-  checkInReservationWithTable,
+  checkInReservationWithTables,
   fetchReservations,
   mapReservationsResponse,
   subscribeToReservationChanges,
 } from "@/src/lib/reservation-actions";
 import { fetchTableSummaries, mapTablesResponse } from "@/src/lib/supabase-data";
+import {
+  formatReservationTableLabels,
+  reservationTableLabels,
+} from "@/lib/reservation-tables";
 
 type Props = {
   open: boolean;
@@ -78,7 +85,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [tablePickerOpen, setTablePickerOpen] = useState(false);
-  const [checkInTableId, setCheckInTableId] = useState("");
+  const [checkInTableIds, setCheckInTableIds] = useState<string[]>([]);
   const checkInLockRef = useRef(false);
   const welcomedIdsRef = useRef<Set<string>>(new Set());
 
@@ -140,7 +147,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
       setError(null);
       setShowCreate(false);
       setTablePickerOpen(false);
-      setCheckInTableId("");
+      setCheckInTableIds([]);
     }
   }, [open]);
 
@@ -149,7 +156,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
     [rows, selectedId],
   );
   const canCheckInSelected = selected ? canCheckIn(selected.status) : false;
-  const checkInOccupied = checkInTableId ? isOccupiedTable(tables, checkInTableId) : false;
+  const checkInOccupied = isAnyOccupiedTable(tables, checkInTableIds);
 
   const handleBooked = useCallback(
     (info: { id: string; bookingCode: string }) => {
@@ -161,7 +168,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
   );
 
   const completeCheckIn = useCallback(
-    async (row: ReservationRecord, tableId: string) => {
+    async (row: ReservationRecord, tableIds: string[]) => {
       if (checkInLockRef.current) return;
       checkInLockRef.current = true;
       setBusyId(row.id);
@@ -175,7 +182,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
           beforeAt: row.reservedAt,
         });
 
-        const result = await checkInReservationWithTable(row.id, tableId, {
+        const result = await checkInReservationWithTables(row.id, tableIds, {
           allowOccupied: true,
         });
 
@@ -184,8 +191,11 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
           return;
         }
 
+        const labels = tableIds
+          .map((id) => tables.find((table) => table.id === id)?.label)
+          .filter(Boolean);
         const tableLabel =
-          tables.find((table) => table.id === tableId)?.label ?? row.tableLabel ?? null;
+          labels.join(" · ") || formatReservationTableLabels(row) || null;
 
         welcomedIdsRef.current.add(row.id);
         const payload: CfdWelcomePayload = {
@@ -195,7 +205,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
           tableLabel,
         };
         setTablePickerOpen(false);
-        setCheckInTableId("");
+        setCheckInTableIds([]);
         onClose();
         onWelcome(payload);
         void sendCfdEvent("GUEST_WELCOME", payload);
@@ -215,15 +225,17 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
     if (!selected || !canCheckIn(selected.status) || busyId != null) return;
     setError(null);
     // Always confirm table at check-in. Assigned table is a staff preview only.
-    setCheckInTableId(selected.tableId ?? "");
+    setCheckInTableIds(
+      [selected.tableId, selected.secondaryTableId].filter(Boolean) as string[],
+    );
     setTablePickerOpen(true);
     void loadTables();
   }, [selected, busyId, loadTables]);
 
   const handleConfirmTableCheckIn = useCallback(() => {
-    if (!selected || !checkInTableId) return;
-    void completeCheckIn(selected, checkInTableId);
-  }, [selected, checkInTableId, completeCheckIn]);
+    if (!selected || checkInTableIds.length === 0) return;
+    void completeCheckIn(selected, checkInTableIds);
+  }, [selected, checkInTableIds, completeCheckIn]);
 
   return (
     <aside
@@ -311,12 +323,12 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                     minute: "2-digit",
                     hour12: language === "en",
                   });
-                  const tableLabel = row.tableLabel?.trim() || "";
-                  const hasTable = tableLabel.length > 0;
+                  const labels = reservationTableLabels(row);
+                  const hasTable = labels.length > 0;
                   const tableTitle = hasTable
                     ? row.status === "checked_in"
-                      ? `Table ${tableLabel}`
-                      : `${translate("resTablePlanned")}: ${tableLabel}`
+                      ? `Table ${labels.join(" · ")}`
+                      : `${translate("resTablePlanned")}: ${labels.join(" · ")}`
                     : "Table: Unassigned";
                   return (
                     <li key={row.id}>
@@ -354,16 +366,20 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                           </div>
 
                           {hasTable ? (
-                            <div
-                              title={tableTitle}
-                              className={`flex w-[5.5rem] shrink-0 flex-col items-center justify-center rounded-xl border px-2 py-2.5 sm:w-[6.25rem] sm:px-2.5 sm:py-3 ${receptionTableBadgeClass(row.status)}`}
-                            >
-                              <span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-current/50 sm:text-[10px]">
-                                Table
-                              </span>
-                              <span className="mt-1 text-[2rem] font-bold leading-none tracking-wide tabular-nums sm:text-[2.35rem]">
-                                {tableLabel}
-                              </span>
+                            <div className="flex shrink-0 items-center gap-1.5" title={tableTitle}>
+                              {labels.map((label) => (
+                                <div
+                                  key={label}
+                                  className={`flex min-w-[3.75rem] flex-col items-center justify-center rounded-xl border px-2 py-2 sm:min-w-[4.5rem] sm:px-2.5 sm:py-2.5 ${receptionTableBadgeClass(row.status)}`}
+                                >
+                                  <span className="text-[8px] font-semibold uppercase tracking-[0.2em] text-current/50 sm:text-[9px]">
+                                    Table
+                                  </span>
+                                  <span className="mt-0.5 text-[1.55rem] font-bold leading-none tracking-wide tabular-nums sm:text-[1.85rem]">
+                                    {label}
+                                  </span>
+                                </div>
+                              ))}
                             </div>
                           ) : null}
                         </div>
@@ -390,8 +406,8 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
             </button>
             <p className="mt-2 text-center text-[11px] text-white/35">
               {canCheckInSelected
-                ? selected?.tableLabel
-                  ? `${translate("resTablePlanned")}: ${selected.tableLabel}`
+                ? formatReservationTableLabels(selected ?? {})
+                  ? `${translate("resTablePlanned")}: ${formatReservationTableLabels(selected!)}`
                   : translate("selectTable")
                 : "Select a confirmed or late reservation"}
             </p>
@@ -422,7 +438,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                 aria-label="Close"
                 onClick={() => {
                   setTablePickerOpen(false);
-                  setCheckInTableId("");
+                  setCheckInTableIds([]);
                 }}
                 className="rounded-full border border-white/15 p-2 text-white/70 hover:bg-white/10 hover:text-white"
               >
@@ -430,15 +446,14 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
               </button>
             </div>
 
-            <label className="block text-sm">
-              <span className="text-white/50">{translate("selectTable")}</span>
-              <ReservationTableSelect
+            <div className="text-sm text-white">
+              <ReservationDualTableSelect
                 tables={tables}
-                value={checkInTableId}
-                onChange={setCheckInTableId}
-                className="pos-input mt-1"
+                value={checkInTableIds}
+                onChange={setCheckInTableIds}
+                className="pos-input"
               />
-            </label>
+            </div>
 
             {checkInOccupied ? (
               <p className="mt-3 border border-amber-500/40 bg-amber-950/40 px-3 py-2 text-sm text-amber-100">
@@ -450,7 +465,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
 
             <button
               type="button"
-              disabled={!checkInTableId || busyId === selected.id}
+              disabled={checkInTableIds.length === 0 || busyId === selected.id}
               onClick={handleConfirmTableCheckIn}
               className="mt-5 flex w-full items-center justify-center gap-2 bg-[#8B1E2D] px-6 py-4 text-base font-semibold uppercase tracking-[0.16em] text-white transition hover:bg-[#A02435] disabled:cursor-not-allowed disabled:opacity-40"
             >

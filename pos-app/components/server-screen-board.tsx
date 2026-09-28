@@ -1,18 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { ArrowRight } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import { ArrowLeft, ArrowRight, History, Loader2, RefreshCw } from "lucide-react";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
-import { NewOrderNotificationListener } from "@/components/new-order-notification-listener";
 import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
 import { useStationScreen } from "@/contexts/station-screen-context";
 import { useSessionHealth } from "@/hooks/use-session-health";
-import { AUTO_SERVE_POLL_MS } from "@/lib/auto-serve";
+import { AUTO_SERVE_POLL_MS, resolveKitchenStatus } from "@/lib/auto-serve";
 import { POS_EGRESS } from "@/lib/egress-config";
 import { isGrillGuestPrepOrder } from "@/lib/grill-guest-count";
 import { usesKitchenScreen } from "@/lib/kitchen-fulfillment-mode";
 import { orderItemDisplayName } from "@/lib/menu-display";
+import {
+  playCustomAlertSound,
+  unlockNotificationAudio,
+} from "@/lib/notification-sound";
 import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
 import {
   applyStationOrderItemRealtimeEvent,
@@ -26,14 +36,15 @@ import {
   formatServerScreenFooterDate,
   formatServerScreenFooterTime,
   GRILL_FIRST_ORDER_COMPANIONS,
+  isPreparingColumnVisible,
+  isReadyColumnVisible,
   nextServerScreenLanguage,
   normalizeServerScreenLanguages,
   preparationAgeMinutes,
   preparationHighlightTone,
   SERVER_SCREEN_LANG_ROTATE_MS,
+  SERVER_SCREEN_READY_VISIBLE_MS,
   shouldShowGrillCompanions,
-  isPreparingColumnVisible,
-  isReadyColumnVisible,
   type PrepHighlightTone,
 } from "@/lib/server-screen";
 import type { LanguageCode, MenuItem, RestaurantTable, Station } from "@/lib/types";
@@ -53,6 +64,7 @@ import {
 } from "@/src/lib/supabase-data";
 
 const SPLIT_STORAGE_KEY = "pos-server-screen-split";
+const COMPANION_DONE_KEY = "pos-server-screen-companion-done";
 const MIN_SPLIT = 28;
 const MAX_SPLIT = 72;
 
@@ -61,10 +73,13 @@ type BoardRow = {
   kind: "item" | "companion";
   item: StationOrderItem;
   tableLabel: string;
-  /** Parent item id for companions */
   parentId?: string;
+  companionId?: string;
   companionName?: string;
+  readyAt?: string;
 };
+
+type CompanionDoneMap = Record<string, string>;
 
 function readStoredSplit(): number {
   if (typeof window === "undefined") return 55;
@@ -73,17 +88,45 @@ function readStoredSplit(): number {
   return Math.min(MAX_SPLIT, Math.max(MIN_SPLIT, raw));
 }
 
+function companionStorageKey(station: Station) {
+  return `${COMPANION_DONE_KEY}-${station}`;
+}
+
+function readCompanionDone(station: Station): CompanionDoneMap {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = sessionStorage.getItem(companionStorageKey(station));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as CompanionDoneMap;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeCompanionDone(station: Station, map: CompanionDoneMap) {
+  sessionStorage.setItem(companionStorageKey(station), JSON.stringify(map));
+}
+
 function prepRowClass(tone: PrepHighlightTone, selected: boolean): string {
-  if (selected) {
-    return "bg-amber-300/90 text-zinc-950";
-  }
-  if (tone === "critical") {
-    return "bg-red-950/70 text-[#f5f2ef] hover:bg-red-900/75";
-  }
-  if (tone === "warn") {
-    return "bg-orange-950/55 text-[#f5f2ef] hover:bg-orange-900/60";
-  }
+  if (selected) return "bg-amber-300/85 text-zinc-950";
+  if (tone === "critical") return "bg-red-950/70 text-[#f5f2ef] hover:bg-red-900/75";
+  if (tone === "warn") return "bg-orange-950/55 text-[#f5f2ef] hover:bg-orange-900/60";
   return "bg-transparent text-[#f5f2ef] hover:bg-white/[0.04]";
+}
+
+function itemNote(item: StationOrderItem, language: LanguageCode): string | null {
+  if (isGrillGuestPrepOrder(item)) return null;
+  const primary =
+    language === "zh"
+      ? item.notesTranslated?.trim() || item.notes?.trim()
+      : item.notes?.trim() || item.notesTranslated?.trim();
+  return primary || null;
+}
+
+function formatOrderClock(iso: string | undefined, language: LanguageCode): string {
+  if (!iso) return "—";
+  return formatReadyClock(iso, language) || "—";
 }
 
 function ServerScreenFooter({ language }: { language: LanguageCode }) {
@@ -120,7 +163,7 @@ interface ServerScreenBoardProps {
 export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const { language, setLanguage, translate } = useStationScreen();
   const { settings } = useSettings();
-  const { currentStaffUser } = useApp();
+  const { currentStaffUser, soundKitchenEnabled } = useApp();
   const screenEnabled = usesKitchenScreen(settings.kitchenFulfillmentMode);
   const serverScreen = settings.serverScreen;
   const languages = useMemo(
@@ -131,8 +174,11 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [items, setItems] = useState<StationOrderItem[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [companionDone, setCompanionDone] = useState<CompanionDoneMap>({});
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [splitPercent, setSplitPercent] = useState(55);
   const [animatingOut, setAnimatingOut] = useState<Set<string>>(new Set());
@@ -140,25 +186,38 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const splitPercentRef = useRef(55);
   const rotateResetRef = useRef(Date.now());
   const shellRef = useRef<HTMLDivElement | null>(null);
+  const seenPreparingRef = useRef<Set<string> | null>(null);
 
   const actor = currentStaffUser?.name?.trim() || (station === "kitchen" ? "Kitchen" : "Bar");
   const realtimeOpts = { debounceMs: POS_EGRESS.REALTIME_DEBOUNCE_MS };
   const minLabel = translate("serverScreenMin");
 
+  const playStationSound = useCallback(
+    (variant: "newOrder" | "ready") => {
+      if (!soundKitchenEnabled) return;
+      unlockNotificationAudio();
+      const url =
+        variant === "newOrder"
+          ? settings.soundConfigs.newOrder
+          : settings.soundConfigs.itemReady;
+      playCustomAlertSound(url, variant === "newOrder" ? "newOrder" : "ready");
+    },
+    [soundKitchenEnabled, settings.soundConfigs.newOrder, settings.soundConfigs.itemReady],
+  );
+
   useEffect(() => {
     const initial = readStoredSplit();
     setSplitPercent(initial);
     splitPercentRef.current = initial;
-  }, []);
+    setCompanionDone(readCompanionDone(station));
+  }, [station]);
 
-  // Keep display language within configured set.
   useEffect(() => {
     if (!languages.includes(language)) {
       setLanguage(languages[0] ?? "en");
     }
   }, [languages, language, setLanguage]);
 
-  // Auto-rotate languages.
   useEffect(() => {
     if (!serverScreen.autoRotateLanguage || languages.length < 2) return;
     const id = window.setInterval(() => {
@@ -226,7 +285,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
 
   useSessionHealth({
     onRefresh: () => void reloadAll(),
-    isBusy: () => busy,
+    isBusy: () => busy || refreshing || historyOpen,
   });
 
   useEffect(() => {
@@ -251,6 +310,26 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       window.clearInterval(timer);
     };
   }, [station, reloadStationItems]);
+
+  // Sound on new preparing items (no popup).
+  useEffect(() => {
+    const pendingIds = new Set(
+      items.filter((item) => isPreparingColumnVisible(item) && item.id).map((item) => item.id!),
+    );
+    if (seenPreparingRef.current == null) {
+      seenPreparingRef.current = pendingIds;
+      return;
+    }
+    let hasNew = false;
+    for (const id of pendingIds) {
+      if (!seenPreparingRef.current.has(id)) {
+        hasNew = true;
+        break;
+      }
+    }
+    if (hasNew) playStationSound("newOrder");
+    seenPreparingRef.current = pendingIds;
+  }, [items, playStationSound]);
 
   const tableLabelById = useMemo(() => {
     const map = new Map<string, string>();
@@ -293,11 +372,14 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       const tableSession = itemsByTable.get(item.tableId) ?? [];
       if (shouldShowGrillCompanions(item, tableSession, menuItems)) {
         for (const companion of GRILL_FIRST_ORDER_COMPANIONS) {
+          const key = `${item.id}::${companion.id}`;
+          if (companionDone[key]) continue;
           rows.push({
-            key: `${item.id}::${companion.id}`,
+            key,
             kind: "companion",
             item,
             parentId: item.id,
+            companionId: companion.id,
             tableLabel,
             companionName: companion.names[language] || companion.names.en,
           });
@@ -305,10 +387,10 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       }
     }
     return rows;
-  }, [items, itemsByTable, menuItems, tableLabelById, language]);
+  }, [items, itemsByTable, menuItems, tableLabelById, language, companionDone]);
 
   const readyRows = useMemo(() => {
-    return items
+    const rows: BoardRow[] = items
       .filter((item) => isReadyColumnVisible(item, nowMs))
       .slice()
       .sort((a, b) => {
@@ -322,42 +404,113 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         kind: "item" as const,
         item,
         tableLabel: tableLabelById.get(item.tableId) ?? "—",
+        readyAt: item.readyAt,
       }));
-  }, [items, nowMs, tableLabelById]);
 
-  // Drop stale selections.
+    for (const [key, readyAt] of Object.entries(companionDone)) {
+      const readyMs = new Date(readyAt).getTime();
+      if (Number.isNaN(readyMs) || nowMs - readyMs > SERVER_SCREEN_READY_VISIBLE_MS) continue;
+      const [parentId, companionId] = key.split("::");
+      if (!parentId || !companionId) continue;
+      const parent = items.find((item) => item.id === parentId);
+      if (!parent) continue;
+      const companion = GRILL_FIRST_ORDER_COMPANIONS.find((row) => row.id === companionId);
+      if (!companion) continue;
+      rows.push({
+        key,
+        kind: "companion",
+        item: parent,
+        parentId,
+        companionId,
+        tableLabel: tableLabelById.get(parent.tableId) ?? "—",
+        companionName: companion.names[language] || companion.names.en,
+        readyAt,
+      });
+    }
+
+    return rows.sort((a, b) => (a.readyAt ?? "").localeCompare(b.readyAt ?? ""));
+  }, [items, nowMs, tableLabelById, companionDone, language]);
+
+  const historyRows = useMemo(() => {
+    const rows = items
+      .filter((item) => {
+        if (item.hideOnKds) return false;
+        const status = resolveKitchenStatus(item);
+        return status === "ready" || status === "served";
+      })
+      .slice()
+      .sort((a, b) => {
+        const at = a.readyAt ?? a.createdAt ?? "";
+        const bt = b.readyAt ?? b.createdAt ?? "";
+        return bt.localeCompare(at);
+      });
+    return rows;
+  }, [items]);
+
+  // Prune invalid selections; keep valid item + companion keys.
   useEffect(() => {
-    const pendingIds = new Set(
-      items.filter((item) => isPreparingColumnVisible(item) && item.id).map((item) => item.id!),
-    );
-    setSelectedIds((prev) => {
+    const valid = new Set(preparingRows.map((row) => row.key));
+    setSelectedKeys((prev) => {
       let changed = false;
       const next = new Set<string>();
-      for (const id of prev) {
-        if (pendingIds.has(id)) next.add(id);
+      for (const key of prev) {
+        if (valid.has(key)) next.add(key);
         else changed = true;
       }
       return changed ? next : prev;
     });
-  }, [items]);
+  }, [preparingRows]);
 
-  const toggleSelect = (itemId: string) => {
-    setSelectedIds((prev) => {
+  // Drop expired / orphaned companion done entries.
+  useEffect(() => {
+    setCompanionDone((prev) => {
+      const next: CompanionDoneMap = {};
+      let changed = false;
+      for (const [key, readyAt] of Object.entries(prev)) {
+        const readyMs = new Date(readyAt).getTime();
+        if (Number.isNaN(readyMs) || nowMs - readyMs > SERVER_SCREEN_READY_VISIBLE_MS * 4) {
+          changed = true;
+          continue;
+        }
+        const parentId = key.split("::")[0];
+        if (!items.some((item) => item.id === parentId)) {
+          changed = true;
+          continue;
+        }
+        next[key] = readyAt;
+      }
+      if (!changed) return prev;
+      writeCompanionDone(station, next);
+      return next;
+    });
+  }, [nowMs, items, station]);
+
+  const toggleSelect = (key: string) => {
+    unlockNotificationAudio();
+    setSelectedKeys((prev) => {
       const next = new Set(prev);
-      if (next.has(itemId)) next.delete(itemId);
-      else next.add(itemId);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
 
-  const handleMarkReady = async () => {
-    if (busy || selectedIds.size === 0) return;
-    const ids = Array.from(selectedIds);
+  const handleMarkDone = async () => {
+    if (busy || selectedKeys.size === 0) return;
+    unlockNotificationAudio();
+    const keys = Array.from(selectedKeys);
     setBusy(true);
-    setAnimatingOut(new Set(ids));
+    setAnimatingOut(new Set(keys));
+
+    const realIds: string[] = [];
+    const companionKeys: string[] = [];
+    for (const key of keys) {
+      if (key.includes("::")) companionKeys.push(key);
+      else realIds.push(key);
+    }
 
     const byTable = new Map<string, string[]>();
-    for (const id of ids) {
+    for (const id of realIds) {
       const item = items.find((row) => row.id === id);
       if (!item) continue;
       const list = byTable.get(item.tableId) ?? [];
@@ -369,11 +522,33 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       await markItemsReady(itemIds, actor, tableId);
     }
 
-    setSelectedIds(new Set());
+    if (companionKeys.length > 0) {
+      const readyAt = new Date().toISOString();
+      setCompanionDone((prev) => {
+        const next = { ...prev };
+        for (const key of companionKeys) next[key] = readyAt;
+        writeCompanionDone(station, next);
+        return next;
+      });
+    }
+
+    playStationSound("ready");
+    setSelectedKeys(new Set());
     setBusy(false);
     window.setTimeout(() => setAnimatingOut(new Set()), 280);
     void reloadStationItems();
     void reloadTables();
+  };
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    unlockNotificationAudio();
+    setRefreshing(true);
+    try {
+      await reloadAll();
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const cycleLanguage = useCallback(() => {
@@ -415,6 +590,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
 
   const shellClass =
     "flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#0B0B0C] text-[#f5f2ef]";
+  const selectedCount = selectedKeys.size;
 
   if (!screenEnabled) {
     return (
@@ -432,7 +608,65 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     );
   }
 
-  const selectedCount = selectedIds.size;
+  if (historyOpen) {
+    return (
+      <div className={shellClass} data-server-interactive>
+        <header className="flex shrink-0 items-center gap-3 border-b border-white/10 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(false)}
+            className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/15 bg-white/[0.04] px-3 text-sm font-medium text-[#F5EDE4] transition hover:bg-white/[0.08]"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            {translate("serverScreenHistoryBack")}
+          </button>
+          <h1 className="landing-serif text-2xl tracking-wide text-[#C9A88B]">
+            {translate("history")}
+          </h1>
+          <span className="text-sm tabular-nums text-white/40">{historyRows.length}</span>
+        </header>
+        <div data-server-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          {historyRows.length === 0 ? (
+            <p className="px-4 py-12 text-center text-base text-white/35">{translate("noOrders")}</p>
+          ) : (
+            <ul className="divide-y divide-white/[0.06]">
+              {historyRows.map((item) => {
+                const name = orderItemDisplayName(item, menuItems, language);
+                const note = itemNote(item, language);
+                const tableLabel = tableLabelById.get(item.tableId) ?? "—";
+                return (
+                  <li key={item.id} className="px-4 py-3">
+                    <div className="flex items-baseline gap-3">
+                      <span className="min-w-0 flex-1 text-[1.25rem] font-semibold leading-snug text-[#f5f2ef]">
+                        {name}
+                      </span>
+                      <span className="w-12 shrink-0 text-right text-base font-bold tabular-nums text-[#E8D5C4] sm:w-14 sm:text-lg">
+                        {tableLabel}
+                      </span>
+                    </div>
+                    {note ? (
+                      <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-white/55">
+                        {note}
+                      </p>
+                    ) : null}
+                    <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs tabular-nums text-white/40">
+                      <span>
+                        {translate("serverScreenOrderTime")}: {formatOrderClock(item.createdAt, language)}
+                      </span>
+                      <span>
+                        {translate("serverScreenReadyAt")}: {formatOrderClock(item.readyAt, language)}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+        <ServerScreenFooter language={language} />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -440,50 +674,44 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       className={shellClass}
       onPointerDown={onBackgroundPointerDown}
     >
-      <NewOrderNotificationListener station={station} tables={tables} menuItems={menuItems} />
       <AnnouncementMarquee surface={station === "kitchen" ? "kds" : "bar"} tone="dark" />
 
       <div className="flex min-h-0 flex-1">
-        {/* Preparing */}
         <section
           className="flex min-h-0 min-w-0 flex-col border-r border-white/10"
           style={{ width: `${splitPercent}%` }}
         >
           <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
-            <h1 className="text-xl font-semibold uppercase tracking-[0.14em] text-[#C9A88B] sm:text-2xl">
+            <h1 className="landing-serif text-2xl tracking-[0.08em] text-[#C9A88B] sm:text-3xl">
               {translate("preparing")}
             </h1>
-            <span className="text-sm tabular-nums text-white/40">{preparingRows.filter((r) => r.kind === "item").length}</span>
+            <span className="text-sm tabular-nums text-white/40">
+              {preparingRows.filter((row) => row.kind === "item").length}
+            </span>
           </header>
-          <div data-server-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div data-server-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-2">
             {preparingRows.length === 0 ? (
               <p className="px-4 py-10 text-center text-base text-white/35">{translate("noOrders")}</p>
             ) : (
               <ul className="divide-y divide-white/[0.06]">
                 {preparingRows.map((row) => {
-                  const itemId = row.item.id!;
-                  const selected = selectedIds.has(itemId);
+                  const selected = selectedKeys.has(row.key);
                   const age = preparationAgeMinutes(row.item.createdAt, nowMs);
                   const tone = preparationHighlightTone(age);
-                  const leaving = animatingOut.has(itemId);
+                  const leaving = animatingOut.has(row.key);
                   const name =
                     row.kind === "companion"
                       ? row.companionName ?? ""
-                      : isGrillGuestPrepOrder(row.item)
-                        ? orderItemDisplayName(row.item, menuItems, language)
-                        : orderItemDisplayName(row.item, menuItems, language);
-                  const note =
-                    row.kind === "item" && row.item.notes?.trim() && !isGrillGuestPrepOrder(row.item)
-                      ? row.item.notes.trim()
-                      : null;
+                      : orderItemDisplayName(row.item, menuItems, language);
+                  const note = row.kind === "item" ? itemNote(row.item, language) : null;
 
                   return (
-                    <li key={row.key}>
+                    <li key={row.key} className={selected ? "bg-amber-300/85" : undefined}>
                       <button
                         type="button"
                         data-server-interactive
-                        onClick={() => toggleSelect(itemId)}
-                        className={`flex w-full items-baseline gap-3 px-4 py-2.5 text-left transition-colors duration-200 ${prepRowClass(
+                        onClick={() => toggleSelect(row.key)}
+                        className={`flex w-full items-baseline gap-3 px-4 py-2.5 text-left transition-colors duration-150 ${prepRowClass(
                           tone,
                           selected,
                         )} ${leaving ? "translate-x-4 opacity-0 transition-all duration-200" : ""} ${
@@ -491,8 +719,8 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                         }`}
                       >
                         <span
-                          className={`min-w-0 flex-1 truncate text-[1.35rem] font-semibold leading-tight tracking-tight sm:text-[1.55rem] ${
-                            row.kind === "companion" ? "font-medium opacity-90" : ""
+                          className={`min-w-0 flex-1 truncate text-[1.35rem] font-semibold leading-tight sm:text-[1.5rem] ${
+                            row.kind === "companion" ? "font-medium" : ""
                           }`}
                           title={name}
                         >
@@ -502,8 +730,8 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                           {name}
                         </span>
                         <span
-                          className={`shrink-0 text-sm tabular-nums sm:text-base ${
-                            selected ? "text-zinc-800/80" : "text-white/45"
+                          className={`shrink-0 text-sm tabular-nums sm:text-[0.95rem] ${
+                            selected ? "text-zinc-800/75" : "text-white/45"
                           }`}
                         >
                           {formatPreparationMinutes(row.item.createdAt, nowMs, minLabel)}
@@ -517,15 +745,16 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                         </span>
                       </button>
                       {note ? (
-                        <p
+                        <button
+                          type="button"
                           data-server-interactive
-                          className={`-mt-1 truncate px-4 pb-2 text-sm italic ${
-                            selected ? "bg-amber-300/90 pl-8 text-zinc-800" : "pl-8 text-white/40"
-                          }`}
-                          title={note}
+                          onClick={() => toggleSelect(row.key)}
+                          className={`w-full px-4 pb-2.5 text-left text-sm leading-relaxed whitespace-pre-wrap break-words ${
+                            row.kind === "companion" ? "pl-8" : "pl-4"
+                          } ${selected ? "text-zinc-800" : "text-white/55"}`}
                         >
                           {note}
-                        </p>
+                        </button>
                       ) : null}
                     </li>
                   );
@@ -535,7 +764,6 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
           </div>
         </section>
 
-        {/* Drag handle */}
         <div
           data-server-interactive
           role="separator"
@@ -548,51 +776,51 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
           <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white/15" />
         </div>
 
-        {/* Ready */}
         <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
             <div className="flex min-w-0 items-center gap-3">
-              <h2 className="text-xl font-semibold uppercase tracking-[0.14em] text-emerald-300/90 sm:text-2xl">
+              <h2 className="landing-serif text-2xl tracking-[0.08em] text-emerald-300/90 sm:text-3xl">
                 {translate("ready")}
               </h2>
               <span className="text-sm tabular-nums text-white/40">{readyRows.length}</span>
             </div>
-            <button
-              type="button"
-              data-server-interactive
-              disabled={selectedCount === 0 || busy}
-              onClick={() => void handleMarkReady()}
-              aria-label={translate("serverScreenMarkReady")}
-              className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#C9A88B]/45 bg-[#8B1E2D]/35 text-[#F5EDE4] transition hover:bg-[#8B1E2D]/55 disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              <ArrowRight className="h-6 w-6" strokeWidth={2.5} />
-            </button>
           </header>
-          <div data-server-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div data-server-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-2">
             {readyRows.length === 0 ? (
               <p className="px-4 py-10 text-center text-base text-white/30">&nbsp;</p>
             ) : (
               <ul className="divide-y divide-white/[0.06]">
                 {readyRows.map((row) => {
-                  const name = orderItemDisplayName(row.item, menuItems, language);
-                  const readyLabel = formatReadyClock(row.item.readyAt, language);
+                  const name =
+                    row.kind === "companion"
+                      ? row.companionName ?? ""
+                      : orderItemDisplayName(row.item, menuItems, language);
+                  const note = row.kind === "item" ? itemNote(row.item, language) : null;
+                  const readyLabel = formatReadyClock(row.readyAt ?? row.item.readyAt, language);
                   return (
-                    <li
-                      key={row.key}
-                      className="server-screen-ready-row flex items-baseline gap-3 px-4 py-2.5"
-                    >
-                      <span
-                        className="min-w-0 flex-1 truncate text-[1.35rem] font-semibold leading-tight tracking-tight text-[#f5f2ef] sm:text-[1.55rem]"
-                        title={name}
-                      >
-                        {name}
-                      </span>
-                      <span className="shrink-0 text-sm tabular-nums text-emerald-300/80 sm:text-base">
-                        {translate("serverScreenReadyAt")} {readyLabel}
-                      </span>
-                      <span className="w-12 shrink-0 text-right text-base font-bold tabular-nums text-[#E8D5C4] sm:w-14 sm:text-lg">
-                        {row.tableLabel}
-                      </span>
+                    <li key={row.key} className="server-screen-ready-row px-4 py-2.5">
+                      <div className={`flex items-baseline gap-3 ${row.kind === "companion" ? "pl-4" : ""}`}>
+                        <span
+                          className="min-w-0 flex-1 truncate text-[1.35rem] font-semibold leading-tight text-[#f5f2ef] sm:text-[1.5rem]"
+                          title={name}
+                        >
+                          {row.kind === "companion" ? (
+                            <span className="mr-1.5 opacity-50">↳</span>
+                          ) : null}
+                          {name}
+                        </span>
+                        <span className="shrink-0 text-sm tabular-nums text-emerald-300/80 sm:text-[0.95rem]">
+                          {translate("serverScreenReadyAt")} {readyLabel}
+                        </span>
+                        <span className="w-12 shrink-0 text-right text-base font-bold tabular-nums text-[#E8D5C4] sm:w-14 sm:text-lg">
+                          {row.tableLabel}
+                        </span>
+                      </div>
+                      {note ? (
+                        <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-white/50">
+                          {note}
+                        </p>
+                      ) : null}
                     </li>
                   );
                 })}
@@ -600,6 +828,45 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             )}
           </div>
         </section>
+      </div>
+
+      {/* Floating toolbar above date/time footer */}
+      <div className="relative z-20 shrink-0 px-3 pb-2 pt-1 sm:px-4">
+        <div
+          data-server-interactive
+          className="mx-auto flex max-w-3xl items-center gap-2 rounded-2xl border border-white/12 bg-[#121214]/92 px-2 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-md sm:gap-3 sm:px-3"
+        >
+          <button
+            type="button"
+            disabled={selectedCount === 0 || busy}
+            onClick={() => void handleMarkDone()}
+            className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#8B1E2D] px-3 text-sm font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#A02435] disabled:cursor-not-allowed disabled:opacity-35 sm:text-base"
+          >
+            {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5" strokeWidth={2.5} />}
+            <span className="truncate">{translate("serverScreenMarkDone")}</span>
+            {selectedCount > 0 ? (
+              <span className="rounded-md bg-black/20 px-1.5 py-0.5 text-xs tabular-nums">{selectedCount}</span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(true)}
+            className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/12 bg-white/[0.04] px-3 text-sm font-medium text-[#E8D5C4] transition hover:bg-white/[0.08] sm:px-4"
+          >
+            <History className="h-4 w-4" />
+            <span className="hidden sm:inline">{translate("history")}</span>
+          </button>
+          <button
+            type="button"
+            disabled={refreshing}
+            onClick={() => void handleRefresh()}
+            aria-label={translate("serverScreenRefresh")}
+            className="inline-flex min-h-12 min-w-12 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/12 bg-white/[0.04] px-3 text-sm font-medium text-[#E8D5C4] transition hover:bg-white/[0.08] disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">{translate("serverScreenRefresh")}</span>
+          </button>
+        </div>
       </div>
 
       <ServerScreenFooter language={language} />

@@ -4,6 +4,7 @@ import {
 } from "@/lib/grill-guest-count";
 import { resolveKitchenStatus } from "@/lib/auto-serve";
 import { resolveMenuItemForOrder } from "@/lib/menu-display";
+import { normalizeOrderItemStatus } from "@/lib/order-status";
 import type {
   LanguageCode,
   MenuItem,
@@ -141,6 +142,19 @@ export function isPreparingColumnVisible(
   item: Pick<OrderItem, "kitchenStatus" | "status" | "isCancelled" | "hideOnKds">,
 ): boolean {
   if (item.hideOnKds) return false;
+  if (item.isCancelled || item.kitchenStatus === "cancelled" || item.kitchenStatus === "archived") {
+    return false;
+  }
+  // Explicit completed kitchen lane — hide from Preparing.
+  if (item.kitchenStatus === "ready" || item.kitchenStatus === "served") return false;
+
+  // Missing/corrupt kitchen_status: fall back to order status so preparing
+  // rows never silently vanish from KDS/Bar.
+  if (!item.kitchenStatus) {
+    const status = normalizeOrderItemStatus(item.status);
+    return status !== "ready" && status !== "served";
+  }
+
   return resolveKitchenStatus(item) === "pending";
 }
 
@@ -155,7 +169,11 @@ export const GRILL_FIRST_ORDER_COMPANIONS: Array<{
   },
   {
     id: "lettuce",
-    names: { en: "Lettuce, garlic", cs: "Salát, česnek", zh: "生菜、大蒜" },
+    names: { en: "Lettuce", cs: "Salát", zh: "生菜" },
+  },
+  {
+    id: "garlic",
+    names: { en: "Garlic", cs: "Česnek", zh: "大蒜" },
   },
   {
     id: "leek",
@@ -218,13 +236,38 @@ export type GrillCompanionAnchor = {
   createdAt: string;
 };
 
+/** Bump when companion id set changes (e.g. split lettuce/garlic). */
+export const GRILL_COMPANION_STORE_VERSION = 2;
+
 export type GrillCompanionStore = {
+  version?: number;
   done: Record<string, string>;
   anchors: Record<string, GrillCompanionAnchor>;
 };
 
 export function emptyGrillCompanionStore(): GrillCompanionStore {
-  return { done: {}, anchors: {} };
+  return { version: GRILL_COMPANION_STORE_VERSION, done: {}, anchors: {} };
+}
+
+/**
+ * v1 used a single "lettuce" row meaning Lettuce+Garlic.
+ * On upgrade, copy done state to the new "garlic" id once.
+ */
+export function migrateGrillCompanionStore(store: GrillCompanionStore): GrillCompanionStore {
+  if ((store.version ?? 1) >= GRILL_COMPANION_STORE_VERSION) {
+    return store.version ? store : { ...store, version: GRILL_COMPANION_STORE_VERSION };
+  }
+  const done = { ...store.done };
+  for (const [key, readyAt] of Object.entries(store.done)) {
+    if (!key.endsWith("::lettuce")) continue;
+    const garlicKey = `${key.slice(0, -"::lettuce".length)}::garlic`;
+    if (!(garlicKey in done)) done[garlicKey] = readyAt;
+  }
+  return {
+    version: GRILL_COMPANION_STORE_VERSION,
+    done,
+    anchors: store.anchors ?? {},
+  };
 }
 
 export function companionKeyFor(parentId: string, companionId: string): string {
@@ -274,7 +317,9 @@ export function mergeGrillCompanionAnchors(
     changed = true;
   }
 
-  return changed ? { ...store, anchors } : store;
+  return changed
+    ? { ...store, version: store.version ?? GRILL_COMPANION_STORE_VERSION, anchors }
+    : store;
 }
 
 /** Drop anchors only when every companion is done and aged out of history. */
@@ -319,7 +364,7 @@ export function pruneGrillCompanionStore(
   if (!changed && Object.keys(done).length === Object.keys(store.done).length) {
     if (Object.keys(anchors).length === Object.keys(store.anchors).length) return store;
   }
-  return { done, anchors };
+  return { version: store.version ?? GRILL_COMPANION_STORE_VERSION, done, anchors };
 }
 
 export function historyWithinRetention(

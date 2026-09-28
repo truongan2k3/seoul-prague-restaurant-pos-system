@@ -63,6 +63,7 @@ import {
   historyWithinRetention,
   isPreparingColumnVisible,
   mergeGrillCompanionAnchors,
+  migrateGrillCompanionStore,
   nextServerScreenLanguage,
   normalizeServerScreenLanguages,
   pendingCompanionIds,
@@ -154,13 +155,17 @@ function readCompanionStore(station: Station): GrillCompanionStore {
     const parsed = JSON.parse(raw) as GrillCompanionStore | Record<string, string>;
     // Migrate legacy done-only map.
     if (parsed && typeof parsed === "object" && !("done" in parsed) && !("anchors" in parsed)) {
-      return { done: parsed as Record<string, string>, anchors: {} };
+      return migrateGrillCompanionStore({
+        done: parsed as Record<string, string>,
+        anchors: {},
+      });
     }
     const store = parsed as GrillCompanionStore;
-    return {
+    return migrateGrillCompanionStore({
+      version: store.version,
       done: store.done && typeof store.done === "object" ? store.done : {},
       anchors: store.anchors && typeof store.anchors === "object" ? store.anchors : {},
-    };
+    });
   } catch {
     return emptyGrillCompanionStore();
   }
@@ -489,7 +494,9 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   }, [flushPendingNewOrderSound]);
 
   useEffect(() => {
-    setCompanionStore(readCompanionStore(station));
+    const store = readCompanionStore(station);
+    setCompanionStore(store);
+    writeCompanionStore(station, store);
     setHistoryCache(pruneHistoryRows(readHistoryCache(station)));
     setLayoutMode(readServerScreenLayoutMode());
     setBootstrapped(false);

@@ -1,4 +1,5 @@
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import { normalizeOrderItemStatus } from "@/lib/order-status";
 import type { OrderItem, RestaurantTable, Station } from "@/lib/types";
 import {
   mapOrderItemRow,
@@ -24,16 +25,30 @@ function isActiveFloorItem(item: OrderItem): boolean {
   return item.kitchenStatus !== "archived";
 }
 
+/** Keep preparing rows on the board even when kitchen_status is null/empty. */
 function isStationBoardItem(row: SupabaseOrderItemRow, station: Station): boolean {
   if (row.station !== station) return false;
-  if (row.kitchen_status === "archived") return false;
-  const status = row.kitchen_status ?? row.status;
+  const kitchenRaw = typeof row.kitchen_status === "string" ? row.kitchen_status.trim() : "";
+  if (kitchenRaw === "archived") return false;
+
+  if (
+    kitchenRaw === "pending" ||
+    kitchenRaw === "ready" ||
+    kitchenRaw === "served" ||
+    kitchenRaw === "cancelled" ||
+    kitchenRaw === "preparing"
+  ) {
+    return true;
+  }
+
+  // null / empty / unknown kitchen_status → fall back to order status
+  const status = normalizeOrderItemStatus(row.status);
   return (
     status === "pending" ||
     status === "preparing" ||
+    status === "held" ||
     status === "ready" ||
-    status === "served" ||
-    status === "cancelled"
+    status === "served"
   );
 }
 

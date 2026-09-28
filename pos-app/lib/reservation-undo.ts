@@ -8,6 +8,7 @@ export interface ReservationSnapshot {
   id: string;
   status: ReservationStatus;
   tableId: string | null;
+  secondaryTableId: string | null;
   checkedInAt: string | null;
   completedAt: string | null;
 }
@@ -22,7 +23,10 @@ export interface ReservationUndoEntry {
   id: string;
   action: ReservationUndoAction;
   reservation: ReservationSnapshot;
+  /** @deprecated Prefer `tables` when undoing multi-table check-in. */
   table?: TableSnapshot;
+  /** Snapshots for every table occupied during check-in (1–2). */
+  tables?: TableSnapshot[];
   expiresAt: number;
 }
 

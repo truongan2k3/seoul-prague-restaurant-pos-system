@@ -415,8 +415,10 @@ const en = {
   checkIn: "Check in",
   assignTable: "Assign table",
   assignTableHint:
-    "Staff preview only — does not seat the guest. The table chosen at Check-in is the official one.",
+    "Staff preview only — does not seat the guest. The table chosen at Check-in is the official one. Large parties may use up to 2 tables.",
   resTablePlanned: "Planned table",
+  selectSecondTable: "Second table (optional)",
+  selectSecondTableHint: "Large parties can use up to {max} tables.",
   resTablesEmptyGroup: "Empty tables",
   resTablesOccupiedGroup: "Occupied tables",
   tableOccupiedWarning:
@@ -1723,8 +1725,10 @@ const cs: Record<TranslationKey, string> = {
   checkIn: "Check-in",
   assignTable: "Přiřadit stůl",
   assignTableHint:
-    "Jen plán pro personál — hosta neusazuje. Oficiální stůl se volí při check-in.",
+    "Jen plán pro personál — hosta neusazuje. Oficiální stůl se volí při check-in. Velké skupiny mohou mít až 2 stoly.",
   resTablePlanned: "Plánovaný stůl",
+  selectSecondTable: "Druhý stůl (volitelné)",
+  selectSecondTableHint: "Velké skupiny mohou použít až {max} stoly.",
   resTablesEmptyGroup: "Volné stoly",
   resTablesOccupiedGroup: "Obsazené stoly",
   tableOccupiedWarning:
@@ -3023,8 +3027,10 @@ const zh: Record<TranslationKey, string> = {
   markNoShow: "未到店",
   checkIn: "签到",
   assignTable: "分配餐桌",
-  assignTableHint: "仅供员工预览，不会入座。签到时选择的桌号才是正式绑定。",
+  assignTableHint: "仅供员工预览，不会入座。签到时选择的桌号才是正式绑定。大桌最多可分配 2 张桌。",
   resTablePlanned: "预排桌",
+  selectSecondTable: "第二桌（可选）",
+  selectSecondTableHint: "大桌最多可使用 {max} 张桌。",
   resTablesEmptyGroup: "空桌",
   resTablesOccupiedGroup: "已占用",
   tableOccupiedWarning: "该桌已有客人。仍可将预订关联到此桌，不会影响当前订单。",

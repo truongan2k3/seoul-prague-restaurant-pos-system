@@ -13,6 +13,7 @@ import {
   countGuestsInSlot,
 } from "@/lib/reservation-slots";
 import { shouldAlertOnReservationInsert } from "@/lib/reservation-change-alert";
+import { normalizeReservationTableIds } from "@/lib/reservation-tables";
 import { venueDayRangeUtc, venueWallTimeToUtc } from "@/lib/venue-timezone";
 import { notifyReservationPushEvent } from "@/lib/web-push-client";
 import { fetchAppSettings } from "@/src/lib/settings-actions";
@@ -22,6 +23,10 @@ import {
   GUEST_RESERVATION_ALERT_EVENT,
   type GuestReservationAlertPayload,
 } from "@/lib/reservation-guest-alert";
+
+/** Explicit FK hints — reservations has two FKs to tables. */
+const RESERVATION_SELECT =
+  "*, tables!table_id(label), secondary_table:tables!secondary_table_id(label)";
 
 export interface CreateReservationInput {
   guestName: string;
@@ -45,6 +50,7 @@ export interface UpdateReservationInput {
   reservedAt: Date;
   notes?: string;
   tableId?: string | null;
+  secondaryTableId?: string | null;
   eventType?: string | null;
 }
 
@@ -62,7 +68,7 @@ function nowIso() {
 export async function fetchReservations(since?: Date) {
   let query = supabase
     .from("reservations")
-    .select("*, tables(label)")
+    .select(RESERVATION_SELECT)
     .order("reserved_at", { ascending: true })
     .limit(5000);
 
@@ -97,7 +103,7 @@ export async function createReservation(input: CreateReservationInput) {
       manage_token: withGuestCodes ? generateManageToken() : null,
       updated_at: nowIso(),
     })
-    .select("*, tables(label)")
+    .select(RESERVATION_SELECT)
     .single();
 
   if (result.data) {
@@ -120,7 +126,12 @@ export async function createReservation(input: CreateReservationInput) {
 export async function updateReservationStatus(
   reservationId: string,
   status: ReservationStatus,
-  extra?: { tableId?: string | null; checkedInAt?: Date; completedAt?: Date },
+  extra?: {
+    tableId?: string | null;
+    secondaryTableId?: string | null;
+    checkedInAt?: Date;
+    completedAt?: Date;
+  },
 ) {
   const payload: Record<string, unknown> = {
     status,
@@ -128,6 +139,7 @@ export async function updateReservationStatus(
   };
 
   if (extra?.tableId !== undefined) payload.table_id = extra.tableId;
+  if (extra?.secondaryTableId !== undefined) payload.secondary_table_id = extra.secondaryTableId;
   if (extra?.checkedInAt) payload.checked_in_at = extra.checkedInAt.toISOString();
   if (extra?.completedAt) payload.completed_at = extra.completedAt.toISOString();
 
@@ -135,7 +147,7 @@ export async function updateReservationStatus(
     .from("reservations")
     .update(payload)
     .eq("id", reservationId)
-    .select("*, tables(label)")
+    .select(RESERVATION_SELECT)
     .single();
 
   if (result.data) {
@@ -215,14 +227,16 @@ export async function updateReservationDetails(
   };
 
   if (input.tableId !== undefined && status !== "checked_in") {
-    payload.table_id = input.tableId || null;
+    const ids = normalizeReservationTableIds([input.tableId, input.secondaryTableId]);
+    payload.table_id = ids[0] ?? null;
+    payload.secondary_table_id = ids[1] ?? null;
   }
 
   const result = await supabase
     .from("reservations")
     .update(payload)
     .eq("id", reservationId)
-    .select("*, tables(label)")
+    .select(RESERVATION_SELECT)
     .single();
 
   if (result.data) {
@@ -244,9 +258,15 @@ export async function markReservationNoShow(reservationId: string) {
   return updateReservationStatus(reservationId, "no_show");
 }
 
-export async function checkInReservation(reservationId: string, tableId?: string) {
+export async function checkInReservation(
+  reservationId: string,
+  tableId?: string,
+  secondaryTableId?: string | null,
+) {
+  const ids = normalizeReservationTableIds([tableId, secondaryTableId]);
   return updateReservationStatus(reservationId, "checked_in", {
-    tableId: tableId ?? null,
+    tableId: ids[0] ?? null,
+    secondaryTableId: ids[1] ?? null,
     checkedInAt: new Date(),
   });
 }
@@ -256,7 +276,7 @@ export async function fetchReservationSnapshot(
 ): Promise<ReservationSnapshot | null> {
   const { data, error } = await supabase
     .from("reservations")
-    .select("id, status, table_id, checked_in_at, completed_at")
+    .select("id, status, table_id, secondary_table_id, checked_in_at, completed_at")
     .eq("id", reservationId)
     .single();
 
@@ -266,6 +286,7 @@ export async function fetchReservationSnapshot(
     id: data.id,
     status: data.status as ReservationStatus,
     tableId: data.table_id ?? null,
+    secondaryTableId: data.secondary_table_id ?? null,
     checkedInAt: data.checked_in_at ?? null,
     completedAt: data.completed_at ?? null,
   };
@@ -293,12 +314,13 @@ export async function restoreReservationSnapshot(snapshot: ReservationSnapshot) 
     .update({
       status: snapshot.status,
       table_id: snapshot.tableId,
+      secondary_table_id: snapshot.secondaryTableId,
       checked_in_at: snapshot.checkedInAt,
       completed_at: snapshot.completedAt,
       updated_at: nowIso(),
     })
     .eq("id", snapshot.id)
-    .select("*, tables(label)")
+    .select(RESERVATION_SELECT)
     .single();
 }
 
@@ -318,22 +340,23 @@ export async function restoreTableSnapshot(snapshot: TableSnapshot) {
   return supabase.from("tables").update(payload).eq("id", snapshot.id);
 }
 
-export async function checkInReservationWithTable(
-  reservationId: string,
+async function ensureTableOccupiedForCheckIn(
   tableId: string,
   options?: { allowOccupied?: boolean },
-) {
+): Promise<{ error: Error | null }> {
   const { data: table, error: tableFetchError } = await supabase
     .from("tables")
     .select("status")
     .eq("id", tableId)
     .single();
 
-  if (tableFetchError) return { data: null, error: tableFetchError };
+  if (tableFetchError) {
+    return { error: tableFetchError instanceof Error ? tableFetchError : new Error(String(tableFetchError)) };
+  }
 
   const isEmpty = table?.status === "empty";
   if (!isEmpty && !options?.allowOccupied) {
-    return { data: null, error: new Error("Table is not available") };
+    return { error: new Error("Table is not available") };
   }
 
   if (isEmpty) {
@@ -347,10 +370,39 @@ export async function checkInReservationWithTable(
       })
       .eq("id", tableId);
 
-    if (tableError) return { data: null, error: tableError };
+    if (tableError) {
+      return { error: tableError instanceof Error ? tableError : new Error(String(tableError)) };
+    }
   }
 
-  return checkInReservation(reservationId, tableId);
+  return { error: null };
+}
+
+/** Check in a reservation onto 1–2 tables (occupies empty tables). */
+export async function checkInReservationWithTables(
+  reservationId: string,
+  tableIds: string[],
+  options?: { allowOccupied?: boolean },
+) {
+  const ids = normalizeReservationTableIds(tableIds);
+  if (ids.length === 0) {
+    return { data: null, error: new Error("Select a table") };
+  }
+
+  for (const tableId of ids) {
+    const { error } = await ensureTableOccupiedForCheckIn(tableId, options);
+    if (error) return { data: null, error };
+  }
+
+  return checkInReservation(reservationId, ids[0], ids[1] ?? null);
+}
+
+export async function checkInReservationWithTable(
+  reservationId: string,
+  tableId: string,
+  options?: { allowOccupied?: boolean },
+) {
+  return checkInReservationWithTables(reservationId, [tableId], options);
 }
 
 const DEFAULT_LATE_GRACE_MINUTES = 30;
@@ -453,55 +505,118 @@ export async function createOnlineReservation(input: {
   });
 }
 
+/** Assign 1–2 planned tables (preview only — does not check in). */
+export async function assignReservationTables(
+  reservationId: string,
+  tableIds: string[],
+  options?: { allowOccupied?: boolean },
+) {
+  const ids = normalizeReservationTableIds(tableIds);
+  if (ids.length === 0) {
+    return { data: null, error: new Error("Select a table") };
+  }
+
+  for (const tableId of ids) {
+    const { data: table, error: tableFetchError } = await supabase
+      .from("tables")
+      .select("status")
+      .eq("id", tableId)
+      .single();
+
+    if (tableFetchError) return { data: null, error: tableFetchError };
+
+    if (table?.status !== "empty" && !options?.allowOccupied) {
+      return { data: null, error: new Error("Table is not available") };
+    }
+  }
+
+  return supabase
+    .from("reservations")
+    .update({
+      table_id: ids[0] ?? null,
+      secondary_table_id: ids[1] ?? null,
+      updated_at: nowIso(),
+    })
+    .eq("id", reservationId)
+    .select(RESERVATION_SELECT)
+    .single();
+}
+
 export async function assignReservationTable(
   reservationId: string,
   tableId: string,
   options?: { allowOccupied?: boolean },
 ) {
-  const { data: table, error: tableFetchError } = await supabase
-    .from("tables")
-    .select("status")
-    .eq("id", tableId)
-    .single();
-
-  if (tableFetchError) return { data: null, error: tableFetchError };
-
-  if (table?.status !== "empty" && !options?.allowOccupied) {
-    return { data: null, error: new Error("Table is not available") };
-  }
-
-  // Assign table only — do not check in. Check-in stays a separate action.
-  return supabase
-    .from("reservations")
-    .update({
-      table_id: tableId,
-      updated_at: nowIso(),
-    })
-    .eq("id", reservationId)
-    .select("*, tables(label)")
-    .single();
+  return assignReservationTables(reservationId, [tableId], options);
 }
 
 export async function findActiveReservationForTable(tableId: string) {
   return supabase
     .from("reservations")
-    .select("*, tables(label)")
-    .eq("table_id", tableId)
+    .select(RESERVATION_SELECT)
     .eq("status", "checked_in")
+    .or(`table_id.eq.${tableId},secondary_table_id.eq.${tableId}`)
     .order("checked_in_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 }
 
+/**
+ * When one linked table checks out: unlink it from the reservation.
+ * Complete the reservation only when no linked tables remain.
+ */
 export async function completeReservationForTable(tableId: string, reservationId?: string | null) {
-  const id =
-    reservationId ??
-    (await findActiveReservationForTable(tableId)).data?.id;
-  if (!id) return { data: null, error: null };
+  const found = reservationId
+    ? await supabase
+        .from("reservations")
+        .select("id, status, table_id, secondary_table_id")
+        .eq("id", reservationId)
+        .maybeSingle()
+    : await findActiveReservationForTable(tableId);
 
-  return updateReservationStatus(id, "completed", {
-    completedAt: new Date(),
-  });
+  const row = found.data as
+    | {
+        id: string;
+        status: string;
+        table_id: string | null;
+        secondary_table_id: string | null;
+      }
+    | null
+    | undefined;
+
+  if (!row || row.status !== "checked_in") return { data: null, error: found.error ?? null };
+
+  let primary = row.table_id;
+  let secondary = row.secondary_table_id;
+
+  if (primary === tableId) {
+    primary = secondary;
+    secondary = null;
+  } else if (secondary === tableId) {
+    secondary = null;
+  } else {
+    // Reservation not linked to this table id — leave as-is.
+    return { data: null, error: null };
+  }
+
+  if (!primary) {
+    return updateReservationStatus(row.id, "completed", {
+      completedAt: new Date(),
+      tableId: null,
+      secondaryTableId: null,
+    });
+  }
+
+  return supabase
+    .from("reservations")
+    .update({
+      table_id: primary,
+      secondary_table_id: secondary,
+      updated_at: nowIso(),
+    })
+    .eq("id", row.id)
+    .select(RESERVATION_SELECT)
+    .single();
 }
 
 interface ReservationChangeHandlers {
@@ -577,6 +692,7 @@ export function mapReservationRow(
   row: {
     id: string;
     table_id: string | null;
+    secondary_table_id?: string | null;
     guest_name: string;
     guest_phone: string | null;
     guest_email: string | null;
@@ -595,15 +711,22 @@ export function mapReservationRow(
     manage_token?: string | null;
     event_type?: string | null;
     tables?: { label: string } | { label: string }[] | null;
+    secondary_table?: { label: string } | { label: string }[] | null;
   },
 ): ReservationRecord {
   const tableJoin = row.tables;
   const tableLabel = Array.isArray(tableJoin) ? tableJoin[0]?.label : tableJoin?.label;
+  const secondaryJoin = row.secondary_table;
+  const secondaryTableLabel = Array.isArray(secondaryJoin)
+    ? secondaryJoin[0]?.label
+    : secondaryJoin?.label;
 
   return {
     id: row.id,
     tableId: row.table_id ?? undefined,
     tableLabel,
+    secondaryTableId: row.secondary_table_id ?? undefined,
+    secondaryTableLabel,
     guestName: row.guest_name,
     guestPhone: row.guest_phone ?? undefined,
     guestEmail: row.guest_email ?? undefined,

@@ -250,7 +250,8 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const languagesRef = useRef(languages);
   const newOrderSoundTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingNewOrderSoundRef = useRef(false);
-  const seenPreparingRef = useRef<Set<string> | null>(null);
+  const seenPreparingRef = useRef<Set<string>>(new Set());
+  const preparingSeededRef = useRef(false);
   const lastAlertAtRef = useRef(0);
   const playNewOrderAlertRef = useRef<() => void>(() => {});
 
@@ -340,7 +341,8 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   useEffect(() => {
     setCompanionDone(readCompanionDone(station));
     setBootstrapped(false);
-    seenPreparingRef.current = null;
+    preparingSeededRef.current = false;
+    seenPreparingRef.current = new Set();
   }, [station]);
 
   useEffect(() => {
@@ -487,19 +489,26 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   }, [station, reloadStationItems]);
 
   // Backup detector: new preparing IDs after bootstrap (covers missed INSERT / UPDATE fire).
-  // Soft-refresh of the same tickets does not beep — only brand-new IDs.
+  // Soft-refresh / cache reload of the same tickets does not beep — only brand-new IDs.
   useEffect(() => {
     const pendingIds = new Set(
       items.filter((item) => isPreparingColumnVisible(item) && item.id).map((item) => item.id!),
     );
+
+    // Before first load finishes, keep the seed in sync but never alert.
     if (!bootstrapped) {
       seenPreparingRef.current = pendingIds;
+      preparingSeededRef.current = false;
       return;
     }
-    if (seenPreparingRef.current == null) {
+
+    // First snapshot after bootstrap — seed only (covers batched setItems + setBootstrapped).
+    if (!preparingSeededRef.current) {
       seenPreparingRef.current = pendingIds;
+      preparingSeededRef.current = true;
       return;
     }
+
     let hasNew = false;
     for (const id of pendingIds) {
       if (!seenPreparingRef.current.has(id)) {

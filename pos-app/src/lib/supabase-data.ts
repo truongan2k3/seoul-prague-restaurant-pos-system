@@ -410,20 +410,45 @@ export async function fetchActiveOrderItems() {
 }
 
 export async function fetchStationOrderItems(station: Station) {
+  // Include null kitchen_status — `.in(...)` alone drops those rows, which made
+  // still-preparing tickets vanish from KDS/Bar after refresh/realtime sync.
   const kitchenStatusQuery = await supabase
     .from("order_items")
     .select(ORDER_ITEM_COLUMNS)
     .eq("station", station)
-    .in("kitchen_status", ["pending", "ready", "served", "cancelled"])
+    .or("kitchen_status.is.null,kitchen_status.neq.archived")
     .order("created_at");
 
-  if (!kitchenStatusQuery.error) return kitchenStatusQuery;
+  if (!kitchenStatusQuery.error) {
+    const data = ((kitchenStatusQuery.data as SupabaseOrderItemRow[] | null) ?? []).filter((row) => {
+      if (row.kitchen_status === "archived") return false;
+      const kitchen = typeof row.kitchen_status === "string" ? row.kitchen_status.trim() : "";
+      if (
+        kitchen === "pending" ||
+        kitchen === "ready" ||
+        kitchen === "served" ||
+        kitchen === "cancelled" ||
+        kitchen === "preparing"
+      ) {
+        return true;
+      }
+      const status = normalizeOrderItemStatus(row.status);
+      return (
+        status === "pending" ||
+        status === "preparing" ||
+        status === "held" ||
+        status === "ready" ||
+        status === "served"
+      );
+    });
+    return { data, error: null };
+  }
 
   return supabase
     .from("order_items")
     .select(ORDER_ITEM_COLUMNS)
     .eq("station", station)
-    .in("status", ["pending", "preparing", "ready", "served"])
+    .in("status", ["pending", "preparing", "held", "ready", "served"])
     .order("created_at");
 }
 

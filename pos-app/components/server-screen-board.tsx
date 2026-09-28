@@ -7,10 +7,12 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type TouchEvent as ReactTouchEvent,
 } from "react";
 import { ArrowLeft, ArrowRight, History, Loader2, RefreshCw } from "lucide-react";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { ServerScreenPrepStatsPanel } from "@/components/server-screen-prep-stats";
+import { ServerScreenReservationPanel } from "@/components/server-screen-reservation-panel";
 import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
 import { useStationScreen } from "@/contexts/station-screen-context";
@@ -29,9 +31,6 @@ import {
 import {
   computePrepTimeStats,
   emptyPrepTimeStats,
-  PREP_STATS_EMPTY_WAIT_MS,
-  PREP_STATS_GAP_MS,
-  PREP_STATS_VISIBLE_MS,
   venueTodayRange,
   type PrepTimeStats,
 } from "@/lib/prep-time-stats";
@@ -79,6 +78,10 @@ import {
 const COMPANION_DONE_KEY = "pos-server-screen-companion-done";
 /** Collapse multi-line inserts from one Send into a single alert. */
 const NEW_ORDER_SOUND_DEBOUNCE_MS = 700;
+/** Hidden edge swipe (same idea as Client Screen). */
+const SWIPE_EDGE_PX = 36;
+const SWIPE_OPEN_PX = 72;
+const SWIPE_CLOSE_PX = 64;
 
 type BoardRow = {
   key: string;
@@ -258,8 +261,8 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const [bootstrapped, setBootstrapped] = useState(false);
   const [prepStats, setPrepStats] = useState<PrepTimeStats>(() => emptyPrepTimeStats());
   const [prepStatsLoading, setPrepStatsLoading] = useState(false);
-  const [prepStatsVisible, setPrepStatsVisible] = useState(false);
-  const [prepStatsFadingOut, setPrepStatsFadingOut] = useState(false);
+  const [prepStatsOpen, setPrepStatsOpen] = useState(false);
+  const [reservationsOpen, setReservationsOpen] = useState(false);
   const rotateResetRef = useRef(Date.now());
   const languageRef = useRef(language);
   const languagesRef = useRef(languages);
@@ -269,11 +272,13 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const preparingSeededRef = useRef(false);
   const lastAlertAtRef = useRef(0);
   const playNewOrderAlertRef = useRef<() => void>(() => {});
-  const prepStatsPhaseRef = useRef<"idle" | "waiting" | "showing" | "gap">("idle");
-  const prepStatsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prepStatsCacheRef = useRef<{ key: string; stats: PrepTimeStats; at: number } | null>(null);
   const tableLabelByIdRef = useRef(new Map<string, string>());
-
+  const touchRef = useRef<{ x: number; y: number; tracking: boolean } | null>(null);
+  const prepStatsOpenRef = useRef(false);
+  const reservationsOpenRef = useRef(false);
+  prepStatsOpenRef.current = prepStatsOpen;
+  reservationsOpenRef.current = reservationsOpen;
   languageRef.current = language;
   languagesRef.current = languages;
 
@@ -634,20 +639,6 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     return rows.sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
   }, [items, menuItems, language, tableLabelById, companionDone]);
 
-  const clearPrepStatsTimer = useCallback(() => {
-    if (prepStatsTimerRef.current) {
-      clearTimeout(prepStatsTimerRef.current);
-      prepStatsTimerRef.current = null;
-    }
-  }, []);
-
-  const hidePrepStatsImmediate = useCallback(() => {
-    clearPrepStatsTimer();
-    prepStatsPhaseRef.current = "idle";
-    setPrepStatsVisible(false);
-    setPrepStatsFadingOut(false);
-  }, [clearPrepStatsTimer]);
-
   const loadTodayPrepStats = useCallback(async () => {
     const { dateIso, startIso, endExclusiveIso } = venueTodayRange();
     const cacheKey = `${station}:${dateIso}`;
@@ -679,64 +670,23 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       setPrepStatsLoading(false);
     }
   }, [station]);
-  const loadTodayPrepStatsRef = useRef(loadTodayPrepStats);
-  loadTodayPrepStatsRef.current = loadTodayPrepStats;
 
-  const boardEmpty = preparingRows.length === 0;
+  const openPrepStats = useCallback(() => {
+    setReservationsOpen(false);
+    setPrepStatsOpen(true);
+    void loadTodayPrepStats();
+  }, [loadTodayPrepStats]);
 
-  // Empty-board cycle: wait 2m → show 1m → fade → wait 5m → repeat.
+  const openReservations = useCallback(() => {
+    setPrepStatsOpen(false);
+    setReservationsOpen(true);
+  }, []);
+
+  // New preparing tickets dismiss stats so they never cover live orders.
   useEffect(() => {
-    if (!boardEmpty) {
-      hidePrepStatsImmediate();
-      return;
-    }
-
-    let cancelled = false;
-
-    const schedule = (ms: number, fn: () => void) => {
-      clearPrepStatsTimer();
-      prepStatsTimerRef.current = setTimeout(() => {
-        prepStatsTimerRef.current = null;
-        if (!cancelled) fn();
-      }, ms);
-    };
-
-    const startGap = () => {
-      prepStatsPhaseRef.current = "gap";
-      setPrepStatsFadingOut(true);
-      schedule(700, () => {
-        setPrepStatsVisible(false);
-        setPrepStatsFadingOut(false);
-        schedule(PREP_STATS_GAP_MS, () => {
-          void showStats();
-        });
-      });
-    };
-
-    const showStats = async () => {
-      prepStatsPhaseRef.current = "showing";
-      await loadTodayPrepStatsRef.current();
-      if (cancelled) return;
-      setPrepStatsFadingOut(false);
-      setPrepStatsVisible(true);
-      schedule(PREP_STATS_VISIBLE_MS, startGap);
-    };
-
-    prepStatsPhaseRef.current = "waiting";
-    schedule(PREP_STATS_EMPTY_WAIT_MS, () => {
-      void showStats();
-    });
-
-    return () => {
-      cancelled = true;
-      clearPrepStatsTimer();
-      prepStatsPhaseRef.current = "idle";
-    };
-  }, [boardEmpty, clearPrepStatsTimer, hidePrepStatsImmediate]);
-
-  useEffect(() => {
-    return () => clearPrepStatsTimer();
-  }, [clearPrepStatsTimer]);
+    if (preparingRows.length === 0) return;
+    if (prepStatsOpen) setPrepStatsOpen(false);
+  }, [preparingRows.length, prepStatsOpen]);
 
   useEffect(() => {
     const valid = new Set(preparingRows.map((row) => row.key));
@@ -849,6 +799,52 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     rotateResetRef.current = Date.now();
   }, [setLanguage]);
 
+  // Hidden gestures (like Client Screen):
+  // swipe right from left edge → reservations (read-only)
+  // swipe left from right edge → prep stats
+  const onTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
+    unlockNotificationAudio();
+    if (historyOpen) return;
+    const touch = event.touches[0];
+    if (!touch) return;
+    const fromLeftEdge = touch.clientX <= SWIPE_EDGE_PX;
+    const fromRightEdge = touch.clientX >= window.innerWidth - SWIPE_EDGE_PX;
+    const anyPanelOpen = prepStatsOpenRef.current || reservationsOpenRef.current;
+    if (!anyPanelOpen && !fromLeftEdge && !fromRightEdge) {
+      touchRef.current = null;
+      return;
+    }
+    touchRef.current = { x: touch.clientX, y: touch.clientY, tracking: true };
+  };
+
+  const onTouchEnd = (event: ReactTouchEvent<HTMLDivElement>) => {
+    const start = touchRef.current;
+    touchRef.current = null;
+    if (!start?.tracking || historyOpen) return;
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    const dx = touch.clientX - start.x;
+    const dy = Math.abs(touch.clientY - start.y);
+    if (dy > Math.abs(dx) * 0.85) return;
+
+    if (reservationsOpenRef.current) {
+      if (dx <= -SWIPE_CLOSE_PX) setReservationsOpen(false);
+      return;
+    }
+    if (prepStatsOpenRef.current) {
+      if (dx >= SWIPE_CLOSE_PX) setPrepStatsOpen(false);
+      return;
+    }
+
+    if (dx >= SWIPE_OPEN_PX && start.x <= SWIPE_EDGE_PX) {
+      openReservations();
+      return;
+    }
+    if (dx <= -SWIPE_OPEN_PX && start.x >= window.innerWidth - SWIPE_EDGE_PX) {
+      openPrepStats();
+    }
+  };
+
   const onBackgroundPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     unlockNotificationAudio();
     flushPendingNewOrderSound();
@@ -857,6 +853,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     // Don't steal taps from buttons / toolbar / list rows.
     if (target.closest("[data-server-interactive]")) return;
     if (target.closest("button, a, input, select, textarea, [role='button']")) return;
+    if (prepStatsOpen || reservationsOpen) return;
     cycleLanguage();
   };
 
@@ -948,7 +945,12 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   }
 
   return (
-    <div className={shellClass} onPointerDown={onBackgroundPointerDown}>
+    <div
+      className={shellClass}
+      onPointerDown={onBackgroundPointerDown}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+    >
       <AnnouncementMarquee surface={station === "kitchen" ? "kds" : "bar"} tone="dark" />
 
       {!audioUnlocked ? (
@@ -962,12 +964,13 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         </button>
       ) : null}
 
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <header
           className="flex shrink-0 cursor-pointer items-center justify-between gap-3 border-b border-white/10 px-4 py-3"
           onPointerDown={(event) => {
             // Tapping the title area cycles language (manual override).
             event.stopPropagation();
+            if (prepStatsOpen || reservationsOpen) return;
             cycleLanguage();
           }}
         >
@@ -1054,11 +1057,19 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             )}
           </div>
 
+          <ServerScreenReservationPanel
+            open={reservationsOpen}
+            onClose={() => setReservationsOpen(false)}
+            language={language}
+            title={translate("prepStatsReservationsTitle")}
+            emptyLabel={translate("prepStatsReservationsEmpty")}
+          />
+
           <ServerScreenPrepStatsPanel
             stats={prepStats}
             loading={prepStatsLoading}
-            visible={prepStatsVisible}
-            fadingOut={prepStatsFadingOut}
+            open={prepStatsOpen}
+            onClose={() => setPrepStatsOpen(false)}
             title={translate("prepStatsTodayTitle")}
             averageLabel={translate("prepStatsAverage")}
             fastestLabel={translate("prepStatsFastest")}

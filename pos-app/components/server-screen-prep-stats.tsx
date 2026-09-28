@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { X } from "lucide-react";
 import type { PrepTimeSample, PrepTimeStats } from "@/lib/prep-time-stats";
 import {
   formatPrepDurationDetailed,
@@ -25,7 +26,9 @@ function StatHero({
 
   return (
     <div className="min-w-0 text-center">
-      <p className={`text-[clamp(1.75rem,4.5vw,3.25rem)] font-semibold tabular-nums leading-none tracking-tight ${accentClass}`}>
+      <p
+        className={`text-[clamp(1.75rem,4.5vw,3.25rem)] font-semibold tabular-nums leading-none tracking-tight ${accentClass}`}
+      >
         {value}
       </p>
       <p className="mt-2 text-[0.7rem] font-medium uppercase tracking-[0.18em] text-white/45 sm:text-xs">
@@ -49,9 +52,7 @@ function ItemRow({
       <div className="min-w-0">
         <p className="truncate text-base font-medium text-[#F5EDE4] sm:text-lg">{sample.name}</p>
         {sample.tableLabel ? (
-          <p className="mt-0.5 text-xs tabular-nums text-white/35">
-            {sample.tableLabel}
-          </p>
+          <p className="mt-0.5 text-xs tabular-nums text-white/35">{sample.tableLabel}</p>
         ) : null}
       </div>
       <span
@@ -68,8 +69,8 @@ function ItemRow({
 export function ServerScreenPrepStatsPanel({
   stats,
   loading,
-  visible,
-  fadingOut,
+  open,
+  onClose,
   title,
   averageLabel,
   fastestLabel,
@@ -82,8 +83,8 @@ export function ServerScreenPrepStatsPanel({
 }: {
   stats: PrepTimeStats;
   loading: boolean;
-  visible: boolean;
-  fadingOut: boolean;
+  open: boolean;
+  onClose: () => void;
   title: string;
   averageLabel: string;
   fastestLabel: string;
@@ -97,17 +98,14 @@ export function ServerScreenPrepStatsPanel({
   const [entered, setEntered] = useState(false);
 
   useEffect(() => {
-    if (!visible) {
+    if (!open) {
       setEntered(false);
       return;
     }
     const id = window.requestAnimationFrame(() => setEntered(true));
     return () => window.cancelAnimationFrame(id);
-  }, [visible]);
+  }, [open]);
 
-  if (!visible && !fadingOut) return null;
-
-  const showContent = entered && !fadingOut;
   const avg =
     stats.averageMs != null ? formatPrepDurationDetailed(stats.averageMs, minLabel) : "—";
   const fastest =
@@ -116,34 +114,46 @@ export function ServerScreenPrepStatsPanel({
     stats.slowest != null ? formatPrepDurationShort(stats.slowest.durationMs, minLabel) : "—";
 
   return (
-    <div
-      className={`absolute inset-0 z-10 flex flex-col overflow-hidden bg-[#0B0B0C]/96 backdrop-blur-[2px] transition-opacity duration-700 ease-out ${
-        showContent ? "opacity-100" : "opacity-0"
+    <aside
+      data-server-interactive
+      className={`absolute inset-0 z-30 flex w-full flex-col bg-[#0B0B0C] transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+        open ? "translate-x-0" : "translate-x-full pointer-events-none"
       }`}
-      aria-hidden={!showContent}
+      aria-hidden={!open}
+      aria-label={title}
     >
       <div
-        className={`pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(232,213,196,0.08),transparent_55%)] transition-opacity duration-1000 ${
-          showContent ? "opacity-100" : "opacity-0"
+        className={`pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(232,213,196,0.08),transparent_55%)] transition-opacity duration-700 ${
+          entered ? "opacity-100" : "opacity-0"
         }`}
       />
 
-      <div
-        className={`relative flex min-h-0 flex-1 flex-col px-5 py-6 transition-all duration-700 ease-out sm:px-8 sm:py-8 ${
-          showContent ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
-        }`}
-      >
-        <header className="shrink-0 text-center">
-          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-[#E8D5C4]/75 sm:text-xs">
+      <div className="relative flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#C9A88B]">
             {title}
           </p>
           {!loading && stats.sampleCount > 0 ? (
-            <p className="mt-2 text-xs tabular-nums text-white/30">
+            <p className="mt-1 text-xs tabular-nums text-white/35">
               {sampleCountLabel.replace("{count}", String(stats.sampleCount))}
             </p>
           ) : null}
-        </header>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="rounded-full border border-white/15 p-2.5 text-white/70 transition hover:bg-white/10 hover:text-white"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
 
+      <div
+        className={`relative flex min-h-0 flex-1 flex-col px-5 py-6 transition-all duration-500 ease-out sm:px-8 sm:py-8 ${
+          entered ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
+        }`}
+      >
         {loading ? (
           <div className="flex flex-1 items-center justify-center">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/15 border-t-[#E8D5C4]" />
@@ -153,7 +163,7 @@ export function ServerScreenPrepStatsPanel({
             <p className="max-w-sm text-center text-base text-white/40">{emptyLabel}</p>
           </div>
         ) : (
-          <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-8 pt-8 sm:gap-10 sm:pt-10">
+          <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-8 sm:gap-10">
             <div className="grid shrink-0 grid-cols-3 gap-3 sm:gap-8">
               <StatHero label={averageLabel} value={avg} accent="avg" />
               <StatHero label={fastestLabel} value={fastest} accent="fast" />
@@ -185,6 +195,6 @@ export function ServerScreenPrepStatsPanel({
           </div>
         )}
       </div>
-    </div>
+    </aside>
   );
 }

@@ -202,6 +202,9 @@ function aggregateOrderItems(items: OrderItem[]): OrderItem[] {
 
     if (match) {
       match.quantity += item.quantity;
+      if (item.id) {
+        match.unitIds = [...(match.unitIds ?? (match.id ? [match.id] : [])), item.id];
+      }
       if (
         item.createdAt &&
         (!match.createdAt || item.createdAt < match.createdAt)
@@ -209,29 +212,83 @@ function aggregateOrderItems(items: OrderItem[]): OrderItem[] {
         match.createdAt = item.createdAt;
       }
     } else {
-      merged.push({ ...item });
+      merged.push({
+        ...item,
+        unitIds: item.unitIds?.length
+          ? [...item.unitIds]
+          : item.id
+            ? [item.id]
+            : undefined,
+      });
     }
   }
 
   return merged;
 }
 
+/**
+ * Expand an aggregated line into unit rows. Prefer `unitIds` so qty>1 lines
+ * never look "removed" to updateTableOrders (which cancels missing ids).
+ */
 function expandOrderToUnits(order: OrderItem): OrderItem[] {
-  const units: OrderItem[] = [];
+  const qty = Math.max(0, order.quantity || 0);
+  if (qty === 0) return [];
+
   const normalized = normalizeOrderItemStatus(order.status);
   const extraUnitStatus: OrderItem["status"] =
     normalized === "served" || normalized === "ready" ? "preparing" : normalized;
 
-  for (let index = 0; index < order.quantity; index += 1) {
-    units.push({
+  const ids =
+    order.unitIds && order.unitIds.length > 0
+      ? order.unitIds
+      : order.id
+        ? [order.id]
+        : [];
+
+  if (ids.length >= qty) {
+    return ids.slice(0, qty).map((id) => ({
       ...order,
       quantity: 1,
-      id: index === 0 ? order.id : undefined,
-      createdAt: index === 0 ? order.createdAt : undefined,
-      status: index === 0 ? order.status : extraUnitStatus,
-    });
+      id,
+      unitIds: undefined,
+    }));
   }
-  return units;
+
+  if (ids.length > 0) {
+    const units: OrderItem[] = ids.map((id) => ({
+      ...order,
+      quantity: 1,
+      id,
+      unitIds: undefined,
+    }));
+    for (let index = ids.length; index < qty; index += 1) {
+      units.push({
+        ...order,
+        quantity: 1,
+        id: undefined,
+        unitIds: undefined,
+        createdAt: undefined,
+        status: extraUnitStatus,
+        kitchenStatus: kitchenStatusFromOrderStatus(extraUnitStatus),
+        readyAt: undefined,
+      });
+    }
+    return units;
+  }
+
+  return Array.from({ length: qty }, (_, index) => ({
+    ...order,
+    quantity: 1,
+    id: index === 0 ? order.id : undefined,
+    unitIds: undefined,
+    createdAt: index === 0 ? order.createdAt : undefined,
+    status: index === 0 ? order.status : extraUnitStatus,
+    kitchenStatus:
+      index === 0
+        ? order.kitchenStatus
+        : kitchenStatusFromOrderStatus(extraUnitStatus),
+    readyAt: index === 0 ? order.readyAt : undefined,
+  }));
 }
 
 function kitchenStatusFromOrderStatus(status: OrderItem["status"]): "pending" | "ready" | "served" {
@@ -280,11 +337,18 @@ function isKitchenStillOpen(
 }
 
 async function syncTableOrdersFromDb(tableId: string) {
-  const { data: rows } = await supabase
+  const { data: rows, error } = await supabase
     .from("order_items")
     .select(ORDER_ITEM_COLUMNS)
     .eq("table_id", tableId)
     .order("created_at", { ascending: true });
+
+  // Never treat a failed select as "empty table" — that would delete live
+  // preparing tickets (incl. right after appendOrdersToTable).
+  if (error) {
+    console.warn("[syncTableOrdersFromDb] select failed:", error.message);
+    return;
+  }
 
   if (!rows?.length) {
     const { data: table } = await supabase.from("tables").select("status").eq("id", tableId).single();
@@ -554,13 +618,26 @@ export async function updateTableOrders(
   }
 
   const desiredUnits = activeOrders.flatMap(expandOrderToUnits);
-  const existingIds = new Set((existingRows ?? []).map((row) => row.id));
+  // Only compare against open (non-archived / non-cancelled) rows. Archived
+  // history rows must never enter the cancel set.
+  const existingOpenIds = new Set(
+    (existingRows ?? [])
+      .filter((row) => {
+        const status = resolveKitchenStatus({
+          status: row.status,
+          kitchenStatus: row.kitchen_status ?? undefined,
+          isCancelled: Boolean(row.is_cancelled),
+        });
+        return status !== "archived" && status !== "cancelled" && !row.is_cancelled;
+      })
+      .map((row) => row.id),
+  );
   const desiredIds = new Set(
     desiredUnits.map((unit) => unit.id).filter((id): id is string => Boolean(id)),
   );
 
   // Soft-delete / archive lines removed from the cart.
-  const idsToCancel = [...existingIds].filter((id) => !desiredIds.has(id));
+  const idsToCancel = [...existingOpenIds].filter((id) => !desiredIds.has(id));
   if (idsToCancel.length > 0) {
     const { data: cancelRows } = await supabase
       .from("order_items")

@@ -751,8 +751,9 @@ export function NewOrderModal({
     setSubmittedLineError(null);
     const orders = editableLinesToOrders(nextLines).map((item) => ({
       ...item,
-      skipPrint: options.silent,
-      hideOnKds: options.silent,
+      // Silent = don't reprint; never flip hideOnKds on already-sent kitchen lines
+      // (that was wiping preparing tickets from KDS when saving/editing a table).
+      skipPrint: options.silent ? true : item.skipPrint,
     }));
     const printOrders = options.silent
       ? undefined

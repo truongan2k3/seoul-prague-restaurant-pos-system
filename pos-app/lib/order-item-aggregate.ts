@@ -2,7 +2,7 @@ import { resolveKitchenStatus } from "@/lib/auto-serve";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
 import type { OrderItem } from "@/lib/types";
 
-/** Same-minute wave so later appends stay separate tickets. */
+/** Same-send wave so later appends stay separate tickets. */
 function createdAtBucket(iso?: string): string {
   if (!iso) return "";
   return iso.slice(0, 16);

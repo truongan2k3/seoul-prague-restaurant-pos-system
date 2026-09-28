@@ -410,6 +410,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const touchRef = useRef<{ x: number; y: number; tracking: boolean } | null>(null);
   const prepStatsOpenRef = useRef(false);
   const reservationsOpenRef = useRef(false);
+  const stationReloadGenRef = useRef(0);
   prepStatsOpenRef.current = prepStatsOpen;
   reservationsOpenRef.current = reservationsOpen;
   languageRef.current = language;
@@ -537,19 +538,34 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   }, []);
 
   const reloadStationItems = useCallback(async () => {
+    const gen = ++stationReloadGenRef.current;
     await autoFirePendingItems(actor, station);
+    if (gen !== stationReloadGenRef.current) return;
+
     const sinceIso = new Date(Date.now() - SERVER_SCREEN_HISTORY_VISIBLE_MS).toISOString();
     const [itemsRes, historyRes] = await Promise.all([
       fetchStationOrderItems(station),
       fetchStationHistoryItems(station, sinceIso),
     ]);
-    setItems(
-      ((itemsRes.data as SupabaseOrderItemRow[] | null) ?? []).map((row) => ({
-        ...mapOrderItemRow(row),
-        tableId: row.table_id,
-        createdAt: row.created_at,
-      })),
-    );
+    if (gen !== stationReloadGenRef.current) return;
+
+    // Never wipe the live board on a failed fetch — realtime may already be ahead.
+    if (!itemsRes.error) {
+      setItems(
+        ((itemsRes.data as SupabaseOrderItemRow[] | null) ?? []).map((row) => ({
+          ...mapOrderItemRow(row),
+          tableId: row.table_id,
+          createdAt: row.created_at,
+        })),
+      );
+    } else {
+      console.warn("[ServerScreen] fetchStationOrderItems failed:", itemsRes.error.message);
+    }
+
+    if (historyRes.error) {
+      console.warn("[ServerScreen] fetchStationHistoryItems failed:", historyRes.error.message);
+      return;
+    }
 
     const historyIncoming: HistoryRow[] = ((historyRes.data as SupabaseOrderItemRow[] | null) ?? [])
       .filter((row) => !row.hide_on_kds && !row.is_cancelled)

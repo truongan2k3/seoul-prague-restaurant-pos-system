@@ -472,13 +472,14 @@ export function writeServerScreenLayoutMode(mode: ServerScreenLayoutMode): void 
   }
 }
 
-/** Same-minute send wave so one Send → one order card. */
+/** One Send → one order card (unit rows from a single INSERT share created_at). */
 export function serverScreenOrderWaveKey(
   tableId: string,
   createdAt: string | null | undefined,
 ): string {
-  const bucket = createdAt ? createdAt.slice(0, 16) : "";
-  return `${tableId}|${bucket}`;
+  // Use the full timestamp — minute bucketing incorrectly merged a later Send
+  // into an already-completed wave, which made done lines reappear on KDS.
+  return `${tableId}|${createdAt ?? ""}`;
 }
 
 /** Compact ticket number from creation time (display only). */

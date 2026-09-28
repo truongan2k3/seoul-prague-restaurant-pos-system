@@ -9,7 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type TouchEvent as ReactTouchEvent,
 } from "react";
-import { ArrowLeft, ArrowRight, History, Loader2, RefreshCw } from "lucide-react";
+import { ArrowLeft, ArrowRight, BarChart3, History, Loader2, RefreshCw } from "lucide-react";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { ServerScreenPrepStatsPanel } from "@/components/server-screen-prep-stats";
 import { ServerScreenReservationPanel } from "@/components/server-screen-reservation-panel";
@@ -173,10 +173,13 @@ function FloatingToolbar({
   onMarkDone,
   onHistory,
   onRefresh,
+  onPrepStats,
   markDoneLabel,
   historyLabel,
   refreshLabel,
+  prepStatsLabel,
   showMarkDone = true,
+  showPrepStats = false,
 }: {
   selectedCount: number;
   busy: boolean;
@@ -184,10 +187,13 @@ function FloatingToolbar({
   onMarkDone: () => void;
   onHistory: () => void;
   onRefresh: () => void;
+  onPrepStats?: () => void;
   markDoneLabel: string;
   historyLabel: string;
   refreshLabel: string;
+  prepStatsLabel?: string;
   showMarkDone?: boolean;
+  showPrepStats?: boolean;
 }) {
   return (
     <div className="relative z-20 shrink-0 px-3 pb-2 pt-1 sm:px-4">
@@ -217,6 +223,17 @@ function FloatingToolbar({
           {showMarkDone ? <History className="h-4 w-4" /> : <ArrowLeft className="h-4 w-4" />}
           <span className="hidden sm:inline">{historyLabel}</span>
         </button>
+        {showPrepStats && onPrepStats ? (
+          <button
+            type="button"
+            onClick={onPrepStats}
+            aria-label={prepStatsLabel ?? "Stats"}
+            title={prepStatsLabel}
+            className="inline-flex min-h-12 min-w-12 shrink-0 items-center justify-center rounded-xl border border-white/12 bg-white/[0.04] text-[#E8D5C4] transition hover:bg-white/[0.08]"
+          >
+            <BarChart3 className="h-4 w-4" />
+          </button>
+        ) : null}
         <button
           type="button"
           disabled={refreshing}
@@ -799,18 +816,16 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     rotateResetRef.current = Date.now();
   }, [setLanguage]);
 
-  // Hidden gestures (like Client Screen):
-  // swipe right from left edge → reservations (read-only)
-  // swipe left from right edge → prep stats
+  // Hidden gesture (like Client Screen): swipe right from left edge → reservations.
+  // Prep stats open from the toolbar button instead.
   const onTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
     unlockNotificationAudio();
     if (historyOpen) return;
     const touch = event.touches[0];
     if (!touch) return;
     const fromLeftEdge = touch.clientX <= SWIPE_EDGE_PX;
-    const fromRightEdge = touch.clientX >= window.innerWidth - SWIPE_EDGE_PX;
     const anyPanelOpen = prepStatsOpenRef.current || reservationsOpenRef.current;
-    if (!anyPanelOpen && !fromLeftEdge && !fromRightEdge) {
+    if (!anyPanelOpen && !fromLeftEdge) {
       touchRef.current = null;
       return;
     }
@@ -832,16 +847,12 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       return;
     }
     if (prepStatsOpenRef.current) {
-      if (dx >= SWIPE_CLOSE_PX) setPrepStatsOpen(false);
+      if (dx <= -SWIPE_CLOSE_PX || dx >= SWIPE_CLOSE_PX) setPrepStatsOpen(false);
       return;
     }
 
     if (dx >= SWIPE_OPEN_PX && start.x <= SWIPE_EDGE_PX) {
       openReservations();
-      return;
-    }
-    if (dx <= -SWIPE_OPEN_PX && start.x >= window.innerWidth - SWIPE_EDGE_PX) {
-      openPrepStats();
     }
   };
 
@@ -1090,9 +1101,12 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         onMarkDone={() => void handleMarkDone()}
         onHistory={() => setHistoryOpen(true)}
         onRefresh={() => void handleRefresh()}
+        onPrepStats={openPrepStats}
         markDoneLabel={translate("serverScreenMarkDone")}
         historyLabel={translate("history")}
         refreshLabel={translate("serverScreenRefresh")}
+        prepStatsLabel={translate("prepStatsTodayTitle")}
+        showPrepStats
       />
       <ServerScreenFooter language={language} />
     </div>

@@ -1,6 +1,7 @@
 import {
   isGrillGuestPrepOrder,
   isGrillMenuItem,
+  isGrillSetMenuItem,
 } from "@/lib/grill-guest-count";
 import { resolveKitchenStatus } from "@/lib/auto-serve";
 import { resolveMenuItemForOrder } from "@/lib/menu-display";
@@ -28,6 +29,7 @@ export const DEFAULT_SERVER_SCREEN_CONFIG: ServerScreenConfig = {
   languageMode: "bilingual",
   languages: ["en", "cs"],
   autoRotateLanguage: true,
+  showPaymentOverlayOnKds: false,
 };
 
 const LANG_SET = new Set<LanguageCode>(["en", "cs", "zh"]);
@@ -81,6 +83,12 @@ export function parseServerScreenConfig(raw: unknown): ServerScreenConfig {
         : typeof row.auto_rotate_language === "boolean"
           ? row.auto_rotate_language
           : DEFAULT_SERVER_SCREEN_CONFIG.autoRotateLanguage,
+    showPaymentOverlayOnKds:
+      typeof row.showPaymentOverlayOnKds === "boolean"
+        ? row.showPaymentOverlayOnKds
+        : typeof row.show_payment_overlay_on_kds === "boolean"
+          ? row.show_payment_overlay_on_kds
+          : DEFAULT_SERVER_SCREEN_CONFIG.showPaymentOverlayOnKds,
   };
 }
 
@@ -90,6 +98,7 @@ export function serverScreenConfigToDb(config: ServerScreenConfig) {
     languageMode: config.languageMode,
     languages,
     autoRotateLanguage: Boolean(config.autoRotateLanguage),
+    showPaymentOverlayOnKds: Boolean(config.showPaymentOverlayOnKds),
   };
 }
 
@@ -185,39 +194,57 @@ export const GRILL_FIRST_ORDER_COMPANIONS: Array<{
   },
 ];
 
-function orderIsGrillDish(order: OrderItem, menuItems: MenuItem[]): boolean {
+function orderIsGrillSetDish(order: OrderItem, menuItems: MenuItem[]): boolean {
   if (isGrillGuestPrepOrder(order)) return false;
   const menu = resolveMenuItemForOrder(order, menuItems);
-  if (menu) return isGrillMenuItem(menu);
+  if (menu) return isGrillSetMenuItem(menu);
   const name = order.name.toLowerCase();
   return (
     name.includes("grill set") ||
     name.includes("busan") ||
     name.includes("seoul set") ||
-    name.includes("grilovací set")
+    name.includes("grilovací set") ||
+    name.includes("grilovaci set")
   );
+}
+
+function orderIsGrillDish(order: OrderItem, menuItems: MenuItem[]): boolean {
+  if (isGrillGuestPrepOrder(order)) return false;
+  const menu = resolveMenuItemForOrder(order, menuItems);
+  if (menu) return isGrillMenuItem(menu);
+  return orderIsGrillSetDish(order, menuItems);
 }
 
 /**
  * Earliest grill dish id for a table among all known session items.
- * Companions attach only to this first grill order.
+ * Companions attach to the first Grill Set when present; otherwise first BBQ grill.
  */
 export function firstGrillOrderItemId(
   tableItems: OrderItem[],
   menuItems: MenuItem[],
 ): string | null {
-  let earliest: OrderItem | null = null;
+  let earliestSet: OrderItem | null = null;
+  let earliestAny: OrderItem | null = null;
   for (const item of tableItems) {
-    if (!item.id || !orderIsGrillDish(item, menuItems)) continue;
-    if (!earliest) {
-      earliest = item;
-      continue;
+    if (!item.id) continue;
+    if (orderIsGrillSetDish(item, menuItems)) {
+      if (
+        !earliestSet ||
+        (item.createdAt && (!earliestSet.createdAt || item.createdAt < earliestSet.createdAt))
+      ) {
+        earliestSet = item;
+      }
     }
-    const a = item.createdAt ?? "";
-    const b = earliest.createdAt ?? "";
-    if (a && (!b || a < b)) earliest = item;
+    if (orderIsGrillDish(item, menuItems)) {
+      if (
+        !earliestAny ||
+        (item.createdAt && (!earliestAny.createdAt || item.createdAt < earliestAny.createdAt))
+      ) {
+        earliestAny = item;
+      }
+    }
   }
-  return earliest?.id ?? null;
+  return earliestSet?.id ?? earliestAny?.id ?? null;
 }
 
 export function shouldShowGrillCompanions(
@@ -473,6 +500,8 @@ export type ServerScreenOrderCardLine = {
   note: string | null;
   /** Pending unit ids still needing prep (remaining quantity). */
   remainingIds: string[];
+  /** All unit ids represented by this line (pending + done). */
+  unitIds: string[];
   /** Ready/served units kept visible until the whole card completes. */
   doneCount: number;
   companionKey?: string;
@@ -535,6 +564,7 @@ function buildCompanionLinesForParent(
       name: companion.names[language] || companion.names.en,
       note: null,
       remainingIds: doneAt ? [] : [key],
+      unitIds: [key],
       doneCount: doneAt ? 1 : 0,
       companionKey: key,
       parentItemId: parentId,
@@ -670,11 +700,13 @@ export function buildServerScreenOrderCards(
           name: resolveName(item),
           note: resolveNote(item),
           remainingIds: [],
+          unitIds: [],
           doneCount: 0,
         };
         lineMap.set(key, line);
         lineOrder.push(key);
       }
+      if (item.id) line.unitIds.push(item.id);
       if (pending && item.id) line.remainingIds.push(item.id);
       else if (!pending) line.doneCount += 1;
     };
@@ -694,6 +726,23 @@ export function buildServerScreenOrderCards(
     }
 
     const itemLines = lineOrder.map((key) => lineMap.get(key)!).filter(Boolean);
+    const lines: ServerScreenOrderCardLine[] = [];
+    let companionsPlaced = false;
+    for (const line of itemLines) {
+      lines.push(line);
+      if (
+        companionParentId &&
+        !companionsPlaced &&
+        line.unitIds.includes(companionParentId)
+      ) {
+        lines.push(...companionLines);
+        companionsPlaced = true;
+      }
+    }
+    if (!companionsPlaced && companionLines.length > 0) {
+      // Grill set missing from wave (done/cancelled) — keep companions on this card.
+      lines.push(...companionLines);
+    }
 
     const ageFrom =
       pendingItems
@@ -712,7 +761,7 @@ export function buildServerScreenOrderCards(
       ticketId: formatServerScreenTicketId(wave.orderedAt),
       orderedAt: wave.orderedAt,
       ageFrom,
-      lines: [...itemLines, ...companionLines],
+      lines,
       hasPending: true,
     });
   }

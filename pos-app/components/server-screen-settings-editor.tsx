@@ -167,6 +167,23 @@ export function ServerScreenSettingsEditor({
           </span>
         </span>
       </label>
+
+      <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+        <input
+          type="checkbox"
+          checked={value.showPaymentOverlayOnKds}
+          onChange={(e) => onChange({ ...value, showPaymentOverlayOnKds: e.target.checked })}
+          className="mt-1 h-4 w-4 rounded border-gray-300"
+        />
+        <span>
+          <span className="block text-sm font-medium text-gray-800 dark:text-gray-100">
+            {translate("serverScreenPaymentOverlayKds")}
+          </span>
+          <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+            {translate("serverScreenPaymentOverlayKdsHint")}
+          </span>
+        </span>
+      </label>
     </div>
   );
 }

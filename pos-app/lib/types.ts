@@ -35,6 +35,11 @@ export interface ServerScreenConfig {
   /** Ordered languages used for display / rotation. */
   languages: LanguageCode[];
   autoRotateLanguage: boolean;
+  /**
+   * When true, Kitchen (/kds) mirrors Client Screen checkout/payment overlay
+   * while staff is taking payment. Bar (/bar) is never affected.
+   */
+  showPaymentOverlayOnKds: boolean;
 }
 export type NavId =
   | "map"

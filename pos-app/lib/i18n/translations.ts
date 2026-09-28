@@ -368,6 +368,9 @@ const en = {
   serverScreenLanguagesMultiHint: "Choose languages and order used for display / rotation.",
   serverScreenAutoRotate: "Auto rotate language",
   serverScreenAutoRotateHint: "Switch language every 10 seconds through the configured list. Tap empty background to change manually.",
+  serverScreenPaymentOverlayKds: "Show payment on Kitchen (/kds)",
+  serverScreenPaymentOverlayKdsHint:
+    "When staff opens checkout, overlay the same payment bill on the Kitchen screen (like Client Display). Bar (/bar) is not affected. Returns to KDS when payment finishes or is cancelled.",
   pending: "Pending",
   table: "Table",
   tableOccupiedSince: "Seated for",
@@ -1716,6 +1719,9 @@ const cs: Record<TranslationKey, string> = {
   serverScreenLanguagesMultiHint: "Vyberte jazyky a pořadí pro zobrazení / rotaci.",
   serverScreenAutoRotate: "Automatická rotace jazyka",
   serverScreenAutoRotateHint: "Každých 10 sekund přepne jazyk podle seznamu. Klepnutím na prázdné pozadí přepnete ručně.",
+  serverScreenPaymentOverlayKds: "Zobrazit platbu na kuchyni (/kds)",
+  serverScreenPaymentOverlayKdsHint:
+    "Když personál otevře platbu, na kuchyni se překryje stejný účet jako na Client Display. Bar (/bar) není ovlivněn. Po dokončení nebo zrušení se vrátí KDS.",
   pending: "Čeká",
   table: "Stůl",
   tableOccupiedSince: "Obsazeno",
@@ -3056,6 +3062,9 @@ const zh: Record<TranslationKey, string> = {
   serverScreenLanguagesMultiHint: "选择用于显示/轮换的语言及顺序。",
   serverScreenAutoRotate: "自动轮换语言",
   serverScreenAutoRotateHint: "每隔 10 秒按配置列表切换语言。点击空白背景可手动切换。",
+  serverScreenPaymentOverlayKds: "在厨房屏 (/kds) 显示付款",
+  serverScreenPaymentOverlayKdsHint:
+    "员工打开结账时，厨房屏会像客显一样覆盖显示账单。吧台 (/bar) 不受影响。付款完成或取消后回到 KDS。",
   pending: "待做",
   table: "桌号",
   tableOccupiedSince: "入座",

@@ -52,23 +52,30 @@ import {
 import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
 import {
   buildServerScreenOrderCards,
+  companionKeyFor,
+  emptyGrillCompanionStore,
   formatPreparationMinutes,
   formatReadyClock,
   formatServerScreenFooterDate,
   formatServerScreenFooterTime,
   formatServerScreenTicketId,
   GRILL_FIRST_ORDER_COMPANIONS,
+  historyWithinRetention,
   isPreparingColumnVisible,
+  mergeGrillCompanionAnchors,
   nextServerScreenLanguage,
   normalizeServerScreenLanguages,
+  pendingCompanionIds,
   preparationAgeMinutes,
   preparationHighlightTone,
+  pruneGrillCompanionStore,
   readServerScreenLayoutMode,
+  SERVER_SCREEN_HISTORY_VISIBLE_MS,
   SERVER_SCREEN_LANG_ROTATE_MS,
-  SERVER_SCREEN_READY_VISIBLE_MS,
   serverScreenOrderWaveKey,
   shouldShowGrillCompanions,
   writeServerScreenLayoutMode,
+  type GrillCompanionStore,
   type PrepHighlightTone,
   type ServerScreenLayoutMode,
   type ServerScreenOrderCardLine,
@@ -81,6 +88,7 @@ import {
   markItemsReady,
 } from "@/src/lib/table-actions";
 import {
+  fetchStationHistoryItems,
   fetchStationOrderItems,
   fetchTableSummaries,
   fetchPrepTimeSamples,
@@ -91,7 +99,8 @@ import {
   type SupabaseOrderItemRow,
 } from "@/src/lib/supabase-data";
 
-const COMPANION_DONE_KEY = "pos-server-screen-companion-done";
+const COMPANION_STORE_KEY = "pos-server-screen-companion-store";
+const HISTORY_CACHE_KEY = "pos-server-screen-history-cache";
 /** Collapse multi-line inserts from one Send into a single alert. */
 const NEW_ORDER_SOUND_DEBOUNCE_MS = 700;
 /** Hidden edge swipe (same idea as Client Screen). */
@@ -110,8 +119,6 @@ type BoardRow = {
   readyAt?: string;
 };
 
-type CompanionDoneMap = Record<string, string>;
-
 type HistoryRow = {
   key: string;
   name: string;
@@ -119,6 +126,7 @@ type HistoryRow = {
   note: string | null;
   orderedAt?: string;
   completedAt?: string;
+  tableId?: string;
 };
 
 type HistoryCardGroup = {
@@ -131,23 +139,71 @@ type HistoryCardGroup = {
 };
 
 function companionStorageKey(station: Station) {
-  return `${COMPANION_DONE_KEY}-${station}`;
+  return `${COMPANION_STORE_KEY}-${station}`;
 }
 
-function readCompanionDone(station: Station): CompanionDoneMap {
-  if (typeof window === "undefined") return {};
+function historyCacheKey(station: Station) {
+  return `${HISTORY_CACHE_KEY}-${station}`;
+}
+
+function readCompanionStore(station: Station): GrillCompanionStore {
+  if (typeof window === "undefined") return emptyGrillCompanionStore();
   try {
     const raw = sessionStorage.getItem(companionStorageKey(station));
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as CompanionDoneMap;
-    return parsed && typeof parsed === "object" ? parsed : {};
+    if (!raw) return emptyGrillCompanionStore();
+    const parsed = JSON.parse(raw) as GrillCompanionStore | Record<string, string>;
+    // Migrate legacy done-only map.
+    if (parsed && typeof parsed === "object" && !("done" in parsed) && !("anchors" in parsed)) {
+      return { done: parsed as Record<string, string>, anchors: {} };
+    }
+    const store = parsed as GrillCompanionStore;
+    return {
+      done: store.done && typeof store.done === "object" ? store.done : {},
+      anchors: store.anchors && typeof store.anchors === "object" ? store.anchors : {},
+    };
   } catch {
-    return {};
+    return emptyGrillCompanionStore();
   }
 }
 
-function writeCompanionDone(station: Station, map: CompanionDoneMap) {
-  sessionStorage.setItem(companionStorageKey(station), JSON.stringify(map));
+function writeCompanionStore(station: Station, store: GrillCompanionStore) {
+  sessionStorage.setItem(companionStorageKey(station), JSON.stringify(store));
+}
+
+function readHistoryCache(station: Station): HistoryRow[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(historyCacheKey(station));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as HistoryRow[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeHistoryCache(station: Station, rows: HistoryRow[]) {
+  try {
+    localStorage.setItem(historyCacheKey(station), JSON.stringify(rows));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+function pruneHistoryRows(rows: HistoryRow[], nowMs = Date.now()): HistoryRow[] {
+  return rows.filter((row) => historyWithinRetention(row.completedAt, nowMs));
+}
+
+function upsertHistoryRows(existing: HistoryRow[], incoming: HistoryRow[], nowMs = Date.now()): HistoryRow[] {
+  const map = new Map<string, HistoryRow>();
+  for (const row of existing) map.set(row.key, row);
+  for (const row of incoming) {
+    if (!row.key || !historyWithinRetention(row.completedAt, nowMs)) continue;
+    map.set(row.key, row);
+  }
+  return pruneHistoryRows(Array.from(map.values()), nowMs).sort((a, b) =>
+    (b.completedAt ?? "").localeCompare(a.completedAt ?? ""),
+  );
 }
 
 function prepRowClass(tone: PrepHighlightTone, selected: boolean): string {
@@ -316,7 +372,10 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [items, setItems] = useState<StationOrderItem[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
-  const [companionDone, setCompanionDone] = useState<CompanionDoneMap>({});
+  const [companionStore, setCompanionStore] = useState<GrillCompanionStore>(() =>
+    emptyGrillCompanionStore(),
+  );
+  const [historyCache, setHistoryCache] = useState<HistoryRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -340,6 +399,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const playNewOrderAlertRef = useRef<() => void>(() => {});
   const prepStatsCacheRef = useRef<{ key: string; stats: PrepTimeStats; at: number } | null>(null);
   const tableLabelByIdRef = useRef(new Map<string, string>());
+  const menuItemsRef = useRef<MenuItem[]>([]);
   const touchRef = useRef<{ x: number; y: number; tracking: boolean } | null>(null);
   const prepStatsOpenRef = useRef(false);
   const reservationsOpenRef = useRef(false);
@@ -429,7 +489,8 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   }, [flushPendingNewOrderSound]);
 
   useEffect(() => {
-    setCompanionDone(readCompanionDone(station));
+    setCompanionStore(readCompanionStore(station));
+    setHistoryCache(pruneHistoryRows(readHistoryCache(station)));
     setLayoutMode(readServerScreenLayoutMode());
     setBootstrapped(false);
     preparingSeededRef.current = false;
@@ -468,7 +529,11 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
 
   const reloadStationItems = useCallback(async () => {
     await autoFirePendingItems(actor, station);
-    const itemsRes = await fetchStationOrderItems(station);
+    const sinceIso = new Date(Date.now() - SERVER_SCREEN_HISTORY_VISIBLE_MS).toISOString();
+    const [itemsRes, historyRes] = await Promise.all([
+      fetchStationOrderItems(station),
+      fetchStationHistoryItems(station, sinceIso),
+    ]);
     setItems(
       ((itemsRes.data as SupabaseOrderItemRow[] | null) ?? []).map((row) => ({
         ...mapOrderItemRow(row),
@@ -476,6 +541,29 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         createdAt: row.created_at,
       })),
     );
+
+    const historyIncoming: HistoryRow[] = ((historyRes.data as SupabaseOrderItemRow[] | null) ?? [])
+      .filter((row) => !row.hide_on_kds && !row.is_cancelled)
+      .map((row) => {
+        const mapped = mapOrderItemRow(row);
+        return {
+          key: row.id,
+          name: orderItemDisplayName(mapped, menuItemsRef.current, languageRef.current),
+          tableLabel: tableLabelByIdRef.current.get(row.table_id) ?? "—",
+          note: itemNote(
+            { ...mapped, tableId: row.table_id, createdAt: row.created_at },
+            languageRef.current,
+          ),
+          orderedAt: row.created_at,
+          completedAt: row.ready_at ?? undefined,
+          tableId: row.table_id,
+        };
+      });
+    setHistoryCache((prev) => {
+      const next = upsertHistoryRows(prev, historyIncoming);
+      writeHistoryCache(station, next);
+      return next;
+    });
   }, [actor, station]);
 
   const reloadTables = useCallback(async () => {
@@ -617,6 +705,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     return map;
   }, [tables]);
   tableLabelByIdRef.current = tableLabelById;
+  menuItemsRef.current = menuItems;
 
   const itemsByTable = useMemo(() => {
     const map = new Map<string, StationOrderItem[]>();
@@ -627,6 +716,16 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     }
     return map;
   }, [items]);
+
+  // Persist first-grill anchors so companions survive grill done/cancel/delete.
+  useEffect(() => {
+    setCompanionStore((prev) => {
+      const merged = mergeGrillCompanionAnchors(prev, itemsByTable, menuItems);
+      if (merged === prev) return prev;
+      writeCompanionStore(station, merged);
+      return merged;
+    });
+  }, [itemsByTable, menuItems, station]);
 
   const preparingRows = useMemo(() => {
     const pending = items
@@ -640,6 +739,8 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       });
 
     const rows: BoardRow[] = [];
+    const attachedParents = new Set<string>();
+
     for (const item of pending) {
       if (!item.id) continue;
       const tableLabel = tableLabelById.get(item.tableId) ?? "—";
@@ -649,26 +750,61 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         item,
         tableLabel,
       });
-
-      const tableSession = itemsByTable.get(item.tableId) ?? [];
-      if (shouldShowGrillCompanions(item, tableSession, menuItems)) {
-        for (const companion of GRILL_FIRST_ORDER_COMPANIONS) {
-          const key = `${item.id}::${companion.id}`;
-          if (companionDone[key]) continue;
-          rows.push({
-            key,
-            kind: "companion",
-            item,
-            parentId: item.id,
-            companionId: companion.id,
-            tableLabel,
-            companionName: companion.names[language] || companion.names.en,
-          });
-        }
-      }
     }
-    return rows;
-  }, [items, itemsByTable, menuItems, tableLabelById, language, companionDone]);
+
+    const appendCompanions = (parentId: string, hostItem: StationOrderItem, tableLabel: string) => {
+      if (attachedParents.has(parentId)) return;
+      attachedParents.add(parentId);
+      for (const companion of GRILL_FIRST_ORDER_COMPANIONS) {
+        const key = companionKeyFor(parentId, companion.id);
+        if (companionStore.done[key]) continue;
+        rows.push({
+          key,
+          kind: "companion",
+          item: hostItem,
+          parentId,
+          companionId: companion.id,
+          tableLabel,
+          companionName: companion.names[language] || companion.names.en,
+        });
+      }
+    };
+
+    // Attach companions for live first-grill (even when grill itself is no longer pending).
+    for (const [tableId, tableSession] of itemsByTable) {
+      const tableLabel = tableLabelById.get(tableId) ?? "—";
+      const anchor = companionStore.anchors[tableId];
+      const firstId =
+        tableSession.find((item) => shouldShowGrillCompanions(item, tableSession, menuItems))?.id ??
+        anchor?.parentId;
+      if (!firstId) continue;
+
+      const host =
+        tableSession.find((item) => item.id === firstId) ??
+        ({
+          id: firstId,
+          name: "Grill",
+          quantity: 1,
+          price: 0,
+          tableId,
+          createdAt: anchor?.createdAt,
+          kitchenStatus: "pending",
+          status: "preparing",
+        } satisfies StationOrderItem);
+
+      // Keep companions on preparing while any remain — grill done/cancelled must not remove them.
+      if (pendingCompanionIds(companionStore, firstId).length === 0) continue;
+      appendCompanions(firstId, host, tableLabel);
+    }
+
+    return rows.sort((a, b) => {
+      const at = a.item.createdAt ?? "";
+      const bt = b.item.createdAt ?? "";
+      if (at !== bt) return at < bt ? -1 : 1;
+      if (a.kind !== b.kind) return a.kind === "item" ? -1 : 1;
+      return a.key.localeCompare(b.key);
+    });
+  }, [items, itemsByTable, menuItems, tableLabelById, language, companionStore]);
 
   const orderCards = useMemo(
     () =>
@@ -677,48 +813,40 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         menuItems,
         tableLabelById,
         language,
-        companionDone,
+        companionStore,
         resolveName: (item) => orderItemDisplayName(item, menuItems, language),
         resolveNote: (item) => itemNote(item as StationOrderItem, language),
       }),
-    [items, menuItems, tableLabelById, language, companionDone],
+    [items, menuItems, tableLabelById, language, companionStore],
   );
 
   const historyRows = useMemo(() => {
-    const rows: HistoryRow[] = items
-      .filter((item) => {
-        if (item.hideOnKds) return false;
-        const status = resolveKitchenStatus(item);
-        return status === "ready" || status === "served";
-      })
-      .map((item) => ({
-        key: item.id!,
-        name: orderItemDisplayName(item, menuItems, language),
-        tableLabel: tableLabelById.get(item.tableId) ?? "—",
-        note: itemNote(item, language),
-        orderedAt: item.createdAt,
-        completedAt: item.readyAt,
-      }));
+    const rows: HistoryRow[] = [...historyCache];
 
-    for (const [key, readyAt] of Object.entries(companionDone)) {
+    for (const [key, readyAt] of Object.entries(companionStore.done)) {
+      if (!historyWithinRetention(readyAt, nowMs)) continue;
       const [parentId, companionId] = key.split("::");
       if (!parentId || !companionId) continue;
-      const parent = items.find((item) => item.id === parentId);
-      if (!parent) continue;
       const companion = GRILL_FIRST_ORDER_COMPANIONS.find((row) => row.id === companionId);
       if (!companion) continue;
+      const anchor = Object.values(companionStore.anchors).find((row) => row.parentId === parentId);
+      const parent = items.find((item) => item.id === parentId);
+      const tableId = parent?.tableId ?? anchor?.tableId;
       rows.push({
         key,
         name: companion.names[language] || companion.names.en,
-        tableLabel: tableLabelById.get(parent.tableId) ?? "—",
+        tableLabel: tableId ? tableLabelById.get(tableId) ?? "—" : "—",
         note: null,
-        orderedAt: parent.createdAt,
+        orderedAt: parent?.createdAt ?? anchor?.createdAt,
         completedAt: readyAt,
+        tableId,
       });
     }
 
-    return rows.sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
-  }, [items, menuItems, language, tableLabelById, companionDone]);
+    return pruneHistoryRows(rows, nowMs).sort((a, b) =>
+      (b.completedAt ?? "").localeCompare(a.completedAt ?? ""),
+    );
+  }, [historyCache, companionStore, items, language, tableLabelById, nowMs]);
 
   const historyCards = useMemo(() => {
     type Acc = {
@@ -731,85 +859,47 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     };
     const groups = new Map<string, Acc>();
 
-    for (const item of items) {
-      if (item.hideOnKds || !item.id) continue;
-      const status = resolveKitchenStatus(item);
-      if (status !== "ready" && status !== "served") continue;
-      const waveId = serverScreenOrderWaveKey(item.tableId, item.createdAt);
+    for (const row of historyRows) {
+      const waveId = serverScreenOrderWaveKey(row.tableId ?? row.tableLabel, row.orderedAt);
+      // Skip waves still active on the preparing board.
+      if (orderCards.some((card) => card.id === waveId)) continue;
+
       let group = groups.get(waveId);
       if (!group) {
         group = {
           key: waveId,
-          tableLabel: tableLabelById.get(item.tableId) ?? "—",
-          ticketId: formatServerScreenTicketId(item.createdAt),
-          orderedAt: item.createdAt,
-          completedAt: item.readyAt,
+          tableLabel: row.tableLabel,
+          ticketId: formatServerScreenTicketId(row.orderedAt),
+          orderedAt: row.orderedAt,
+          completedAt: row.completedAt,
           lineMap: new Map(),
         };
         groups.set(waveId, group);
       }
-      if (item.createdAt && (!group.orderedAt || item.createdAt < group.orderedAt)) {
-        group.orderedAt = item.createdAt;
-        group.ticketId = formatServerScreenTicketId(item.createdAt);
+      if (row.orderedAt && (!group.orderedAt || row.orderedAt < group.orderedAt)) {
+        group.orderedAt = row.orderedAt;
+        group.ticketId = formatServerScreenTicketId(row.orderedAt);
       }
-      if (item.readyAt && (!group.completedAt || item.readyAt > group.completedAt)) {
-        group.completedAt = item.readyAt;
+      if (row.completedAt && (!group.completedAt || row.completedAt > group.completedAt)) {
+        group.completedAt = row.completedAt;
       }
-      const name = orderItemDisplayName(item, menuItems, language);
-      const note = itemNote(item, language);
-      const lineKey = `${name}\u0001${note ?? ""}`;
+      const lineKey = `${row.name}\u0001${row.note ?? ""}`;
       const existing = group.lineMap.get(lineKey);
       if (existing) existing.qty += 1;
-      else group.lineMap.set(lineKey, { name, note, qty: 1 });
+      else group.lineMap.set(lineKey, { name: row.name, note: row.note, qty: 1 });
     }
 
-    for (const [key, readyAt] of Object.entries(companionDone)) {
-      const [parentId, companionId] = key.split("::");
-      if (!parentId || !companionId) continue;
-      const parent = items.find((item) => item.id === parentId);
-      if (!parent) continue;
-      const companion = GRILL_FIRST_ORDER_COMPANIONS.find((row) => row.id === companionId);
-      if (!companion) continue;
-      const waveId = serverScreenOrderWaveKey(parent.tableId, parent.createdAt);
-      let group = groups.get(waveId);
-      if (!group) {
-        group = {
-          key: waveId,
-          tableLabel: tableLabelById.get(parent.tableId) ?? "—",
-          ticketId: formatServerScreenTicketId(parent.createdAt),
-          orderedAt: parent.createdAt,
-          completedAt: readyAt,
-          lineMap: new Map(),
-        };
-        groups.set(waveId, group);
-      }
-      if (readyAt && (!group.completedAt || readyAt > group.completedAt)) {
-        group.completedAt = readyAt;
-      }
-      const name = companion.names[language] || companion.names.en;
-      const lineKey = `${name}\u0001`;
-      const existing = group.lineMap.get(lineKey);
-      if (existing) existing.qty += 1;
-      else group.lineMap.set(lineKey, { name, note: null, qty: 1 });
-    }
-
-    const result: HistoryCardGroup[] = [];
-    for (const group of groups.values()) {
-      // Only fully completed waves — skip cards still active on the board.
-      const stillActive = orderCards.some((card) => card.id === group.key);
-      if (stillActive) continue;
-      result.push({
-        key: group.key,
-        tableLabel: group.tableLabel,
-        ticketId: group.ticketId,
-        orderedAt: group.orderedAt,
-        completedAt: group.completedAt,
-        lines: Array.from(group.lineMap.values()),
-      });
-    }
+    const result: HistoryCardGroup[] = Array.from(groups.values()).map((group) => ({
+      key: group.key,
+      tableLabel: group.tableLabel,
+      ticketId: group.ticketId,
+      orderedAt: group.orderedAt,
+      completedAt: group.completedAt,
+      lines: Array.from(group.lineMap.values()),
+    }));
 
     return result.sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
-  }, [items, menuItems, language, tableLabelById, companionDone, orderCards]);
+  }, [historyRows, orderCards]);
 
   const loadTodayPrepStats = useCallback(async () => {
     const { dateIso, startIso, endExclusiveIso } = venueTodayRange();
@@ -888,27 +978,45 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   }, [preparingRows, orderCards, layoutMode]);
 
   useEffect(() => {
-    setCompanionDone((prev) => {
-      const next: CompanionDoneMap = {};
-      let changed = false;
-      for (const [key, readyAt] of Object.entries(prev)) {
-        const readyMs = new Date(readyAt).getTime();
-        if (Number.isNaN(readyMs) || nowMs - readyMs > SERVER_SCREEN_READY_VISIBLE_MS * 12) {
-          changed = true;
-          continue;
-        }
-        const parentId = key.split("::")[0];
-        if (!items.some((item) => item.id === parentId)) {
-          changed = true;
-          continue;
-        }
-        next[key] = readyAt;
-      }
-      if (!changed) return prev;
-      writeCompanionDone(station, next);
+    setCompanionStore((prev) => {
+      const next = pruneGrillCompanionStore(prev, nowMs);
+      if (next === prev) return prev;
+      writeCompanionStore(station, next);
       return next;
     });
-  }, [nowMs, items, station]);
+    setHistoryCache((prev) => {
+      const next = pruneHistoryRows(prev, nowMs);
+      if (next.length === prev.length) return prev;
+      writeHistoryCache(station, next);
+      return next;
+    });
+  }, [nowMs, station]);
+
+  // Keep History populated for 2h even after checkout archives the DB rows.
+  useEffect(() => {
+    const incoming: HistoryRow[] = [];
+    for (const item of items) {
+      if (!item.id || item.hideOnKds || item.isCancelled) continue;
+      const status = resolveKitchenStatus(item);
+      if (status !== "ready" && status !== "served") continue;
+      if (!historyWithinRetention(item.readyAt, nowMs)) continue;
+      incoming.push({
+        key: item.id,
+        name: orderItemDisplayName(item, menuItems, language),
+        tableLabel: tableLabelById.get(item.tableId) ?? "—",
+        note: itemNote(item, language),
+        orderedAt: item.createdAt,
+        completedAt: item.readyAt,
+        tableId: item.tableId,
+      });
+    }
+    if (incoming.length === 0) return;
+    setHistoryCache((prev) => {
+      const next = upsertHistoryRows(prev, incoming, nowMs);
+      writeHistoryCache(station, next);
+      return next;
+    });
+  }, [items, menuItems, language, tableLabelById, nowMs, station]);
 
   const toggleSelect = (key: string) => {
     unlockNotificationAudio();
@@ -994,12 +1102,41 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
 
     if (companionKeys.length > 0) {
       const readyAt = new Date().toISOString();
-      setCompanionDone((prev) => {
-        const next = { ...prev };
-        for (const key of companionKeys) next[key] = readyAt;
-        writeCompanionDone(station, next);
+      setCompanionStore((prev) => {
+        const next: GrillCompanionStore = {
+          ...prev,
+          done: { ...prev.done },
+        };
+        for (const key of companionKeys) next.done[key] = readyAt;
+        writeCompanionStore(station, next);
         return next;
       });
+      const companionHistory: HistoryRow[] = [];
+      for (const key of companionKeys) {
+        const [parentId, companionId] = key.split("::");
+        if (!parentId || !companionId) continue;
+        const companion = GRILL_FIRST_ORDER_COMPANIONS.find((row) => row.id === companionId);
+        if (!companion) continue;
+        const anchor = Object.values(companionStore.anchors).find((row) => row.parentId === parentId);
+        const parent = items.find((item) => item.id === parentId);
+        const tableId = parent?.tableId ?? anchor?.tableId;
+        companionHistory.push({
+          key,
+          name: companion.names[language] || companion.names.en,
+          tableLabel: tableId ? tableLabelById.get(tableId) ?? "—" : "—",
+          note: null,
+          orderedAt: parent?.createdAt ?? anchor?.createdAt,
+          completedAt: readyAt,
+          tableId,
+        });
+      }
+      if (companionHistory.length > 0) {
+        setHistoryCache((prev) => {
+          const next = upsertHistoryRows(prev, companionHistory);
+          writeHistoryCache(station, next);
+          return next;
+        });
+      }
     }
 
     playReadySound();

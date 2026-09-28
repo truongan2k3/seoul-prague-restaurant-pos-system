@@ -15,6 +15,9 @@ import type {
 /** Ready column keeps items visible this long after mark-ready (display only). */
 export const SERVER_SCREEN_READY_VISIBLE_MS = 5 * 60 * 1000;
 
+/** Server Screen History keeps completed orders this long. */
+export const SERVER_SCREEN_HISTORY_VISIBLE_MS = 2 * 60 * 60 * 1000;
+
 /** Auto language rotation interval. */
 export const SERVER_SCREEN_LANG_ROTATE_MS = 10_000;
 
@@ -208,6 +211,127 @@ export function shouldShowGrillCompanions(
   return firstGrillOrderItemId(tableItems, menuItems) === item.id;
 }
 
+/** Persisted first-grill anchor so companions survive grill done/cancel/delete. */
+export type GrillCompanionAnchor = {
+  parentId: string;
+  tableId: string;
+  createdAt: string;
+};
+
+export type GrillCompanionStore = {
+  done: Record<string, string>;
+  anchors: Record<string, GrillCompanionAnchor>;
+};
+
+export function emptyGrillCompanionStore(): GrillCompanionStore {
+  return { done: {}, anchors: {} };
+}
+
+export function companionKeyFor(parentId: string, companionId: string): string {
+  return `${parentId}::${companionId}`;
+}
+
+export function isCompanionPending(
+  store: GrillCompanionStore,
+  parentId: string,
+  companionId: string,
+): boolean {
+  return !store.done[companionKeyFor(parentId, companionId)];
+}
+
+export function pendingCompanionIds(
+  store: GrillCompanionStore,
+  parentId: string,
+): string[] {
+  return GRILL_FIRST_ORDER_COMPANIONS.filter((row) =>
+    isCompanionPending(store, parentId, row.id),
+  ).map((row) => row.id);
+}
+
+/**
+ * Remember first-grill anchors from live items. Never clears an existing
+ * table anchor just because the grill left preparing / was cancelled.
+ */
+export function mergeGrillCompanionAnchors(
+  store: GrillCompanionStore,
+  tableItemsByTable: Map<string, OrderItem[]>,
+  menuItems: MenuItem[],
+): GrillCompanionStore {
+  let changed = false;
+  const anchors = { ...store.anchors };
+
+  for (const [tableId, tableItems] of tableItemsByTable) {
+    if (anchors[tableId]) continue;
+    const firstId = firstGrillOrderItemId(tableItems, menuItems);
+    if (!firstId) continue;
+    const parent = tableItems.find((item) => item.id === firstId);
+    if (!parent?.id) continue;
+    anchors[tableId] = {
+      parentId: parent.id,
+      tableId,
+      createdAt: parent.createdAt ?? new Date().toISOString(),
+    };
+    changed = true;
+  }
+
+  return changed ? { ...store, anchors } : store;
+}
+
+/** Drop anchors only when every companion is done and aged out of history. */
+export function pruneGrillCompanionStore(
+  store: GrillCompanionStore,
+  nowMs = Date.now(),
+): GrillCompanionStore {
+  const done: Record<string, string> = {};
+  let changed = false;
+
+  for (const [key, readyAt] of Object.entries(store.done)) {
+    const readyMs = new Date(readyAt).getTime();
+    if (Number.isNaN(readyMs) || nowMs - readyMs > SERVER_SCREEN_HISTORY_VISIBLE_MS) {
+      changed = true;
+      continue;
+    }
+    done[key] = readyAt;
+  }
+
+  const anchors: Record<string, GrillCompanionAnchor> = {};
+  for (const [tableId, anchor] of Object.entries(store.anchors)) {
+    const pending = pendingCompanionIds({ done, anchors: store.anchors }, anchor.parentId);
+    if (pending.length > 0) {
+      anchors[tableId] = anchor;
+      continue;
+    }
+    // All companions done — keep anchor until the newest companion ages out of history.
+    let newestDone = 0;
+    for (const companion of GRILL_FIRST_ORDER_COMPANIONS) {
+      const readyAt = done[companionKeyFor(anchor.parentId, companion.id)];
+      if (!readyAt) continue;
+      const ms = new Date(readyAt).getTime();
+      if (!Number.isNaN(ms)) newestDone = Math.max(newestDone, ms);
+    }
+    if (newestDone > 0 && nowMs - newestDone <= SERVER_SCREEN_HISTORY_VISIBLE_MS) {
+      anchors[tableId] = anchor;
+    } else {
+      changed = true;
+    }
+  }
+
+  if (!changed && Object.keys(done).length === Object.keys(store.done).length) {
+    if (Object.keys(anchors).length === Object.keys(store.anchors).length) return store;
+  }
+  return { done, anchors };
+}
+
+export function historyWithinRetention(
+  completedAt: string | null | undefined,
+  nowMs = Date.now(),
+): boolean {
+  if (!completedAt) return false;
+  const ms = new Date(completedAt).getTime();
+  if (Number.isNaN(ms)) return false;
+  return nowMs - ms <= SERVER_SCREEN_HISTORY_VISIBLE_MS;
+}
+
 export function formatReadyClock(
   readyAt: string | Date | null | undefined,
   language: LanguageCode,
@@ -334,7 +458,7 @@ type BuildOrderCardsInput = {
   menuItems: MenuItem[];
   tableLabelById: Map<string, string>;
   language: LanguageCode;
-  companionDone: Record<string, string>;
+  companionStore: GrillCompanionStore;
   resolveName: (item: OrderItem) => string;
   resolveNote: (item: OrderItem) => string | null;
 };
@@ -349,9 +473,35 @@ function lineAggregateKey(item: OrderItem): string {
   ].join("\u0001");
 }
 
+function buildCompanionLinesForParent(
+  parentId: string,
+  language: LanguageCode,
+  companionStore: GrillCompanionStore,
+): { lines: ServerScreenOrderCardLine[]; pendingCount: number } {
+  const lines: ServerScreenOrderCardLine[] = [];
+  let pendingCount = 0;
+  for (const companion of GRILL_FIRST_ORDER_COMPANIONS) {
+    const key = companionKeyFor(parentId, companion.id);
+    const doneAt = companionStore.done[key];
+    if (!doneAt) pendingCount += 1;
+    lines.push({
+      key,
+      kind: "companion",
+      name: companion.names[language] || companion.names.en,
+      note: null,
+      remainingIds: doneAt ? [] : [key],
+      doneCount: doneAt ? 1 : 0,
+      companionKey: key,
+      parentItemId: parentId,
+    });
+  }
+  return { lines, pendingCount };
+}
+
 /**
  * Group station items into kitchen order cards (one Send / wave per card).
  * Pending + recently-done lines stay together until the whole card is complete.
+ * Grill companions stay until marked done — even if the grill item is done/cancelled/removed.
  */
 export function buildServerScreenOrderCards(
   input: BuildOrderCardsInput,
@@ -361,14 +511,15 @@ export function buildServerScreenOrderCards(
     menuItems,
     tableLabelById,
     language,
-    companionDone,
+    companionStore,
     resolveName,
     resolveNote,
   } = input;
 
   const byTable = new Map<string, typeof items>();
   for (const item of items) {
-    if (item.hideOnKds || item.isCancelled || item.kitchenStatus === "cancelled") continue;
+    // Keep cancelled grill rows in session lookup so companion anchors can resolve names/times.
+    if (item.hideOnKds) continue;
     const list = byTable.get(item.tableId) ?? [];
     list.push(item);
     byTable.set(item.tableId, list);
@@ -382,9 +533,8 @@ export function buildServerScreenOrderCards(
 
   const waves = new Map<string, WaveBucket>();
   for (const item of items) {
-    if (!item.id || item.hideOnKds || item.isCancelled || item.kitchenStatus === "cancelled") {
-      continue;
-    }
+    if (!item.id || item.hideOnKds) continue;
+    if (item.isCancelled || item.kitchenStatus === "cancelled") continue;
     const status = resolveKitchenStatus(item);
     if (status !== "pending" && status !== "ready" && status !== "served") continue;
 
@@ -404,69 +554,60 @@ export function buildServerScreenOrderCards(
     }
   }
 
+  // Ensure companion-only cards exist when the grill wave was cancelled/removed.
+  for (const anchor of Object.values(companionStore.anchors)) {
+    const pending = pendingCompanionIds(companionStore, anchor.parentId);
+    if (pending.length === 0) continue;
+    const waveId = serverScreenOrderWaveKey(anchor.tableId, anchor.createdAt);
+    if (waves.has(waveId)) continue;
+    waves.set(waveId, {
+      tableId: anchor.tableId,
+      orderedAt: anchor.createdAt,
+      items: [],
+    });
+  }
+
   const cards: ServerScreenOrderCard[] = [];
+  const companionsAttached = new Set<string>();
 
   for (const [waveId, wave] of waves) {
     const pendingItems = wave.items.filter((item) => isPreparingColumnVisible(item));
-
     const tableSession = byTable.get(wave.tableId) ?? [];
-    const companionLines: ServerScreenOrderCardLine[] = [];
+    const anchor = companionStore.anchors[wave.tableId];
+
+    let companionLines: ServerScreenOrderCardLine[] = [];
     let pendingCompanions = 0;
 
-    for (const item of pendingItems) {
-      if (!shouldShowGrillCompanions(item, tableSession, menuItems)) continue;
-      for (const companion of GRILL_FIRST_ORDER_COMPANIONS) {
-        const companionKey = `${item.id}::${companion.id}`;
-        const doneAt = companionDone[companionKey];
-        if (!doneAt) pendingCompanions += 1;
-        companionLines.push({
-          key: companionKey,
-          kind: "companion",
-          name: companion.names[language] || companion.names.en,
-          note: null,
-          remainingIds: doneAt ? [] : [companionKey],
-          doneCount: doneAt ? 1 : 0,
-          companionKey,
-          parentItemId: item.id,
-        });
+    const attachCompanionsForParent = (parentId: string) => {
+      if (companionsAttached.has(parentId)) return;
+      const built = buildCompanionLinesForParent(parentId, language, companionStore);
+      companionLines = built.lines;
+      pendingCompanions = built.pendingCount;
+      companionsAttached.add(parentId);
+    };
+
+    // Prefer live first-grill in this wave; fall back to persisted table anchor.
+    let companionParentId: string | null = null;
+    for (const item of wave.items) {
+      if (shouldShowGrillCompanions(item, tableSession, menuItems)) {
+        companionParentId = item.id ?? null;
+        break;
       }
+    }
+    if (
+      !companionParentId &&
+      anchor &&
+      serverScreenOrderWaveKey(anchor.tableId, anchor.createdAt) === waveId
+    ) {
+      companionParentId = anchor.parentId;
+    }
+    // Also attach when anchor's parent appears in this wave (ready/served/cancelled gone but wave has other items)
+    if (!companionParentId && anchor) {
+      const parentInWave = wave.items.some((item) => item.id === anchor.parentId);
+      if (parentInWave) companionParentId = anchor.parentId;
     }
 
-    // Also show done companions whose parent grill is in this wave (ready or pending).
-    for (const item of wave.items) {
-      if (!item.id || !shouldShowGrillCompanions(item, tableSession, menuItems)) continue;
-      if (pendingItems.some((row) => row.id === item.id)) continue;
-      for (const companion of GRILL_FIRST_ORDER_COMPANIONS) {
-        const companionKey = `${item.id}::${companion.id}`;
-        const doneAt = companionDone[companionKey];
-        if (!doneAt) {
-          pendingCompanions += 1;
-          companionLines.push({
-            key: companionKey,
-            kind: "companion",
-            name: companion.names[language] || companion.names.en,
-            note: null,
-            remainingIds: [companionKey],
-            doneCount: 0,
-            companionKey,
-            parentItemId: item.id,
-          });
-          continue;
-        }
-        if (!companionLines.some((line) => line.key === companionKey)) {
-          companionLines.push({
-            key: companionKey,
-            kind: "companion",
-            name: companion.names[language] || companion.names.en,
-            note: null,
-            remainingIds: [],
-            doneCount: 1,
-            companionKey,
-            parentItemId: item.id,
-          });
-        }
-      }
-    }
+    if (companionParentId) attachCompanionsForParent(companionParentId);
 
     const hasPending = pendingItems.length > 0 || pendingCompanions > 0;
     if (!hasPending) continue;
@@ -507,15 +648,17 @@ export function buildServerScreenOrderCards(
       }
     }
 
-    const itemLines = lineOrder
-      .map((key) => lineMap.get(key)!)
-      .filter(Boolean);
+    const itemLines = lineOrder.map((key) => lineMap.get(key)!).filter(Boolean);
 
     const ageFrom =
       pendingItems
         .map((item) => item.createdAt)
         .filter((value): value is string => Boolean(value))
-        .sort()[0] ?? wave.orderedAt;
+        .sort()[0] ??
+      (companionParentId && pendingCompanions > 0
+        ? companionStore.anchors[wave.tableId]?.createdAt
+        : undefined) ??
+      wave.orderedAt;
 
     cards.push({
       id: waveId,

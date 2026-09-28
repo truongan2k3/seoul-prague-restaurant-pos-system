@@ -427,6 +427,32 @@ export async function fetchStationOrderItems(station: Station) {
     .order("created_at");
 }
 
+/**
+ * Completed station lines for Server Screen History (incl. archived),
+ * retained from `sinceIso` (typically now − 2 hours).
+ */
+export async function fetchStationHistoryItems(station: Station, sinceIso: string) {
+  const kitchenStatusQuery = await supabase
+    .from("order_items")
+    .select(ORDER_ITEM_COLUMNS)
+    .eq("station", station)
+    .not("ready_at", "is", null)
+    .gte("ready_at", sinceIso)
+    .in("kitchen_status", ["ready", "served", "archived"])
+    .order("ready_at", { ascending: false });
+
+  if (!kitchenStatusQuery.error) return kitchenStatusQuery;
+
+  return supabase
+    .from("order_items")
+    .select(ORDER_ITEM_COLUMNS)
+    .eq("station", station)
+    .not("ready_at", "is", null)
+    .gte("ready_at", sinceIso)
+    .in("status", ["ready", "served"])
+    .order("ready_at", { ascending: false });
+}
+
 export async function fetchPrepTimeSamples(options: {
   startIso: string;
   endExclusiveIso: string;

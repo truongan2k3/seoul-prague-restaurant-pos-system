@@ -2,7 +2,7 @@ import type { KitchenStatus, OrderItem, SoundConfigs, Station } from "@/lib/type
 import { normalizeOrderItemStatus } from "@/lib/order-status";
 
 /** Auto-serve delay after kitchen marks an item ready. */
-export const AUTO_SERVE_MS = 3 * 60 * 1000;
+export const AUTO_SERVE_MS = 5 * 60 * 1000;
 
 /** Poll interval for KDS / Bar auto-serve checks. */
 export const AUTO_SERVE_POLL_MS = 10_000;

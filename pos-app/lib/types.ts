@@ -28,6 +28,14 @@ export type DiscountType = "percent" | "fixed";
 export type SplitMode = "total" | "equal" | "items";
 export type LanguageCode = "en" | "cs" | "zh";
 export type ThemeMode = "light" | "dark";
+export type ServerScreenLanguageMode = "single" | "bilingual" | "multilingual";
+
+export interface ServerScreenConfig {
+  languageMode: ServerScreenLanguageMode;
+  /** Ordered languages used for display / rotation. */
+  languages: LanguageCode[];
+  autoRotateLanguage: boolean;
+}
 export type NavId =
   | "map"
   | "order"
@@ -284,6 +292,8 @@ export interface AppSettings {
   guestAnnouncementBanner: GuestAnnouncementBanner;
   /** Gift voucher sales + bank / Czech QR configuration */
   voucher: VoucherConfig;
+  /** Kitchen/Bar server screen language + rotation settings */
+  serverScreen: ServerScreenConfig;
   /**
    * Sidebar nav tabs hidden restaurant-wide (UI only).
    * `settings` is never hideable and must not appear here.

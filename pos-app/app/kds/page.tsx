@@ -1,12 +1,12 @@
 "use client";
 
-import { StationBoard } from "@/components/station-board";
+import { ServerScreenBoard } from "@/components/server-screen-board";
 import { StationScreenProvider } from "@/contexts/station-screen-context";
 
 export default function KdsPage() {
   return (
     <StationScreenProvider station="kitchen">
-      <StationBoard station="kitchen" variant="kitchen" />
+      <ServerScreenBoard station="kitchen" />
     </StationScreenProvider>
   );
 }

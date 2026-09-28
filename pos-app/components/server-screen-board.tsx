@@ -9,8 +9,17 @@ import {
   type PointerEvent as ReactPointerEvent,
   type TouchEvent as ReactTouchEvent,
 } from "react";
-import { ArrowLeft, ArrowRight, BarChart3, History, Loader2, RefreshCw } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  BarChart3,
+  History,
+  LayoutGrid,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
+import { ServerScreenOrderCards } from "@/components/server-screen-order-cards";
 import { ServerScreenPrepStatsPanel } from "@/components/server-screen-prep-stats";
 import { ServerScreenReservationPanel } from "@/components/server-screen-reservation-panel";
 import { useApp } from "@/contexts/app-context";
@@ -42,20 +51,27 @@ import {
 } from "@/lib/realtime-pos-sync";
 import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
 import {
+  buildServerScreenOrderCards,
   formatPreparationMinutes,
   formatReadyClock,
   formatServerScreenFooterDate,
   formatServerScreenFooterTime,
+  formatServerScreenTicketId,
   GRILL_FIRST_ORDER_COMPANIONS,
   isPreparingColumnVisible,
   nextServerScreenLanguage,
   normalizeServerScreenLanguages,
   preparationAgeMinutes,
   preparationHighlightTone,
+  readServerScreenLayoutMode,
   SERVER_SCREEN_LANG_ROTATE_MS,
   SERVER_SCREEN_READY_VISIBLE_MS,
+  serverScreenOrderWaveKey,
   shouldShowGrillCompanions,
+  writeServerScreenLayoutMode,
   type PrepHighlightTone,
+  type ServerScreenLayoutMode,
+  type ServerScreenOrderCardLine,
 } from "@/lib/server-screen";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
 import type { LanguageCode, MenuItem, RestaurantTable, Station } from "@/lib/types";
@@ -103,6 +119,15 @@ type HistoryRow = {
   note: string | null;
   orderedAt?: string;
   completedAt?: string;
+};
+
+type HistoryCardGroup = {
+  key: string;
+  tableLabel: string;
+  ticketId: string;
+  orderedAt?: string;
+  completedAt?: string;
+  lines: Array<{ name: string; note: string | null; qty: number }>;
 };
 
 function companionStorageKey(station: Station) {
@@ -172,34 +197,40 @@ function FloatingToolbar({
   refreshing,
   onMarkDone,
   onHistory,
+  onLayout,
   onRefresh,
   onPrepStats,
   markDoneLabel,
   historyLabel,
+  layoutLabel,
   refreshLabel,
   prepStatsLabel,
   showMarkDone = true,
   showPrepStats = false,
+  layoutActive = false,
 }: {
   selectedCount: number;
   busy: boolean;
   refreshing: boolean;
   onMarkDone: () => void;
   onHistory: () => void;
+  onLayout?: () => void;
   onRefresh: () => void;
   onPrepStats?: () => void;
   markDoneLabel: string;
   historyLabel: string;
+  layoutLabel?: string;
   refreshLabel: string;
   prepStatsLabel?: string;
   showMarkDone?: boolean;
   showPrepStats?: boolean;
+  layoutActive?: boolean;
 }) {
   return (
     <div className="relative z-20 shrink-0 px-3 pb-2 pt-1 sm:px-4">
       <div
         data-server-interactive
-        className="mx-auto flex max-w-3xl items-center gap-2 rounded-2xl border border-white/12 bg-[#121214]/95 px-2 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-md sm:gap-3 sm:px-3"
+        className="mx-auto flex max-w-4xl items-center gap-2 rounded-2xl border border-white/12 bg-[#121214]/95 px-2 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-md sm:gap-3 sm:px-3"
       >
         {showMarkDone ? (
           <button
@@ -232,6 +263,23 @@ function FloatingToolbar({
             className="inline-flex min-h-12 min-w-12 shrink-0 items-center justify-center rounded-xl border border-white/12 bg-white/[0.04] text-[#E8D5C4] transition hover:bg-white/[0.08]"
           >
             <BarChart3 className="h-4 w-4" />
+          </button>
+        ) : null}
+        {onLayout ? (
+          <button
+            type="button"
+            onClick={onLayout}
+            aria-label={layoutLabel ?? "Layout"}
+            title={layoutLabel}
+            aria-pressed={layoutActive}
+            className={`inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-medium transition sm:px-4 ${
+              layoutActive
+                ? "border-[#C9A88B]/45 bg-[#C9A88B]/15 text-[#F5EDE4]"
+                : "border-white/12 bg-white/[0.04] text-[#E8D5C4] hover:bg-white/[0.08]"
+            }`}
+          >
+            <LayoutGrid className="h-4 w-4" />
+            <span className="hidden sm:inline">{layoutLabel ?? "Layout"}</span>
           </button>
         ) : null}
         <button
@@ -272,6 +320,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [layoutMode, setLayoutMode] = useState<ServerScreenLayoutMode>("list");
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [animatingOut, setAnimatingOut] = useState<Set<string>>(new Set());
   const [audioUnlocked, setAudioUnlocked] = useState(false);
@@ -381,6 +430,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
 
   useEffect(() => {
     setCompanionDone(readCompanionDone(station));
+    setLayoutMode(readServerScreenLayoutMode());
     setBootstrapped(false);
     preparingSeededRef.current = false;
     seenPreparingRef.current = new Set();
@@ -620,6 +670,20 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     return rows;
   }, [items, itemsByTable, menuItems, tableLabelById, language, companionDone]);
 
+  const orderCards = useMemo(
+    () =>
+      buildServerScreenOrderCards({
+        items,
+        menuItems,
+        tableLabelById,
+        language,
+        companionDone,
+        resolveName: (item) => orderItemDisplayName(item, menuItems, language),
+        resolveNote: (item) => itemNote(item as StationOrderItem, language),
+      }),
+    [items, menuItems, tableLabelById, language, companionDone],
+  );
+
   const historyRows = useMemo(() => {
     const rows: HistoryRow[] = items
       .filter((item) => {
@@ -655,6 +719,97 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
 
     return rows.sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
   }, [items, menuItems, language, tableLabelById, companionDone]);
+
+  const historyCards = useMemo(() => {
+    type Acc = {
+      key: string;
+      tableLabel: string;
+      ticketId: string;
+      orderedAt?: string;
+      completedAt?: string;
+      lineMap: Map<string, { name: string; note: string | null; qty: number }>;
+    };
+    const groups = new Map<string, Acc>();
+
+    for (const item of items) {
+      if (item.hideOnKds || !item.id) continue;
+      const status = resolveKitchenStatus(item);
+      if (status !== "ready" && status !== "served") continue;
+      const waveId = serverScreenOrderWaveKey(item.tableId, item.createdAt);
+      let group = groups.get(waveId);
+      if (!group) {
+        group = {
+          key: waveId,
+          tableLabel: tableLabelById.get(item.tableId) ?? "—",
+          ticketId: formatServerScreenTicketId(item.createdAt),
+          orderedAt: item.createdAt,
+          completedAt: item.readyAt,
+          lineMap: new Map(),
+        };
+        groups.set(waveId, group);
+      }
+      if (item.createdAt && (!group.orderedAt || item.createdAt < group.orderedAt)) {
+        group.orderedAt = item.createdAt;
+        group.ticketId = formatServerScreenTicketId(item.createdAt);
+      }
+      if (item.readyAt && (!group.completedAt || item.readyAt > group.completedAt)) {
+        group.completedAt = item.readyAt;
+      }
+      const name = orderItemDisplayName(item, menuItems, language);
+      const note = itemNote(item, language);
+      const lineKey = `${name}\u0001${note ?? ""}`;
+      const existing = group.lineMap.get(lineKey);
+      if (existing) existing.qty += 1;
+      else group.lineMap.set(lineKey, { name, note, qty: 1 });
+    }
+
+    for (const [key, readyAt] of Object.entries(companionDone)) {
+      const [parentId, companionId] = key.split("::");
+      if (!parentId || !companionId) continue;
+      const parent = items.find((item) => item.id === parentId);
+      if (!parent) continue;
+      const companion = GRILL_FIRST_ORDER_COMPANIONS.find((row) => row.id === companionId);
+      if (!companion) continue;
+      const waveId = serverScreenOrderWaveKey(parent.tableId, parent.createdAt);
+      let group = groups.get(waveId);
+      if (!group) {
+        group = {
+          key: waveId,
+          tableLabel: tableLabelById.get(parent.tableId) ?? "—",
+          ticketId: formatServerScreenTicketId(parent.createdAt),
+          orderedAt: parent.createdAt,
+          completedAt: readyAt,
+          lineMap: new Map(),
+        };
+        groups.set(waveId, group);
+      }
+      if (readyAt && (!group.completedAt || readyAt > group.completedAt)) {
+        group.completedAt = readyAt;
+      }
+      const name = companion.names[language] || companion.names.en;
+      const lineKey = `${name}\u0001`;
+      const existing = group.lineMap.get(lineKey);
+      if (existing) existing.qty += 1;
+      else group.lineMap.set(lineKey, { name, note: null, qty: 1 });
+    }
+
+    const result: HistoryCardGroup[] = [];
+    for (const group of groups.values()) {
+      // Only fully completed waves — skip cards still active on the board.
+      const stillActive = orderCards.some((card) => card.id === group.key);
+      if (stillActive) continue;
+      result.push({
+        key: group.key,
+        tableLabel: group.tableLabel,
+        ticketId: group.ticketId,
+        orderedAt: group.orderedAt,
+        completedAt: group.completedAt,
+        lines: Array.from(group.lineMap.values()),
+      });
+    }
+
+    return result.sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
+  }, [items, menuItems, language, tableLabelById, companionDone, orderCards]);
 
   const loadTodayPrepStats = useCallback(async () => {
     const { dateIso, startIso, endExclusiveIso } = venueTodayRange();
@@ -701,12 +856,26 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
 
   // New preparing tickets dismiss stats so they never cover live orders.
   useEffect(() => {
-    if (preparingRows.length === 0) return;
+    const pendingCount =
+      layoutMode === "cards"
+        ? orderCards.length
+        : preparingRows.filter((row) => row.kind === "item").length;
+    if (pendingCount === 0) return;
     if (prepStatsOpen) setPrepStatsOpen(false);
-  }, [preparingRows.length, prepStatsOpen]);
+  }, [preparingRows, orderCards.length, layoutMode, prepStatsOpen]);
 
   useEffect(() => {
-    const valid = new Set(preparingRows.map((row) => row.key));
+    const valid = new Set<string>();
+    if (layoutMode === "cards") {
+      for (const card of orderCards) {
+        for (const line of card.lines) {
+          for (const id of line.remainingIds) valid.add(id);
+          if (line.companionKey && line.remainingIds.length > 0) valid.add(line.companionKey);
+        }
+      }
+    } else {
+      for (const row of preparingRows) valid.add(row.key);
+    }
     setSelectedKeys((prev) => {
       let changed = false;
       const next = new Set<string>();
@@ -716,7 +885,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       }
       return changed ? next : prev;
     });
-  }, [preparingRows]);
+  }, [preparingRows, orderCards, layoutMode]);
 
   useEffect(() => {
     setCompanionDone((prev) => {
@@ -749,6 +918,51 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       else next.add(key);
       return next;
     });
+  };
+
+  const toggleCardLine = (line: ServerScreenOrderCardLine) => {
+    unlockNotificationAudio();
+    if (line.kind === "companion") {
+      if (!line.companionKey || line.remainingIds.length === 0) return;
+      toggleSelect(line.companionKey);
+      return;
+    }
+    if (line.remainingIds.length === 0) return;
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      const allSelected = line.remainingIds.every((id) => next.has(id));
+      if (allSelected) {
+        for (const id of line.remainingIds) next.delete(id);
+      } else {
+        for (const id of line.remainingIds) next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const setCardLineSelectedCount = (line: ServerScreenOrderCardLine, count: number) => {
+    unlockNotificationAudio();
+    if (line.kind !== "item" || line.remainingIds.length === 0) return;
+    const clamped = Math.max(0, Math.min(count, line.remainingIds.length));
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      for (const id of line.remainingIds) next.delete(id);
+      for (let i = 0; i < clamped; i += 1) {
+        const id = line.remainingIds[i];
+        if (id) next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleLayoutMode = () => {
+    unlockNotificationAudio();
+    setLayoutMode((prev) => {
+      const next: ServerScreenLayoutMode = prev === "cards" ? "list" : "cards";
+      writeServerScreenLayoutMode(next);
+      return next;
+    });
+    setSelectedKeys(new Set());
   };
 
   const handleMarkDone = async () => {
@@ -900,13 +1114,66 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             <ArrowLeft className="h-4 w-4" />
             {translate("serverScreenHistoryBack")}
           </button>
-          <h1 className="text-xl font-semibold uppercase tracking-[0.14em] text-white sm:text-2xl">
+          <h1 className="font-serif text-xl font-semibold tracking-tight text-white sm:text-2xl">
             {translate("history")}
           </h1>
-          <span className="text-sm tabular-nums text-white/40">{historyRows.length}</span>
+          <span className="text-sm tabular-nums text-white/40">
+            {layoutMode === "cards" ? historyCards.length : historyRows.length}
+          </span>
         </header>
         <div data-server-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          {historyRows.length === 0 ? (
+          {layoutMode === "cards" ? (
+            historyCards.length === 0 ? (
+              <p className="px-4 py-12 text-center text-base text-white/35">{translate("noOrders")}</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                {historyCards.map((card) => (
+                  <article
+                    key={card.key}
+                    className="overflow-hidden rounded-xl border border-white/10 bg-[#121214]"
+                  >
+                    <header className="flex items-start justify-between gap-2 border-b border-white/10 bg-[#1c1c1f] px-3 py-2.5">
+                      <div className="min-w-0">
+                        <p className="font-serif text-xl font-semibold text-[#F5EDE4]">
+                          {card.tableLabel}
+                        </p>
+                        <p className="mt-0.5 text-xs tabular-nums text-white/40">#{card.ticketId}</p>
+                      </div>
+                    </header>
+                    <ul className="divide-y divide-white/[0.06] px-1 py-1">
+                      {card.lines.map((line, index) => (
+                        <li key={`${line.name}-${index}`} className="px-2.5 py-1.5">
+                          <div className="flex min-w-0 items-baseline gap-2">
+                            <span className="min-w-0 flex-1 truncate text-[0.95rem] font-medium text-[#f5f2ef]">
+                              {line.name}
+                            </span>
+                            <span className="shrink-0 text-sm font-bold tabular-nums text-[#E8D5C4]">
+                              {line.qty}
+                            </span>
+                          </div>
+                          {line.note ? (
+                            <p className="mt-0.5 whitespace-pre-wrap break-words text-xs text-white/45">
+                              {line.note}
+                            </p>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                    <footer className="flex flex-wrap gap-x-4 gap-y-1 border-t border-white/[0.06] px-3 py-2 text-xs tabular-nums text-white/40">
+                      <span>
+                        {translate("serverScreenOrderTime")}:{" "}
+                        {formatOrderClock(card.orderedAt, language)}
+                      </span>
+                      <span>
+                        {translate("serverScreenReadyAt")}:{" "}
+                        {formatOrderClock(card.completedAt, language)}
+                      </span>
+                    </footer>
+                  </article>
+                ))}
+              </div>
+            )
+          ) : historyRows.length === 0 ? (
             <p className="px-4 py-12 text-center text-base text-white/35">{translate("noOrders")}</p>
           ) : (
             <ul className="divide-y divide-white/[0.06]">
@@ -944,11 +1211,14 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
           refreshing={refreshing}
           onMarkDone={() => undefined}
           onHistory={() => setHistoryOpen(false)}
+          onLayout={toggleLayoutMode}
           onRefresh={() => void handleRefresh()}
           markDoneLabel={translate("serverScreenMarkDone")}
           historyLabel={translate("serverScreenHistoryBack")}
+          layoutLabel={translate("serverScreenLayout")}
           refreshLabel={translate("serverScreenRefresh")}
           showMarkDone={false}
+          layoutActive={layoutMode === "cards"}
         />
         <ServerScreenFooter language={language} />
       </div>
@@ -985,17 +1255,36 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             cycleLanguage();
           }}
         >
-          <h1 className="text-xl font-semibold uppercase tracking-[0.14em] text-white sm:text-2xl">
+          <h1
+            className={`text-xl font-semibold text-white sm:text-2xl ${
+              layoutMode === "cards"
+                ? "font-serif tracking-tight"
+                : "uppercase tracking-[0.14em]"
+            }`}
+          >
             {translate("preparing")}
           </h1>
           <span className="text-sm tabular-nums text-white/40">
-            {preparingRows.filter((row) => row.kind === "item").length}
+            {layoutMode === "cards"
+              ? orderCards.length
+              : preparingRows.filter((row) => row.kind === "item").length}
           </span>
         </header>
 
         <div className="relative min-h-0 flex-1">
           <div data-server-scroll className="absolute inset-0 overflow-y-auto overscroll-contain">
-            {preparingRows.length === 0 ? (
+            {layoutMode === "cards" ? (
+              <ServerScreenOrderCards
+                cards={orderCards}
+                nowMs={nowMs}
+                minLabel={minLabel}
+                selectedKeys={selectedKeys}
+                animatingOut={animatingOut}
+                emptyLabel={translate("noOrders")}
+                onToggleLine={toggleCardLine}
+                onSetLineCount={setCardLineSelectedCount}
+              />
+            ) : preparingRows.length === 0 ? (
               <p className="px-4 py-10 text-center text-base text-white/35">{translate("noOrders")}</p>
             ) : (
               <ul className="divide-y divide-white/[0.06]">
@@ -1100,13 +1389,16 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         refreshing={refreshing}
         onMarkDone={() => void handleMarkDone()}
         onHistory={() => setHistoryOpen(true)}
+        onLayout={toggleLayoutMode}
         onRefresh={() => void handleRefresh()}
         onPrepStats={openPrepStats}
         markDoneLabel={translate("serverScreenMarkDone")}
         historyLabel={translate("history")}
+        layoutLabel={translate("serverScreenLayout")}
         refreshLabel={translate("serverScreenRefresh")}
         prepStatsLabel={translate("prepStatsTodayTitle")}
         showPrepStats
+        layoutActive={layoutMode === "cards"}
       />
       <ServerScreenFooter language={language} />
     </div>

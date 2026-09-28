@@ -251,3 +251,287 @@ export function nextServerScreenLanguage(
   if (index < 0) return list[0]!;
   return list[(index + 1) % list.length]!;
 }
+
+/** Server Screen visual layout — list (default) or kitchen order cards. */
+export type ServerScreenLayoutMode = "list" | "cards";
+
+const LAYOUT_STORAGE_KEY = "pos-server-screen-layout-mode";
+
+export function readServerScreenLayoutMode(): ServerScreenLayoutMode {
+  if (typeof window === "undefined") return "list";
+  try {
+    const raw = localStorage.getItem(LAYOUT_STORAGE_KEY);
+    return raw === "cards" ? "cards" : "list";
+  } catch {
+    return "list";
+  }
+}
+
+export function writeServerScreenLayoutMode(mode: ServerScreenLayoutMode): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(LAYOUT_STORAGE_KEY, mode);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+/** Same-minute send wave so one Send → one order card. */
+export function serverScreenOrderWaveKey(
+  tableId: string,
+  createdAt: string | null | undefined,
+): string {
+  const bucket = createdAt ? createdAt.slice(0, 16) : "";
+  return `${tableId}|${bucket}`;
+}
+
+/** Compact ticket number from creation time (display only). */
+export function formatServerScreenTicketId(
+  createdAt: string | Date | null | undefined,
+): string {
+  if (!createdAt) return "---";
+  const date = typeof createdAt === "string" ? new Date(createdAt) : createdAt;
+  if (Number.isNaN(date.getTime())) return "---";
+  return String(Math.floor(date.getTime() / 1000) % 1000).padStart(3, "0");
+}
+
+export type ServerScreenOrderCardLineKind = "item" | "companion";
+
+export type ServerScreenOrderCardLine = {
+  key: string;
+  kind: ServerScreenOrderCardLineKind;
+  name: string;
+  note: string | null;
+  /** Pending unit ids still needing prep (remaining quantity). */
+  remainingIds: string[];
+  /** Ready/served units kept visible until the whole card completes. */
+  doneCount: number;
+  companionKey?: string;
+  parentItemId?: string;
+};
+
+export type ServerScreenOrderCard = {
+  id: string;
+  tableId: string;
+  tableLabel: string;
+  ticketId: string;
+  orderedAt: string;
+  /** Age / highlight from earliest pending (or order) timestamp. */
+  ageFrom: string;
+  lines: ServerScreenOrderCardLine[];
+  /** True while any remaining prep work exists on this card. */
+  hasPending: boolean;
+};
+
+type BuildOrderCardsInput = {
+  items: Array<
+    OrderItem & {
+      tableId: string;
+      createdAt?: string;
+      readyAt?: string;
+    }
+  >;
+  menuItems: MenuItem[];
+  tableLabelById: Map<string, string>;
+  language: LanguageCode;
+  companionDone: Record<string, string>;
+  resolveName: (item: OrderItem) => string;
+  resolveNote: (item: OrderItem) => string | null;
+};
+
+function lineAggregateKey(item: OrderItem): string {
+  return [
+    item.menuItemId ?? "",
+    item.name,
+    item.notes ?? "",
+    item.notesTranslated ?? "",
+    item.station ?? "",
+  ].join("\u0001");
+}
+
+/**
+ * Group station items into kitchen order cards (one Send / wave per card).
+ * Pending + recently-done lines stay together until the whole card is complete.
+ */
+export function buildServerScreenOrderCards(
+  input: BuildOrderCardsInput,
+): ServerScreenOrderCard[] {
+  const {
+    items,
+    menuItems,
+    tableLabelById,
+    language,
+    companionDone,
+    resolveName,
+    resolveNote,
+  } = input;
+
+  const byTable = new Map<string, typeof items>();
+  for (const item of items) {
+    if (item.hideOnKds || item.isCancelled || item.kitchenStatus === "cancelled") continue;
+    const list = byTable.get(item.tableId) ?? [];
+    list.push(item);
+    byTable.set(item.tableId, list);
+  }
+
+  type WaveBucket = {
+    tableId: string;
+    orderedAt: string;
+    items: typeof items;
+  };
+
+  const waves = new Map<string, WaveBucket>();
+  for (const item of items) {
+    if (!item.id || item.hideOnKds || item.isCancelled || item.kitchenStatus === "cancelled") {
+      continue;
+    }
+    const status = resolveKitchenStatus(item);
+    if (status !== "pending" && status !== "ready" && status !== "served") continue;
+
+    const waveId = serverScreenOrderWaveKey(item.tableId, item.createdAt);
+    const existing = waves.get(waveId);
+    if (!existing) {
+      waves.set(waveId, {
+        tableId: item.tableId,
+        orderedAt: item.createdAt ?? "",
+        items: [item],
+      });
+      continue;
+    }
+    existing.items.push(item);
+    if (item.createdAt && (!existing.orderedAt || item.createdAt < existing.orderedAt)) {
+      existing.orderedAt = item.createdAt;
+    }
+  }
+
+  const cards: ServerScreenOrderCard[] = [];
+
+  for (const [waveId, wave] of waves) {
+    const pendingItems = wave.items.filter((item) => isPreparingColumnVisible(item));
+
+    const tableSession = byTable.get(wave.tableId) ?? [];
+    const companionLines: ServerScreenOrderCardLine[] = [];
+    let pendingCompanions = 0;
+
+    for (const item of pendingItems) {
+      if (!shouldShowGrillCompanions(item, tableSession, menuItems)) continue;
+      for (const companion of GRILL_FIRST_ORDER_COMPANIONS) {
+        const companionKey = `${item.id}::${companion.id}`;
+        const doneAt = companionDone[companionKey];
+        if (!doneAt) pendingCompanions += 1;
+        companionLines.push({
+          key: companionKey,
+          kind: "companion",
+          name: companion.names[language] || companion.names.en,
+          note: null,
+          remainingIds: doneAt ? [] : [companionKey],
+          doneCount: doneAt ? 1 : 0,
+          companionKey,
+          parentItemId: item.id,
+        });
+      }
+    }
+
+    // Also show done companions whose parent grill is in this wave (ready or pending).
+    for (const item of wave.items) {
+      if (!item.id || !shouldShowGrillCompanions(item, tableSession, menuItems)) continue;
+      if (pendingItems.some((row) => row.id === item.id)) continue;
+      for (const companion of GRILL_FIRST_ORDER_COMPANIONS) {
+        const companionKey = `${item.id}::${companion.id}`;
+        const doneAt = companionDone[companionKey];
+        if (!doneAt) {
+          pendingCompanions += 1;
+          companionLines.push({
+            key: companionKey,
+            kind: "companion",
+            name: companion.names[language] || companion.names.en,
+            note: null,
+            remainingIds: [companionKey],
+            doneCount: 0,
+            companionKey,
+            parentItemId: item.id,
+          });
+          continue;
+        }
+        if (!companionLines.some((line) => line.key === companionKey)) {
+          companionLines.push({
+            key: companionKey,
+            kind: "companion",
+            name: companion.names[language] || companion.names.en,
+            note: null,
+            remainingIds: [],
+            doneCount: 1,
+            companionKey,
+            parentItemId: item.id,
+          });
+        }
+      }
+    }
+
+    const hasPending = pendingItems.length > 0 || pendingCompanions > 0;
+    if (!hasPending) continue;
+
+    const lineMap = new Map<string, ServerScreenOrderCardLine>();
+    const lineOrder: string[] = [];
+    const ensureLine = (item: (typeof items)[number], pending: boolean) => {
+      const agg = lineAggregateKey(item);
+      const key = `item:${waveId}:${agg}`;
+      let line = lineMap.get(key);
+      if (!line) {
+        line = {
+          key,
+          kind: "item",
+          name: resolveName(item),
+          note: resolveNote(item),
+          remainingIds: [],
+          doneCount: 0,
+        };
+        lineMap.set(key, line);
+        lineOrder.push(key);
+      }
+      if (pending && item.id) line.remainingIds.push(item.id);
+      else if (!pending) line.doneCount += 1;
+    };
+
+    const waveSorted = wave.items.slice().sort((a, b) => {
+      const at = a.createdAt ?? "";
+      const bt = b.createdAt ?? "";
+      if (at !== bt) return at < bt ? -1 : 1;
+      return (a.id ?? "").localeCompare(b.id ?? "");
+    });
+    for (const item of waveSorted) {
+      if (isPreparingColumnVisible(item)) ensureLine(item, true);
+      else {
+        const status = resolveKitchenStatus(item);
+        if (status === "ready" || status === "served") ensureLine(item, false);
+      }
+    }
+
+    const itemLines = lineOrder
+      .map((key) => lineMap.get(key)!)
+      .filter(Boolean);
+
+    const ageFrom =
+      pendingItems
+        .map((item) => item.createdAt)
+        .filter((value): value is string => Boolean(value))
+        .sort()[0] ?? wave.orderedAt;
+
+    cards.push({
+      id: waveId,
+      tableId: wave.tableId,
+      tableLabel: tableLabelById.get(wave.tableId) ?? "—",
+      ticketId: formatServerScreenTicketId(wave.orderedAt),
+      orderedAt: wave.orderedAt,
+      ageFrom,
+      lines: [...itemLines, ...companionLines],
+      hasPending: true,
+    });
+  }
+
+  // Newest appends at the end — stable by order creation time.
+  return cards.sort((a, b) => {
+    if (a.orderedAt !== b.orderedAt) return a.orderedAt < b.orderedAt ? -1 : 1;
+    return a.id.localeCompare(b.id);
+  });
+}

@@ -738,7 +738,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                       type="button"
                       data-server-interactive
                       onClick={() => toggleSelect(row.key)}
-                      className={`flex w-full items-baseline gap-3 px-4 py-2.5 text-left transition-colors duration-150 ${prepRowClass(
+                      className={`flex w-full flex-nowrap items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ${prepRowClass(
                         tone,
                         selected,
                       )} ${leaving ? "translate-x-4 opacity-0 transition-all duration-200" : ""} ${
@@ -757,14 +757,14 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                         {name}
                       </span>
                       <span
-                        className={`shrink-0 text-sm tabular-nums sm:text-[0.95rem] ${
+                        className={`shrink-0 whitespace-nowrap text-sm tabular-nums sm:text-[0.95rem] ${
                           selected ? "text-zinc-800/75" : "text-white/45"
                         }`}
                       >
                         {formatPreparationMinutes(row.item.createdAt, nowMs, minLabel)}
                       </span>
                       <span
-                        className={`w-12 shrink-0 text-right text-base font-bold tabular-nums sm:w-14 sm:text-lg ${
+                        className={`shrink-0 whitespace-nowrap text-right text-base font-bold tabular-nums sm:text-lg ${
                           selected ? "text-zinc-950" : "text-[#E8D5C4]"
                         }`}
                       >

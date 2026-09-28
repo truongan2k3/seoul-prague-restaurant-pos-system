@@ -402,6 +402,22 @@ export async function fetchOrderItems() {
 
 /** Open session lines only — skips KDS-archived cancel rows. */
 export async function fetchActiveOrderItems() {
+  // Include null kitchen_status — `.neq("archived")` alone drops SQL NULL rows,
+  // which left floor/POS out of sync with KDS and could cancel those units on save.
+  const kitchenStatusQuery = await supabase
+    .from("order_items")
+    .select(ORDER_ITEM_COLUMNS)
+    .or("kitchen_status.is.null,kitchen_status.neq.archived")
+    .order("created_at");
+
+  if (!kitchenStatusQuery.error) {
+    const data = ((kitchenStatusQuery.data as SupabaseOrderItemRow[] | null) ?? []).filter((row) => {
+      if (row.kitchen_status === "archived") return false;
+      return true;
+    });
+    return { data, error: null };
+  }
+
   return supabase
     .from("order_items")
     .select(ORDER_ITEM_COLUMNS)

@@ -61,7 +61,6 @@ import {
   mapOrderItemRow,
   mapTablesResponse,
   subscribeToMenuChanges,
-  subscribeToOrderItemInserts,
   type SupabaseOrderItemRow,
 } from "@/src/lib/supabase-data";
 
@@ -250,6 +249,8 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const newOrderSoundTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingNewOrderSoundRef = useRef(false);
   const playStationSoundRef = useRef<(variant: "newOrder" | "ready") => void>(() => {});
+  const soundKitchenEnabledRef = useRef(soundKitchenEnabled);
+  soundKitchenEnabledRef.current = soundKitchenEnabled;
 
   languageRef.current = language;
   languagesRef.current = languages;
@@ -366,12 +367,45 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     await Promise.all([reloadStationItems(), reloadTables(), reloadMenu()]);
   }, [reloadStationItems, reloadTables, reloadMenu]);
 
+  const scheduleNewOrderSound = useCallback(() => {
+    if (!soundKitchenEnabledRef.current) return;
+    if (newOrderSoundTimerRef.current) clearTimeout(newOrderSoundTimerRef.current);
+    newOrderSoundTimerRef.current = setTimeout(() => {
+      newOrderSoundTimerRef.current = null;
+      playStationSoundRef.current("newOrder");
+    }, NEW_ORDER_SOUND_DEBOUNCE_MS);
+  }, []);
+
+  const maybeAlertNewOrderInsert = useCallback(
+    (payload: { eventType?: string; new?: Record<string, unknown> }) => {
+      // Only realtime INSERTs — never soft-refresh / session-health / cache reloads.
+      if (payload.eventType !== "INSERT") return;
+      const row = payload.new as unknown as SupabaseOrderItemRow | undefined;
+      if (!row?.id) return;
+      if (row.station !== station) return;
+      if (row.hide_on_kds) return;
+      if (
+        row.kitchen_status === "ready" ||
+        row.kitchen_status === "served" ||
+        row.kitchen_status === "cancelled" ||
+        row.kitchen_status === "archived"
+      ) {
+        return;
+      }
+      const status = normalizeOrderItemStatus(row.status);
+      if (status !== "preparing" && status !== "pending") return;
+      scheduleNewOrderSound();
+    },
+    [scheduleNewOrderSound, station],
+  );
+
   useEffect(() => {
     void reloadAll();
     const unsubItems = subscribeToPostgresRowChanges(
       `server-screen-items-${station}`,
       { event: "*", schema: "public", table: "order_items" },
       (payload) => {
+        maybeAlertNewOrderInsert(payload);
         setItems((prev) => applyStationOrderItemRealtimeEvent(prev, station, payload));
       },
     );
@@ -387,8 +421,12 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       unsubItems();
       unsubTables();
       unsubMenu();
+      if (newOrderSoundTimerRef.current) {
+        clearTimeout(newOrderSoundTimerRef.current);
+        newOrderSoundTimerRef.current = null;
+      }
     };
-  }, [reloadAll, reloadMenu, station]);
+  }, [maybeAlertNewOrderInsert, reloadAll, reloadMenu, station]);
 
   useSessionHealth({
     onRefresh: () => void reloadAll(),
@@ -417,42 +455,6 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       window.clearInterval(timer);
     };
   }, [station, reloadStationItems]);
-
-  // Direct INSERT listener — more reliable than diffing React state (and avoids
-  // false positives on first load / soft refresh).
-  useEffect(() => {
-    if (!soundKitchenEnabled) return;
-
-    const scheduleNewOrderSound = () => {
-      if (newOrderSoundTimerRef.current) clearTimeout(newOrderSoundTimerRef.current);
-      newOrderSoundTimerRef.current = setTimeout(() => {
-        newOrderSoundTimerRef.current = null;
-        playStationSoundRef.current("newOrder");
-      }, NEW_ORDER_SOUND_DEBOUNCE_MS);
-    };
-
-    return subscribeToOrderItemInserts((row) => {
-      if (row.station !== station) return;
-      if (row.hide_on_kds) return;
-      if (
-        row.kitchen_status === "ready" ||
-        row.kitchen_status === "served" ||
-        row.kitchen_status === "cancelled" ||
-        row.kitchen_status === "archived"
-      ) {
-        return;
-      }
-      const status = normalizeOrderItemStatus(row.status);
-      if (status !== "preparing" && status !== "pending") return;
-      scheduleNewOrderSound();
-    }, `server-screen-new-order-sound-${station}`);
-  }, [station, soundKitchenEnabled]);
-
-  useEffect(() => {
-    return () => {
-      if (newOrderSoundTimerRef.current) clearTimeout(newOrderSoundTimerRef.current);
-    };
-  }, []);
 
   const tableLabelById = useMemo(() => {
     const map = new Map<string, string>();

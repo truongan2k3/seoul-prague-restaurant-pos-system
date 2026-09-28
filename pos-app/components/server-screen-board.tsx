@@ -652,11 +652,11 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             <ul className="divide-y divide-white/[0.06]">
               {historyRows.map((row) => (
                 <li key={row.key} className="px-4 py-3">
-                  <div className="flex items-baseline gap-3">
-                    <span className="min-w-0 flex-1 text-[1.25rem] font-semibold leading-snug text-[#f5f2ef]">
+                  <div className="flex flex-nowrap items-center gap-3">
+                    <span className="min-w-0 flex-1 truncate text-[1.25rem] font-semibold leading-snug text-[#f5f2ef]">
                       {row.name}
                     </span>
-                    <span className="w-12 shrink-0 text-right text-base font-bold tabular-nums text-[#E8D5C4] sm:w-14 sm:text-lg">
+                    <span className="shrink-0 whitespace-nowrap text-right text-base font-bold tabular-nums text-[#E8D5C4] sm:text-lg">
                       {row.tableLabel}
                     </span>
                   </div>

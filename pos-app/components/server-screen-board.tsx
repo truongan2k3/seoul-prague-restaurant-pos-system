@@ -640,7 +640,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             <ArrowLeft className="h-4 w-4" />
             {translate("serverScreenHistoryBack")}
           </button>
-          <h1 className="text-xl font-semibold uppercase tracking-[0.14em] text-[#C9A88B] sm:text-2xl">
+          <h1 className="text-xl font-semibold uppercase tracking-[0.14em] text-white sm:text-2xl">
             {translate("history")}
           </h1>
           <span className="text-sm tabular-nums text-white/40">{historyRows.length}</span>
@@ -708,7 +708,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             cycleLanguage();
           }}
         >
-          <h1 className="text-xl font-semibold uppercase tracking-[0.14em] text-[#C9A88B] sm:text-2xl">
+          <h1 className="text-xl font-semibold uppercase tracking-[0.14em] text-white sm:text-2xl">
             {translate("preparing")}
           </h1>
           <span className="text-sm tabular-nums text-white/40">

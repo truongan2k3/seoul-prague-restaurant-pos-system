@@ -13,6 +13,7 @@ import {
   type GrillNeed,
   type OccupiedTableInput,
 } from "@/lib/reservation-capacity-engine";
+import { ONLINE_SELF_SERVE_MAX_PARTY } from "@/lib/reservation-party-limits";
 import { generateBookingCode, generateManageToken } from "@/lib/reservation-codes";
 import {
   parseReservationEventTypes,
@@ -467,6 +468,14 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
   if (!input.date || !input.time) {
     const copy = guestReservationCopy(parseGuestReservationLang(input.lang));
     return { data: null, error: copy.errorDateTime };
+  }
+
+  if (
+    !input.receptionDesk &&
+    input.guestCount > ONLINE_SELF_SERVE_MAX_PARTY
+  ) {
+    const copy = guestReservationCopy(parseGuestReservationLang(input.lang));
+    return { data: null, error: copy.largePartyMessage };
   }
 
   const guestCount = Math.max(

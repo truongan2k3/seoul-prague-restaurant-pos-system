@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapPin, ChevronLeft, ChevronRight, Pencil, Plus } from "lucide-react";
+import { Activity, MapPin, ChevronLeft, ChevronRight, Pencil, Plus } from "lucide-react";
 import { GuestReturningBadge } from "@/components/guest-returning-badge";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { Modal } from "@/components/modal";
@@ -241,6 +241,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const [undoEntry, setUndoEntry] = useState<ReservationUndoEntry | null>(null);
   const [undoBusy, setUndoBusy] = useState(false);
   const [capacityRefreshKey, setCapacityRefreshKey] = useState(0);
+  const [showCapacityModal, setShowCapacityModal] = useState(false);
 
   const loadReservations = useCallback(async () => {
     setLoading(true);
@@ -340,6 +341,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
   const showDayNav = period === "day";
   const isTodayAnchor = anchorDate === toDateInputValue(new Date());
+  const capacityDateIso = showDayNav ? anchorDate : toDateInputValue(new Date());
 
   const emptyTables = useMemo(
     () => tables.filter((table) => table.status === "empty"),
@@ -679,6 +681,14 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <button
             type="button"
+            onClick={() => setShowCapacityModal(true)}
+            className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-800 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 sm:gap-1.5 sm:rounded-lg sm:px-2.5 sm:py-1.5 sm:text-xs"
+          >
+            <Activity className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            {translate("resCapacityOpenButton")}
+          </button>
+          <button
+            type="button"
             onClick={() => {
               setFormSource("reservation");
               setShowNewModal(true);
@@ -690,6 +700,24 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           </button>
         </div>
       </header>
+
+      <Modal
+        open={showCapacityModal}
+        onClose={() => setShowCapacityModal(false)}
+        title={translate("resCapacityOverviewTitle")}
+        size="xl"
+        bodyClassName="px-4 py-4 sm:px-6"
+      >
+        {showCapacityModal ? (
+          <ReservationCapacityOverview
+            dateIso={capacityDateIso}
+            refreshKey={capacityRefreshKey}
+            floorOccupiedCount={floorOccupiedCount}
+            active={showCapacityModal}
+            inModal
+          />
+        ) : null}
+      </Modal>
 
       <div className="flex-1 overflow-auto p-2.5 sm:p-4 lg:p-6">
         <div className="mx-auto max-w-6xl space-y-3 sm:space-y-4 lg:space-y-6">
@@ -809,14 +837,6 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
               </div>
             ))}
           </section>
-
-          {showDayNav && anchorDate ? (
-            <ReservationCapacityOverview
-              dateIso={anchorDate}
-              refreshKey={capacityRefreshKey}
-              floorOccupiedCount={floorOccupiedCount}
-            />
-          ) : null}
 
           {error && (
             <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">

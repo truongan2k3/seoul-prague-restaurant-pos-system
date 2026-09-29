@@ -62,12 +62,18 @@ interface ReservationCapacityOverviewProps {
   /** Bumps when reservations reload; combine with floor occupancy for live POS blocks. */
   refreshKey?: number;
   floorOccupiedCount?: number;
+  /** When false, skip fetching (e.g. modal closed). */
+  active?: boolean;
+  /** Render inside a modal — hide duplicate page title chrome. */
+  inModal?: boolean;
 }
 
 export function ReservationCapacityOverview({
   dateIso,
   refreshKey = 0,
   floorOccupiedCount = 0,
+  active = true,
+  inModal = false,
 }: ReservationCapacityOverviewProps) {
   const { translate } = useApp();
   const [partySize, setPartySize] = useState(4);
@@ -78,7 +84,7 @@ export function ReservationCapacityOverview({
   const [detailsOpen, setDetailsOpen] = useState(true);
 
   const load = useCallback(async () => {
-    if (!dateIso) return;
+    if (!dateIso || !active) return;
     setLoading(true);
     setError(null);
     const params = new URLSearchParams({
@@ -103,11 +109,12 @@ export function ReservationCapacityOverview({
     } finally {
       setLoading(false);
     }
-  }, [dateIso, grillFilter, partySize, translate]);
+  }, [active, dateIso, grillFilter, partySize, translate]);
 
   useEffect(() => {
+    if (!active) return;
     void load();
-  }, [load, refreshKey, floorOccupiedCount]);
+  }, [active, load, refreshKey, floorOccupiedCount]);
 
   const timelineSlots = useMemo(
     () => payload?.slots.map((row) => ({ time: row.time, availability: row.availability })) ?? [],
@@ -132,34 +139,53 @@ export function ReservationCapacityOverview({
     return translate("resCapacityAvailable");
   };
 
-  return (
-    <section className="overflow-hidden rounded-xl border border-gray-200 bg-gradient-to-br from-white via-white to-gray-50/80 shadow-sm dark:border-gray-700 dark:from-gray-800 dark:via-gray-800 dark:to-gray-900/80">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-200/80 px-3 py-3 dark:border-gray-700/80 sm:px-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900">
-              <Activity className="h-4 w-4" />
-            </span>
-            <div>
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 sm:text-base">
-                {translate("resCapacityOverviewTitle")}
-              </h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400">{translate("resCapacityOverviewHint")}</p>
+  const shellClass = inModal
+    ? "space-y-4"
+    : "overflow-hidden rounded-xl border border-gray-200 bg-gradient-to-br from-white via-white to-gray-50/80 shadow-sm dark:border-gray-700 dark:from-gray-800 dark:via-gray-800 dark:to-gray-900/80";
+
+  const content = (
+    <>
+      {inModal ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-gray-500 dark:text-gray-400">{translate("resCapacityOverviewHint")}</p>
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            {translate("resCapacityRefresh")}
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-200/80 px-3 py-3 dark:border-gray-700/80 sm:px-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900">
+                <Activity className="h-4 w-4" />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 sm:text-base">
+                  {translate("resCapacityOverviewTitle")}
+                </h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{translate("resCapacityOverviewHint")}</p>
+              </div>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            {translate("resCapacityRefresh")}
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-          {translate("resCapacityRefresh")}
-        </button>
-      </div>
+      )}
 
-      <div className="space-y-4 px-3 py-3 sm:px-4 sm:py-4">
+      <div className={`space-y-4 ${inModal ? "" : "px-3 py-3 sm:px-4 sm:py-4"}`}>
         <div className="flex flex-wrap items-end gap-3">
           <label className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
             {translate("resCapacityPreviewParty")}
@@ -422,6 +448,12 @@ export function ReservationCapacityOverview({
           </>
         ) : null}
       </div>
-    </section>
+    </>
   );
+
+  if (inModal) {
+    return <div className={shellClass}>{content}</div>;
+  }
+
+  return <section className={shellClass}>{content}</section>;
 }

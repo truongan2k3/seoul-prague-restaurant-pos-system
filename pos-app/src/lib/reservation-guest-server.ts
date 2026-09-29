@@ -25,7 +25,7 @@ import { guestReservationCopy, parseGuestReservationLang } from "@/lib/i18n/gues
 import type { AppSettings, ReservationOperatingHours, ReservationStatus } from "@/lib/types";
 import { venueDayRangeUtc, venueWallTimeToUtc } from "@/lib/venue-timezone";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
-import { sumActiveHoldsForSlot } from "@/src/lib/reservation-holds";
+import { sumActiveHoldsForSlot, listActiveHoldsForSlot } from "@/src/lib/reservation-holds";
 
 export interface OnlineBookInput {
   guestName: string;
@@ -305,12 +305,18 @@ export async function evaluateGuestSlotAvailability(input: {
     );
 
   const heldGuestsByTime: Record<string, number> = {};
+  const heldPartiesByTime: Record<
+    string,
+    Array<{ partySize: number; wantsGrill?: "yes" | "no" | "undecided" | null }>
+  > = {};
   await Promise.all(
     times.map(async (time) => {
-      heldGuestsByTime[time] = await sumActiveHoldsForSlot({
+      const parties = await listActiveHoldsForSlot({
         dateIso: input.date,
         time,
       });
+      heldPartiesByTime[time] = parties;
+      heldGuestsByTime[time] = parties.reduce((sum, row) => sum + row.partySize, 0);
     }),
   );
 
@@ -323,6 +329,7 @@ export async function evaluateGuestSlotAvailability(input: {
     occupiedTables: ctx.occupiedTables,
     maxGuestsPerSlot: ctx.settings.reservationMaxGuestsPerSlot,
     heldGuestsByTime,
+    heldPartiesByTime,
   });
 
   return {
@@ -485,11 +492,12 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
   );
 
   const ctx = await loadDayCapacityContext(input.date);
-  const heldGuests = await sumActiveHoldsForSlot({
+  const heldParties = await listActiveHoldsForSlot({
     dateIso: input.date,
     time: input.time,
     excludeToken: input.holdToken,
   });
+  const heldGuests = heldParties.reduce((sum, row) => sum + row.partySize, 0);
 
   const evaluation = evaluateReservationCapacity({
     dateIso: input.date,
@@ -500,6 +508,7 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
     occupiedTables: ctx.occupiedTables,
     maxGuestsPerSlot: ctx.settings.reservationMaxGuestsPerSlot,
     heldGuests,
+    heldParties,
   });
 
   const allowFull =

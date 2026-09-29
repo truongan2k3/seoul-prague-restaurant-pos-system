@@ -57,28 +57,41 @@ export async function releaseReservationHold(token: string | null | undefined): 
   }
 }
 
+export async function listActiveHoldsForSlot(input: {
+  dateIso: string;
+  time: string;
+  excludeToken?: string | null;
+}): Promise<Array<{ partySize: number; wantsGrill: "yes" | "no" | "undecided" | null }>> {
+  try {
+    await purgeExpiredReservationHolds();
+    const admin = createSupabaseAdmin();
+    const { data, error } = await admin
+      .from("reservation_holds")
+      .select("party_size, hold_token, wants_grill")
+      .eq("date_iso", input.dateIso)
+      .eq("time_slot", input.time)
+      .gt("expires_at", new Date().toISOString());
+
+    if (error || !data) return [];
+    return data
+      .filter((row) => !(input.excludeToken && row.hold_token === input.excludeToken))
+      .map((row) => ({
+        partySize: Math.max(1, Number(row.party_size) || 1),
+        wantsGrill:
+          row.wants_grill === "yes" || row.wants_grill === "no" || row.wants_grill === "undecided"
+            ? row.wants_grill
+            : null,
+      }));
+  } catch {
+    return [];
+  }
+}
+
 export async function sumActiveHoldsForSlot(input: {
   dateIso: string;
   time: string;
   excludeToken?: string | null;
 }): Promise<number> {
-  try {
-    await purgeExpiredReservationHolds();
-    const admin = createSupabaseAdmin();
-    let query = admin
-      .from("reservation_holds")
-      .select("party_size, hold_token")
-      .eq("date_iso", input.dateIso)
-      .eq("time_slot", input.time)
-      .gt("expires_at", new Date().toISOString());
-
-    const { data, error } = await query;
-    if (error || !data) return 0;
-    return data.reduce((sum, row) => {
-      if (input.excludeToken && row.hold_token === input.excludeToken) return sum;
-      return sum + (Number(row.party_size) || 0);
-    }, 0);
-  } catch {
-    return 0;
-  }
+  const parties = await listActiveHoldsForSlot(input);
+  return parties.reduce((sum, row) => sum + row.partySize, 0);
 }

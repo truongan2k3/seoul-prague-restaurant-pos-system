@@ -36,7 +36,7 @@ interface TableCardProps {
   editMode?: boolean;
   compact?: boolean;
   /** Planned (not yet checked-in) reservation assigned to this table. */
-  plannedReservation?: { timeLabel: string; guestName: string } | null;
+  plannedReservation?: { displayLabel: string } | null;
   style?: CSSProperties;
   onClick?: () => void;
   onEdit?: () => void;
@@ -111,10 +111,11 @@ export function TableCard({
       )}
 
       {showPlannedReservation ? (
-        <p className="mt-auto shrink-0 pt-2 text-xs font-semibold leading-snug text-[var(--pos-champagne)]">
-          <span className="tabular-nums">{plannedReservation.timeLabel}</span>
-          {" + "}
-          <span className="truncate">{plannedReservation.guestName}</span>
+        <p
+          className="mt-auto shrink-0 truncate pt-2 text-xs font-semibold leading-snug tabular-nums text-[var(--pos-champagne)]"
+          title={plannedReservation.displayLabel}
+        >
+          {plannedReservation.displayLabel}
         </p>
       ) : null}
 

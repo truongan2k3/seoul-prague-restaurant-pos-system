@@ -267,11 +267,12 @@ async function loadDayCapacityContext(dateIso: string): Promise<DayCapacityConte
   try {
     const { data: floorTables } = await admin
       .from("tables")
-      .select("label, status")
+      .select("label, status, occupied_at")
       .neq("status", "empty");
     occupiedTables = (floorTables ?? []).map((row) => ({
       label: String(row.label),
       occupied: row.status === "waiting" || row.status === "ready",
+      occupiedAt: (row as { occupied_at?: string | null }).occupied_at ?? null,
     }));
   } catch {
     occupiedTables = [];

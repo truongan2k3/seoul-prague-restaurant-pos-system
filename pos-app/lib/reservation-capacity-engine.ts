@@ -44,6 +44,8 @@ export type OccupiedTableInput = {
   label: string;
   /** Table is currently busy on the floor (waiting/ready). */
   occupied: boolean;
+  /** When occupancy started (optional). Used to estimate when the table frees. */
+  occupiedAt?: string | Date | null;
 };
 
 export type CapacityEvaluateInput = {
@@ -60,6 +62,8 @@ export type CapacityEvaluateInput = {
   maxGuestsPerSlot?: number;
   /** Hold seats already claimed by in-progress online bookings. */
   heldGuests?: number;
+  /** Evaluation clock for POS occupancy windows; defaults to Date.now(). */
+  nowMs?: number;
 };
 
 export type CapacityEvaluateResult = {
@@ -133,7 +137,11 @@ function assignedLabels(row: CapacityReservationInput): string[] {
 }
 
 /**
- * Tables blocked for a slot: occupied on POS floor, or assigned to an overlapping reservation.
+ * Tables blocked for a slot: overlapping reservation assignments, or POS floor
+ * occupancy that still overlaps this slot’s dining window.
+ *
+ * Current POS occupancy only blocks ~the next dining duration (default 2h) from
+ * now / occupied_at — it does NOT lock large tables for all future evening slots.
  */
 export function blockedTableLabels(input: {
   reservations: CapacityReservationInput[];
@@ -142,12 +150,25 @@ export function blockedTableLabels(input: {
   time: string;
   durationMinutes: number;
   excludeReservationId?: string;
+  /** Evaluation clock; defaults to Date.now(). */
+  nowMs?: number;
 }): Set<string> {
   const blocked = new Set<string>();
   const { startMs, endMs } = windowFor(input.dateIso, input.time, input.durationMinutes);
+  const nowMs = input.nowMs ?? Date.now();
+  const durationMs = input.durationMinutes * 60 * 1000;
 
   for (const table of input.occupiedTables ?? []) {
-    if (table.occupied) blocked.add(normalizeTableLabel(table.label));
+    if (!table.occupied) continue;
+    const occupiedStartRaw = table.occupiedAt ? new Date(table.occupiedAt).getTime() : NaN;
+    // If still occupied past the original expected end, keep blocking from "now".
+    const occupiedStart = Number.isFinite(occupiedStartRaw)
+      ? Math.max(occupiedStartRaw, nowMs - durationMs)
+      : nowMs;
+    const occupiedEnd = occupiedStart + durationMs;
+    if (occupiedStart < endMs && occupiedEnd > startMs) {
+      blocked.add(normalizeTableLabel(table.label));
+    }
   }
 
   for (const row of input.reservations) {
@@ -227,6 +248,7 @@ export function evaluateReservationCapacity(
     time: input.time,
     durationMinutes: duration,
     excludeReservationId: input.excludeReservationId,
+    nowMs: input.nowMs,
   });
 
   const recommendation = recommendSeating(partySize, grill, blocked);

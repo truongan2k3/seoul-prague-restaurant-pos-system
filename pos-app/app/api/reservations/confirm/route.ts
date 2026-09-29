@@ -5,7 +5,10 @@ import {
   buildManageUrl,
   sendReservationEmail,
 } from "@/src/lib/reservation-email";
-import { confirmReservationServer } from "@/src/lib/reservation-guest-server";
+import {
+  confirmReservationServer,
+  patchReservationEmailStatus,
+} from "@/src/lib/reservation-guest-server";
 
 export async function POST(request: Request) {
   // Main POS uses staff session; Customer Display (/client) is a station with
@@ -34,6 +37,7 @@ export async function POST(request: Request) {
   }
 
   let emailSent = false;
+  let emailError: string | null = null;
   if (data.guestEmail) {
     const emailResult = await sendReservationEmail("confirmed", {
       guestName: data.guestName,
@@ -46,6 +50,12 @@ export async function POST(request: Request) {
       status: data.status,
     });
     emailSent = emailResult.sent;
+    emailError = emailResult.error ?? null;
+    await patchReservationEmailStatus(id, {
+      confirmEmailStatus: emailSent ? "sent" : "failed",
+    });
+  } else {
+    await patchReservationEmailStatus(id, { confirmEmailStatus: "skipped_no_email" });
   }
 
   // No staff push on confirm — already notified as "New reservation".
@@ -53,6 +63,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     emailSent,
+    emailError,
     bookingCode: data.bookingCode,
   });
 }

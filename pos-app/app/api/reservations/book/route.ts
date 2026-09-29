@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import {
-  buildManageUrl,
-  sendReservationEmail,
-} from "@/src/lib/reservation-email";
 import { createOnlineReservationServer } from "@/src/lib/reservation-guest-server";
+import { releaseReservationHold } from "@/src/lib/reservation-holds";
 import { reservationPushCopy, sendReservationPush } from "@/src/lib/push-server";
 
+/**
+ * Guest booking. Push notifies staff; guest email is sent ONLY when staff confirms
+ * (see /api/reservations/confirm) — never on submit.
+ */
 export async function POST(request: Request) {
   let body: {
     guestName?: string;
@@ -20,6 +21,9 @@ export async function POST(request: Request) {
     lang?: string;
     emailOptional?: boolean;
     receptionDesk?: boolean;
+    holdToken?: string;
+    wantsGrill?: "yes" | "no" | "undecided" | null;
+    staffOverrideCapacity?: boolean;
   };
 
   try {
@@ -40,6 +44,9 @@ export async function POST(request: Request) {
     gdprConsent: body.gdprConsent === true,
     emailOptional: body.emailOptional === true,
     receptionDesk: body.receptionDesk === true,
+    holdToken: body.holdToken,
+    wantsGrill: body.wantsGrill ?? null,
+    staffOverrideCapacity: body.staffOverrideCapacity === true,
     lang:
       body.lang === "cs" ||
       body.lang === "vi" ||
@@ -53,9 +60,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error ?? "Booking failed." }, { status: 400 });
   }
 
+  await releaseReservationHold(body.holdToken);
+
+  // Reception desk creates confirmed bookings — send confirm email there.
+  // Normal online submit stays pending; email waits for staff confirm.
   let emailSent = false;
-  if (data.guestEmail) {
-    const emailResult = await sendReservationEmail("received", {
+  if (body.receptionDesk && data.guestEmail && data.status === "confirmed") {
+    const { buildManageUrl, sendReservationEmail } = await import("@/src/lib/reservation-email");
+    const emailResult = await sendReservationEmail("confirmed", {
       guestName: data.guestName,
       guestEmail: data.guestEmail,
       partySize: data.partySize,
@@ -83,7 +95,7 @@ export async function POST(request: Request) {
       id: data.id,
       bookingCode: data.bookingCode,
       manageToken: data.manageToken,
-      manageUrl: buildManageUrl(data.manageToken),
+      manageUrl: (await import("@/src/lib/reservation-email")).buildManageUrl(data.manageToken),
       guestName: data.guestName,
       partySize: data.partySize,
       reservedAt: data.reservedAt,

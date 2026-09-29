@@ -5,6 +5,14 @@ import {
   getWeekdayKeyForDateIso,
   type SlotCapacityRow,
 } from "@/lib/reservation-slots";
+import {
+  evaluateReservationCapacity,
+  evaluateSlotsForGuest,
+  type CapacityEvaluateResult,
+  type CapacityReservationInput,
+  type GrillNeed,
+  type OccupiedTableInput,
+} from "@/lib/reservation-capacity-engine";
 import { generateBookingCode, generateManageToken } from "@/lib/reservation-codes";
 import {
   parseReservationEventTypes,
@@ -16,6 +24,7 @@ import { guestReservationCopy, parseGuestReservationLang } from "@/lib/i18n/gues
 import type { AppSettings, ReservationOperatingHours, ReservationStatus } from "@/lib/types";
 import { venueDayRangeUtc, venueWallTimeToUtc } from "@/lib/venue-timezone";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
+import { sumActiveHoldsForSlot } from "@/src/lib/reservation-holds";
 
 export interface OnlineBookInput {
   guestName: string;
@@ -32,6 +41,11 @@ export interface OnlineBookInput {
   emailOptional?: boolean;
   /** Client Screen / reception: create as confirmed staff booking (check-in ready). */
   receptionDesk?: boolean;
+  /** Short-lived capacity hold token from /api/reservations/hold. */
+  holdToken?: string;
+  wantsGrill?: "yes" | "no" | "undecided" | null;
+  /** Staff POS may force-accept when engine says Full. Guests cannot. */
+  staffOverrideCapacity?: boolean;
 }
 
 export interface GuestReservationPublic {
@@ -178,6 +192,173 @@ export async function ensureReservationCodes(reservationId: string): Promise<{
   };
 }
 
+type DayCapacityContext = {
+  settings: ReservationGuestSettings;
+  reservations: CapacityReservationInput[];
+  occupiedTables: OccupiedTableInput[];
+};
+
+async function loadDayCapacityContext(dateIso: string): Promise<DayCapacityContext> {
+  const settings = await fetchReservationGuestSettings();
+  const admin = createSupabaseAdmin();
+  const { startIso, endExclusiveIso } = venueDayRangeUtc(dateIso);
+
+  let reservations: CapacityReservationInput[] = [];
+  try {
+    const { data: existingRows } = await admin
+      .from("reservations")
+      .select(
+        "id, party_size, actual_party_size, reserved_at, status, notes, wants_grill, tables!table_id(label), secondary_table:tables!secondary_table_id(label)",
+      )
+      .gte("reserved_at", startIso)
+      .lt("reserved_at", endExclusiveIso);
+
+    type ExistingRow = {
+      id: string;
+      party_size: number;
+      actual_party_size?: number | null;
+      reserved_at: string;
+      status: string;
+      notes: string | null;
+      wants_grill?: string | null;
+      tables?: { label: string } | { label: string }[] | null;
+      secondary_table?: { label: string } | { label: string }[] | null;
+    };
+
+    reservations = ((existingRows ?? []) as ExistingRow[]).map((row) => {
+      const tableJoin = row.tables;
+      const tableLabel = Array.isArray(tableJoin) ? tableJoin[0]?.label : tableJoin?.label;
+      const secondaryJoin = row.secondary_table;
+      const secondaryTableLabel = Array.isArray(secondaryJoin)
+        ? secondaryJoin[0]?.label
+        : secondaryJoin?.label;
+      return {
+        id: row.id,
+        partySize: row.party_size,
+        actualPartySize: row.actual_party_size,
+        reservedAt: row.reserved_at,
+        status: row.status,
+        notes: row.notes,
+        wantsGrill:
+          row.wants_grill === "yes" || row.wants_grill === "no" || row.wants_grill === "undecided"
+            ? row.wants_grill
+            : undefined,
+        tableLabel,
+        secondaryTableLabel,
+      };
+    });
+  } catch {
+    const { data: legacyRows } = await admin
+      .from("reservations")
+      .select("id, party_size, reserved_at, status, notes")
+      .gte("reserved_at", startIso)
+      .lt("reserved_at", endExclusiveIso);
+    reservations = (legacyRows ?? []).map((row) => ({
+      id: row.id,
+      partySize: row.party_size,
+      reservedAt: row.reserved_at,
+      status: row.status,
+      notes: row.notes,
+    }));
+  }
+
+  let occupiedTables: OccupiedTableInput[] = [];
+  try {
+    const { data: floorTables } = await admin
+      .from("tables")
+      .select("label, status")
+      .neq("status", "empty");
+    occupiedTables = (floorTables ?? []).map((row) => ({
+      label: String(row.label),
+      occupied: row.status === "waiting" || row.status === "ready",
+    }));
+  } catch {
+    occupiedTables = [];
+  }
+
+  return { settings, reservations, occupiedTables };
+}
+
+/** Guest-facing slot availability (Available / Limited / Full) — no table labels. */
+export async function evaluateGuestSlotAvailability(input: {
+  date: string;
+  partySize: number;
+  grill?: GrillNeed;
+  times?: string[];
+}): Promise<{
+  slots: Array<{
+    time: string;
+    availability: CapacityEvaluateResult["availability"];
+    guestStatus: CapacityEvaluateResult["guestStatus"];
+  }>;
+  settings: ReservationGuestSettings;
+}> {
+  const ctx = await loadDayCapacityContext(input.date);
+  const times =
+    input.times ??
+    buildTimeSlotsForDate(
+      input.date,
+      ctx.settings.reservationOperatingHours,
+      ctx.settings.reservationTimeStep,
+    );
+
+  const heldGuestsByTime: Record<string, number> = {};
+  await Promise.all(
+    times.map(async (time) => {
+      heldGuestsByTime[time] = await sumActiveHoldsForSlot({
+        dateIso: input.date,
+        time,
+      });
+    }),
+  );
+
+  const evaluated = evaluateSlotsForGuest({
+    dateIso: input.date,
+    times,
+    partySize: Math.max(1, input.partySize),
+    grill: input.grill ?? null,
+    reservations: ctx.reservations,
+    occupiedTables: ctx.occupiedTables,
+    maxGuestsPerSlot: ctx.settings.reservationMaxGuestsPerSlot,
+    heldGuestsByTime,
+  });
+
+  return {
+    settings: ctx.settings,
+    slots: evaluated.map(({ time, result }) => ({
+      time,
+      availability: result.availability,
+      guestStatus: result.guestStatus,
+    })),
+  };
+}
+
+export async function patchReservationEmailStatus(
+  reservationId: string,
+  fields: {
+    cancelEmailStatus?: string;
+    cancelEmailError?: string | null;
+    confirmEmailStatus?: string;
+  },
+): Promise<void> {
+  try {
+    const admin = createSupabaseAdmin();
+    const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (fields.cancelEmailStatus !== undefined) {
+      payload.cancel_email_status = fields.cancelEmailStatus;
+    }
+    if (fields.cancelEmailError !== undefined) {
+      payload.cancel_email_error = fields.cancelEmailError;
+    }
+    if (fields.confirmEmailStatus !== undefined) {
+      payload.confirm_email_status = fields.confirmEmailStatus;
+    }
+    await admin.from("reservations").update(payload).eq("id", reservationId);
+  } catch {
+    /* columns may not exist yet */
+  }
+}
+
 async function validateSlotCapacity(params: {
   settings: ReservationGuestSettings;
   date: string;
@@ -288,13 +469,52 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
     return { data: null, error: copy.errorDateTime };
   }
 
-  const capacity = await validateSlotCapacity({
-    settings,
-    date: input.date,
+  const guestCount = Math.max(
+    1,
+    Math.min(settings.reservationMaxGuestsPerSlot, input.guestCount),
+  );
+
+  const ctx = await loadDayCapacityContext(input.date);
+  const heldGuests = await sumActiveHoldsForSlot({
+    dateIso: input.date,
     time: input.time,
-    guestCount: input.guestCount,
+    excludeToken: input.holdToken,
   });
-  if (!capacity.ok) return { data: null, error: capacity.error };
+
+  const evaluation = evaluateReservationCapacity({
+    dateIso: input.date,
+    time: input.time,
+    partySize: guestCount,
+    grill: input.wantsGrill ?? null,
+    reservations: ctx.reservations,
+    occupiedTables: ctx.occupiedTables,
+    maxGuestsPerSlot: ctx.settings.reservationMaxGuestsPerSlot,
+    heldGuests,
+  });
+
+  const allowFull =
+    input.staffOverrideCapacity === true || input.receptionDesk === true;
+  if (evaluation.availability === "full" && !allowFull) {
+    return {
+      data: null,
+      error: "This time slot is fully booked. Please choose another time.",
+    };
+  }
+
+  // Also enforce operating hours via legacy slot list.
+  const dayKey = getWeekdayKeyForDateIso(input.date);
+  const dayConfig = settings.reservationOperatingHours[dayKey];
+  if (!dayConfig?.enabled) {
+    return { data: null, error: "Selected date is outside booking hours." };
+  }
+  const slots = buildTimeSlotsForDate(
+    input.date,
+    settings.reservationOperatingHours,
+    settings.reservationTimeStep,
+  );
+  if (!slots.includes(input.time)) {
+    return { data: null, error: "Selected time is outside booking hours." };
+  }
 
   const guestName = input.guestName.trim();
   const email = input.email.trim();
@@ -307,27 +527,62 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
   const admin = createSupabaseAdmin();
   const nowIso = new Date().toISOString();
 
-  const { data, error } = await admin
+  const insertPayload: Record<string, unknown> = {
+    guest_name: guestName,
+    guest_phone: phone || null,
+    guest_email: email || null,
+    party_size: guestCount,
+    reserved_at: reservedAt.toISOString(),
+    notes: input.notes?.trim() || null,
+    event_type: eventType,
+    gdpr_consent_at: nowIso,
+    source: input.receptionDesk ? "reservation" : "online",
+    status: input.receptionDesk ? "confirmed" : "pending",
+    booking_code: bookingCode,
+    manage_token: manageToken,
+    updated_at: nowIso,
+    wants_grill: input.wantsGrill ?? null,
+    suggested_seating: evaluation.recommendationLabel,
+    suggested_capacity: evaluation.capacity,
+    capacity_status: evaluation.availability,
+    capacity_warnings: evaluation.warnings.join(" · ") || null,
+    staff_override_capacity: allowFull && evaluation.availability === "full",
+  };
+
+  let { data, error } = await admin
     .from("reservations")
-    .insert({
-      guest_name: guestName,
-      guest_phone: phone || null,
-      guest_email: email || null,
-      party_size: capacity.guestCount,
-      reserved_at: reservedAt.toISOString(),
-      notes: input.notes?.trim() || null,
-      event_type: eventType,
-      gdpr_consent_at: nowIso,
-      source: input.receptionDesk ? "reservation" : "online",
-      status: input.receptionDesk ? "confirmed" : "pending",
-      booking_code: bookingCode,
-      manage_token: manageToken,
-      updated_at: nowIso,
-    })
+    .insert(insertPayload)
     .select(
       "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
     )
     .single();
+
+  // Backward compatible if capacity columns are not migrated yet.
+  if (error && /column .* does not exist/i.test(error.message)) {
+    const legacy = await admin
+      .from("reservations")
+      .insert({
+        guest_name: guestName,
+        guest_phone: phone || null,
+        guest_email: email || null,
+        party_size: guestCount,
+        reserved_at: reservedAt.toISOString(),
+        notes: input.notes?.trim() || null,
+        event_type: eventType,
+        gdpr_consent_at: nowIso,
+        source: input.receptionDesk ? "reservation" : "online",
+        status: input.receptionDesk ? "confirmed" : "pending",
+        booking_code: bookingCode,
+        manage_token: manageToken,
+        updated_at: nowIso,
+      })
+      .select(
+        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+      )
+      .single();
+    data = legacy.data;
+    error = legacy.error;
+  }
 
   if (error || !data) {
     return { data: null, error: error?.message ?? "Failed to create reservation." };
@@ -426,17 +681,37 @@ export async function cancelReservationByManageToken(
   }
 
   const admin = createSupabaseAdmin();
-  const { data, error } = await admin
+  const now = new Date().toISOString();
+  let { data, error } = await admin
     .from("reservations")
     .update({
       status: "cancelled",
-      updated_at: new Date().toISOString(),
+      updated_at: now,
+      cancelled_at: now,
+      cancelled_by: "guest",
+      cancellation_reason: "customer",
     })
     .eq("id", existing.id)
     .select(
       "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
     )
     .single();
+
+  if (error && /column .* does not exist/i.test(error.message)) {
+    const legacy = await admin
+      .from("reservations")
+      .update({
+        status: "cancelled",
+        updated_at: now,
+      })
+      .eq("id", existing.id)
+      .select(
+        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+      )
+      .single();
+    data = legacy.data;
+    error = legacy.error;
+  }
 
   if (error || !data) {
     return { data: null, error: error?.message ?? "Failed to cancel reservation." };
@@ -489,26 +764,50 @@ export async function confirmReservationServer(reservationId: string): Promise<{
 }
 
 export async function fetchReservationEmailContext(reservationId: string): Promise<{
-  data: GuestReservationPublic | null;
+  data: (GuestReservationPublic & { cancellationReason?: string | null }) | null;
   error: string | null;
 }> {
   const codes = await ensureReservationCodes(reservationId);
   if (codes.error) return { data: null, error: codes.error.message };
 
   const admin = createSupabaseAdmin();
-  const { data, error } = await admin
+  let { data, error } = await admin
     .from("reservations")
     .select(
-      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type, cancellation_reason",
     )
     .eq("id", reservationId)
     .single();
+
+  if (error && /column .* does not exist/i.test(error.message)) {
+    const legacy = await admin
+      .from("reservations")
+      .select(
+        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+      )
+      .eq("id", reservationId)
+      .single();
+    data = legacy.data as typeof data;
+    error = legacy.error;
+  }
 
   if (error || !data) {
     return { data: null, error: error?.message ?? "Reservation not found." };
   }
 
-  return { data: mapPublicRow(data), error: null };
+  const mapped = mapPublicRow(data);
+  if (!mapped) return { data: null, error: "Reservation not found." };
+
+  return {
+    data: {
+      ...mapped,
+      cancellationReason:
+        "cancellation_reason" in data
+          ? ((data as { cancellation_reason?: string | null }).cancellation_reason ?? null)
+          : null,
+    },
+    error: null,
+  };
 }
 
 /** Guest page success popup copy (for API responses if needed). */

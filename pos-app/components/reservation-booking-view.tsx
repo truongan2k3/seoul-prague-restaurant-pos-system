@@ -24,6 +24,11 @@ import {
 import type { AppSettings } from "@/lib/types";
 import { LandingImage } from "@/lib/website/landing-image";
 import type { WebsiteContent } from "@/lib/website/types";
+import { openGuestChat } from "@/lib/guest-chat-ui";
+import {
+  ONLINE_PARTY_SIZE_PICKER_MAX,
+  ONLINE_SELF_SERVE_MAX_PARTY,
+} from "@/lib/reservation-party-limits";
 import { DEFAULT_APP_SETTINGS, fetchAppSettings } from "@/src/lib/settings-actions";
 
 type SlotStatus = "available" | "limited" | "full";
@@ -142,10 +147,16 @@ export function ReservationBookingView({
   }, []);
 
   useEffect(() => {
-    if (guestCount > appSettings.reservationMaxGuestsPerSlot) {
-      setGuestCount(appSettings.reservationMaxGuestsPerSlot);
+    const pickerMax = Math.max(
+      appSettings.reservationMaxGuestsPerSlot,
+      ONLINE_PARTY_SIZE_PICKER_MAX,
+    );
+    if (guestCount > pickerMax) {
+      setGuestCount(pickerMax);
     }
   }, [appSettings.reservationMaxGuestsPerSlot, guestCount]);
+
+  const requiresLargePartyContact = !embedded && guestCount > ONLINE_SELF_SERVE_MAX_PARTY;
 
   // Release hold on unmount / abandon.
   useEffect(() => {
@@ -161,6 +172,12 @@ export function ReservationBookingView({
   }, [holdToken]);
 
   useEffect(() => {
+    if (requiresLargePartyContact) {
+      setAvailabilitySlots([]);
+      setSlotsLoading(false);
+      return;
+    }
+
     let cancelled = false;
     setSlotsLoading(true);
     const params = new URLSearchParams({
@@ -206,13 +223,16 @@ export function ReservationBookingView({
     date,
     guestCount,
     wantsBbq,
+    requiresLargePartyContact,
   ]);
 
-  const guestOptions = useMemo(
-    () =>
-      Array.from({ length: appSettings.reservationMaxGuestsPerSlot }, (_, index) => index + 1),
-    [appSettings.reservationMaxGuestsPerSlot],
-  );
+  const guestOptions = useMemo(() => {
+    const max = Math.max(
+      appSettings.reservationMaxGuestsPerSlot,
+      ONLINE_PARTY_SIZE_PICKER_MAX,
+    );
+    return Array.from({ length: max }, (_, index) => index + 1);
+  }, [appSettings.reservationMaxGuestsPerSlot]);
 
   /** Bookable slots for guests — Full is hidden (staff may still override in POS). */
   const availableTimeSlots = useMemo(
@@ -269,6 +289,11 @@ export function ReservationBookingView({
     event.preventDefault();
     setError(null);
     setGdprError(false);
+
+    if (requiresLargePartyContact) {
+      setError(copy.largePartyMessage);
+      return;
+    }
 
     const validationError = validateForm();
     if (validationError) {
@@ -494,6 +519,38 @@ export function ReservationBookingView({
           </label>
         </div>
 
+        {requiresLargePartyContact ? (
+          <div className="space-y-4 rounded-none border border-[#C9A88B]/35 bg-[#C9A88B]/10 px-4 py-5 text-sm text-[#F5EDE4]">
+            <p className="landing-serif text-lg text-[#C9A88B]">{copy.largePartyTitle}</p>
+            <p className="leading-relaxed text-white/80">{copy.largePartyMessage}</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => openGuestChat()}
+                className="rounded-none border border-[#C9A88B]/50 bg-[#0B0B0C] px-4 py-2.5 text-sm font-medium text-[#C9A88B] transition hover:border-[#C9A88B] hover:bg-[#141416]"
+              >
+                {copy.largePartyChatCta}
+              </button>
+              <a
+                href={emailHref}
+                className="inline-flex items-center gap-2 rounded-none border border-white/15 bg-[#0B0B0C] px-4 py-2.5 text-sm text-white/80 transition hover:border-white/30"
+              >
+                <Mail className="h-4 w-4 text-[#C9A88B]" />
+                {displayEmail}
+              </a>
+              <a
+                href={phoneHref}
+                className="inline-flex items-center gap-2 rounded-none border border-white/15 bg-[#0B0B0C] px-4 py-2.5 text-sm text-white/80 transition hover:border-white/30"
+              >
+                <Phone className="h-4 w-4 text-[#C9A88B]" />
+                {displayPhone}
+              </a>
+            </div>
+          </div>
+        ) : null}
+
+        {requiresLargePartyContact ? null : (
+        <>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block text-sm text-white/80">
             {copy.emailAddress}
@@ -648,6 +705,8 @@ export function ReservationBookingView({
         >
           {submitting ? copy.submitting : copy.submitReservation}
         </button>
+        </>
+        )}
       </form>
 
       <Modal open={showSuccess} onClose={() => setShowSuccess(false)} title={successTitle || copy.makeReservation}>

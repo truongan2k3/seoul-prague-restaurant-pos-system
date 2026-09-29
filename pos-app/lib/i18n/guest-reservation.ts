@@ -40,6 +40,9 @@ export type GuestReservationCopy = {
   bookingCode: string;
   manageReservation: string;
   gdprRequired: string;
+  largePartyTitle: string;
+  largePartyMessage: string;
+  largePartyChatCta: string;
   errorName: string;
   errorEmail: string;
   errorPhone: string;
@@ -90,6 +93,10 @@ const en: GuestReservationCopy = {
   bookingCode: "Booking code",
   manageReservation: "Manage reservation",
   gdprRequired: "Please agree to data processing before submitting.",
+  largePartyTitle: "Large party (over 12 guests)",
+  largePartyMessage:
+    "Please contact us via Chat with us or by email/phone for more details. We may be able to combine tables or arrange seating for you — please reach out via Chat with us or email/phone.",
+  largePartyChatCta: "Chat with us",
   errorName: "Please enter your name.",
   errorEmail: "Please enter your email.",
   errorPhone: "Please enter your phone number.",
@@ -140,6 +147,10 @@ const cs: GuestReservationCopy = {
   bookingCode: "Kód rezervace",
   manageReservation: "Spravovat rezervaci",
   gdprRequired: "Před odesláním prosím souhlaste se zpracováním údajů.",
+  largePartyTitle: "Větší skupina (více než 12 hostů)",
+  largePartyMessage:
+    "Prosím kontaktujte nás přes Chat with us nebo e-mailem/telefonem pro více informací. Můžeme spojit stoly nebo vám sezení připravit — napište nám přes Chat with us nebo e-mail/telefon.",
+  largePartyChatCta: "Chat with us",
   errorName: "Zadejte prosím jméno.",
   errorEmail: "Zadejte prosím e-mail.",
   errorPhone: "Zadejte prosím telefon.",
@@ -190,6 +201,10 @@ const vi: GuestReservationCopy = {
   bookingCode: "Mã đặt bàn",
   manageReservation: "Quản lý đặt bàn",
   gdprRequired: "Vui lòng đồng ý xử lý dữ liệu trước khi gửi.",
+  largePartyTitle: "Đoàn trên 12 khách",
+  largePartyMessage:
+    "Vui lòng liên hệ chúng tôi qua Chat with us hoặc qua email/số điện thoại để biết thêm chi tiết. Chúng tôi có thể sẽ gộp bàn hoặc sắp xếp cho bạn — vui lòng trao đổi qua Chat with us hoặc email/số điện thoại.",
+  largePartyChatCta: "Chat with us",
   errorName: "Vui lòng nhập họ tên.",
   errorEmail: "Vui lòng nhập email.",
   errorPhone: "Vui lòng nhập số điện thoại.",
@@ -240,6 +255,10 @@ const de: GuestReservationCopy = {
   bookingCode: "Buchungscode",
   manageReservation: "Reservierung verwalten",
   gdprRequired: "Bitte stimmen Sie der Datenverarbeitung zu, bevor Sie absenden.",
+  largePartyTitle: "Große Gruppe (über 12 Gäste)",
+  largePartyMessage:
+    "Bitte kontaktieren Sie uns über Chat with us oder per E-Mail/Telefon für weitere Details. Wir können Tische zusammenlegen oder Sitzplätze arrangieren — melden Sie sich bitte über Chat with us oder E-Mail/Telefon.",
+  largePartyChatCta: "Chat with us",
   errorName: "Bitte geben Sie Ihren Namen ein.",
   errorEmail: "Bitte geben Sie Ihre E-Mail ein.",
   errorPhone: "Bitte geben Sie Ihre Telefonnummer ein.",
@@ -290,6 +309,10 @@ const ko: GuestReservationCopy = {
   bookingCode: "예약 코드",
   manageReservation: "예약 관리",
   gdprRequired: "제출 전에 데이터 처리에 동의해 주세요.",
+  largePartyTitle: "12명 초과 단체",
+  largePartyMessage:
+    "12명보다 많은 인원은 Chat with us 또는 이메일/전화로 문의해 주세요. 테이블을 합치거나 좌석을 준비해 드릴 수 있습니다 — Chat with us 또는 이메일/전화로 연락해 주세요.",
+  largePartyChatCta: "Chat with us",
   errorName: "이름을 입력해 주세요.",
   errorEmail: "이메일을 입력해 주세요.",
   errorPhone: "전화번호를 입력해 주세요.",

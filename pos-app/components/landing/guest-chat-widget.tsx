@@ -15,7 +15,7 @@ import {
   type GuestChatSession,
 } from "@/lib/guest-chat";
 import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
-import { subscribeGuestChatHiddenForMenuBook } from "@/lib/guest-chat-ui";
+import { subscribeGuestChatHiddenForMenuBook, subscribeOpenGuestChat } from "@/lib/guest-chat-ui";
 
 type Props = {
   page: GuestChatPage;
@@ -96,6 +96,18 @@ export function GuestChatWidget({ page, liftAboveBookCta = false }: Props) {
 
   useEffect(() => {
     return subscribeGuestChatHiddenForMenuBook(setHiddenForMenuBook);
+  }, []);
+
+  useEffect(() => {
+    return subscribeOpenGuestChat(() => {
+      setOpen(true);
+      setError(null);
+      if (!readStoredSessionId()) {
+        setSession(null);
+        setMessages([]);
+        setPhase("start");
+      }
+    });
   }, []);
 
   useEffect(() => {

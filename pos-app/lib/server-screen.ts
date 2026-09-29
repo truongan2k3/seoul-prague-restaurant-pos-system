@@ -20,6 +20,13 @@ export const SERVER_SCREEN_READY_VISIBLE_MS = 5 * 60 * 1000;
 /** Server Screen History keeps completed orders this long. */
 export const SERVER_SCREEN_HISTORY_VISIBLE_MS = 2 * 60 * 60 * 1000;
 
+/**
+ * Pending grill companions (Banchan / Lettuce / …) auto-drop after this age.
+ * Without a cap, unfinished companions from yesterday stay on KDS overnight
+ * whenever the tablet keeps the /kds tab open (sessionStorage anchors).
+ */
+export const SERVER_SCREEN_COMPANION_MAX_AGE_MS = 4 * 60 * 60 * 1000;
+
 /** Auto language rotation interval. */
 export const SERVER_SCREEN_LANG_ROTATE_MS = 10_000;
 
@@ -321,6 +328,7 @@ export function pendingCompanionIds(
 /**
  * Remember first-grill anchors from live items. Never clears an existing
  * table anchor just because the grill left preparing / was cancelled.
+ * Drops anchors only when the table has no live station rows left (checked out).
  */
 export function mergeGrillCompanionAnchors(
   store: GrillCompanionStore,
@@ -344,12 +352,24 @@ export function mergeGrillCompanionAnchors(
     changed = true;
   }
 
+  // Table fully left the station board (checkout / archive) → drop companions.
+  for (const tableId of Object.keys(anchors)) {
+    const live = tableItemsByTable.get(tableId) ?? [];
+    if (live.length > 0) continue;
+    delete anchors[tableId];
+    changed = true;
+  }
+
   return changed
     ? { ...store, version: store.version ?? GRILL_COMPANION_STORE_VERSION, anchors }
     : store;
 }
 
-/** Drop anchors only when every companion is done and aged out of history. */
+/**
+ * Drop aged-out done keys and stale anchors.
+ * Pending companions older than SERVER_SCREEN_COMPANION_MAX_AGE_MS are discarded
+ * so overnight leftovers cannot haunt the preparing board the next day.
+ */
 export function pruneGrillCompanionStore(
   store: GrillCompanionStore,
   nowMs = Date.now(),
@@ -368,6 +388,16 @@ export function pruneGrillCompanionStore(
 
   const anchors: Record<string, GrillCompanionAnchor> = {};
   for (const [tableId, anchor] of Object.entries(store.anchors)) {
+    const createdMs = new Date(anchor.createdAt).getTime();
+    if (
+      !Number.isNaN(createdMs) &&
+      nowMs - createdMs > SERVER_SCREEN_COMPANION_MAX_AGE_MS
+    ) {
+      // Stale overnight / forgotten companions — drop the whole table anchor.
+      changed = true;
+      continue;
+    }
+
     const pending = pendingCompanionIds({ done, anchors: store.anchors }, anchor.parentId);
     if (pending.length > 0) {
       anchors[tableId] = anchor;

@@ -7,7 +7,11 @@ import { NotificationBell } from "@/components/notification-bell";
 import { TableCard } from "@/components/table-card";
 import { TableEditModal } from "@/components/table-edit-modal";
 import { useApp } from "@/contexts/app-context";
-import { filterReservationsByPeriod } from "@/lib/reservation-analytics";
+import {
+  formatFloorTableAssignmentLabel,
+  reservationOnVenueDateIso,
+} from "@/lib/reservation-floor-display";
+import { todayIsoDateInVenue, venueDayRangeUtc } from "@/lib/venue-timezone";
 import { TABLE_CARD_WIDTH } from "@/lib/table-layout";
 import { tableIdsWithSlaBreach } from "@/lib/order-sla";
 import type { MenuItem, OrderItem, ReservationRecord, ReservationStatus, RestaurantTable } from "@/lib/types";
@@ -35,32 +39,24 @@ type DragState = {
 };
 
 type PlannedFloorReservation = {
-  timeLabel: string;
-  guestName: string;
+  displayLabel: string;
   reservedAtMs: number;
 };
 
 /** Upcoming assigned bookings still waiting to be seated. */
 const PLANNED_FLOOR_STATUSES: ReservationStatus[] = ["pending", "confirmed", "late"];
 
-function formatReservationClock(date: Date, language: string): string {
-  return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : language === "cs" ? "cs-CZ" : "en-GB", {
-    timeZone: "Europe/Prague",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(date);
-}
-
 function buildPlannedByTableId(
   reservations: ReservationRecord[],
   language: string,
+  venueDateIso: string,
 ): Record<string, PlannedFloorReservation> {
   const byTable: Record<string, PlannedFloorReservation> = {};
 
-  const candidates = filterReservationsByPeriod(reservations, "today")
+  const candidates = reservations
     .filter(
       (row) =>
+        reservationOnVenueDateIso(row.reservedAt, venueDateIso) &&
         PLANNED_FLOOR_STATUSES.includes(row.status) &&
         Boolean(row.tableId || row.secondaryTableId),
     )
@@ -68,8 +64,12 @@ function buildPlannedByTableId(
 
   for (const row of candidates) {
     const planned: PlannedFloorReservation = {
-      timeLabel: formatReservationClock(row.reservedAt, language),
-      guestName: row.guestName.trim() || "—",
+      displayLabel: formatFloorTableAssignmentLabel({
+        reservedAt: row.reservedAt,
+        guestName: row.guestName,
+        partySize: row.partySize,
+        language,
+      }),
       reservedAtMs: row.reservedAt.getTime(),
     };
     for (const tableId of [row.tableId, row.secondaryTableId]) {
@@ -103,10 +103,12 @@ export function MapView({
   const [slaClock, setSlaClock] = useState(() => Date.now());
   const [plannedReservations, setPlannedReservations] = useState<ReservationRecord[]>([]);
 
+  const venueTodayIso = todayIsoDateInVenue();
+
   const loadPlannedReservations = useCallback(async () => {
-    const since = new Date();
-    since.setHours(0, 0, 0, 0);
-    const { data, error } = await fetchReservations(since);
+    const dateIso = todayIsoDateInVenue();
+    const { startIso } = venueDayRangeUtc(dateIso);
+    const { data, error } = await fetchReservations(new Date(startIso));
     if (error || !data) return;
     setPlannedReservations(mapReservationsResponse(data));
   }, []);
@@ -119,8 +121,8 @@ export function MapView({
   }, [loadPlannedReservations]);
 
   const plannedByTableId = useMemo(
-    () => buildPlannedByTableId(plannedReservations, language),
-    [plannedReservations, language],
+    () => buildPlannedByTableId(plannedReservations, language, venueTodayIso),
+    [plannedReservations, language, venueTodayIso],
   );
 
   useEffect(() => {
@@ -202,7 +204,7 @@ export function MapView({
   const plannedFor = (tableId: string) => {
     const row = plannedByTableId[tableId];
     if (!row) return null;
-    return { timeLabel: row.timeLabel, guestName: row.guestName };
+    return { displayLabel: row.displayLabel };
   };
 
   return (

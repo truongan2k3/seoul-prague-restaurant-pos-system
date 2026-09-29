@@ -6,12 +6,15 @@ import {
   type SlotCapacityRow,
 } from "@/lib/reservation-slots";
 import {
+  blockedTableLabels,
+  DEFAULT_RESERVATION_DURATION_MINUTES,
   evaluateReservationCapacity,
   evaluateSlotsForGuest,
   type CapacityEvaluateResult,
   type CapacityReservationInput,
   type GrillNeed,
   type OccupiedTableInput,
+  type SlotAvailability,
 } from "@/lib/reservation-capacity-engine";
 import { ONLINE_SELF_SERVE_MAX_PARTY } from "@/lib/reservation-party-limits";
 import { generateBookingCode, generateManageToken } from "@/lib/reservation-codes";
@@ -332,6 +335,134 @@ export async function evaluateGuestSlotAvailability(input: {
       availability: result.availability,
       guestStatus: result.guestStatus,
     })),
+  };
+}
+
+export type StaffCapacitySlotDetail = {
+  time: string;
+  availability: SlotAvailability;
+  recommendationLabel: string | null;
+  freeConfigurationCount: number;
+  overlappingGuestCount: number;
+  remainingSeatEstimate: number;
+  heldGuests: number;
+  warnings: string[];
+  staffSummary: string;
+  blockedLabels: string[];
+};
+
+export type StaffPartySizeSummary = {
+  partySize: number;
+  available: number;
+  limited: number;
+  full: number;
+};
+
+/** Staff-only day capacity — includes table labels, blocked sets, and seating counts. */
+export async function evaluateStaffDayCapacity(input: {
+  date: string;
+  partySize: number;
+  grill?: GrillNeed;
+}): Promise<{
+  date: string;
+  partySize: number;
+  grill: GrillNeed;
+  maxGuestsPerSlot: number;
+  slots: StaffCapacitySlotDetail[];
+  summary: { available: number; limited: number; full: number; total: number };
+  partySizeSummaries: StaffPartySizeSummary[];
+}> {
+  const partySize = Math.max(1, input.partySize);
+  const grill: GrillNeed = input.grill ?? null;
+  const ctx = await loadDayCapacityContext(input.date);
+  const times = buildTimeSlotsForDate(
+    input.date,
+    ctx.settings.reservationOperatingHours,
+    ctx.settings.reservationTimeStep,
+  );
+
+  const heldGuestsByTime: Record<string, number> = {};
+  await Promise.all(
+    times.map(async (time) => {
+      heldGuestsByTime[time] = await sumActiveHoldsForSlot({
+        dateIso: input.date,
+        time,
+      });
+    }),
+  );
+
+  const evaluated = evaluateSlotsForGuest({
+    dateIso: input.date,
+    times,
+    partySize,
+    grill,
+    reservations: ctx.reservations,
+    occupiedTables: ctx.occupiedTables,
+    maxGuestsPerSlot: ctx.settings.reservationMaxGuestsPerSlot,
+    heldGuestsByTime,
+  });
+
+  const slots: StaffCapacitySlotDetail[] = evaluated.map(({ time, result }) => {
+    const blocked = blockedTableLabels({
+      reservations: ctx.reservations,
+      occupiedTables: ctx.occupiedTables,
+      dateIso: input.date,
+      time,
+      durationMinutes: DEFAULT_RESERVATION_DURATION_MINUTES,
+    });
+    return {
+      time,
+      availability: result.availability,
+      recommendationLabel: result.recommendationLabel,
+      freeConfigurationCount: result.freeConfigurationCount,
+      overlappingGuestCount: result.overlappingGuestCount,
+      remainingSeatEstimate: result.remainingSeatEstimate,
+      heldGuests: heldGuestsByTime[time] ?? 0,
+      warnings: result.warnings,
+      staffSummary: result.staffSummary,
+      blockedLabels: [...blocked].sort((a, b) => a.localeCompare(b)),
+    };
+  });
+
+  const summary = {
+    total: slots.length,
+    available: slots.filter((row) => row.availability === "available").length,
+    limited: slots.filter((row) => row.availability === "limited").length,
+    full: slots.filter((row) => row.availability === "full").length,
+  };
+
+  const referenceSizes = [2, 4, 6, 8, 10, 12].filter(
+    (size) => size <= ONLINE_SELF_SERVE_MAX_PARTY || size === partySize,
+  );
+  const uniqueSizes = [...new Set([partySize, ...referenceSizes])].sort((a, b) => a - b);
+
+  const partySizeSummaries: StaffPartySizeSummary[] = uniqueSizes.map((size) => {
+    const rows = evaluateSlotsForGuest({
+      dateIso: input.date,
+      times,
+      partySize: size,
+      grill,
+      reservations: ctx.reservations,
+      occupiedTables: ctx.occupiedTables,
+      maxGuestsPerSlot: ctx.settings.reservationMaxGuestsPerSlot,
+      heldGuestsByTime,
+    });
+    return {
+      partySize: size,
+      available: rows.filter((row) => row.result.availability === "available").length,
+      limited: rows.filter((row) => row.result.availability === "limited").length,
+      full: rows.filter((row) => row.result.availability === "full").length,
+    };
+  });
+
+  return {
+    date: input.date,
+    partySize,
+    grill,
+    maxGuestsPerSlot: ctx.settings.reservationMaxGuestsPerSlot,
+    slots,
+    summary,
+    partySizeSummaries,
   };
 }
 

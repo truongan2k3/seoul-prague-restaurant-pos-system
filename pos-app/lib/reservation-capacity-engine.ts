@@ -81,6 +81,8 @@ export type CapacityEvaluateResult = {
   guestStatus: SlotAvailability;
   overlappingGuestCount: number;
   remainingSeatEstimate: number;
+  /** Distinct seating configurations still free for this party (staff). */
+  freeConfigurationCount: number;
 };
 
 const ACTIVE_STATUSES = new Set([
@@ -252,6 +254,12 @@ export function evaluateReservationCapacity(
   });
 
   const recommendation = recommendSeating(partySize, grill, blocked);
+  const freeConfigurationCount = buildAllSeatingConfigurations()
+    .filter((config) => config.capacity >= partySize)
+    .filter((config) => grillSatisfied(config, grill))
+    .filter((config) =>
+      config.labels.every((label) => !blocked.has(normalizeTableLabel(label))),
+    ).length;
   const warnings: string[] = [];
 
   if (grill === "yes" && recommendation && !recommendation.grill) {
@@ -316,6 +324,7 @@ export function evaluateReservationCapacity(
     guestStatus: availability,
     overlappingGuestCount,
     remainingSeatEstimate,
+    freeConfigurationCount,
   };
 }
 

@@ -71,6 +71,7 @@ import {
   RESERVATION_CANCEL_REASONS,
   type ReservationCancelReasonId,
 } from "@/lib/reservation-cancel-reasons";
+import { ReservationCapacityOverview } from "@/components/reservation-capacity-overview";
 
 async function confirmReservationWithEmail(reservationId: string) {
   const response = await fetch("/api/reservations/confirm", {
@@ -239,6 +240,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const [checkInTableIds, setCheckInTableIds] = useState<string[]>([]);
   const [undoEntry, setUndoEntry] = useState<ReservationUndoEntry | null>(null);
   const [undoBusy, setUndoBusy] = useState(false);
+  const [capacityRefreshKey, setCapacityRefreshKey] = useState(0);
 
   const loadReservations = useCallback(async () => {
     setLoading(true);
@@ -253,6 +255,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     } else {
       const mapped = mapReservationsResponse(data);
       setReservations(mapped);
+      setCapacityRefreshKey((key) => key + 1);
       if (!initialLoadDoneRef.current) {
         mapped.forEach((row) => seenReservationIdsRef.current.add(row.id));
         initialLoadDoneRef.current = true;
@@ -340,6 +343,11 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
   const emptyTables = useMemo(
     () => tables.filter((table) => table.status === "empty"),
+    [tables],
+  );
+
+  const floorOccupiedCount = useMemo(
+    () => tables.filter((table) => table.status === "waiting" || table.status === "ready").length,
     [tables],
   );
 
@@ -801,6 +809,14 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
               </div>
             ))}
           </section>
+
+          {showDayNav && anchorDate ? (
+            <ReservationCapacityOverview
+              dateIso={anchorDate}
+              refreshKey={capacityRefreshKey}
+              floorOccupiedCount={floorOccupiedCount}
+            />
+          ) : null}
 
           {error && (
             <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">

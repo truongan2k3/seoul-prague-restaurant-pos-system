@@ -26,7 +26,7 @@ import { LandingImage } from "@/lib/website/landing-image";
 import type { WebsiteContent } from "@/lib/website/types";
 import { openGuestChat } from "@/lib/guest-chat-ui";
 import {
-  ONLINE_PARTY_SIZE_PICKER_MAX,
+  ONLINE_LARGE_PARTY_OPTION,
   ONLINE_SELF_SERVE_MAX_PARTY,
 } from "@/lib/reservation-party-limits";
 import { DEFAULT_APP_SETTINGS, fetchAppSettings } from "@/src/lib/settings-actions";
@@ -147,16 +147,19 @@ export function ReservationBookingView({
   }, []);
 
   useEffect(() => {
-    const pickerMax = Math.max(
-      appSettings.reservationMaxGuestsPerSlot,
-      ONLINE_PARTY_SIZE_PICKER_MAX,
-    );
-    if (guestCount > pickerMax) {
-      setGuestCount(pickerMax);
+    if (embedded) {
+      if (guestCount > appSettings.reservationMaxGuestsPerSlot) {
+        setGuestCount(appSettings.reservationMaxGuestsPerSlot);
+      }
+      return;
     }
-  }, [appSettings.reservationMaxGuestsPerSlot, guestCount]);
+    // Online: only 1–12 or the “12+” sentinel.
+    if (guestCount !== ONLINE_LARGE_PARTY_OPTION && guestCount > ONLINE_SELF_SERVE_MAX_PARTY) {
+      setGuestCount(ONLINE_SELF_SERVE_MAX_PARTY);
+    }
+  }, [appSettings.reservationMaxGuestsPerSlot, embedded, guestCount]);
 
-  const requiresLargePartyContact = !embedded && guestCount > ONLINE_SELF_SERVE_MAX_PARTY;
+  const requiresLargePartyContact = !embedded && guestCount === ONLINE_LARGE_PARTY_OPTION;
 
   // Release hold on unmount / abandon.
   useEffect(() => {
@@ -227,12 +230,14 @@ export function ReservationBookingView({
   ]);
 
   const guestOptions = useMemo(() => {
-    const max = Math.max(
-      appSettings.reservationMaxGuestsPerSlot,
-      ONLINE_PARTY_SIZE_PICKER_MAX,
-    );
-    return Array.from({ length: max }, (_, index) => index + 1);
-  }, [appSettings.reservationMaxGuestsPerSlot]);
+    if (embedded) {
+      return Array.from(
+        { length: appSettings.reservationMaxGuestsPerSlot },
+        (_, index) => index + 1,
+      );
+    }
+    return Array.from({ length: ONLINE_SELF_SERVE_MAX_PARTY }, (_, index) => index + 1);
+  }, [appSettings.reservationMaxGuestsPerSlot, embedded]);
 
   /** Bookable slots for guests — Full is hidden (staff may still override in POS). */
   const availableTimeSlots = useMemo(
@@ -515,6 +520,9 @@ export function ReservationBookingView({
                   {count} {count === 1 ? copy.guestSingular : copy.guestPlural}
                 </option>
               ))}
+              {!embedded ? (
+                <option value={ONLINE_LARGE_PARTY_OPTION}>{copy.largePartyOption}</option>
+              ) : null}
             </select>
           </label>
         </div>

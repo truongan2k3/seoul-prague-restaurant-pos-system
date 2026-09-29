@@ -43,6 +43,7 @@ export type GuestReservationCopy = {
   largePartyTitle: string;
   largePartyMessage: string;
   largePartyChatCta: string;
+  largePartyOption: string;
   errorName: string;
   errorEmail: string;
   errorPhone: string;
@@ -97,6 +98,7 @@ const en: GuestReservationCopy = {
   largePartyMessage:
     "Please contact us via Chat with us or by email/phone for more details. We may be able to combine tables or arrange seating for you — please reach out via Chat with us or email/phone.",
   largePartyChatCta: "Chat with us",
+  largePartyOption: "12+",
   errorName: "Please enter your name.",
   errorEmail: "Please enter your email.",
   errorPhone: "Please enter your phone number.",
@@ -151,6 +153,7 @@ const cs: GuestReservationCopy = {
   largePartyMessage:
     "Prosím kontaktujte nás přes Chat with us nebo e-mailem/telefonem pro více informací. Můžeme spojit stoly nebo vám sezení připravit — napište nám přes Chat with us nebo e-mail/telefon.",
   largePartyChatCta: "Chat with us",
+  largePartyOption: "12+",
   errorName: "Zadejte prosím jméno.",
   errorEmail: "Zadejte prosím e-mail.",
   errorPhone: "Zadejte prosím telefon.",
@@ -205,6 +208,7 @@ const vi: GuestReservationCopy = {
   largePartyMessage:
     "Vui lòng liên hệ chúng tôi qua Chat with us hoặc qua email/số điện thoại để biết thêm chi tiết. Chúng tôi có thể sẽ gộp bàn hoặc sắp xếp cho bạn — vui lòng trao đổi qua Chat with us hoặc email/số điện thoại.",
   largePartyChatCta: "Chat with us",
+  largePartyOption: "12+",
   errorName: "Vui lòng nhập họ tên.",
   errorEmail: "Vui lòng nhập email.",
   errorPhone: "Vui lòng nhập số điện thoại.",
@@ -259,6 +263,7 @@ const de: GuestReservationCopy = {
   largePartyMessage:
     "Bitte kontaktieren Sie uns über Chat with us oder per E-Mail/Telefon für weitere Details. Wir können Tische zusammenlegen oder Sitzplätze arrangieren — melden Sie sich bitte über Chat with us oder E-Mail/Telefon.",
   largePartyChatCta: "Chat with us",
+  largePartyOption: "12+",
   errorName: "Bitte geben Sie Ihren Namen ein.",
   errorEmail: "Bitte geben Sie Ihre E-Mail ein.",
   errorPhone: "Bitte geben Sie Ihre Telefonnummer ein.",
@@ -313,6 +318,7 @@ const ko: GuestReservationCopy = {
   largePartyMessage:
     "12명보다 많은 인원은 Chat with us 또는 이메일/전화로 문의해 주세요. 테이블을 합치거나 좌석을 준비해 드릴 수 있습니다 — Chat with us 또는 이메일/전화로 연락해 주세요.",
   largePartyChatCta: "Chat with us",
+  largePartyOption: "12+",
   errorName: "이름을 입력해 주세요.",
   errorEmail: "이메일을 입력해 주세요.",
   errorPhone: "전화번호를 입력해 주세요.",

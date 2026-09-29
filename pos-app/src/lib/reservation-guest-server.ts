@@ -25,7 +25,7 @@ import { guestReservationCopy, parseGuestReservationLang } from "@/lib/i18n/gues
 import type { AppSettings, ReservationOperatingHours, ReservationStatus } from "@/lib/types";
 import { venueDayRangeUtc, venueWallTimeToUtc } from "@/lib/venue-timezone";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
-import { sumActiveHoldsForSlot, listActiveHoldsForSlot } from "@/src/lib/reservation-holds";
+import { listActiveHoldsForSlot } from "@/src/lib/reservation-holds";
 
 export interface OnlineBookInput {
   guestName: string;

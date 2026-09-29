@@ -230,6 +230,11 @@ export interface AppSettings {
   reservationTimeStep: number;
   reservationMaxGuestsPerSlot: number;
   reservationTableHoldingTime: number;
+  /**
+   * Assumed dining window (minutes) for capacity overlap / table blocking.
+   * Default 90. Used by online availability + staff capacity overview.
+   */
+  reservationDurationMinutes: number;
   reservationOperatingHours: ReservationOperatingHours;
   /** Seconds each today's reservation stays on the floor-map vertical ticker. */
   mapReservationTickerSeconds: number;
@@ -542,6 +547,10 @@ export interface ReservationRecord {
   completedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  /** When guest first submitted online / reception form. */
+  guestSubmittedAt?: Date;
+  /** When guest last changed via manage link. */
+  guestChangedAt?: Date;
   /** Short public reference (e.g. SP-A7K2). */
   bookingCode?: string;
   /** Guest-selected occasion (casual, birthday, …). */

@@ -1445,6 +1445,27 @@ export function SettingsView({
               </label>
               <label className="block text-sm">
                 <span className="text-gray-500 dark:text-gray-400">
+                  {translate("settingsReservationDuration")}
+                </span>
+                <select
+                  value={draft.reservationDurationMinutes}
+                  onChange={(event) =>
+                    updateDraft("reservationDurationMinutes", Number(event.target.value))
+                  }
+                  className="pos-input mt-1"
+                >
+                  <option value={60}>{translate("settingsDuration60")}</option>
+                  <option value={90}>{translate("settingsDuration90")}</option>
+                  <option value={120}>{translate("settingsDuration120")}</option>
+                  <option value={150}>{translate("settingsDuration150")}</option>
+                  <option value={180}>{translate("settingsDuration180")}</option>
+                </select>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {translate("settingsReservationDurationHint")}
+                </p>
+              </label>
+              <label className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">
                   {translate("settingsMapResTickerSeconds")}
                 </span>
                 <input

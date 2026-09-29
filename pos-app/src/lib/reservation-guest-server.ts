@@ -7,6 +7,7 @@ import {
 } from "@/lib/reservation-slots";
 import {
   blockedTableLabels,
+  clampReservationDurationMinutes,
   DEFAULT_RESERVATION_DURATION_MINUTES,
   evaluateReservationCapacity,
   evaluateSlotsForGuest,
@@ -72,6 +73,7 @@ type ReservationGuestSettings = Pick<
   AppSettings,
   | "reservationTimeStep"
   | "reservationMaxGuestsPerSlot"
+  | "reservationDurationMinutes"
   | "reservationOperatingHours"
   | "reservationRequiredFields"
   | "reservationEventTypes"
@@ -80,6 +82,7 @@ type ReservationGuestSettings = Pick<
 const DEFAULT_RESERVATION_SETTINGS: ReservationGuestSettings = {
   reservationTimeStep: 30,
   reservationMaxGuestsPerSlot: 20,
+  reservationDurationMinutes: DEFAULT_RESERVATION_DURATION_MINUTES,
   reservationOperatingHours: DEFAULT_RESERVATION_OPERATING_HOURS,
   reservationRequiredFields: parseReservationRequiredFields(null),
   reservationEventTypes: parseReservationEventTypes(null),
@@ -96,13 +99,38 @@ function parseOperatingHours(value: unknown): ReservationOperatingHours {
 async function fetchReservationGuestSettings(): Promise<ReservationGuestSettings> {
   try {
     const admin = createSupabaseAdmin();
-    const { data } = await admin
+    const { data, error } = await admin
       .from("settings")
       .select(
-        "reservation_time_step, reservation_max_guests_per_slot, reservation_operating_hours, reservation_required_fields, reservation_event_types",
+        "reservation_time_step, reservation_max_guests_per_slot, reservation_duration_minutes, reservation_operating_hours, reservation_required_fields, reservation_event_types",
       )
       .eq("id", 1)
       .maybeSingle();
+
+    // Older DBs without reservation_duration_minutes — retry without that column.
+    if (error && /reservation_duration_minutes/i.test(error.message)) {
+      const legacy = await admin
+        .from("settings")
+        .select(
+          "reservation_time_step, reservation_max_guests_per_slot, reservation_operating_hours, reservation_required_fields, reservation_event_types",
+        )
+        .eq("id", 1)
+        .maybeSingle();
+      if (!legacy.data) return DEFAULT_RESERVATION_SETTINGS;
+      return {
+        reservationTimeStep:
+          legacy.data.reservation_time_step ?? DEFAULT_RESERVATION_SETTINGS.reservationTimeStep,
+        reservationMaxGuestsPerSlot:
+          legacy.data.reservation_max_guests_per_slot ??
+          DEFAULT_RESERVATION_SETTINGS.reservationMaxGuestsPerSlot,
+        reservationDurationMinutes: DEFAULT_RESERVATION_SETTINGS.reservationDurationMinutes,
+        reservationOperatingHours: parseOperatingHours(legacy.data.reservation_operating_hours),
+        reservationRequiredFields: parseReservationRequiredFields(
+          legacy.data.reservation_required_fields,
+        ),
+        reservationEventTypes: parseReservationEventTypes(legacy.data.reservation_event_types),
+      };
+    }
 
     if (!data) return DEFAULT_RESERVATION_SETTINGS;
 
@@ -112,6 +140,10 @@ async function fetchReservationGuestSettings(): Promise<ReservationGuestSettings
       reservationMaxGuestsPerSlot:
         data.reservation_max_guests_per_slot ??
         DEFAULT_RESERVATION_SETTINGS.reservationMaxGuestsPerSlot,
+      reservationDurationMinutes: clampReservationDurationMinutes(
+        (data as { reservation_duration_minutes?: number | null }).reservation_duration_minutes ??
+          DEFAULT_RESERVATION_SETTINGS.reservationDurationMinutes,
+      ),
       reservationOperatingHours: parseOperatingHours(data.reservation_operating_hours),
       reservationRequiredFields: parseReservationRequiredFields(data.reservation_required_fields),
       reservationEventTypes: parseReservationEventTypes(data.reservation_event_types),
@@ -325,6 +357,7 @@ export async function evaluateGuestSlotAvailability(input: {
     reservations: ctx.reservations,
     occupiedTables: ctx.occupiedTables,
     maxGuestsPerSlot: ctx.settings.reservationMaxGuestsPerSlot,
+    durationMinutes: ctx.settings.reservationDurationMinutes,
     heldGuestsByTime,
   });
 
@@ -391,6 +424,8 @@ export async function evaluateStaffDayCapacity(input: {
     }),
   );
 
+  const durationMinutes = ctx.settings.reservationDurationMinutes;
+
   const evaluated = evaluateSlotsForGuest({
     dateIso: input.date,
     times,
@@ -399,6 +434,7 @@ export async function evaluateStaffDayCapacity(input: {
     reservations: ctx.reservations,
     occupiedTables: ctx.occupiedTables,
     maxGuestsPerSlot: ctx.settings.reservationMaxGuestsPerSlot,
+    durationMinutes,
     heldGuestsByTime,
   });
 
@@ -408,7 +444,7 @@ export async function evaluateStaffDayCapacity(input: {
       occupiedTables: ctx.occupiedTables,
       dateIso: input.date,
       time,
-      durationMinutes: DEFAULT_RESERVATION_DURATION_MINUTES,
+      durationMinutes,
     });
     return {
       time,
@@ -445,6 +481,7 @@ export async function evaluateStaffDayCapacity(input: {
       reservations: ctx.reservations,
       occupiedTables: ctx.occupiedTables,
       maxGuestsPerSlot: ctx.settings.reservationMaxGuestsPerSlot,
+      durationMinutes,
       heldGuestsByTime,
     });
     return {
@@ -630,6 +667,7 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
     reservations: ctx.reservations,
     occupiedTables: ctx.occupiedTables,
     maxGuestsPerSlot: ctx.settings.reservationMaxGuestsPerSlot,
+    durationMinutes: ctx.settings.reservationDurationMinutes,
     heldGuests,
   });
 
@@ -682,6 +720,7 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
     booking_code: bookingCode,
     manage_token: manageToken,
     updated_at: nowIso,
+    guest_submitted_at: nowIso,
     wants_grill: input.wantsGrill ?? null,
     suggested_seating: evaluation.recommendationLabel,
     suggested_capacity: evaluation.capacity,
@@ -786,20 +825,41 @@ export async function updateReservationByManageToken(input: {
 
   const reservedAt = venueWallTimeToUtc(input.date, input.time);
   const admin = createSupabaseAdmin();
-  const { data, error } = await admin
+  const nowIso = new Date().toISOString();
+  let { data, error } = await admin
     .from("reservations")
     .update({
       party_size: capacity.guestCount,
       reserved_at: reservedAt.toISOString(),
       notes: input.notes?.trim() || null,
       status: existing.status === "late" ? "confirmed" : existing.status,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso,
+      guest_changed_at: nowIso,
     })
     .eq("id", existing.id)
     .select(
       "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
     )
     .single();
+
+  if (error && /guest_changed_at/i.test(error.message)) {
+    const legacy = await admin
+      .from("reservations")
+      .update({
+        party_size: capacity.guestCount,
+        reserved_at: reservedAt.toISOString(),
+        notes: input.notes?.trim() || null,
+        status: existing.status === "late" ? "confirmed" : existing.status,
+        updated_at: nowIso,
+      })
+      .eq("id", existing.id)
+      .select(
+        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+      )
+      .single();
+    data = legacy.data;
+    error = legacy.error;
+  }
 
   if (error || !data) {
     return { data: null, error: error?.message ?? "Failed to update reservation." };
@@ -828,6 +888,7 @@ export async function cancelReservationByManageToken(
     .update({
       status: "cancelled",
       updated_at: now,
+      guest_changed_at: now,
       cancelled_at: now,
       cancelled_by: "guest",
       cancellation_reason: "customer",

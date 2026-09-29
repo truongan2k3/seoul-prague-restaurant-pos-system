@@ -15,8 +15,15 @@ import { parseReservationBbqNotes, type ReservationBbqPreference } from "@/lib/r
 import { parseTimeToMinutes } from "@/lib/reservation-slots";
 import { venueWallTimeToUtc } from "@/lib/venue-timezone";
 
-/** Default assumed dining duration for overlap (minutes). */
-export const DEFAULT_RESERVATION_DURATION_MINUTES = 120;
+/** Default assumed dining duration for overlap (minutes). Overridable in Settings. */
+export const DEFAULT_RESERVATION_DURATION_MINUTES = 90;
+
+/** Clamp staff-configured dining window used by the capacity engine. */
+export function clampReservationDurationMinutes(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_RESERVATION_DURATION_MINUTES;
+  return Math.min(240, Math.max(60, Math.round(n / 15) * 15));
+}
 
 /** When remaining seat share falls below this, surface Limited. */
 export const LIMITED_REMAINING_RATIO = 0.35;
@@ -142,8 +149,9 @@ function assignedLabels(row: CapacityReservationInput): string[] {
  * Tables blocked for a slot: overlapping reservation assignments, or POS floor
  * occupancy that still overlaps this slot’s dining window.
  *
- * Current POS occupancy only blocks ~the next dining duration (default 2h) from
- * now / occupied_at — it does NOT lock large tables for all future evening slots.
+ * Current POS occupancy only blocks ~the next dining duration (default 90m,
+ * configurable in Settings) from now / occupied_at — it does NOT lock large
+ * tables for all future evening slots.
  */
 export function blockedTableLabels(input: {
   reservations: CapacityReservationInput[];

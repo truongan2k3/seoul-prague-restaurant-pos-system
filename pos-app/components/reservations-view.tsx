@@ -878,6 +878,27 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                         {row.guestPhone ? ` · ${row.guestPhone}` : ""}
                         {row.bookingCode ? ` · ${row.bookingCode}` : ""}
                       </p>
+                      {(() => {
+                        const submittedAt =
+                          row.guestSubmittedAt ??
+                          (row.source === "online" ? row.createdAt : undefined);
+                        const changedAt = row.guestChangedAt;
+                        if (!submittedAt && !changedAt) return null;
+                        return (
+                          <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-gray-500 dark:text-gray-400 sm:text-xs">
+                            {submittedAt ? (
+                              <span>
+                                {translate("resGuestSubmittedAt")}: {formatDateTime(submittedAt)}
+                              </span>
+                            ) : null}
+                            {changedAt ? (
+                              <span>
+                                {translate("resGuestChangedAt")}: {formatDateTime(changedAt)}
+                              </span>
+                            ) : null}
+                          </p>
+                        );
+                      })()}
                       {formatReservationTableLabels(row) ? (
                         <p
                           className={`mt-1 inline-flex items-center gap-1 text-sm font-medium ${

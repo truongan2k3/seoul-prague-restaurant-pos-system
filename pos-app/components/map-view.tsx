@@ -7,9 +7,15 @@ import { NotificationBell } from "@/components/notification-bell";
 import { TableCard } from "@/components/table-card";
 import { TableEditModal } from "@/components/table-edit-modal";
 import { useApp } from "@/contexts/app-context";
+import { filterReservationsByPeriod } from "@/lib/reservation-analytics";
 import { TABLE_CARD_WIDTH } from "@/lib/table-layout";
 import { tableIdsWithSlaBreach } from "@/lib/order-sla";
-import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
+import type { MenuItem, OrderItem, ReservationRecord, ReservationStatus, RestaurantTable } from "@/lib/types";
+import {
+  fetchReservations,
+  mapReservationsResponse,
+  subscribeToReservationChanges,
+} from "@/src/lib/reservation-actions";
 import { updateTablePosition } from "@/src/lib/supabase-data";
 
 interface MapViewProps {
@@ -28,6 +34,57 @@ type DragState = {
   offsetY: number;
 };
 
+type PlannedFloorReservation = {
+  timeLabel: string;
+  guestName: string;
+  reservedAtMs: number;
+};
+
+/** Upcoming assigned bookings still waiting to be seated. */
+const PLANNED_FLOOR_STATUSES: ReservationStatus[] = ["pending", "confirmed", "late"];
+
+function formatReservationClock(date: Date, language: string): string {
+  return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : language === "cs" ? "cs-CZ" : "en-GB", {
+    timeZone: "Europe/Prague",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function buildPlannedByTableId(
+  reservations: ReservationRecord[],
+  language: string,
+): Record<string, PlannedFloorReservation> {
+  const byTable: Record<string, PlannedFloorReservation> = {};
+
+  const candidates = filterReservationsByPeriod(reservations, "today")
+    .filter(
+      (row) =>
+        PLANNED_FLOOR_STATUSES.includes(row.status) &&
+        Boolean(row.tableId || row.secondaryTableId),
+    )
+    .sort((a, b) => a.reservedAt.getTime() - b.reservedAt.getTime());
+
+  for (const row of candidates) {
+    const planned: PlannedFloorReservation = {
+      timeLabel: formatReservationClock(row.reservedAt, language),
+      guestName: row.guestName.trim() || "—",
+      reservedAtMs: row.reservedAt.getTime(),
+    };
+    for (const tableId of [row.tableId, row.secondaryTableId]) {
+      if (!tableId) continue;
+      const existing = byTable[tableId];
+      // Prefer the soonest upcoming assignment if multiple touch the same table.
+      if (!existing || planned.reservedAtMs < existing.reservedAtMs) {
+        byTable[tableId] = planned;
+      }
+    }
+  }
+
+  return byTable;
+}
+
 export function MapView({
   tables,
   setTables,
@@ -37,13 +94,34 @@ export function MapView({
   onTableClick,
   actionError,
 }: MapViewProps) {
-  const { translate } = useApp();
+  const { translate, language } = useApp();
   const mapRef = useRef<HTMLDivElement>(null);
   const [editMode, setEditMode] = useState(false);
   const [editingTable, setEditingTable] = useState<RestaurantTable | null>(null);
   const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [slaClock, setSlaClock] = useState(() => Date.now());
+  const [plannedReservations, setPlannedReservations] = useState<ReservationRecord[]>([]);
+
+  const loadPlannedReservations = useCallback(async () => {
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+    const { data, error } = await fetchReservations(since);
+    if (error || !data) return;
+    setPlannedReservations(mapReservationsResponse(data));
+  }, []);
+
+  useEffect(() => {
+    void loadPlannedReservations();
+    return subscribeToReservationChanges(() => {
+      void loadPlannedReservations();
+    });
+  }, [loadPlannedReservations]);
+
+  const plannedByTableId = useMemo(
+    () => buildPlannedByTableId(plannedReservations, language),
+    [plannedReservations, language],
+  );
 
   useEffect(() => {
     const interval = setInterval(() => setSlaClock(Date.now()), 30_000);
@@ -121,6 +199,12 @@ export function MapView({
     });
   };
 
+  const plannedFor = (tableId: string) => {
+    const row = plannedByTableId[tableId];
+    if (!row) return null;
+    return { timeLabel: row.timeLabel, guestName: row.guestName };
+  };
+
   return (
     <div className="flex h-full flex-col bg-background text-[var(--foreground)]">
       <header className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--pos-raised)] px-2.5 py-1.5 sm:gap-3 sm:px-4 sm:py-2.5 lg:px-6 lg:py-3">
@@ -192,6 +276,7 @@ export function MapView({
                     menuItems={menuItems}
                     orderItems={tableOrderItems}
                     slaAlert={slaAlertTableIds.has(table.id)}
+                    plannedReservation={plannedFor(table.id)}
                     compact
                     editMode={editMode}
                     onEdit={() => setEditingTable(table)}
@@ -229,6 +314,7 @@ export function MapView({
                     menuItems={menuItems}
                     orderItems={tableOrderItems}
                     slaAlert={slaAlertTableIds.has(table.id)}
+                    plannedReservation={plannedFor(table.id)}
                     editMode
                     onEdit={() => setEditingTable(table)}
                     onPointerDown={(event) => handlePointerDown(table.id, event)}
@@ -239,6 +325,7 @@ export function MapView({
                     menuItems={menuItems}
                     orderItems={tableOrderItems}
                     slaAlert={slaAlertTableIds.has(table.id)}
+                    plannedReservation={plannedFor(table.id)}
                     onClick={() => onTableClick(table)}
                   />
                 )}

@@ -780,6 +780,8 @@ export function mapReservationRow(
     completed_at: string | null;
     created_at: string;
     updated_at: string;
+    guest_submitted_at?: string | null;
+    guest_changed_at?: string | null;
     booking_code?: string | null;
     manage_token?: string | null;
     event_type?: string | null;
@@ -838,6 +840,8 @@ export function mapReservationRow(
     completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
+    guestSubmittedAt: row.guest_submitted_at ? new Date(row.guest_submitted_at) : undefined,
+    guestChangedAt: row.guest_changed_at ? new Date(row.guest_changed_at) : undefined,
     bookingCode: row.booking_code ?? undefined,
     eventType: row.event_type ?? undefined,
     suggestedSeating: row.suggested_seating ?? undefined,

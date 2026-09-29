@@ -271,19 +271,26 @@ export function evaluateReservationCapacity(
 
   const maxGuests = input.maxGuestsPerSlot ?? 40;
   const remainingSeatEstimate = Math.max(0, maxGuests - overlappingGuestCount);
-  const softFull = overlappingGuestCount + partySize > maxGuests;
+  const softTight = overlappingGuestCount + partySize > maxGuests;
 
   let availability: SlotAvailability;
-  if (!recommendation || softFull) {
+  // Full only when no free seating configuration fits.
+  // Soft seat-cap pressure becomes Limited — never hide a free table behind Full.
+  if (!recommendation) {
     availability = "full";
   } else {
     const remainingRatio = remainingSeatEstimate / Math.max(1, maxGuests);
     const onlyExtendedLeft =
       recommendation.extended ||
       (partySize > 10 && recommendation.labels[0] === "A1");
-    if (remainingRatio <= LIMITED_REMAINING_RATIO || onlyExtendedLeft || partySize >= 9) {
+    if (
+      softTight ||
+      remainingRatio <= LIMITED_REMAINING_RATIO ||
+      onlyExtendedLeft ||
+      partySize >= 9
+    ) {
       availability = "limited";
-      if (remainingRatio <= LIMITED_REMAINING_RATIO) {
+      if (softTight || remainingRatio <= LIMITED_REMAINING_RATIO) {
         warnings.push("Online capacity is getting tight for this slot.");
       }
     } else {

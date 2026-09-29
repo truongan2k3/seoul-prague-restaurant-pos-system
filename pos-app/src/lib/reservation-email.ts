@@ -18,6 +18,8 @@ export interface ReservationEmailPayload {
   manageUrl: string;
   notes?: string;
   status?: ReservationStatus;
+  /** Customer-safe cancellation message (never raw staff "Other" notes). */
+  cancellationGuestMessage?: string;
 }
 
 export function getReservationAppBaseUrl(): string {
@@ -68,7 +70,7 @@ function subjectFor(kind: ReservationEmailKind, bookingCode: string): string {
     case "updated":
       return `Reservation updated · ${bookingCode}`;
     case "cancelled":
-      return `Reservation cancelled · ${bookingCode}`;
+      return `Your reservation at Seoul Prague has been cancelled`;
     case "no_show":
       return `Reservation cancelled (no-show) · ${bookingCode}`;
   }
@@ -81,7 +83,7 @@ function reservationFromHeader(): string {
   return `${BRAND_NAME} <${email}>`;
 }
 
-function introFor(kind: ReservationEmailKind): string {
+function introFor(kind: ReservationEmailKind, payload: ReservationEmailPayload): string {
   switch (kind) {
     case "received":
       return "We received your reservation request. Our team will confirm it shortly.";
@@ -90,7 +92,16 @@ function introFor(kind: ReservationEmailKind): string {
     case "updated":
       return "Your reservation has been updated. Please review the new details below.";
     case "cancelled":
-      return "Your reservation has been cancelled. You can book again anytime.";
+      return [
+        "We're sorry to let you know that your reservation has been cancelled.",
+        payload.cancellationGuestMessage
+          ? `Reason: ${payload.cancellationGuestMessage}`
+          : null,
+        "We apologize for the inconvenience and appreciate your understanding. If you would like, please contact us or make a new reservation for another available time.",
+        "We hope to welcome you another time.",
+      ]
+        .filter(Boolean)
+        .join(" ");
     case "no_show":
       return "Your reservation was cancelled because you did not arrive on time. You are welcome to book again anytime.";
   }
@@ -108,7 +119,7 @@ function buildHtml(kind: ReservationEmailKind, payload: ReservationEmailPayload)
         </p>
         <p style="color:#71717a;font-size:12px">Or open: ${payload.manageUrl}</p>`;
 
-  const intro = introFor(kind);
+  const intro = introFor(kind, payload);
   const heading = headingFor(kind);
 
   return `<!DOCTYPE html>
@@ -138,7 +149,7 @@ function buildHtml(kind: ReservationEmailKind, payload: ReservationEmailPayload)
 
 function buildText(kind: ReservationEmailKind, payload: ReservationEmailPayload): string {
   const lines = [
-    introFor(kind),
+    introFor(kind, payload),
     "",
     `Code: ${payload.bookingCode}`,
     `Guest: ${payload.guestName}`,

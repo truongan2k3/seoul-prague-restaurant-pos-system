@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { GuestReservationAlertPayload } from "@/lib/reservation-guest-alert";
+import { guestMessageForCancelReason } from "@/lib/reservation-cancel-reasons";
 import {
   cancelReservationByManageToken,
   fetchReservationByManageToken,
@@ -165,6 +166,7 @@ export async function DELETE(request: Request) {
       manageUrl: buildManageUrl(data.manageToken),
       notes: data.notes ?? undefined,
       status: data.status,
+      cancellationGuestMessage: guestMessageForCancelReason("customer"),
     });
     emailSent = emailResult.sent;
   }

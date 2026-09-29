@@ -131,6 +131,7 @@ export async function updateReservationStatus(
     secondaryTableId?: string | null;
     checkedInAt?: Date;
     completedAt?: Date;
+    actualPartySize?: number | null;
   },
 ) {
   const payload: Record<string, unknown> = {
@@ -142,6 +143,12 @@ export async function updateReservationStatus(
   if (extra?.secondaryTableId !== undefined) payload.secondary_table_id = extra.secondaryTableId;
   if (extra?.checkedInAt) payload.checked_in_at = extra.checkedInAt.toISOString();
   if (extra?.completedAt) payload.completed_at = extra.completedAt.toISOString();
+  if (extra?.actualPartySize !== undefined) {
+    payload.actual_party_size =
+      extra.actualPartySize != null && extra.actualPartySize > 0
+        ? Math.floor(extra.actualPartySize)
+        : null;
+  }
 
   const result = await supabase
     .from("reservations")
@@ -149,6 +156,21 @@ export async function updateReservationStatus(
     .eq("id", reservationId)
     .select(RESERVATION_SELECT)
     .single();
+
+  // Backward compatible if actual_party_size column is missing.
+  if (
+    result.error &&
+    extra?.actualPartySize !== undefined &&
+    /column .* does not exist/i.test(result.error.message)
+  ) {
+    delete payload.actual_party_size;
+    return supabase
+      .from("reservations")
+      .update(payload)
+      .eq("id", reservationId)
+      .select(RESERVATION_SELECT)
+      .single();
+  }
 
   if (result.data) {
     const row = mapReservationRow(result.data as Parameters<typeof mapReservationRow>[0]);
@@ -181,8 +203,53 @@ export async function confirmReservation(reservationId: string) {
   return updateReservationStatus(reservationId, "confirmed");
 }
 
-export async function cancelReservation(reservationId: string) {
-  return updateReservationStatus(reservationId, "cancelled");
+export async function cancelReservation(
+  reservationId: string,
+  options?: {
+    cancelledBy?: string;
+    cancellationReason?: string;
+    cancellationNote?: string;
+  },
+) {
+  const payload: Record<string, unknown> = {
+    status: "cancelled",
+    updated_at: nowIso(),
+    cancelled_at: nowIso(),
+  };
+  if (options?.cancelledBy) payload.cancelled_by = options.cancelledBy;
+  if (options?.cancellationReason) payload.cancellation_reason = options.cancellationReason;
+  if (options?.cancellationNote !== undefined) {
+    payload.cancellation_note = options.cancellationNote?.trim() || null;
+  }
+
+  const result = await supabase
+    .from("reservations")
+    .update(payload)
+    .eq("id", reservationId)
+    .select(RESERVATION_SELECT)
+    .single();
+
+  if (result.error) {
+    // Columns may not exist until migration — fall back to status-only cancel.
+    if (/column .* does not exist/i.test(result.error.message)) {
+      return updateReservationStatus(reservationId, "cancelled");
+    }
+    return result;
+  }
+
+  if (result.data) {
+    const row = mapReservationRow(result.data as Parameters<typeof mapReservationRow>[0]);
+    notifyReservationPushEvent({
+      kind: "cancelled",
+      reservationId: row.id,
+      guestName: row.guestName,
+      partySize: row.partySize,
+      reservedAt: row.reservedAt,
+      bookingCode: row.bookingCode,
+    });
+  }
+
+  return result;
 }
 
 export async function updateReservationDetails(
@@ -262,12 +329,14 @@ export async function checkInReservation(
   reservationId: string,
   tableId?: string,
   secondaryTableId?: string | null,
+  options?: { actualPartySize?: number | null },
 ) {
   const ids = normalizeReservationTableIds([tableId, secondaryTableId]);
   return updateReservationStatus(reservationId, "checked_in", {
     tableId: ids[0] ?? null,
     secondaryTableId: ids[1] ?? null,
     checkedInAt: new Date(),
+    actualPartySize: options?.actualPartySize,
   });
 }
 
@@ -382,7 +451,7 @@ async function ensureTableOccupiedForCheckIn(
 export async function checkInReservationWithTables(
   reservationId: string,
   tableIds: string[],
-  options?: { allowOccupied?: boolean },
+  options?: { allowOccupied?: boolean; actualPartySize?: number | null },
 ) {
   const ids = normalizeReservationTableIds(tableIds);
   if (ids.length === 0) {
@@ -394,7 +463,9 @@ export async function checkInReservationWithTables(
     if (error) return { data: null, error };
   }
 
-  return checkInReservation(reservationId, ids[0], ids[1] ?? null);
+  return checkInReservation(reservationId, ids[0], ids[1] ?? null, {
+    actualPartySize: options?.actualPartySize,
+  });
 }
 
 export async function checkInReservationWithTable(
@@ -697,10 +768,12 @@ export function mapReservationRow(
     guest_phone: string | null;
     guest_email: string | null;
     party_size: number;
+    actual_party_size?: number | null;
     reserved_at: string;
     status: ReservationStatus;
     source: VisitSource;
     notes: string | null;
+    wants_grill?: string | null;
     staff_id: string | null;
     staff_name: string | null;
     checked_in_at: string | null;
@@ -710,6 +783,17 @@ export function mapReservationRow(
     booking_code?: string | null;
     manage_token?: string | null;
     event_type?: string | null;
+    suggested_seating?: string | null;
+    suggested_capacity?: number | null;
+    capacity_status?: string | null;
+    capacity_warnings?: string | null;
+    staff_override_capacity?: boolean | null;
+    cancelled_at?: string | null;
+    cancelled_by?: string | null;
+    cancellation_reason?: string | null;
+    cancellation_note?: string | null;
+    cancel_email_status?: string | null;
+    confirm_email_status?: string | null;
     tables?: { label: string } | { label: string }[] | null;
     secondary_table?: { label: string } | { label: string }[] | null;
   },
@@ -721,6 +805,17 @@ export function mapReservationRow(
     ? secondaryJoin[0]?.label
     : secondaryJoin?.label;
 
+  const wantsGrill =
+    row.wants_grill === "yes" || row.wants_grill === "no" || row.wants_grill === "undecided"
+      ? row.wants_grill
+      : undefined;
+  const capacityStatus =
+    row.capacity_status === "available" ||
+    row.capacity_status === "limited" ||
+    row.capacity_status === "full"
+      ? row.capacity_status
+      : undefined;
+
   return {
     id: row.id,
     tableId: row.table_id ?? undefined,
@@ -731,10 +826,12 @@ export function mapReservationRow(
     guestPhone: row.guest_phone ?? undefined,
     guestEmail: row.guest_email ?? undefined,
     partySize: row.party_size,
+    actualPartySize: row.actual_party_size ?? undefined,
     reservedAt: new Date(row.reserved_at),
     status: row.status,
     source: row.source,
     notes: row.notes ?? undefined,
+    wantsGrill,
     staffId: row.staff_id ?? undefined,
     staffName: row.staff_name ?? undefined,
     checkedInAt: row.checked_in_at ? new Date(row.checked_in_at) : undefined,
@@ -743,6 +840,17 @@ export function mapReservationRow(
     updatedAt: new Date(row.updated_at),
     bookingCode: row.booking_code ?? undefined,
     eventType: row.event_type ?? undefined,
+    suggestedSeating: row.suggested_seating ?? undefined,
+    suggestedCapacity: row.suggested_capacity ?? undefined,
+    capacityStatus,
+    capacityWarnings: row.capacity_warnings ?? undefined,
+    staffOverrideCapacity: Boolean(row.staff_override_capacity),
+    cancelledAt: row.cancelled_at ? new Date(row.cancelled_at) : undefined,
+    cancelledBy: row.cancelled_by ?? undefined,
+    cancellationReason: row.cancellation_reason ?? undefined,
+    cancellationNote: row.cancellation_note ?? undefined,
+    cancelEmailStatus: row.cancel_email_status ?? undefined,
+    confirmEmailStatus: row.confirm_email_status ?? undefined,
   };
 }
 

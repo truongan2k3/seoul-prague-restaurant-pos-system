@@ -67,6 +67,10 @@ import {
 import { formatReservationTableLabels } from "@/lib/reservation-tables";
 import { fetchGuestVisitProfile } from "@/src/lib/guest-history-actions";
 import { sendCfdEvent } from "@/lib/cfd-display";
+import {
+  RESERVATION_CANCEL_REASONS,
+  type ReservationCancelReasonId,
+} from "@/lib/reservation-cancel-reasons";
 
 async function confirmReservationWithEmail(reservationId: string) {
   const response = await fetch("/api/reservations/confirm", {
@@ -81,15 +85,37 @@ async function confirmReservationWithEmail(reservationId: string) {
   return { error: null };
 }
 
-async function cancelReservationWithEmail(reservationId: string) {
-  const result = await cancelReservation(reservationId);
-  if (result.error) return result;
-  void fetch("/api/reservations/notify", {
+async function cancelReservationWithEmail(
+  reservationId: string,
+  options: {
+    cancelledBy?: string;
+    cancellationReason: string;
+    cancellationNote?: string;
+  },
+) {
+  const result = await cancelReservation(reservationId, options);
+  if (result.error) return { ...result, emailSent: false as boolean, emailError: null as string | null };
+  const notify = await fetch("/api/reservations/notify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id: reservationId, type: "cancelled" }),
-  }).catch(() => undefined);
-  return result;
+    body: JSON.stringify({
+      id: reservationId,
+      type: "cancelled",
+      cancellationReason: options.cancellationReason,
+    }),
+  })
+    .then(async (response) => {
+      const payload = (await response.json().catch(() => ({}))) as {
+        emailSent?: boolean;
+        emailError?: string | null;
+      };
+      return {
+        emailSent: Boolean(payload.emailSent),
+        emailError: payload.emailError ?? null,
+      };
+    })
+    .catch(() => ({ emailSent: false, emailError: "notify_failed" }));
+  return { ...result, ...notify };
 }
 
 async function markNoShowWithEmail(reservationId: string) {
@@ -193,6 +219,10 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const [assignTarget, setAssignTarget] = useState<ReservationRecord | null>(null);
   const [checkInTarget, setCheckInTarget] = useState<ReservationRecord | null>(null);
   const [editTarget, setEditTarget] = useState<ReservationRecord | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<ReservationRecord | null>(null);
+  const [cancelReason, setCancelReason] = useState<ReservationCancelReasonId | "">("");
+  const [cancelNote, setCancelNote] = useState("");
+  const [checkInActualParty, setCheckInActualParty] = useState(2);
   const seenReservationIdsRef = useRef<Set<string>>(new Set());
   const initialLoadDoneRef = useRef(false);
 
@@ -509,10 +539,11 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     });
 
     setBusyId(checkInTarget.id);
+    const actualParty = Math.max(1, checkInActualParty || checkInTarget.partySize);
     const { error: checkInError } = await checkInReservationWithTables(
       checkInTarget.id,
       checkInTableIds,
-      { allowOccupied: checkInOccupied },
+      { allowOccupied: checkInOccupied, actualPartySize: actualParty },
     );
     setBusyId(null);
 
@@ -539,24 +570,37 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     });
     setCheckInTarget(null);
     setCheckInTableIds([]);
+    setCheckInActualParty(2);
     void loadReservations();
     onRefreshTables?.();
   };
 
-  const handleCancelReservation = async (row: ReservationRecord) => {
-    const confirmed = window.confirm(
-      translate("confirmCancelReservation").replace("{name}", row.guestName),
-    );
-    if (!confirmed) return;
+  const handleCancelReservation = async () => {
+    if (!cancelTarget) return;
+    if (!cancelReason) {
+      setError(translate("resCancelReasonRequired"));
+      return;
+    }
+    if (cancelReason === "other" && !cancelNote.trim()) {
+      setError(translate("resCancelNoteRequired"));
+      return;
+    }
 
-    const snapshot = await fetchReservationSnapshot(row.id);
+    const snapshot = await fetchReservationSnapshot(cancelTarget.id);
     if (!snapshot) {
       setError(translate("resUndoFailed"));
       return;
     }
 
-    setBusyId(row.id);
-    const { error: cancelError } = await cancelReservationWithEmail(row.id);
+    setBusyId(cancelTarget.id);
+    const { error: cancelError, emailSent, emailError } = await cancelReservationWithEmail(
+      cancelTarget.id,
+      {
+        cancelledBy: currentStaffUser?.name || currentStaffUser?.id || "staff",
+        cancellationReason: cancelReason,
+        cancellationNote: cancelReason === "other" ? cancelNote.trim() : cancelNote.trim() || undefined,
+      },
+    );
     setBusyId(null);
 
     if (cancelError) {
@@ -564,12 +608,33 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       return;
     }
 
+    if (!cancelTarget.guestEmail) {
+      pushNotification({ message: translate("resCancelEmailSkipped"), playSound: false });
+    } else if (emailSent) {
+      pushNotification({ message: translate("resCancelEmailSent"), playSound: false });
+    } else {
+      pushNotification({
+        message: `${translate("resCancelEmailFailed")}${emailError ? `: ${emailError}` : ""}`,
+        playSound: false,
+      });
+    }
+
     queueUndo({
-      id: `${row.id}-cancel-${Date.now()}`,
+      id: `${cancelTarget.id}-cancel-${Date.now()}`,
       action: "cancel",
       reservation: snapshot,
     });
+    setCancelTarget(null);
+    setCancelReason("");
+    setCancelNote("");
     void loadReservations();
+  };
+
+  const openCancelDialog = (row: ReservationRecord) => {
+    setError(null);
+    setCancelTarget(row);
+    setCancelReason("");
+    setCancelNote("");
   };
 
   const handleMarkNoShow = async (row: ReservationRecord) => {
@@ -790,6 +855,45 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                             ? `${translate("table")} ${formatReservationTableLabels(row)}`
                             : `${translate("resTablePlanned")}: ${formatReservationTableLabels(row)}`}
                         </p>
+                      ) : row.suggestedSeating ? (
+                        <p className="mt-1 inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+                          <MapPin className="h-4 w-4" />
+                          {translate("resSuggestedSeating")}: {row.suggestedSeating}
+                          {row.suggestedCapacity ? ` · ${row.suggestedCapacity}` : ""}
+                        </p>
+                      ) : null}
+                      {row.capacityStatus ? (
+                        <p className="mt-1">
+                          <span
+                            className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${
+                              row.capacityStatus === "full"
+                                ? "bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-200"
+                                : row.capacityStatus === "limited"
+                                  ? "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100"
+                                  : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+                            }`}
+                          >
+                            {translate("resCapacityWarning")}:{" "}
+                            {row.capacityStatus === "full"
+                              ? translate("resCapacityFull")
+                              : row.capacityStatus === "limited"
+                                ? translate("resCapacityLimited")
+                                : translate("resCapacityAvailable")}
+                            {row.staffOverrideCapacity ? ` · ${translate("resStaffOverride")}` : ""}
+                          </span>
+                        </p>
+                      ) : null}
+                      {row.capacityWarnings ? (
+                        <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                          {row.capacityWarnings}
+                        </p>
+                      ) : null}
+                      {row.status === "cancelled" && row.cancellationReason ? (
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          {translate("resCancelReasonTitle")}: {row.cancellationReason}
+                          {row.cancelledBy ? ` · ${row.cancelledBy}` : ""}
+                          {row.cancelEmailStatus ? ` · ${row.cancelEmailStatus}` : ""}
+                        </p>
                       ) : null}
                       {row.eventType ? (
                         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -880,6 +984,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                             setCheckInTableIds(
                               [row.tableId, row.secondaryTableId].filter(Boolean) as string[],
                             );
+                            setCheckInActualParty(row.actualPartySize ?? row.partySize);
                           }}
                           className="rounded-md bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-sky-500 sm:rounded-lg sm:px-3 sm:py-1.5 sm:text-xs"
                         >
@@ -915,7 +1020,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                         <button
                           type="button"
                           disabled={busyId === row.id}
-                          onClick={() => void handleCancelReservation(row)}
+                          onClick={() => openCancelDialog(row)}
                           className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white"
                         >
                           {translate("cancelReservation")}
@@ -1105,13 +1210,23 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
         onClose={() => {
           setCheckInTarget(null);
           setCheckInTableIds([]);
+          setCheckInActualParty(2);
         }}
         title={translate("checkIn")}
       >
         <div className="space-y-3">
           <p className="text-sm text-gray-600 dark:text-gray-300">
             {checkInTarget?.guestName} · {checkInTarget?.partySize} {translate("partySize").toLowerCase()}
+            {checkInTarget?.suggestedSeating
+              ? ` · ${translate("resSuggestedSeating")}: ${checkInTarget.suggestedSeating}`
+              : ""}
           </p>
+          <PartySizeStepper
+            value={checkInActualParty}
+            onChange={setCheckInActualParty}
+            max={settings.reservationMaxGuestsPerSlot || 50}
+            label={translate("resActualPartySize")}
+          />
           <ReservationDualTableSelect
             tables={tables}
             value={checkInTableIds}
@@ -1130,6 +1245,77 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             className="w-full rounded-xl bg-[var(--pos-brand)] py-3 text-sm font-semibold text-white hover:bg-[var(--pos-brand-hover)] disabled:opacity-50"
           >
             {translate("checkIn")}
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={cancelTarget !== null}
+        onClose={() => {
+          setCancelTarget(null);
+          setCancelReason("");
+          setCancelNote("");
+        }}
+        title={translate("resCancelReasonTitle")}
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            {cancelTarget?.guestName}
+            {cancelTarget
+              ? ` · ${cancelTarget.partySize} ${translate("partySize").toLowerCase()}`
+              : ""}
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{translate("resCancelReasonHint")}</p>
+          <div className="space-y-2">
+            {RESERVATION_CANCEL_REASONS.map((reason) => (
+              <label
+                key={reason.id}
+                className={`flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
+                  cancelReason === reason.id
+                    ? "border-red-400 bg-red-50 dark:border-red-700 dark:bg-red-950/30"
+                    : "border-gray-200 dark:border-gray-700"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="cancel-reason"
+                  checked={cancelReason === reason.id}
+                  onChange={() => setCancelReason(reason.id)}
+                  className="mt-1"
+                />
+                <span>
+                  {reason.id === "capacity"
+                    ? translate("resCancelReasonCapacity")
+                    : reason.id === "closed"
+                      ? translate("resCancelReasonClosed")
+                      : reason.id === "time"
+                        ? translate("resCancelReasonTime")
+                        : reason.id === "info"
+                          ? translate("resCancelReasonInfo")
+                          : reason.id === "customer"
+                            ? translate("resCancelReasonCustomer")
+                            : reason.id === "duplicate"
+                              ? translate("resCancelReasonDuplicate")
+                              : translate("resCancelReasonOther")}
+                </span>
+              </label>
+            ))}
+          </div>
+          <label className="block text-sm">
+            <span className="text-gray-500">{translate("resCancelNoteLabel")}</span>
+            <textarea
+              value={cancelNote}
+              onChange={(event) => setCancelNote(event.target.value)}
+              className="pos-input mt-1 min-h-[72px]"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={!cancelReason || busyId === cancelTarget?.id}
+            onClick={() => void handleCancelReservation()}
+            className="w-full rounded-xl bg-red-600 py-3 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
+          >
+            {translate("resCancelConfirmFinal")}
           </button>
         </div>
       </Modal>

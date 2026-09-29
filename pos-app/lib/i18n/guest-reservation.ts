@@ -31,6 +31,9 @@ export type GuestReservationCopy = {
   notesPlaceholder: string;
   loadingTimes: string;
   noTimesAvailable: string;
+  slotAvailable: string;
+  slotLimited: string;
+  slotFull: string;
   submitReservation: string;
   submitting: string;
   close: string;
@@ -78,6 +81,9 @@ const en: GuestReservationCopy = {
   notesPlaceholder: "Dietary requirements, special requests…",
   loadingTimes: "Loading…",
   noTimesAvailable: "No times available",
+  slotAvailable: "Available",
+  slotLimited: "Limited — available",
+  slotFull: "Full",
   submitReservation: "Submit Reservation →",
   submitting: "Submitting…",
   close: "Close",
@@ -125,6 +131,9 @@ const cs: GuestReservationCopy = {
   notesPlaceholder: "Alergie, speciální požadavky…",
   loadingTimes: "Načítání…",
   noTimesAvailable: "Žádné volné termíny",
+  slotAvailable: "Volno",
+  slotLimited: "Omezeně — stále možné",
+  slotFull: "Plně obsazeno",
   submitReservation: "Odeslat rezervaci →",
   submitting: "Odesílání…",
   close: "Zavřít",
@@ -172,6 +181,9 @@ const vi: GuestReservationCopy = {
   notesPlaceholder: "Yêu cầu đặc biệt, dị ứng thực phẩm…",
   loadingTimes: "Đang tải…",
   noTimesAvailable: "Không còn giờ trống",
+  slotAvailable: "Còn chỗ",
+  slotLimited: "Hạn chế — vẫn còn",
+  slotFull: "Hết chỗ",
   submitReservation: "Gửi đặt bàn →",
   submitting: "Đang gửi…",
   close: "Đóng",
@@ -219,6 +231,9 @@ const de: GuestReservationCopy = {
   notesPlaceholder: "Ernährungswünsche, besondere Wünsche…",
   loadingTimes: "Laden…",
   noTimesAvailable: "Keine Zeiten verfügbar",
+  slotAvailable: "Verfügbar",
+  slotLimited: "Begrenzt — noch möglich",
+  slotFull: "Ausgebucht",
   submitReservation: "Reservierung senden →",
   submitting: "Wird gesendet…",
   close: "Schließen",
@@ -266,6 +281,9 @@ const ko: GuestReservationCopy = {
   notesPlaceholder: "알레르기, 특별 요청…",
   loadingTimes: "불러오는 중…",
   noTimesAvailable: "예약 가능한 시간 없음",
+  slotAvailable: "예약 가능",
+  slotLimited: "여유 적음 — 예약 가능",
+  slotFull: "마감",
   submitReservation: "예약 제출 →",
   submitting: "제출 중…",
   close: "닫기",

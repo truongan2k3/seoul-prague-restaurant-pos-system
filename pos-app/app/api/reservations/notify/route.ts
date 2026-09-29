@@ -1,22 +1,31 @@
 import { NextResponse } from "next/server";
 import { readStaffSession } from "@/src/lib/auth/staff-session";
+import { guestMessageForCancelReason } from "@/lib/reservation-cancel-reasons";
 import type { ReservationEmailKind } from "@/src/lib/reservation-email";
 import {
   buildManageUrl,
   sendReservationEmail,
 } from "@/src/lib/reservation-email";
-import { fetchReservationEmailContext } from "@/src/lib/reservation-guest-server";
+import {
+  fetchReservationEmailContext,
+  patchReservationEmailStatus,
+} from "@/src/lib/reservation-guest-server";
 
 const ALLOWED: ReservationEmailKind[] = ["received", "cancelled", "updated", "no_show"];
 
-/** Staff-triggered guest emails (POS create → received, update, cancel, no-show). */
+/** Staff-triggered guest emails (POS update, cancel, no-show). Guest submit never emails. */
 export async function POST(request: Request) {
   const staff = await readStaffSession();
   if (!staff) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { id?: string; type?: ReservationEmailKind };
+  let body: {
+    id?: string;
+    type?: ReservationEmailKind;
+    /** Optional override — normally loaded from reservation.cancellation_reason. */
+    cancellationReason?: string;
+  };
   try {
     body = await request.json();
   } catch {
@@ -56,8 +65,21 @@ export async function POST(request: Request) {
   }
 
   if (!data.guestEmail) {
+    if (type === "cancelled") {
+      await patchReservationEmailStatus(id, {
+        cancelEmailStatus: "skipped_no_email",
+        cancelEmailError: null,
+      });
+    }
     return NextResponse.json({ ok: true, emailSent: false });
   }
+
+  const cancellationGuestMessage =
+    type === "cancelled"
+      ? guestMessageForCancelReason(
+          body.cancellationReason ?? data.cancellationReason ?? undefined,
+        )
+      : undefined;
 
   const emailResult = await sendReservationEmail(type, {
     guestName: data.guestName,
@@ -68,7 +90,19 @@ export async function POST(request: Request) {
     manageUrl: buildManageUrl(data.manageToken),
     notes: data.notes ?? undefined,
     status: data.status,
+    cancellationGuestMessage,
   });
 
-  return NextResponse.json({ ok: true, emailSent: emailResult.sent });
+  if (type === "cancelled") {
+    await patchReservationEmailStatus(id, {
+      cancelEmailStatus: emailResult.sent ? "sent" : "failed",
+      cancelEmailError: emailResult.sent ? null : emailResult.error ?? "send_failed",
+    });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    emailSent: emailResult.sent,
+    emailError: emailResult.error ?? null,
+  });
 }

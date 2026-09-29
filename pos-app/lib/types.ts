@@ -528,10 +528,14 @@ export interface ReservationRecord {
   guestPhone?: string;
   guestEmail?: string;
   partySize: number;
+  /** Actual headcount after arrival (overrides partySize for capacity). */
+  actualPartySize?: number;
   reservedAt: Date;
   status: ReservationStatus;
   source: VisitSource;
   notes?: string;
+  /** yes | no | undecided */
+  wantsGrill?: "yes" | "no" | "undecided";
   staffId?: string;
   staffName?: string;
   checkedInAt?: Date;
@@ -542,6 +546,19 @@ export interface ReservationRecord {
   bookingCode?: string;
   /** Guest-selected occasion (casual, birthday, …). */
   eventType?: string;
+  /** Internal seating suggestion, e.g. "A1 + B2". */
+  suggestedSeating?: string;
+  suggestedCapacity?: number;
+  /** available | limited | full at booking time. */
+  capacityStatus?: "available" | "limited" | "full";
+  capacityWarnings?: string;
+  staffOverrideCapacity?: boolean;
+  cancelledAt?: Date;
+  cancelledBy?: string;
+  cancellationReason?: string;
+  cancellationNote?: string;
+  cancelEmailStatus?: string;
+  confirmEmailStatus?: string;
 }
 
 export interface SaleRecord {

@@ -35,6 +35,8 @@ interface TableCardProps {
   slaAlert?: boolean;
   editMode?: boolean;
   compact?: boolean;
+  /** Planned (not yet checked-in) reservation assigned to this table. */
+  plannedReservation?: { timeLabel: string; guestName: string } | null;
   style?: CSSProperties;
   onClick?: () => void;
   onEdit?: () => void;
@@ -48,6 +50,7 @@ export function TableCard({
   slaAlert = false,
   editMode = false,
   compact = false,
+  plannedReservation = null,
   style,
   onClick,
   onEdit,
@@ -59,10 +62,13 @@ export function TableCard({
   const displayOrders =
     orderItems.length > 0 ? orderItems : (table.orders ?? []);
   const occupiedSince = resolveTableOccupiedSince(table, displayOrders);
+  const showPlannedReservation = table.status === "empty" && plannedReservation != null;
 
   const cardClassName = `flex h-full w-full flex-col border p-2.5 text-left shadow-sm transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pos-champagne)]/50 sm:p-3 ${
     compact ? "min-h-[100px] max-h-none rounded-xl" : "min-h-[120px] max-h-[176px] rounded-xl"
   } ${isRound && !compact ? "aspect-square max-h-[140px] items-center justify-center text-center rounded-full" : ""} ${statusStyles[table.status]} ${
+    showPlannedReservation ? "ring-1 ring-inset ring-[var(--pos-champagne)]/50" : ""
+  } ${
     isPaidInProgress ? "ring-2 ring-emerald-500/70" : ""
   } ${slaAlert ? "sla-alert-pulse" : ""} ${
     editMode ? "cursor-grab ring-2 ring-[var(--pos-champagne)]/60 ring-offset-2 ring-offset-[var(--background)] active:cursor-grabbing" : "hover:shadow-md"
@@ -104,7 +110,15 @@ export function TableCard({
         </ul>
       )}
 
-      {table.status === "empty" && (
+      {showPlannedReservation ? (
+        <p className="mt-auto shrink-0 pt-2 text-xs font-semibold leading-snug text-[var(--pos-champagne)]">
+          <span className="tabular-nums">{plannedReservation.timeLabel}</span>
+          {" + "}
+          <span className="truncate">{plannedReservation.guestName}</span>
+        </p>
+      ) : null}
+
+      {table.status === "empty" && !showPlannedReservation && (
         <p className="mt-auto shrink-0 pt-2 text-xs font-medium text-[var(--muted)]">
           {translate("available")}
         </p>

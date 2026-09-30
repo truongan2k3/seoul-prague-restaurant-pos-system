@@ -727,7 +727,10 @@ export function ReservationBookingView({
           ) : null}
           <p className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400">
             <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            Confirmation email is sent after the restaurant confirms your reservation.
+            <span>{copy.emailAfterConfirmNote}</span>
+          </p>
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100">
+            {copy.spamFolderReminder}
           </p>
           {successManageUrl ? (
             <a

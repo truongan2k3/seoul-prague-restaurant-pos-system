@@ -37,8 +37,14 @@ export function ReadyNotificationListener({
     const tableLabels = new Map(tables.map((table) => [table.id, table.label]));
 
     return subscribeToOrderItemUpdates(({ new: row, old }) => {
-      if (row.status !== "ready" && normalizeOrderItemStatus(row.status) !== "ready") return;
-      if (old?.status === "ready" || normalizeOrderItemStatus(old?.status) === "ready") return;
+      const newStatus = normalizeOrderItemStatus(row.status);
+      const oldStatus = old?.status != null ? normalizeOrderItemStatus(old.status) : null;
+      // Ready = served: notify when kitchen marks done (either status).
+      const becameDone =
+        (newStatus === "ready" || newStatus === "served") &&
+        oldStatus !== "ready" &&
+        oldStatus !== "served";
+      if (!becameDone) return;
 
       void (async () => {
         const item = mapOrderItemRow(row);

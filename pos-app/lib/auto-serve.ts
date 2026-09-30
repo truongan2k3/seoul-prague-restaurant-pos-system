@@ -1,10 +1,13 @@
 import type { KitchenStatus, OrderItem, SoundConfigs, Station } from "@/lib/types";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
 
-/** Auto-serve delay after kitchen marks an item ready. */
-export const AUTO_SERVE_MS = 5 * 60 * 1000;
+/**
+ * Legacy ready→served delay. Kitchen "done" now writes served immediately;
+ * keep 0 so any leftover ready rows are promoted on the next poll.
+ */
+export const AUTO_SERVE_MS = 0;
 
-/** Poll interval for KDS / Bar auto-serve checks. */
+/** Poll interval for KDS / Bar leftover ready→served cleanup. */
 export const AUTO_SERVE_POLL_MS = 10_000;
 
 export const DEFAULT_SOUND_CONFIGS: SoundConfigs = {
@@ -114,9 +117,11 @@ export function isReadyForAutoServe(
   nowMs = Date.now(),
 ): boolean {
   if (isCancelledKitchenItem(item)) return false;
-  if (resolveKitchenStatus(item) !== "ready" || !item.readyAt) return false;
+  if (resolveKitchenStatus(item) !== "ready") return false;
+  // Ready equals served — promote immediately (readyAt optional for legacy rows).
+  if (!item.readyAt) return true;
   const readyAtMs = new Date(item.readyAt).getTime();
-  if (Number.isNaN(readyAtMs)) return false;
+  if (Number.isNaN(readyAtMs)) return true;
   return nowMs - readyAtMs >= AUTO_SERVE_MS;
 }
 

@@ -116,7 +116,8 @@ export function OrderItemChecklist({
 
     longPressTriggeredRef.current = false;
 
-    if (resolveKitchenStatus(item) === "ready") {
+    const kitchen = resolveKitchenStatus(item);
+    if (kitchen === "ready" || kitchen === "served") {
       onUndoReady?.(ids);
     }
   };
@@ -159,11 +160,12 @@ export function OrderItemChecklist({
           const isServed = !isCancelled && (kitchenStatus === "served" || status === "served");
           const isLate = isGroupLate(item);
           const slaBreached = isItemSlaBreached(item);
-          const kitchenDone = variant === "kitchen" && isReady;
+          // Ready = served: kitchen "done" covers both statuses.
+          const kitchenDone = variant === "kitchen" && (isReady || isServed);
           const timerStart = itemTimerStart(item);
           const unitIds = resolveUnitIds(item);
           const rowInteractive =
-            useTapWorkflow && unitIds.length > 0 && !isServed && !isCancelled;
+            useTapWorkflow && unitIds.length > 0 && !isCancelled && !(variant !== "kitchen" && isServed);
 
           const rowClass = `${
             rowInteractive ? "cursor-pointer select-none active:scale-[0.99]" : ""
@@ -220,9 +222,9 @@ export function OrderItemChecklist({
                       {translate("delayed")}
                     </span>
                   )}
-                  {!isCancelled && (variant === "kitchen" ? isReady : isReady || isServed) && (
+                  {!isCancelled && (isReady || isServed) && (
                     <span className="rounded bg-emerald-600 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-                      {translate(isServed ? "served" : "done")}
+                      {translate(variant === "kitchen" || isReady ? "done" : "served")}
                     </span>
                   )}
                 </div>

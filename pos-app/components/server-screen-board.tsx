@@ -12,11 +12,9 @@ import {
 } from "react";
 import {
   ArrowLeft,
-  ArrowRight,
   BarChart3,
   History,
   LayoutGrid,
-  Loader2,
   RefreshCw,
 } from "lucide-react";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
@@ -77,6 +75,7 @@ import {
   SERVER_SCREEN_DONE_LINGER_MS,
   SERVER_SCREEN_HISTORY_VISIBLE_MS,
   SERVER_SCREEN_LANG_ROTATE_MS,
+  SERVER_SCREEN_TABLE_AUTO_DONE_MS,
   serverScreenOrderWaveKey,
   shouldShowGrillCompanions,
   writeServerScreenLayoutMode,
@@ -260,38 +259,30 @@ function ServerScreenFooter({ language }: { language: LanguageCode }) {
 }
 
 function FloatingToolbar({
-  selectedCount,
-  busy,
   refreshing,
-  onMarkDone,
   onHistory,
   onLayout,
   onRefresh,
   onPrepStats,
-  markDoneLabel,
   historyLabel,
   layoutLabel,
   refreshLabel,
   prepStatsLabel,
-  showMarkDone = true,
   showPrepStats = false,
+  historyBack = false,
   layoutActive = false,
 }: {
-  selectedCount: number;
-  busy: boolean;
   refreshing: boolean;
-  onMarkDone: () => void;
   onHistory: () => void;
   onLayout?: () => void;
   onRefresh: () => void;
   onPrepStats?: () => void;
-  markDoneLabel: string;
   historyLabel: string;
   layoutLabel?: string;
   refreshLabel: string;
   prepStatsLabel?: string;
-  showMarkDone?: boolean;
   showPrepStats?: boolean;
+  historyBack?: boolean;
   layoutActive?: boolean;
 }) {
   return (
@@ -300,26 +291,12 @@ function FloatingToolbar({
         data-server-interactive
         className="mx-auto flex max-w-4xl items-center gap-2 rounded-2xl border border-white/12 bg-[#121214]/95 px-2 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-md sm:gap-3 sm:px-3"
       >
-        {showMarkDone ? (
-          <button
-            type="button"
-            disabled={selectedCount === 0 || busy}
-            onClick={onMarkDone}
-            className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#8B1E2D] px-3 text-sm font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#A02435] disabled:cursor-not-allowed disabled:opacity-35 sm:text-base"
-          >
-            {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5" strokeWidth={2.5} />}
-            <span className="truncate">{markDoneLabel}</span>
-            {selectedCount > 0 ? (
-              <span className="rounded-md bg-black/20 px-1.5 py-0.5 text-xs tabular-nums">{selectedCount}</span>
-            ) : null}
-          </button>
-        ) : null}
         <button
           type="button"
           onClick={onHistory}
-          className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/12 bg-white/[0.04] px-3 text-sm font-medium text-[#E8D5C4] transition hover:bg-white/[0.08] sm:px-4"
+          className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-white/12 bg-white/[0.04] px-3 text-sm font-medium text-[#E8D5C4] transition hover:bg-white/[0.08] sm:px-4"
         >
-          {showMarkDone ? <History className="h-4 w-4" /> : <ArrowLeft className="h-4 w-4" />}
+          {historyBack ? <ArrowLeft className="h-4 w-4" /> : <History className="h-4 w-4" />}
           <span className="hidden sm:inline">{historyLabel}</span>
         </button>
         {showPrepStats && onPrepStats ? (
@@ -428,6 +405,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const autoDoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleMarkDoneRef = useRef<(keysOverride?: string[]) => Promise<void>>(async () => {});
   const listDoneTapRef = useRef<{ key: string; at: number } | null>(null);
+  const tableTagTapRef = useRef<{ key: string; at: number } | null>(null);
   const orderCardsRef = useRef<ServerScreenOrderCard[]>([]);
   const preparingRowsRef = useRef<BoardRow[]>([]);
   prepStatsOpenRef.current = prepStatsOpen;
@@ -572,13 +550,16 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     }
   }, []);
 
-  const scheduleAutoDone = useCallback(() => {
-    clearAutoDoneTimer();
-    autoDoneTimerRef.current = setTimeout(() => {
-      autoDoneTimerRef.current = null;
-      void handleMarkDoneRef.current();
-    }, SERVER_SCREEN_AUTO_DONE_MS);
-  }, [clearAutoDoneTimer]);
+  const scheduleAutoDone = useCallback(
+    (delayMs: number = SERVER_SCREEN_AUTO_DONE_MS) => {
+      clearAutoDoneTimer();
+      autoDoneTimerRef.current = setTimeout(() => {
+        autoDoneTimerRef.current = null;
+        void handleMarkDoneRef.current();
+      }, delayMs);
+    },
+    [clearAutoDoneTimer],
+  );
 
   const reloadStationItems = useCallback(async () => {
     const gen = ++stationReloadGenRef.current;
@@ -1368,36 +1349,17 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   );
   handleMarkDoneRef.current = (keysOverride?: string[]) => handleMarkDone(keysOverride);
 
-  const markCardAllDone = useCallback(
-    (card: ServerScreenOrderCard) => {
-      if (busy || card.lingering || !card.hasPending) return;
-      unlockNotificationAudio();
-      const keys: string[] = [];
-      for (const line of card.lines) {
-        if (line.kind === "companion") {
-          if (line.companionKey && line.remainingIds.length > 0) keys.push(line.companionKey);
-          continue;
-        }
-        for (const id of line.remainingIds) keys.push(id);
+  const remainingKeysForCard = useCallback((card: ServerScreenOrderCard): string[] => {
+    const keys: string[] = [];
+    for (const line of card.lines) {
+      if (line.kind === "companion") {
+        if (line.companionKey && line.remainingIds.length > 0) keys.push(line.companionKey);
+        continue;
       }
-      if (keys.length === 0) return;
-      void handleMarkDone(keys);
-    },
-    [busy, handleMarkDone],
-  );
-
-  const markTableAllDone = useCallback(
-    (tableId: string) => {
-      if (busy) return;
-      unlockNotificationAudio();
-      const keys = preparingRowsRef.current
-        .filter((row) => row.item.tableId === tableId)
-        .map((row) => row.key);
-      if (keys.length === 0) return;
-      void handleMarkDone(keys);
-    },
-    [busy, handleMarkDone],
-  );
+      for (const id of line.remainingIds) keys.push(id);
+    }
+    return keys;
+  }, []);
 
   const handleUndoDoneLine = useCallback(
     async (line: ServerScreenOrderCardLine) => {
@@ -1466,6 +1428,237 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       }
     },
     [actor, busy, clearAutoDoneTimer, items, reloadStationItems, reloadTables, station],
+  );
+
+  const handleUndoDoneCard = useCallback(
+    async (card: ServerScreenOrderCard) => {
+      if (busy) return;
+      unlockNotificationAudio();
+      clearAutoDoneTimer();
+      setBusy(true);
+      try {
+        const companionKeys: string[] = [];
+        const realIds: string[] = [];
+        for (const line of card.lines) {
+          if (line.kind === "companion") {
+            if (line.companionKey && line.remainingIds.length === 0) {
+              companionKeys.push(line.companionKey);
+            }
+            continue;
+          }
+          const undoIds = line.unitIds.filter((id) => !line.remainingIds.includes(id));
+          if (undoIds.length > 0) realIds.push(...undoIds);
+          else if (line.remainingIds.length === 0) realIds.push(...line.unitIds);
+        }
+
+        if (companionKeys.length > 0) {
+          setCompanionStore((prev) => {
+            const nextDone = { ...prev.done };
+            let changed = false;
+            for (const key of companionKeys) {
+              if (nextDone[key]) {
+                delete nextDone[key];
+                changed = true;
+              }
+            }
+            if (!changed) return prev;
+            const next: GrillCompanionStore = { ...prev, done: nextDone };
+            writeCompanionStore(station, next);
+            return next;
+          });
+          setLingerUntilByRowKey((prev) => {
+            let changed = false;
+            const next = new Map(prev);
+            for (const key of companionKeys) {
+              if (next.delete(key)) changed = true;
+            }
+            return changed ? next : prev;
+          });
+          setLingeringListRows((prev) =>
+            prev.filter((row) => !companionKeys.includes(row.key)),
+          );
+        }
+
+        if (realIds.length > 0) {
+          const byTable = new Map<string, string[]>();
+          for (const id of realIds) {
+            const item = items.find((row) => row.id === id);
+            if (!item) continue;
+            const list = byTable.get(item.tableId) ?? [];
+            list.push(id);
+            byTable.set(item.tableId, list);
+          }
+          for (const [tableId, itemIds] of byTable) {
+            await markItemsPreparing(itemIds, actor, tableId);
+          }
+          setLingerUntilByRowKey((prev) => {
+            let changed = false;
+            const next = new Map(prev);
+            for (const id of realIds) {
+              if (next.delete(id)) changed = true;
+            }
+            return changed ? next : prev;
+          });
+          setLingeringListRows((prev) => prev.filter((row) => !realIds.includes(row.key)));
+        }
+
+        setLingerUntilByCardId((prev) => {
+          if (!prev.has(card.id)) return prev;
+          const next = new Map(prev);
+          next.delete(card.id);
+          return next;
+        });
+        setSelectedKeys(new Set());
+      } finally {
+        setBusy(false);
+        void reloadStationItems();
+        void reloadTables();
+      }
+    },
+    [actor, busy, clearAutoDoneTimer, items, reloadStationItems, reloadTables, station],
+  );
+
+  const handleTableTagActivate = useCallback(
+    (card: ServerScreenOrderCard) => {
+      if (busy) return;
+      unlockNotificationAudio();
+      const now = Date.now();
+      const prev = tableTagTapRef.current;
+      const isDouble =
+        Boolean(prev) && prev!.key === card.id && now - prev!.at <= DONE_DOUBLE_TAP_MS;
+
+      if (isDouble) {
+        tableTagTapRef.current = null;
+        const hasDone = card.lines.some(
+          (line) =>
+            line.doneCount > 0 ||
+            (line.remainingIds.length === 0 && line.unitIds.length > 0),
+        );
+        if (hasDone || card.lingering) {
+          clearAutoDoneTimer();
+          setSelectedKeys(new Set());
+          void handleUndoDoneCard(card);
+        }
+        return;
+      }
+
+      tableTagTapRef.current = { key: card.id, at: now };
+
+      if (card.lingering || !card.hasPending) {
+        return;
+      }
+
+      const keys = remainingKeysForCard(card);
+      if (keys.length === 0) return;
+      setSelectedKeys(new Set(keys));
+      scheduleAutoDone(SERVER_SCREEN_TABLE_AUTO_DONE_MS);
+    },
+    [busy, clearAutoDoneTimer, handleUndoDoneCard, remainingKeysForCard, scheduleAutoDone],
+  );
+
+  const handleListTableTagActivate = useCallback(
+    (tableId: string, lingering: boolean) => {
+      if (busy) return;
+      unlockNotificationAudio();
+      const tapKey = `table:${tableId}`;
+      const now = Date.now();
+      const prev = tableTagTapRef.current;
+      const isDouble =
+        Boolean(prev) && prev!.key === tapKey && now - prev!.at <= DONE_DOUBLE_TAP_MS;
+
+      if (isDouble) {
+        tableTagTapRef.current = null;
+        clearAutoDoneTimer();
+        setSelectedKeys(new Set());
+
+        const cardsForTable = orderCardsRef.current.filter((card) => card.tableId === tableId);
+        const undoCards = cardsForTable.filter(
+          (card) =>
+            card.lingering ||
+            card.lines.some(
+              (line) =>
+                line.doneCount > 0 ||
+                (line.remainingIds.length === 0 && line.unitIds.length > 0),
+            ),
+        );
+        if (undoCards.length > 0) {
+          void (async () => {
+            for (const card of undoCards) {
+              await handleUndoDoneCard(card);
+            }
+          })();
+          return;
+        }
+
+        const lingeringRows = lingeringListRows.filter((row) => row.item.tableId === tableId);
+        if (lingeringRows.length === 0 && !lingering) return;
+
+        void (async () => {
+          setBusy(true);
+          try {
+            const companionKeys: string[] = [];
+            const realIds: string[] = [];
+            for (const row of lingeringRows) {
+              if (row.kind === "companion") companionKeys.push(row.key);
+              else if (row.item.id) realIds.push(row.item.id);
+            }
+            if (companionKeys.length > 0) {
+              setCompanionStore((prev) => {
+                const nextDone = { ...prev.done };
+                let changed = false;
+                for (const key of companionKeys) {
+                  if (nextDone[key]) {
+                    delete nextDone[key];
+                    changed = true;
+                  }
+                }
+                if (!changed) return prev;
+                const next: GrillCompanionStore = { ...prev, done: nextDone };
+                writeCompanionStore(station, next);
+                return next;
+              });
+            }
+            if (realIds.length > 0) {
+              await markItemsPreparing(realIds, actor, tableId);
+            }
+            setLingerUntilByRowKey((prev) => {
+              const next = new Map(prev);
+              for (const key of [...companionKeys, ...realIds]) next.delete(key);
+              return next;
+            });
+            setLingeringListRows((prev) =>
+              prev.filter((row) => row.item.tableId !== tableId),
+            );
+          } finally {
+            setBusy(false);
+            void reloadStationItems();
+            void reloadTables();
+          }
+        })();
+        return;
+      }
+
+      tableTagTapRef.current = { key: tapKey, at: now };
+      if (lingering) return;
+
+      const keys = preparingRowsRef.current
+        .filter((row) => row.item.tableId === tableId)
+        .map((row) => row.key);
+      if (keys.length === 0) return;
+      setSelectedKeys(new Set(keys));
+      scheduleAutoDone(SERVER_SCREEN_TABLE_AUTO_DONE_MS);
+    },
+    [
+      actor,
+      busy,
+      clearAutoDoneTimer,
+      handleUndoDoneCard,
+      lingeringListRows,
+      reloadStationItems,
+      reloadTables,
+      scheduleAutoDone,
+      station,
+    ],
   );
 
   const handleListRowActivate = (row: BoardRow, lingering: boolean) => {
@@ -1580,7 +1773,6 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
 
   const shellClass =
     "flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#0B0B0C] text-[#f5f2ef]";
-  const selectedCount = selectedKeys.size;
   const paymentOverlayEnabled =
     station === "kitchen" && Boolean(serverScreen.showPaymentOverlayOnKds);
 
@@ -1710,18 +1902,14 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
           )}
         </div>
         <FloatingToolbar
-          selectedCount={0}
-          busy={false}
           refreshing={refreshing}
-          onMarkDone={() => undefined}
           onHistory={() => setHistoryOpen(false)}
           onLayout={toggleLayoutMode}
           onRefresh={() => void handleRefresh()}
-          markDoneLabel={translate("serverScreenMarkDone")}
           historyLabel={translate("serverScreenHistoryBack")}
           layoutLabel={translate("serverScreenLayout")}
           refreshLabel={translate("serverScreenRefresh")}
-          showMarkDone={false}
+          historyBack
           layoutActive={layoutMode === "cards"}
         />
         <ServerScreenFooter language={language} />
@@ -1787,7 +1975,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                 emptyLabel={translate("noOrders")}
                 onToggleLine={toggleCardLine}
                 onSetLineCount={setCardLineSelectedCount}
-                onMarkCardDone={markCardAllDone}
+                onTableTagActivate={handleTableTagActivate}
                 onUndoDoneLine={(line) => void handleUndoDoneLine(line)}
               />
             ) : visiblePreparingRows.length === 0 ? (
@@ -1854,15 +2042,11 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                         <button
                           type="button"
                           data-server-interactive
-                          disabled={lingering}
-                          onClick={() => {
-                            if (lingering) return;
-                            markTableAllDone(row.item.tableId);
-                          }}
+                          onClick={() => handleListTableTagActivate(row.item.tableId, lingering)}
                           className={`shrink-0 whitespace-nowrap text-right text-base font-bold tabular-nums sm:text-lg ${
                             selected ? "text-zinc-950" : "text-[#E8D5C4]"
-                          } disabled:cursor-default`}
-                          title={lingering ? undefined : "Mark all done"}
+                          }`}
+                          title={lingering ? "Double-tap to undo" : "Tap to mark all done"}
                         >
                           {row.tableLabel}
                         </button>
@@ -1913,15 +2097,11 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       </section>
 
       <FloatingToolbar
-        selectedCount={selectedCount}
-        busy={busy}
         refreshing={refreshing}
-        onMarkDone={() => void handleMarkDone()}
         onHistory={() => setHistoryOpen(true)}
         onLayout={toggleLayoutMode}
         onRefresh={() => void handleRefresh()}
         onPrepStats={openPrepStats}
-        markDoneLabel={translate("serverScreenMarkDone")}
         historyLabel={translate("history")}
         layoutLabel={translate("serverScreenLayout")}
         refreshLabel={translate("serverScreenRefresh")}

@@ -23,6 +23,9 @@ export const SERVER_SCREEN_HISTORY_VISIBLE_MS = 2 * 60 * 60 * 1000;
 /** After selecting item(s), wait this long before auto mark-done (allows multi-select). */
 export const SERVER_SCREEN_AUTO_DONE_MS = 5_000;
 
+/** After tapping a table number, wait this long before mark-all-done. */
+export const SERVER_SCREEN_TABLE_AUTO_DONE_MS = 3_000;
+
 /** Keep a fully-done order card/row on the preparing board this long before removing. */
 export const SERVER_SCREEN_DONE_LINGER_MS = 15_000;
 

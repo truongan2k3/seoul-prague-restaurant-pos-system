@@ -13,7 +13,12 @@ import {
 
 const DONE_DOUBLE_TAP_MS = 450;
 
-function cardHeaderClass(tone: PrepHighlightTone, lingering: boolean): string {
+function cardHeaderClass(
+  tone: PrepHighlightTone,
+  lingering: boolean,
+  queued: boolean,
+): string {
+  if (queued) return "bg-amber-300/90 text-zinc-950";
   if (lingering) return "bg-emerald-900/80 text-white";
   if (tone === "critical") return "bg-red-800/90 text-white";
   if (tone === "warn") return "bg-orange-700/85 text-white";
@@ -180,7 +185,7 @@ function OrderCard({
   leaving,
   onToggleLine,
   onSetLineCount,
-  onMarkCardDone,
+  onTableTagActivate,
   onUndoDoneLine,
 }: {
   card: ServerScreenOrderCard;
@@ -190,44 +195,65 @@ function OrderCard({
   leaving: boolean;
   onToggleLine: (line: ServerScreenOrderCardLine) => void;
   onSetLineCount: (line: ServerScreenOrderCardLine, count: number) => void;
-  onMarkCardDone: (card: ServerScreenOrderCard) => void;
+  onTableTagActivate: (card: ServerScreenOrderCard) => void;
   onUndoDoneLine: (line: ServerScreenOrderCardLine) => void;
 }) {
   const age = preparationAgeMinutes(card.ageFrom, nowMs);
   const tone = preparationHighlightTone(age);
   const prepLabel = formatPreparationMinutes(card.ageFrom, nowMs, minLabel);
   const lingering = Boolean(card.lingering);
+  const remainingKeys: string[] = [];
+  for (const line of card.lines) {
+    for (const id of line.remainingIds) remainingKeys.push(id);
+  }
+  const queued =
+    !lingering &&
+    remainingKeys.length > 0 &&
+    remainingKeys.every((id) => selectedKeys.has(id));
 
   return (
     <article
       data-server-interactive
       className={`flex min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#121214] shadow-[0_6px_24px_rgba(0,0,0,0.35)] transition-all duration-200 ${
         leaving ? "translate-y-1 scale-[0.98] opacity-0" : ""
-      } ${lingering ? "ring-1 ring-emerald-500/40" : ""}`}
+      } ${lingering ? "ring-1 ring-emerald-500/40" : ""} ${
+        queued ? "ring-1 ring-amber-300/70" : ""
+      }`}
     >
       <header
-        className={`flex items-start justify-between gap-2 px-3 py-2.5 ${cardHeaderClass(tone, lingering)}`}
+        className={`flex items-start justify-between gap-2 px-3 py-2.5 ${cardHeaderClass(
+          tone,
+          lingering,
+          queued,
+        )}`}
       >
         <button
           type="button"
           data-server-interactive
-          disabled={lingering || !card.hasPending}
-          onClick={() => onMarkCardDone(card)}
-          className="min-w-0 flex-1 rounded-lg text-left transition hover:brightness-110 disabled:cursor-default disabled:hover:brightness-100"
-          title={lingering ? undefined : "Mark all done"}
+          onClick={() => onTableTagActivate(card)}
+          className="min-w-0 flex-1 rounded-lg text-left transition hover:brightness-110"
+          title={lingering ? "Double-tap to undo" : "Tap to mark all done"}
         >
           <p className="font-serif text-2xl font-semibold leading-none tracking-tight sm:text-[1.65rem]">
             {card.tableLabel}
           </p>
           <p
             className={`mt-1 text-xs tabular-nums ${
-              lingering || tone !== "normal" ? "text-white/80" : "text-white/45"
+              queued
+                ? "text-zinc-800/70"
+                : lingering || tone !== "normal"
+                  ? "text-white/80"
+                  : "text-white/45"
             }`}
           >
             #{card.ticketId}
           </p>
         </button>
-        <span className="shrink-0 rounded-md bg-black/20 px-2 py-1 text-xs font-semibold tabular-nums tracking-wide">
+        <span
+          className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold tabular-nums tracking-wide ${
+            queued ? "bg-zinc-950/15 text-zinc-950" : "bg-black/20"
+          }`}
+        >
           {lingering ? "✓" : prepLabel}
         </span>
       </header>
@@ -257,7 +283,7 @@ export function ServerScreenOrderCards({
   emptyLabel,
   onToggleLine,
   onSetLineCount,
-  onMarkCardDone,
+  onTableTagActivate,
   onUndoDoneLine,
 }: {
   cards: ServerScreenOrderCard[];
@@ -268,7 +294,7 @@ export function ServerScreenOrderCards({
   emptyLabel: string;
   onToggleLine: (line: ServerScreenOrderCardLine) => void;
   onSetLineCount: (line: ServerScreenOrderCardLine, count: number) => void;
-  onMarkCardDone: (card: ServerScreenOrderCard) => void;
+  onTableTagActivate: (card: ServerScreenOrderCard) => void;
   onUndoDoneLine: (line: ServerScreenOrderCardLine) => void;
 }) {
   if (cards.length === 0) {
@@ -295,7 +321,7 @@ export function ServerScreenOrderCards({
             leaving={leaving}
             onToggleLine={onToggleLine}
             onSetLineCount={onSetLineCount}
-            onMarkCardDone={onMarkCardDone}
+            onTableTagActivate={onTableTagActivate}
             onUndoDoneLine={onUndoDoneLine}
           />
         );

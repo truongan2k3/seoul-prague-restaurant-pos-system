@@ -73,6 +73,8 @@ import {
   preparationHighlightTone,
   pruneGrillCompanionStore,
   readServerScreenLayoutMode,
+  SERVER_SCREEN_AUTO_DONE_MS,
+  SERVER_SCREEN_DONE_LINGER_MS,
   SERVER_SCREEN_HISTORY_VISIBLE_MS,
   SERVER_SCREEN_LANG_ROTATE_MS,
   serverScreenOrderWaveKey,
@@ -81,6 +83,7 @@ import {
   type GrillCompanionStore,
   type PrepHighlightTone,
   type ServerScreenLayoutMode,
+  type ServerScreenOrderCard,
   type ServerScreenOrderCardLine,
 } from "@/lib/server-screen";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
@@ -88,6 +91,7 @@ import type { LanguageCode, MenuItem, RestaurantTable, Station } from "@/lib/typ
 import {
   autoFirePendingItems,
   autoServeExpiredReadyItems,
+  markItemsPreparing,
   markItemsReady,
 } from "@/src/lib/table-actions";
 import {
@@ -110,6 +114,7 @@ const NEW_ORDER_SOUND_DEBOUNCE_MS = 700;
 const SWIPE_EDGE_PX = 36;
 const SWIPE_OPEN_PX = 72;
 const SWIPE_CLOSE_PX = 64;
+const DONE_DOUBLE_TAP_MS = 450;
 
 type BoardRow = {
   key: string;
@@ -395,6 +400,15 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const [prepStatsLoading, setPrepStatsLoading] = useState(false);
   const [prepStatsOpen, setPrepStatsOpen] = useState(false);
   const [reservationsOpen, setReservationsOpen] = useState(false);
+  /** Fully-done cards stay visible until this timestamp (ms). */
+  const [lingerUntilByCardId, setLingerUntilByCardId] = useState<Map<string, number>>(
+    () => new Map(),
+  );
+  /** Fully-done list rows stay visible until this timestamp (ms). */
+  const [lingerUntilByRowKey, setLingerUntilByRowKey] = useState<Map<string, number>>(
+    () => new Map(),
+  );
+  const [lingeringListRows, setLingeringListRows] = useState<BoardRow[]>([]);
   const rotateResetRef = useRef(Date.now());
   const languageRef = useRef(language);
   const languagesRef = useRef(languages);
@@ -411,6 +425,11 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const prepStatsOpenRef = useRef(false);
   const reservationsOpenRef = useRef(false);
   const stationReloadGenRef = useRef(0);
+  const autoDoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleMarkDoneRef = useRef<(keysOverride?: string[]) => Promise<void>>(async () => {});
+  const listDoneTapRef = useRef<{ key: string; at: number } | null>(null);
+  const orderCardsRef = useRef<ServerScreenOrderCard[]>([]);
+  const preparingRowsRef = useRef<BoardRow[]>([]);
   prepStatsOpenRef.current = prepStatsOpen;
   reservationsOpenRef.current = reservationsOpen;
   languageRef.current = language;
@@ -533,9 +552,33 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   }, [serverScreen.autoRotateLanguage, languages.length, setLanguage]);
 
   useEffect(() => {
-    const id = window.setInterval(() => setNowMs(Date.now()), 15_000);
+    const id = window.setInterval(() => setNowMs(Date.now()), 1_000);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (autoDoneTimerRef.current) {
+        clearTimeout(autoDoneTimerRef.current);
+        autoDoneTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const clearAutoDoneTimer = useCallback(() => {
+    if (autoDoneTimerRef.current) {
+      clearTimeout(autoDoneTimerRef.current);
+      autoDoneTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleAutoDone = useCallback(() => {
+    clearAutoDoneTimer();
+    autoDoneTimerRef.current = setTimeout(() => {
+      autoDoneTimerRef.current = null;
+      void handleMarkDoneRef.current();
+    }, SERVER_SCREEN_AUTO_DONE_MS);
+  }, [clearAutoDoneTimer]);
 
   const reloadStationItems = useCallback(async () => {
     const gen = ++stationReloadGenRef.current;
@@ -859,6 +902,44 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
 
     return rows;
   }, [items, itemsByTable, menuItems, tableLabelById, language, companionStore]);
+  preparingRowsRef.current = preparingRows;
+
+  const visiblePreparingRows = useMemo(() => {
+    const activeKeys = new Set(preparingRows.map((row) => row.key));
+    const extras = lingeringListRows.filter((row) => {
+      if (activeKeys.has(row.key)) return false;
+      const until = lingerUntilByRowKey.get(row.key) ?? 0;
+      return until > nowMs;
+    });
+    if (extras.length === 0) return preparingRows;
+    return [...preparingRows, ...extras];
+  }, [preparingRows, lingeringListRows, lingerUntilByRowKey, nowMs]);
+
+  // Drop expired linger entries.
+  useEffect(() => {
+    setLingerUntilByCardId((prev) => {
+      let changed = false;
+      const next = new Map<string, number>();
+      for (const [key, until] of prev) {
+        if (until > nowMs) next.set(key, until);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+    setLingerUntilByRowKey((prev) => {
+      let changed = false;
+      const next = new Map<string, number>();
+      for (const [key, until] of prev) {
+        if (until > nowMs) next.set(key, until);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+    setLingeringListRows((prev) => {
+      const next = prev.filter((row) => (lingerUntilByRowKey.get(row.key) ?? 0) > nowMs);
+      return next.length === prev.length ? prev : next;
+    });
+  }, [nowMs, lingerUntilByRowKey]);
 
   const orderCards = useMemo(
     () =>
@@ -870,9 +951,12 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         companionStore,
         resolveName: (item) => orderItemDisplayName(item, menuItems, language),
         resolveNote: (item) => itemNote(item as StationOrderItem, language),
+        lingerUntilByCardId,
+        nowMs,
       }),
-    [items, menuItems, tableLabelById, language, companionStore],
+    [items, menuItems, tableLabelById, language, companionStore, lingerUntilByCardId, nowMs],
   );
+  orderCardsRef.current = orderCards;
 
   const historyRows = useMemo(() => {
     const rows: HistoryRow[] = [...historyCache];
@@ -1078,6 +1162,8 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
+      if (next.size === 0) clearAutoDoneTimer();
+      else scheduleAutoDone();
       return next;
     });
   };
@@ -1098,6 +1184,8 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       } else {
         for (const id of line.remainingIds) next.add(id);
       }
+      if (next.size === 0) clearAutoDoneTimer();
+      else scheduleAutoDone();
       return next;
     });
   };
@@ -1113,12 +1201,15 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         const id = line.remainingIds[i];
         if (id) next.add(id);
       }
+      if (next.size === 0) clearAutoDoneTimer();
+      else scheduleAutoDone();
       return next;
     });
   };
 
   const toggleLayoutMode = () => {
     unlockNotificationAudio();
+    clearAutoDoneTimer();
     setLayoutMode((prev) => {
       const next: ServerScreenLayoutMode = prev === "cards" ? "list" : "cards";
       writeServerScreenLayoutMode(next);
@@ -1127,78 +1218,292 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     setSelectedKeys(new Set());
   };
 
-  const handleMarkDone = async () => {
-    if (busy || selectedKeys.size === 0) return;
-    unlockNotificationAudio();
-    const keys = Array.from(selectedKeys);
-    setBusy(true);
-    setAnimatingOut(new Set(keys));
+  const registerLingerAfterMark = useCallback(
+    (keys: string[]) => {
+      const keySet = new Set(keys);
+      const expireAt = Date.now() + SERVER_SCREEN_DONE_LINGER_MS;
 
-    const realIds: string[] = [];
-    const companionKeys: string[] = [];
-    for (const key of keys) {
-      if (key.includes("::")) companionKeys.push(key);
-      else realIds.push(key);
-    }
-
-    const byTable = new Map<string, string[]>();
-    for (const id of realIds) {
-      const item = items.find((row) => row.id === id);
-      if (!item) continue;
-      const list = byTable.get(item.tableId) ?? [];
-      list.push(id);
-      byTable.set(item.tableId, list);
-    }
-
-    for (const [tableId, itemIds] of byTable) {
-      await markItemsReady(itemIds, actor, tableId);
-    }
-
-    if (companionKeys.length > 0) {
-      const readyAt = new Date().toISOString();
-      setCompanionStore((prev) => {
-        const next: GrillCompanionStore = {
-          ...prev,
-          done: { ...prev.done },
-        };
-        for (const key of companionKeys) next.done[key] = readyAt;
-        writeCompanionStore(station, next);
-        return next;
-      });
-      const companionHistory: HistoryRow[] = [];
-      for (const key of companionKeys) {
-        const [parentId, companionId] = key.split("::");
-        if (!parentId || !companionId) continue;
-        const companion = GRILL_FIRST_ORDER_COMPANIONS.find((row) => row.id === companionId);
-        if (!companion) continue;
-        const anchor = Object.values(companionStore.anchors).find((row) => row.parentId === parentId);
-        const parent = items.find((item) => item.id === parentId);
-        const tableId = parent?.tableId ?? anchor?.tableId;
-        companionHistory.push({
-          key,
-          name: companion.names[language] || companion.names.en,
-          tableLabel: tableId ? tableLabelById.get(tableId) ?? "—" : "—",
-          note: null,
-          orderedAt: parent?.createdAt ?? anchor?.createdAt,
-          completedAt: readyAt,
-          tableId,
-        });
+      // Cards: linger when this mark clears the last pending line(s) on a card.
+      const cardLinger = new Map<string, number>();
+      for (const card of orderCardsRef.current) {
+        if (!card.hasPending) continue;
+        let markedPending = 0;
+        let totalPending = 0;
+        for (const line of card.lines) {
+          for (const id of line.remainingIds) {
+            totalPending += 1;
+            if (keySet.has(id)) markedPending += 1;
+          }
+          if (line.companionKey && line.remainingIds.length > 0 && keySet.has(line.companionKey)) {
+            // companion remainingIds already counted via id === companionKey
+          }
+        }
+        if (totalPending > 0 && markedPending >= totalPending) {
+          cardLinger.set(card.id, expireAt);
+        }
       }
-      if (companionHistory.length > 0) {
-        setHistoryCache((prev) => {
-          const next = upsertHistoryRows(prev, companionHistory);
-          writeHistoryCache(station, next);
+      if (cardLinger.size > 0) {
+        setLingerUntilByCardId((prev) => {
+          const next = new Map(prev);
+          for (const [id, until] of cardLinger) next.set(id, until);
           return next;
         });
       }
-    }
 
-    playReadySound();
-    setSelectedKeys(new Set());
-    setBusy(false);
-    window.setTimeout(() => setAnimatingOut(new Set()), 280);
-    void reloadStationItems();
-    void reloadTables();
+      // List: keep marked rows visible briefly when they leave the preparing set.
+      const rowSnapshots: BoardRow[] = [];
+      const rowLinger = new Map<string, number>();
+      for (const row of preparingRowsRef.current) {
+        if (!keySet.has(row.key)) continue;
+        rowLinger.set(row.key, expireAt);
+        rowSnapshots.push({ ...row, readyAt: new Date().toISOString() });
+      }
+      if (rowLinger.size > 0) {
+        setLingerUntilByRowKey((prev) => {
+          const next = new Map(prev);
+          for (const [key, until] of rowLinger) next.set(key, until);
+          return next;
+        });
+        setLingeringListRows((prev) => {
+          const map = new Map(prev.map((row) => [row.key, row]));
+          for (const row of rowSnapshots) map.set(row.key, row);
+          return Array.from(map.values());
+        });
+      }
+    },
+    [],
+  );
+
+  const handleMarkDone = useCallback(
+    async (keysOverride?: string[]) => {
+      const keys = keysOverride ?? Array.from(selectedKeys);
+      if (busy || keys.length === 0) return;
+      unlockNotificationAudio();
+      clearAutoDoneTimer();
+      setBusy(true);
+      setAnimatingOut(new Set(keys));
+      registerLingerAfterMark(keys);
+
+      const realIds: string[] = [];
+      const companionKeys: string[] = [];
+      for (const key of keys) {
+        if (key.includes("::")) companionKeys.push(key);
+        else realIds.push(key);
+      }
+
+      const byTable = new Map<string, string[]>();
+      for (const id of realIds) {
+        const item = items.find((row) => row.id === id);
+        if (!item) continue;
+        const list = byTable.get(item.tableId) ?? [];
+        list.push(id);
+        byTable.set(item.tableId, list);
+      }
+
+      for (const [tableId, itemIds] of byTable) {
+        await markItemsReady(itemIds, actor, tableId);
+      }
+
+      if (companionKeys.length > 0) {
+        const readyAt = new Date().toISOString();
+        setCompanionStore((prev) => {
+          const next: GrillCompanionStore = {
+            ...prev,
+            done: { ...prev.done },
+          };
+          for (const key of companionKeys) next.done[key] = readyAt;
+          writeCompanionStore(station, next);
+          return next;
+        });
+        const companionHistory: HistoryRow[] = [];
+        for (const key of companionKeys) {
+          const [parentId, companionId] = key.split("::");
+          if (!parentId || !companionId) continue;
+          const companion = GRILL_FIRST_ORDER_COMPANIONS.find((row) => row.id === companionId);
+          if (!companion) continue;
+          const anchor = Object.values(companionStore.anchors).find((row) => row.parentId === parentId);
+          const parent = items.find((item) => item.id === parentId);
+          const tableId = parent?.tableId ?? anchor?.tableId;
+          companionHistory.push({
+            key,
+            name: companion.names[language] || companion.names.en,
+            tableLabel: tableId ? tableLabelById.get(tableId) ?? "—" : "—",
+            note: null,
+            orderedAt: parent?.createdAt ?? anchor?.createdAt,
+            completedAt: readyAt,
+            tableId,
+          });
+        }
+        if (companionHistory.length > 0) {
+          setHistoryCache((prev) => {
+            const next = upsertHistoryRows(prev, companionHistory);
+            writeHistoryCache(station, next);
+            return next;
+          });
+        }
+      }
+
+      playReadySound();
+      setSelectedKeys(new Set());
+      setBusy(false);
+      window.setTimeout(() => setAnimatingOut(new Set()), 280);
+      void reloadStationItems();
+      void reloadTables();
+    },
+    [
+      actor,
+      busy,
+      clearAutoDoneTimer,
+      companionStore.anchors,
+      items,
+      language,
+      playReadySound,
+      registerLingerAfterMark,
+      reloadStationItems,
+      reloadTables,
+      selectedKeys,
+      station,
+      tableLabelById,
+    ],
+  );
+  handleMarkDoneRef.current = (keysOverride?: string[]) => handleMarkDone(keysOverride);
+
+  const markCardAllDone = useCallback(
+    (card: ServerScreenOrderCard) => {
+      if (busy || card.lingering || !card.hasPending) return;
+      unlockNotificationAudio();
+      const keys: string[] = [];
+      for (const line of card.lines) {
+        if (line.kind === "companion") {
+          if (line.companionKey && line.remainingIds.length > 0) keys.push(line.companionKey);
+          continue;
+        }
+        for (const id of line.remainingIds) keys.push(id);
+      }
+      if (keys.length === 0) return;
+      void handleMarkDone(keys);
+    },
+    [busy, handleMarkDone],
+  );
+
+  const markTableAllDone = useCallback(
+    (tableId: string) => {
+      if (busy) return;
+      unlockNotificationAudio();
+      const keys = preparingRowsRef.current
+        .filter((row) => row.item.tableId === tableId)
+        .map((row) => row.key);
+      if (keys.length === 0) return;
+      void handleMarkDone(keys);
+    },
+    [busy, handleMarkDone],
+  );
+
+  const handleUndoDoneLine = useCallback(
+    async (line: ServerScreenOrderCardLine) => {
+      if (busy) return;
+      unlockNotificationAudio();
+      clearAutoDoneTimer();
+      setBusy(true);
+      try {
+        if (line.kind === "companion") {
+          const key = line.companionKey;
+          if (!key) return;
+          setCompanionStore((prev) => {
+            if (!prev.done[key]) return prev;
+            const nextDone = { ...prev.done };
+            delete nextDone[key];
+            const next: GrillCompanionStore = { ...prev, done: nextDone };
+            writeCompanionStore(station, next);
+            return next;
+          });
+          setLingerUntilByRowKey((prev) => {
+            if (!prev.has(key)) return prev;
+            const next = new Map(prev);
+            next.delete(key);
+            return next;
+          });
+          setLingeringListRows((prev) => prev.filter((row) => row.key !== key));
+        } else {
+          const undoIds = line.unitIds.filter((id) => !line.remainingIds.includes(id));
+          const ids = undoIds.length > 0 ? undoIds : line.unitIds;
+          if (ids.length === 0) return;
+          const byTable = new Map<string, string[]>();
+          for (const id of ids) {
+            const item = items.find((row) => row.id === id);
+            if (!item) continue;
+            const list = byTable.get(item.tableId) ?? [];
+            list.push(id);
+            byTable.set(item.tableId, list);
+          }
+          for (const [tableId, itemIds] of byTable) {
+            await markItemsPreparing(itemIds, actor, tableId);
+          }
+          setLingerUntilByRowKey((prev) => {
+            let changed = false;
+            const next = new Map(prev);
+            for (const id of ids) {
+              if (next.delete(id)) changed = true;
+            }
+            return changed ? next : prev;
+          });
+          setLingeringListRows((prev) => prev.filter((row) => !ids.includes(row.key)));
+        }
+
+        // Any card containing this line should leave linger mode.
+        setLingerUntilByCardId((prev) => {
+          if (prev.size === 0) return prev;
+          const next = new Map(prev);
+          for (const card of orderCardsRef.current) {
+            if (card.lines.some((row) => row.key === line.key)) next.delete(card.id);
+          }
+          return next;
+        });
+      } finally {
+        setBusy(false);
+        void reloadStationItems();
+        void reloadTables();
+      }
+    },
+    [actor, busy, clearAutoDoneTimer, items, reloadStationItems, reloadTables, station],
+  );
+
+  const handleListRowActivate = (row: BoardRow, lingering: boolean) => {
+    unlockNotificationAudio();
+    if (lingering) {
+      const now = Date.now();
+      const prev = listDoneTapRef.current;
+      if (prev && prev.key === row.key && now - prev.at <= DONE_DOUBLE_TAP_MS) {
+        listDoneTapRef.current = null;
+        if (row.kind === "companion") {
+          void handleUndoDoneLine({
+            key: row.key,
+            kind: "companion",
+            name: row.companionName ?? "",
+            note: null,
+            remainingIds: [],
+            unitIds: [row.key],
+            doneCount: 1,
+            companionKey: row.key,
+            parentItemId: row.parentId,
+          });
+        } else if (row.item.id) {
+          void handleUndoDoneLine({
+            key: row.item.id,
+            kind: "item",
+            name: orderItemDisplayName(row.item, menuItems, language),
+            note: itemNote(row.item, language),
+            remainingIds: [],
+            unitIds: [row.item.id],
+            doneCount: 1,
+          });
+        }
+        return;
+      }
+      listDoneTapRef.current = { key: row.key, at: now };
+      return;
+    }
+    toggleSelect(row.key);
   };
 
   const handleRefresh = async () => {
@@ -1482,13 +1787,18 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                 emptyLabel={translate("noOrders")}
                 onToggleLine={toggleCardLine}
                 onSetLineCount={setCardLineSelectedCount}
+                onMarkCardDone={markCardAllDone}
+                onUndoDoneLine={(line) => void handleUndoDoneLine(line)}
               />
-            ) : preparingRows.length === 0 ? (
+            ) : visiblePreparingRows.length === 0 ? (
               <p className="px-4 py-10 text-center text-base text-white/35">{translate("noOrders")}</p>
             ) : (
               <ul className="divide-y divide-white/[0.06]">
-                {preparingRows.map((row) => {
-                  const selected = selectedKeys.has(row.key);
+                {visiblePreparingRows.map((row) => {
+                  const lingering =
+                    !preparingRows.some((active) => active.key === row.key) &&
+                    (lingerUntilByRowKey.get(row.key) ?? 0) > nowMs;
+                  const selected = !lingering && selectedKeys.has(row.key);
                   const age = preparationAgeMinutes(row.item.createdAt, nowMs);
                   const tone = preparationHighlightTone(age);
                   const leaving = animatingOut.has(row.key);
@@ -1499,49 +1809,69 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                   const note = row.kind === "item" ? itemNote(row.item, language) : null;
 
                   return (
-                    <li key={row.key} className={selected ? "bg-amber-300/85" : undefined}>
-                      <button
-                        type="button"
-                        data-server-interactive
-                        onClick={() => toggleSelect(row.key)}
-                        className={`flex w-full flex-nowrap items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ${prepRowClass(
-                          tone,
-                          selected,
-                        )} ${leaving ? "translate-x-4 opacity-0 transition-all duration-200" : ""} ${
+                    <li
+                      key={row.key}
+                      className={
+                        selected
+                          ? "bg-amber-300/85"
+                          : lingering
+                            ? "bg-emerald-950/40"
+                            : undefined
+                      }
+                    >
+                      <div
+                        className={`flex w-full flex-nowrap items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ${
+                          lingering
+                            ? "text-white/55"
+                            : prepRowClass(tone, selected)
+                        } ${leaving ? "translate-x-4 opacity-0 transition-all duration-200" : ""} ${
                           row.kind === "companion" ? "pl-8" : ""
                         }`}
                       >
-                        <span
-                          className={`min-w-0 flex-1 truncate text-[1.35rem] font-semibold leading-tight sm:text-[1.5rem] ${
+                        <button
+                          type="button"
+                          data-server-interactive
+                          onClick={() => handleListRowActivate(row, lingering)}
+                          className={`min-w-0 flex-1 truncate text-left text-[1.35rem] font-semibold leading-tight sm:text-[1.5rem] ${
                             row.kind === "companion" ? "font-medium" : ""
-                          }`}
+                          } ${lingering ? "line-through decoration-white/30" : ""}`}
                           title={name}
                         >
                           {row.kind === "companion" ? (
                             <span className="mr-1.5 opacity-50">↳</span>
                           ) : null}
                           {name}
-                        </span>
+                        </button>
                         <span
                           className={`shrink-0 whitespace-nowrap text-sm tabular-nums sm:text-[0.95rem] ${
                             selected ? "text-zinc-800/75" : "text-white/45"
                           }`}
                         >
-                          {formatPreparationMinutes(row.item.createdAt, nowMs, minLabel)}
+                          {lingering
+                            ? "✓"
+                            : formatPreparationMinutes(row.item.createdAt, nowMs, minLabel)}
                         </span>
-                        <span
+                        <button
+                          type="button"
+                          data-server-interactive
+                          disabled={lingering}
+                          onClick={() => {
+                            if (lingering) return;
+                            markTableAllDone(row.item.tableId);
+                          }}
                           className={`shrink-0 whitespace-nowrap text-right text-base font-bold tabular-nums sm:text-lg ${
                             selected ? "text-zinc-950" : "text-[#E8D5C4]"
-                          }`}
+                          } disabled:cursor-default`}
+                          title={lingering ? undefined : "Mark all done"}
                         >
                           {row.tableLabel}
-                        </span>
-                      </button>
+                        </button>
+                      </div>
                       {note ? (
                         <button
                           type="button"
                           data-server-interactive
-                          onClick={() => toggleSelect(row.key)}
+                          onClick={() => handleListRowActivate(row, lingering)}
                           className={`w-full px-4 pb-2.5 text-left text-sm leading-relaxed whitespace-pre-wrap break-words ${
                             row.kind === "companion" ? "pl-8" : "pl-4"
                           } ${selected ? "text-zinc-800" : "text-white/55"}`}

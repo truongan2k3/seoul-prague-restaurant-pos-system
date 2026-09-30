@@ -20,6 +20,12 @@ export const SERVER_SCREEN_READY_VISIBLE_MS = 5 * 60 * 1000;
 /** Server Screen History keeps completed orders this long. */
 export const SERVER_SCREEN_HISTORY_VISIBLE_MS = 2 * 60 * 60 * 1000;
 
+/** After selecting item(s), wait this long before auto mark-done (allows multi-select). */
+export const SERVER_SCREEN_AUTO_DONE_MS = 5_000;
+
+/** Keep a fully-done order card/row on the preparing board this long before removing. */
+export const SERVER_SCREEN_DONE_LINGER_MS = 15_000;
+
 /**
  * Pending grill companions (Banchan / Lettuce / …) auto-drop after this age.
  * Without a cap, unfinished companions from yesterday stay on KDS overnight
@@ -550,6 +556,8 @@ export type ServerScreenOrderCard = {
   lines: ServerScreenOrderCardLine[];
   /** True while any remaining prep work exists on this card. */
   hasPending: boolean;
+  /** Fully done but kept on-screen briefly after the last item was marked done. */
+  lingering?: boolean;
 };
 
 type BuildOrderCardsInput = {
@@ -566,6 +574,9 @@ type BuildOrderCardsInput = {
   companionStore: GrillCompanionStore;
   resolveName: (item: OrderItem) => string;
   resolveNote: (item: OrderItem) => string | null;
+  /** Wave/card ids still showing after the last pending line was marked done. */
+  lingerUntilByCardId?: Map<string, number> | Record<string, number>;
+  nowMs?: number;
 };
 
 function lineAggregateKey(item: OrderItem): string {
@@ -620,7 +631,15 @@ export function buildServerScreenOrderCards(
     companionStore,
     resolveName,
     resolveNote,
+    lingerUntilByCardId,
+    nowMs = Date.now(),
   } = input;
+
+  const lingerUntil = (cardId: string): number => {
+    if (!lingerUntilByCardId) return 0;
+    if (lingerUntilByCardId instanceof Map) return lingerUntilByCardId.get(cardId) ?? 0;
+    return lingerUntilByCardId[cardId] ?? 0;
+  };
 
   const byTable = new Map<string, typeof items>();
   for (const item of items) {
@@ -716,7 +735,9 @@ export function buildServerScreenOrderCards(
     if (companionParentId) attachCompanionsForParent(companionParentId);
 
     const hasPending = pendingItems.length > 0 || pendingCompanions > 0;
-    if (!hasPending) continue;
+    const cardLingerUntil = lingerUntil(waveId);
+    const lingering = !hasPending && cardLingerUntil > nowMs;
+    if (!hasPending && !lingering) continue;
 
     const lineMap = new Map<string, ServerScreenOrderCardLine>();
     const lineOrder: string[] = [];
@@ -793,7 +814,8 @@ export function buildServerScreenOrderCards(
       orderedAt: wave.orderedAt,
       ageFrom,
       lines,
-      hasPending: true,
+      hasPending,
+      lingering,
     });
   }
 

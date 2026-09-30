@@ -26,13 +26,17 @@ export function orderDispatchFromMenuItem(
   return { skipPrint: false, hideOnKds: false };
 }
 
-/** Bill-only lines skip fulfillment — mark served so they do not block table flow. */
+/**
+ * Non-print lines (bill-only / Box / silent) skip kitchen fulfillment —
+ * mark served so they do not block table flow or floor status.
+ */
 export function finalizeBillOnlyOrder(order: OrderItem): OrderItem {
-  if (!order.skipPrint || !order.hideOnKds) return order;
+  if (!order.skipPrint) return order;
   return {
     ...order,
     status: "served",
     kitchenStatus: "served",
+    hideOnKds: true,
   };
 }
 

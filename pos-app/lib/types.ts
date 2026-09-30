@@ -442,7 +442,7 @@ export interface OrderItem {
   isCancelled?: boolean;
   cancelReason?: string;
   cancelledAt?: string;
-  /** ISO timestamp when kitchen marked the line ready (starts 3-min auto-serve). */
+  /** ISO timestamp when kitchen marked the line done (ready/served). */
   readyAt?: string;
   selectedAddons?: SelectedAddon[];
   menuItemId?: string;

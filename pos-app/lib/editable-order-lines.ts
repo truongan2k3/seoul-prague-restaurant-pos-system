@@ -1,9 +1,36 @@
 import { isBillOnlyOrderLine } from "@/lib/menu-item-dispatch";
+import { isKitchenMessageOrder } from "@/lib/kitchen-message-order";
 import { aggregateOrderPanelItems } from "@/lib/order-item-aggregate";
 import { resolveOriginalUnitPrice } from "@/lib/order-line-pricing";
+import { normalizeOrderItemStatus } from "@/lib/order-status";
 import type { MenuItem, OrderItem } from "@/lib/types";
 
 export type EditableLine = OrderItem & { lineId: string };
+
+/**
+ * Extra units from "+" on a ready/served line must start preparing/pending so
+ * they print and appear on KDS — never inherit the parent's done status.
+ */
+function fieldsForNewUnit(parent: OrderItem): Pick<
+  OrderItem,
+  "status" | "kitchenStatus" | "readyAt" | "createdAt"
+> {
+  const normalized = normalizeOrderItemStatus(parent.status);
+  if (normalized === "served" || normalized === "ready") {
+    return {
+      status: "preparing",
+      kitchenStatus: "pending",
+      readyAt: undefined,
+      createdAt: undefined,
+    };
+  }
+  return {
+    status: parent.status,
+    kitchenStatus: parent.kitchenStatus,
+    readyAt: undefined,
+    createdAt: undefined,
+  };
+}
 
 function expandEditableLineToUnits(line: EditableLine): OrderItem[] {
   const { lineId: _lineId, unitIds, ...rest } = line;
@@ -29,7 +56,13 @@ function expandEditableLineToUnits(line: EditableLine): OrderItem[] {
       unitIds: undefined,
     }));
     for (let index = ids.length; index < qty; index += 1) {
-      units.push({ ...rest, quantity: 1, id: undefined, unitIds: undefined });
+      units.push({
+        ...rest,
+        quantity: 1,
+        id: undefined,
+        unitIds: undefined,
+        ...fieldsForNewUnit(rest),
+      });
     }
     return units;
   }
@@ -39,6 +72,7 @@ function expandEditableLineToUnits(line: EditableLine): OrderItem[] {
     quantity: 1,
     id: index === 0 ? rest.id : undefined,
     unitIds: undefined,
+    ...(index === 0 && rest.id ? {} : fieldsForNewUnit(rest)),
   }));
 }
 
@@ -123,12 +157,31 @@ export function kitchenPrintDelta(baseline: OrderItem[], draft: OrderItem[]): Or
   const printItems: OrderItem[] = [];
 
   for (const line of draftAgg) {
+    if (isKitchenMessageOrder(line)) continue;
     const ids = line.unitIds?.length ? line.unitIds : line.id ? [line.id] : [];
-    if (ids.length === 0) continue;
+    // New units from "+" on a served/ready line are preparing with no id yet —
+    // they must still print / hit the station ticket path.
+    if (ids.length === 0) {
+      if (isBillOnlyOrderLine(line) || (line.quantity || 0) <= 0) continue;
+      printItems.push({
+        ...line,
+        skipPrint: false,
+        hideOnKds: false,
+      });
+      continue;
+    }
 
     const prevUnits = baseline.filter((item) => item.id && ids.includes(item.id));
     const prevAgg = aggregateOrderPanelItems(prevUnits)[0];
-    if (!prevAgg) continue;
+    if (!prevAgg) {
+      if (isBillOnlyOrderLine(line) || (line.quantity || 0) <= 0) continue;
+      printItems.push({
+        ...line,
+        skipPrint: false,
+        hideOnKds: false,
+      });
+      continue;
+    }
 
     const qtyDelta = line.quantity - prevAgg.quantity;
     if (qtyDelta > 0) {

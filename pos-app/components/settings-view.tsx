@@ -98,6 +98,7 @@ export function SettingsView({
 }) {
   const {
     translate,
+    language,
     theme,
     setTheme,
     lightBackground,
@@ -2072,9 +2073,14 @@ export function SettingsView({
               value={draft.serverScreen ?? {
                 ...DEFAULT_SERVER_SCREEN_CONFIG,
                 languages: [...DEFAULT_SERVER_SCREEN_CONFIG.languages],
+                forceChineseMenuItemIds: [
+                  ...(DEFAULT_SERVER_SCREEN_CONFIG.forceChineseMenuItemIds ?? []),
+                ],
               }}
               onChange={(serverScreen) => updateDraft("serverScreen", serverScreen)}
               translate={translate}
+              menuItems={menuItems}
+              language={language}
             />
           </section>
         </div>

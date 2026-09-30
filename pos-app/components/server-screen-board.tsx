@@ -30,7 +30,7 @@ import { AUTO_SERVE_POLL_MS, resolveKitchenStatus } from "@/lib/auto-serve";
 import { POS_EGRESS } from "@/lib/egress-config";
 import { isGrillGuestPrepOrder } from "@/lib/grill-guest-count";
 import { usesKitchenScreen } from "@/lib/kitchen-fulfillment-mode";
-import { orderItemDisplayName } from "@/lib/menu-display";
+import { orderItemDisplayName, resolveMenuItemForOrder } from "@/lib/menu-display";
 import {
   isNotificationAudioUnlocked,
   playCustomAlertSound,
@@ -66,6 +66,7 @@ import {
   migrateGrillCompanionStore,
   nextServerScreenLanguage,
   normalizeServerScreenLanguages,
+  orderIsGrillDish,
   pendingCompanionIds,
   preparationAgeMinutes,
   preparationHighlightTone,
@@ -78,6 +79,7 @@ import {
   SERVER_SCREEN_TABLE_AUTO_DONE_MS,
   serverScreenOrderWaveKey,
   shouldShowGrillCompanions,
+  tableSessionHasGrill,
   writeServerScreenLayoutMode,
   type GrillCompanionStore,
   type PrepHighlightTone,
@@ -231,6 +233,23 @@ function itemNote(item: StationOrderItem, language: LanguageCode): string | null
       ? item.notesTranslated?.trim() || item.notes?.trim()
       : item.notes?.trim() || item.notesTranslated?.trim();
   return primary || null;
+}
+
+function forcedChineseName(
+  item: StationOrderItem,
+  menuItems: MenuItem[],
+  language: LanguageCode,
+  forceIds: Iterable<string>,
+  primaryName: string,
+): string | null {
+  if (language === "zh") return null;
+  if (!item.menuItemId) return null;
+  const forceSet = forceIds instanceof Set ? forceIds : new Set(forceIds);
+  if (!forceSet.has(item.menuItemId)) return null;
+  const menu = resolveMenuItemForOrder(item, menuItems);
+  const zh = menu?.nameZh?.trim() || "";
+  if (!zh || zh === primaryName) return null;
+  return zh;
 }
 
 function formatOrderClock(iso: string | undefined, language: LanguageCode): string {
@@ -777,10 +796,23 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   }, [itemsByTable, menuItems, station]);
 
   const preparingRows = useMemo(() => {
+    const grillTableIds = new Set<string>();
+    for (const [tableId, tableSession] of itemsByTable) {
+      if (tableSessionHasGrill(tableSession, menuItems)) grillTableIds.add(tableId);
+    }
+
     const pending = items
       .filter((item) => isPreparingColumnVisible(item))
       .slice()
       .sort((a, b) => {
+        const aGrill = grillTableIds.has(a.tableId) ? 0 : 1;
+        const bGrill = grillTableIds.has(b.tableId) ? 0 : 1;
+        if (aGrill !== bGrill) return aGrill - bGrill;
+        const aItemGrill = orderIsGrillDish(a, menuItems) ? 0 : 1;
+        const bItemGrill = orderIsGrillDish(b, menuItems) ? 0 : 1;
+        if (aItemGrill !== bItemGrill && a.tableId === b.tableId) {
+          return aItemGrill - bItemGrill;
+        }
         const at = a.createdAt ?? "";
         const bt = b.createdAt ?? "";
         if (at !== bt) return at < bt ? -1 : 1;
@@ -934,8 +966,18 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         resolveNote: (item) => itemNote(item as StationOrderItem, language),
         lingerUntilByCardId,
         nowMs,
+        forceChineseMenuItemIds: serverScreen.forceChineseMenuItemIds,
       }),
-    [items, menuItems, tableLabelById, language, companionStore, lingerUntilByCardId, nowMs],
+    [
+      items,
+      menuItems,
+      tableLabelById,
+      language,
+      companionStore,
+      lingerUntilByCardId,
+      nowMs,
+      serverScreen.forceChineseMenuItemIds,
+    ],
   );
   orderCardsRef.current = orderCards;
 
@@ -1723,6 +1765,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             key: row.key,
             kind: "companion",
             name: row.companionName ?? "",
+            nameZh: null,
             note: null,
             remainingIds: [],
             unitIds: [row.key],
@@ -1735,6 +1778,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             key: row.item.id,
             kind: "item",
             name: orderItemDisplayName(row.item, menuItems, language),
+            nameZh: null,
             note: itemNote(row.item, language),
             remainingIds: [],
             unitIds: [row.item.id],
@@ -2044,6 +2088,16 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                     row.kind === "companion"
                       ? row.companionName ?? ""
                       : orderItemDisplayName(row.item, menuItems, language);
+                  const nameZh =
+                    row.kind === "item"
+                      ? forcedChineseName(
+                          row.item,
+                          menuItems,
+                          language,
+                          serverScreen.forceChineseMenuItemIds,
+                          name,
+                        )
+                      : null;
                   const note = row.kind === "item" ? itemNote(row.item, language) : null;
 
                   return (
@@ -2070,15 +2124,31 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                           type="button"
                           data-server-interactive
                           onClick={() => handleListRowActivate(row, lingering)}
-                          className={`min-w-0 flex-1 truncate text-left text-[1.35rem] font-semibold leading-tight sm:text-[1.5rem] ${
-                            row.kind === "companion" ? "font-medium" : ""
-                          } ${lingering ? "line-through decoration-white/30" : ""}`}
+                          className={`min-w-0 flex-1 truncate text-left ${
+                            lingering ? "line-through decoration-white/30" : ""
+                          }`}
                           title={name}
                         >
-                          {row.kind === "companion" ? (
-                            <span className="mr-1.5 opacity-50">↳</span>
+                          <span
+                            className={`block truncate text-[1.35rem] font-semibold leading-tight sm:text-[1.5rem] ${
+                              row.kind === "companion" ? "font-medium" : ""
+                            }`}
+                          >
+                            {row.kind === "companion" ? (
+                              <span className="mr-1.5 opacity-50">↳</span>
+                            ) : null}
+                            {name}
+                          </span>
+                          {nameZh ? (
+                            <span
+                              className={`mt-0.5 block truncate text-sm font-medium ${
+                                selected ? "text-zinc-800/75" : "text-white/55"
+                              }`}
+                              title={nameZh}
+                            >
+                              {nameZh}
+                            </span>
                           ) : null}
-                          {name}
                         </button>
                         <span
                           className={`shrink-0 whitespace-nowrap text-sm tabular-nums sm:text-[0.95rem] ${

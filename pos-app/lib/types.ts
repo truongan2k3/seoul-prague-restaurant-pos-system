@@ -40,6 +40,11 @@ export interface ServerScreenConfig {
    * while staff is taking payment. Bar (/bar) is never affected.
    */
   showPaymentOverlayOnKds: boolean;
+  /**
+   * Menu item ids that always show Chinese on KDS/Bar (in addition to the
+   * active server-screen language).
+   */
+  forceChineseMenuItemIds: string[];
 }
 export type NavId =
   | "map"

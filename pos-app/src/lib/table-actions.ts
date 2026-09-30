@@ -276,18 +276,16 @@ function expandOrderToUnits(order: OrderItem): OrderItem[] {
     return units;
   }
 
-  return Array.from({ length: qty }, (_, index) => ({
+  // No existing ids — every unit is an insert. Never keep served/ready on these.
+  return Array.from({ length: qty }, () => ({
     ...order,
     quantity: 1,
-    id: index === 0 ? order.id : undefined,
+    id: undefined,
     unitIds: undefined,
-    createdAt: index === 0 ? order.createdAt : undefined,
-    status: index === 0 ? order.status : extraUnitStatus,
-    kitchenStatus:
-      index === 0
-        ? order.kitchenStatus
-        : kitchenStatusFromOrderStatus(extraUnitStatus),
-    readyAt: index === 0 ? order.readyAt : undefined,
+    createdAt: undefined,
+    status: extraUnitStatus,
+    kitchenStatus: kitchenStatusFromOrderStatus(extraUnitStatus),
+    readyAt: undefined,
   }));
 }
 

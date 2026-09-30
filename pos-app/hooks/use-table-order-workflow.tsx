@@ -361,7 +361,7 @@ export function useTableOrderWorkflow({
     setIsSaving(false);
     if (error) {
       setActionError(error.message);
-      return;
+      throw new Error(error.message);
     }
     if (orders.length === 0) {
       logAction("clear table", `Table ${selectedTable?.label}`);

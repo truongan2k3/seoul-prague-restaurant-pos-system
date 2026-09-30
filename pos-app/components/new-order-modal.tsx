@@ -751,21 +751,29 @@ export function NewOrderModal({
   ) => {
     if (!onSaveExistingOrders) return;
     setSubmittedLineError(null);
-    const orders = editableLinesToOrders(nextLines).map((item) => ({
+    // Kitchen-message rows are hidden from the editable list but must stay in the
+    // save payload — otherwise updateTableOrders treats them as removed.
+    const openKitchenMessages = (existingOrders ?? []).filter((item) => {
+      if (!isKitchenMessageOrder(item)) return false;
+      const kitchen = resolveKitchenStatus(item);
+      return kitchen !== "archived" && !item.isCancelled && kitchen !== "cancelled";
+    });
+    const editedOrders = editableLinesToOrders(nextLines).map((item) => ({
       ...item,
       // Silent = don't reprint; never flip hideOnKds on already-sent kitchen lines
       // (that was wiping preparing tickets from KDS when saving/editing a table).
       skipPrint: options.silent ? true : item.skipPrint,
     }));
+    const orders = [...editedOrders, ...openKitchenMessages];
     const printOrders = options.silent
       ? undefined
-      : kitchenPrintDelta(submittedBaseline, orders);
+      : kitchenPrintDelta(submittedBaseline, editedOrders);
     try {
       await onSaveExistingOrders(orders, {
         silent: options.silent,
         printOrders,
       });
-      setSubmittedBaseline(orders);
+      setSubmittedBaseline(orders.filter((item) => !isKitchenMessageOrder(item)));
       setPendingCancels([]);
       onRefreshExistingOrders?.();
     } catch (error) {

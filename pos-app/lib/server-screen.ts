@@ -4,6 +4,7 @@ import {
   isGrillMenuItem,
   isGrillSetMenuItem,
 } from "@/lib/grill-guest-count";
+import { isKitchenMessageOrder } from "@/lib/kitchen-message-order";
 import { resolveKitchenStatus } from "@/lib/auto-serve";
 import { resolveMenuItemForOrder } from "@/lib/menu-display";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
@@ -592,6 +593,8 @@ export type ServerScreenOrderCardLine = {
   isGrill?: boolean;
   /** Nested under grill (e.g. BBQ Sauces) — indented like companions. */
   isSubitem?: boolean;
+  /** Staff table message — acknowledge-only card line. */
+  isMessage?: boolean;
 };
 
 export type ServerScreenOrderCard = {
@@ -609,6 +612,8 @@ export type ServerScreenOrderCard = {
   lingering?: boolean;
   /** Table session includes grill/BBQ — cards sort to the top of the board. */
   hasGrill?: boolean;
+  /** Includes a staff table message — sorted above grill cards. */
+  hasMessage?: boolean;
 };
 
 type BuildOrderCardsInput = {
@@ -835,17 +840,32 @@ export function buildServerScreenOrderCards(
       const key = `item:${waveId}:${agg}`;
       let line = lineMap.get(key);
       if (!line) {
-        const primary = resolveName(item);
+        const isMessage = isKitchenMessageOrder(item);
+        const primary = isMessage
+          ? language === "zh"
+            ? item.notesTranslated?.trim() || item.name
+            : item.notes?.trim() || item.name
+          : resolveName(item);
+        const zhForMessage =
+          isMessage && language !== "zh"
+            ? item.notesTranslated?.trim() || item.name
+            : null;
         line = {
           key,
           kind: "item",
           name: primary,
-          nameZh: resolveForcedZh(item, primary),
-          note: resolveNote(item),
+          nameZh:
+            isMessage
+              ? zhForMessage && zhForMessage !== primary
+                ? zhForMessage
+                : null
+              : resolveForcedZh(item, primary),
+          note: isMessage ? null : resolveNote(item),
           remainingIds: [],
           unitIds: [],
           doneCount: 0,
           isGrill: orderIsGrillDish(item, menuItems),
+          isMessage,
         };
         lineMap.set(key, line);
         lineOrder.push(key);
@@ -911,8 +931,11 @@ export function buildServerScreenOrderCards(
 
     const itemLines = lineOrder.map((key) => lineMap.get(key)!).filter(Boolean);
     const sauceLines = sauceLineOrder.map((key) => sauceLineMap.get(key)!).filter(Boolean);
-    // Grill dishes first within the card; sauces + companions stay under their grill parent.
+    // Messages first, then grill dishes; sauces + companions stay under grill parent.
     itemLines.sort((a, b) => {
+      const aMsg = a.isMessage ? 0 : 1;
+      const bMsg = b.isMessage ? 0 : 1;
+      if (aMsg !== bMsg) return aMsg - bMsg;
       const aGrill = a.isGrill ? 0 : 1;
       const bGrill = b.isGrill ? 0 : 1;
       if (aGrill !== bGrill) return aGrill - bGrill;
@@ -954,6 +977,7 @@ export function buildServerScreenOrderCards(
       Boolean(companionParentId) ||
       tableSessionHasGrill(tableSession, menuItems) ||
       lines.some((line) => line.isGrill);
+    const hasMessage = lines.some((line) => line.isMessage);
 
     cards.push({
       id: waveId,
@@ -966,11 +990,15 @@ export function buildServerScreenOrderCards(
       hasPending,
       lingering,
       hasGrill,
+      hasMessage,
     });
   }
 
-  // Grill tables first, then by order creation time.
+  // Messages first, then grill tables, then by order creation time.
   return cards.sort((a, b) => {
+    const aMsg = a.hasMessage ? 0 : 1;
+    const bMsg = b.hasMessage ? 0 : 1;
+    if (aMsg !== bMsg) return aMsg - bMsg;
     const aGrill = a.hasGrill ? 0 : 1;
     const bGrill = b.hasGrill ? 0 : 1;
     if (aGrill !== bGrill) return aGrill - bGrill;

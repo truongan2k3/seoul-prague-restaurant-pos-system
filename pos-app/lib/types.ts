@@ -391,6 +391,8 @@ export interface SelectedMenuOption {
 export interface OrderLineModifiers {
   selectedOptions?: SelectedMenuOption[];
   specialRequestIds?: string[];
+  /** Staff table → kitchen message (KDS card until ack; not billed). */
+  kitchenMessage?: boolean;
 }
 
 /** Priced add-on chosen on an order line (stored in order_items.selected_addons). */

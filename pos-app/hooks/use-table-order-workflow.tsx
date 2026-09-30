@@ -17,6 +17,7 @@ import { reportPrintFailed } from "@/lib/print-failed-alert";
 import { expectPrintStationAck } from "@/lib/print-station-ack";
 import { ordersFromLines } from "@/lib/checkout-calculations";
 import { finalizeBillOnlyOrder, isBillOnlyOrderLine } from "@/lib/menu-item-dispatch";
+import { isKitchenMessageOrder } from "@/lib/kitchen-message-order";
 import { filterItemsForBoard } from "@/lib/order-board";
 import { sendCfdEvent } from "@/lib/cfd-display";
 import type { MenuCategoryRecord, MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
@@ -415,8 +416,11 @@ export function useTableOrderWorkflow({
     const table = tables.find((t) => t.id === tableId);
     if (!table || table.paymentStatus === "paid") return;
 
+    const billOrders = orders.filter((order) => !isKitchenMessageOrder(order));
+    if (billOrders.length === 0) return;
+
     setActionError(null);
-    setModal({ type: "checkout", tableId, orders });
+    setModal({ type: "checkout", tableId, orders: billOrders });
 
     void updateTableOrders(tableId, orders, {
       staffId: staff?.id,

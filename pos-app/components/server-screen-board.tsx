@@ -28,7 +28,8 @@ import { useStationScreen } from "@/contexts/station-screen-context";
 import { useSessionHealth } from "@/hooks/use-session-health";
 import { AUTO_SERVE_POLL_MS, resolveKitchenStatus } from "@/lib/auto-serve";
 import { POS_EGRESS } from "@/lib/egress-config";
-import { grillGuestPrepDisplayName, isGrillGuestPrepOrder } from "@/lib/grill-guest-count";
+import { isGrillGuestPrepOrder, grillGuestPrepDisplayName } from "@/lib/grill-guest-count";
+import { isKitchenMessageOrder } from "@/lib/kitchen-message-order";
 import { usesKitchenScreen } from "@/lib/kitchen-fulfillment-mode";
 import { orderItemDisplayName, resolveMenuItemForOrder } from "@/lib/menu-display";
 import {
@@ -2147,13 +2148,28 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                   const age = preparationAgeMinutes(row.item.createdAt, nowMs);
                   const tone = preparationHighlightTone(age);
                   const leaving = animatingOut.has(row.key);
+                  const isMessage =
+                    row.kind === "item" && isKitchenMessageOrder(row.item);
                   const name =
                     row.kind === "companion"
                       ? row.companionName ?? ""
-                      : orderItemDisplayName(row.item, menuItems, language);
+                      : isMessage
+                        ? language === "zh"
+                          ? row.item.notesTranslated?.trim() ||
+                            orderItemDisplayName(row.item, menuItems, language)
+                          : row.item.notes?.trim() ||
+                            orderItemDisplayName(row.item, menuItems, language)
+                        : orderItemDisplayName(row.item, menuItems, language);
                   const nameZh =
                     row.kind === "item"
-                      ? isGrillGuestPrepOrder(row.item)
+                      ? isMessage
+                        ? (() => {
+                            if (language === "zh") return null;
+                            const zh =
+                              row.item.notesTranslated?.trim() || row.item.name;
+                            return zh && zh !== name ? zh : null;
+                          })()
+                        : isGrillGuestPrepOrder(row.item)
                         ? (() => {
                             if (!(serverScreen.showChineseForGrill ?? true) || language === "zh") {
                               return null;
@@ -2181,7 +2197,9 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                           return zh;
                         })();
                   const note =
-                    row.kind === "item" && !isGrillGuestPrepOrder(row.item)
+                    row.kind === "item" &&
+                    !isGrillGuestPrepOrder(row.item) &&
+                    !isMessage
                       ? itemNote(row.item, language)
                       : null;
                   const nested = row.kind === "companion" || Boolean(row.isSubitem);
@@ -2194,7 +2212,9 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                           ? "bg-amber-300/85"
                           : lingering
                             ? "bg-emerald-950/40"
-                            : undefined
+                            : isMessage
+                              ? "bg-sky-950/45"
+                              : undefined
                       }
                     >
                       <div
@@ -2210,24 +2230,25 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                           type="button"
                           data-server-interactive
                           onClick={() => handleListRowActivate(row, lingering)}
-                          className={`min-w-0 flex-1 truncate text-left ${
+                          className={`min-w-0 flex-1 text-left ${
                             lingering ? "line-through decoration-white/30" : ""
                           }`}
                           title={name}
                         >
                           <span
-                            className={`block truncate text-[1.35rem] font-semibold leading-tight sm:text-[1.5rem] ${
-                              nested ? "font-medium" : ""
+                            className={`block text-[1.35rem] font-semibold leading-tight sm:text-[1.5rem] ${
+                              nested ? "font-medium truncate" : isMessage ? "whitespace-pre-wrap break-words" : "truncate"
                             }`}
                           >
                             {nested ? <span className="mr-1.5 opacity-50">↳</span> : null}
+                            {isMessage ? <span className="mr-1.5 opacity-80">✉</span> : null}
                             {name}
                           </span>
                           {nameZh ? (
                             <span
-                              className={`mt-0.5 block truncate text-sm font-medium ${
-                                selected ? "text-zinc-800/75" : "text-white/55"
-                              }`}
+                              className={`mt-0.5 block text-sm font-medium ${
+                                isMessage ? "whitespace-pre-wrap break-words" : "truncate"
+                              } ${selected ? "text-zinc-800/75" : "text-white/55"}`}
                               title={nameZh}
                             >
                               {nameZh}

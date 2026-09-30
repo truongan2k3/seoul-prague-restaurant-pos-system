@@ -1508,7 +1508,14 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
           next.delete(card.id);
           return next;
         });
-        setSelectedKeys(new Set());
+        setSelectedKeys((prev) => {
+          const next = new Set(prev);
+          for (const line of card.lines) {
+            for (const id of line.unitIds) next.delete(id);
+            if (line.companionKey) next.delete(line.companionKey);
+          }
+          return next;
+        });
       } finally {
         setBusy(false);
         void reloadStationItems();
@@ -1536,7 +1543,14 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         );
         if (hasDone || card.lingering) {
           clearAutoDoneTimer();
-          setSelectedKeys(new Set());
+          setSelectedKeys((prev) => {
+            const next = new Set(prev);
+            for (const line of card.lines) {
+              for (const id of line.unitIds) next.delete(id);
+              if (line.companionKey) next.delete(line.companionKey);
+            }
+            return next;
+          });
           void handleUndoDoneCard(card);
         }
         return;
@@ -1550,8 +1564,18 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
 
       const keys = remainingKeysForCard(card);
       if (keys.length === 0) return;
-      setSelectedKeys(new Set(keys));
-      scheduleAutoDone(SERVER_SCREEN_TABLE_AUTO_DONE_MS);
+      setSelectedKeys((prev) => {
+        const next = new Set(prev);
+        const allAlreadySelected = keys.every((key) => next.has(key));
+        if (allAlreadySelected) {
+          for (const key of keys) next.delete(key);
+        } else {
+          for (const key of keys) next.add(key);
+        }
+        if (next.size === 0) clearAutoDoneTimer();
+        else scheduleAutoDone(SERVER_SCREEN_TABLE_AUTO_DONE_MS);
+        return next;
+      });
     },
     [busy, clearAutoDoneTimer, handleUndoDoneCard, remainingKeysForCard, scheduleAutoDone],
   );
@@ -1569,7 +1593,23 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       if (isDouble) {
         tableTagTapRef.current = null;
         clearAutoDoneTimer();
-        setSelectedKeys(new Set());
+        setSelectedKeys((prev) => {
+          const next = new Set(prev);
+          for (const row of preparingRowsRef.current) {
+            if (row.item.tableId === tableId) next.delete(row.key);
+          }
+          for (const row of lingeringListRows) {
+            if (row.item.tableId === tableId) next.delete(row.key);
+          }
+          for (const card of orderCardsRef.current) {
+            if (card.tableId !== tableId) continue;
+            for (const line of card.lines) {
+              for (const id of line.unitIds) next.delete(id);
+              if (line.companionKey) next.delete(line.companionKey);
+            }
+          }
+          return next;
+        });
 
         const cardsForTable = orderCardsRef.current.filter((card) => card.tableId === tableId);
         const undoCards = cardsForTable.filter(
@@ -1645,8 +1685,18 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         .filter((row) => row.item.tableId === tableId)
         .map((row) => row.key);
       if (keys.length === 0) return;
-      setSelectedKeys(new Set(keys));
-      scheduleAutoDone(SERVER_SCREEN_TABLE_AUTO_DONE_MS);
+      setSelectedKeys((prev) => {
+        const next = new Set(prev);
+        const allAlreadySelected = keys.every((key) => next.has(key));
+        if (allAlreadySelected) {
+          for (const key of keys) next.delete(key);
+        } else {
+          for (const key of keys) next.add(key);
+        }
+        if (next.size === 0) clearAutoDoneTimer();
+        else scheduleAutoDone(SERVER_SCREEN_TABLE_AUTO_DONE_MS);
+        return next;
+      });
     },
     [
       actor,

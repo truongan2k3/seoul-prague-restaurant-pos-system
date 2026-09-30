@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { Check, Minus, Plus } from "lucide-react";
 import {
   formatPreparationMinutes,
@@ -10,7 +11,10 @@ import {
   type ServerScreenOrderCardLine,
 } from "@/lib/server-screen";
 
-function cardHeaderClass(tone: PrepHighlightTone): string {
+const DONE_DOUBLE_TAP_MS = 450;
+
+function cardHeaderClass(tone: PrepHighlightTone, lingering: boolean): string {
+  if (lingering) return "bg-emerald-900/80 text-white";
   if (tone === "critical") return "bg-red-800/90 text-white";
   if (tone === "warn") return "bg-orange-700/85 text-white";
   return "bg-[#1c1c1f] text-[#F5EDE4]";
@@ -31,24 +35,41 @@ function OrderCardLineRow({
   selectedKeys,
   onToggle,
   onSetCount,
+  onUndoDone,
 }: {
   line: ServerScreenOrderCardLine;
   selectedKeys: Set<string>;
   onToggle: (line: ServerScreenOrderCardLine) => void;
   onSetCount: (line: ServerScreenOrderCardLine, count: number) => void;
+  onUndoDone: (line: ServerScreenOrderCardLine) => void;
 }) {
   const remaining = line.remainingIds.length;
-  const done = remaining === 0 && line.doneCount > 0;
+  const done = remaining === 0 && (line.doneCount > 0 || line.unitIds.length > 0);
   const selectedCount = selectedCountForLine(line, selectedKeys);
   const selected = selectedCount > 0;
   const canPartial = line.kind === "item" && remaining > 1 && selected;
+  const lastTapRef = useRef(0);
 
   if (done) {
     return (
-      <div className="px-2.5 py-1.5 opacity-55">
+      <button
+        type="button"
+        data-server-interactive
+        onClick={() => {
+          const now = Date.now();
+          if (now - lastTapRef.current <= DONE_DOUBLE_TAP_MS) {
+            lastTapRef.current = 0;
+            onUndoDone(line);
+            return;
+          }
+          lastTapRef.current = now;
+        }}
+        className="w-full px-2.5 py-1.5 text-left opacity-55 transition hover:opacity-80"
+        title="Double-tap to undo"
+      >
         <div className="flex min-w-0 items-baseline gap-2">
           <span
-            className={`min-w-0 flex-1 truncate text-[0.95rem] font-medium leading-tight text-white/70 ${
+            className={`min-w-0 flex-1 truncate text-[0.95rem] font-medium leading-tight text-white/70 line-through decoration-white/35 ${
               line.kind === "companion" ? "pl-2" : ""
             }`}
             title={line.name}
@@ -68,7 +89,7 @@ function OrderCardLineRow({
             {line.note}
           </p>
         ) : null}
-      </div>
+      </button>
     );
   }
 
@@ -159,6 +180,8 @@ function OrderCard({
   leaving,
   onToggleLine,
   onSetLineCount,
+  onMarkCardDone,
+  onUndoDoneLine,
 }: {
   card: ServerScreenOrderCard;
   nowMs: number;
@@ -167,35 +190,45 @@ function OrderCard({
   leaving: boolean;
   onToggleLine: (line: ServerScreenOrderCardLine) => void;
   onSetLineCount: (line: ServerScreenOrderCardLine, count: number) => void;
+  onMarkCardDone: (card: ServerScreenOrderCard) => void;
+  onUndoDoneLine: (line: ServerScreenOrderCardLine) => void;
 }) {
   const age = preparationAgeMinutes(card.ageFrom, nowMs);
   const tone = preparationHighlightTone(age);
   const prepLabel = formatPreparationMinutes(card.ageFrom, nowMs, minLabel);
+  const lingering = Boolean(card.lingering);
 
   return (
     <article
       data-server-interactive
       className={`flex min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#121214] shadow-[0_6px_24px_rgba(0,0,0,0.35)] transition-all duration-200 ${
         leaving ? "translate-y-1 scale-[0.98] opacity-0" : ""
-      }`}
+      } ${lingering ? "ring-1 ring-emerald-500/40" : ""}`}
     >
       <header
-        className={`flex items-start justify-between gap-2 px-3 py-2.5 ${cardHeaderClass(tone)}`}
+        className={`flex items-start justify-between gap-2 px-3 py-2.5 ${cardHeaderClass(tone, lingering)}`}
       >
-        <div className="min-w-0">
+        <button
+          type="button"
+          data-server-interactive
+          disabled={lingering || !card.hasPending}
+          onClick={() => onMarkCardDone(card)}
+          className="min-w-0 flex-1 rounded-lg text-left transition hover:brightness-110 disabled:cursor-default disabled:hover:brightness-100"
+          title={lingering ? undefined : "Mark all done"}
+        >
           <p className="font-serif text-2xl font-semibold leading-none tracking-tight sm:text-[1.65rem]">
             {card.tableLabel}
           </p>
           <p
             className={`mt-1 text-xs tabular-nums ${
-              tone === "normal" ? "text-white/45" : "text-white/80"
+              lingering || tone !== "normal" ? "text-white/80" : "text-white/45"
             }`}
           >
             #{card.ticketId}
           </p>
-        </div>
+        </button>
         <span className="shrink-0 rounded-md bg-black/20 px-2 py-1 text-xs font-semibold tabular-nums tracking-wide">
-          {prepLabel}
+          {lingering ? "✓" : prepLabel}
         </span>
       </header>
 
@@ -207,6 +240,7 @@ function OrderCard({
             selectedKeys={selectedKeys}
             onToggle={onToggleLine}
             onSetCount={onSetLineCount}
+            onUndoDone={onUndoDoneLine}
           />
         ))}
       </div>
@@ -223,6 +257,8 @@ export function ServerScreenOrderCards({
   emptyLabel,
   onToggleLine,
   onSetLineCount,
+  onMarkCardDone,
+  onUndoDoneLine,
 }: {
   cards: ServerScreenOrderCard[];
   nowMs: number;
@@ -232,6 +268,8 @@ export function ServerScreenOrderCards({
   emptyLabel: string;
   onToggleLine: (line: ServerScreenOrderCardLine) => void;
   onSetLineCount: (line: ServerScreenOrderCardLine, count: number) => void;
+  onMarkCardDone: (card: ServerScreenOrderCard) => void;
+  onUndoDoneLine: (line: ServerScreenOrderCardLine) => void;
 }) {
   if (cards.length === 0) {
     return <p className="px-4 py-10 text-center text-base text-white/35">{emptyLabel}</p>;
@@ -240,11 +278,13 @@ export function ServerScreenOrderCards({
   return (
     <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
       {cards.map((card) => {
-        const leaving = card.lines.some(
-          (line) =>
-            line.remainingIds.some((id) => animatingOut.has(id)) ||
-            (line.companionKey ? animatingOut.has(line.companionKey) : false),
-        );
+        const leaving =
+          !card.lingering &&
+          card.lines.some(
+            (line) =>
+              line.remainingIds.some((id) => animatingOut.has(id)) ||
+              (line.companionKey ? animatingOut.has(line.companionKey) : false),
+          );
         return (
           <OrderCard
             key={card.id}
@@ -255,6 +295,8 @@ export function ServerScreenOrderCards({
             leaving={leaving}
             onToggleLine={onToggleLine}
             onSetLineCount={onSetLineCount}
+            onMarkCardDone={onMarkCardDone}
+            onUndoDoneLine={onUndoDoneLine}
           />
         );
       })}

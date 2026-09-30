@@ -46,6 +46,7 @@ export const DEFAULT_SERVER_SCREEN_CONFIG: ServerScreenConfig = {
   languages: ["en", "cs"],
   autoRotateLanguage: true,
   showPaymentOverlayOnKds: false,
+  showChineseForGrill: true,
   forceChineseMenuItemIds: [],
 };
 
@@ -124,6 +125,12 @@ export function parseServerScreenConfig(raw: unknown): ServerScreenConfig {
         : typeof row.show_payment_overlay_on_kds === "boolean"
           ? row.show_payment_overlay_on_kds
           : DEFAULT_SERVER_SCREEN_CONFIG.showPaymentOverlayOnKds,
+    showChineseForGrill:
+      typeof row.showChineseForGrill === "boolean"
+        ? row.showChineseForGrill
+        : typeof row.show_chinese_for_grill === "boolean"
+          ? row.show_chinese_for_grill
+          : DEFAULT_SERVER_SCREEN_CONFIG.showChineseForGrill,
     forceChineseMenuItemIds: parseForceChineseMenuItemIds(
       row.forceChineseMenuItemIds ?? row.force_chinese_menu_item_ids,
     ),
@@ -137,6 +144,7 @@ export function serverScreenConfigToDb(config: ServerScreenConfig) {
     languages,
     autoRotateLanguage: Boolean(config.autoRotateLanguage),
     showPaymentOverlayOnKds: Boolean(config.showPaymentOverlayOnKds),
+    showChineseForGrill: Boolean(config.showChineseForGrill),
     forceChineseMenuItemIds: parseForceChineseMenuItemIds(config.forceChineseMenuItemIds),
   };
 }
@@ -617,6 +625,8 @@ type BuildOrderCardsInput = {
   /** Wave/card ids still showing after the last pending line was marked done. */
   lingerUntilByCardId?: Map<string, number> | Record<string, number>;
   nowMs?: number;
+  /** When true, grill/BBQ dishes and companions also show Chinese. */
+  showChineseForGrill?: boolean;
   /** Menu item ids that should also show Chinese under the primary label. */
   forceChineseMenuItemIds?: Iterable<string>;
 };
@@ -635,6 +645,7 @@ function buildCompanionLinesForParent(
   parentId: string,
   language: LanguageCode,
   companionStore: GrillCompanionStore,
+  showChineseForGrill = true,
 ): { lines: ServerScreenOrderCardLine[]; pendingCount: number } {
   const lines: ServerScreenOrderCardLine[] = [];
   let pendingCount = 0;
@@ -644,11 +655,13 @@ function buildCompanionLinesForParent(
     if (!doneAt) pendingCount += 1;
     const primary = companion.names[language] || companion.names.en;
     const zh = companion.names.zh?.trim() || "";
+    const showZh =
+      showChineseForGrill && language !== "zh" && Boolean(zh) && zh !== primary;
     lines.push({
       key,
       kind: "companion",
       name: primary,
-      nameZh: language === "zh" || !zh || zh === primary ? null : zh,
+      nameZh: showZh ? zh : null,
       note: null,
       remainingIds: doneAt ? [] : [key],
       unitIds: [key],
@@ -679,6 +692,7 @@ export function buildServerScreenOrderCards(
     resolveNote,
     lingerUntilByCardId,
     nowMs = Date.now(),
+    showChineseForGrill = true,
     forceChineseMenuItemIds,
   } = input;
 
@@ -690,10 +704,12 @@ export function buildServerScreenOrderCards(
 
   const resolveForcedZh = (item: OrderItem, primary: string): string | null => {
     if (language === "zh") return null;
-    if (!item.menuItemId || !forceZhIds.has(item.menuItemId)) return null;
     const menu = resolveMenuItemForOrder(item, menuItems);
     const zh = menu?.nameZh?.trim() || "";
     if (!zh || zh === primary) return null;
+    const forced = Boolean(item.menuItemId && forceZhIds.has(item.menuItemId));
+    const grillZh = showChineseForGrill && orderIsGrillDish(item, menuItems);
+    if (!forced && !grillZh) return null;
     return zh;
   };
 
@@ -767,7 +783,12 @@ export function buildServerScreenOrderCards(
 
     const attachCompanionsForParent = (parentId: string) => {
       if (companionsAttached.has(parentId)) return;
-      const built = buildCompanionLinesForParent(parentId, language, companionStore);
+      const built = buildCompanionLinesForParent(
+        parentId,
+        language,
+        companionStore,
+        showChineseForGrill,
+      );
       companionLines = built.lines;
       pendingCompanions = built.pendingCount;
       companionsAttached.add(parentId);

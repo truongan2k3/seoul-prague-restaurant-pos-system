@@ -226,6 +226,23 @@ export function ServerScreenSettingsEditor({
         </span>
       </label>
 
+      <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+        <input
+          type="checkbox"
+          checked={value.showChineseForGrill ?? true}
+          onChange={(e) => onChange({ ...value, showChineseForGrill: e.target.checked })}
+          className="mt-1 h-4 w-4 rounded border-gray-300"
+        />
+        <span>
+          <span className="block text-sm font-medium text-gray-800 dark:text-gray-100">
+            {translate("serverScreenShowChineseForGrill")}
+          </span>
+          <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+            {translate("serverScreenShowChineseForGrillHint")}
+          </span>
+        </span>
+      </label>
+
       <fieldset className="space-y-3">
         <legend className="text-sm font-medium text-gray-700 dark:text-gray-300">
           {translate("serverScreenForceChineseItems")}

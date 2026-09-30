@@ -41,6 +41,11 @@ export interface ServerScreenConfig {
    */
   showPaymentOverlayOnKds: boolean;
   /**
+   * When true (default), grill/BBQ dishes and first-order companions
+   * also show Chinese under the active KDS/Bar language.
+   */
+  showChineseForGrill: boolean;
+  /**
    * Menu item ids that always show Chinese on KDS/Bar (in addition to the
    * active server-screen language).
    */

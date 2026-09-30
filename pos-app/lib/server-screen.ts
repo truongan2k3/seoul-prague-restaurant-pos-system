@@ -1,4 +1,5 @@
 import {
+  grillGuestPrepDisplayName,
   isGrillGuestPrepOrder,
   isGrillMenuItem,
   isGrillSetMenuItem,
@@ -46,6 +47,7 @@ export const DEFAULT_SERVER_SCREEN_CONFIG: ServerScreenConfig = {
   languages: ["en", "cs"],
   autoRotateLanguage: true,
   showPaymentOverlayOnKds: false,
+  showChineseForGrill: true,
   forceChineseMenuItemIds: [],
 };
 
@@ -124,6 +126,12 @@ export function parseServerScreenConfig(raw: unknown): ServerScreenConfig {
         : typeof row.show_payment_overlay_on_kds === "boolean"
           ? row.show_payment_overlay_on_kds
           : DEFAULT_SERVER_SCREEN_CONFIG.showPaymentOverlayOnKds,
+    showChineseForGrill:
+      typeof row.showChineseForGrill === "boolean"
+        ? row.showChineseForGrill
+        : typeof row.show_chinese_for_grill === "boolean"
+          ? row.show_chinese_for_grill
+          : DEFAULT_SERVER_SCREEN_CONFIG.showChineseForGrill,
     forceChineseMenuItemIds: parseForceChineseMenuItemIds(
       row.forceChineseMenuItemIds ?? row.force_chinese_menu_item_ids,
     ),
@@ -137,6 +145,7 @@ export function serverScreenConfigToDb(config: ServerScreenConfig) {
     languages,
     autoRotateLanguage: Boolean(config.autoRotateLanguage),
     showPaymentOverlayOnKds: Boolean(config.showPaymentOverlayOnKds),
+    showChineseForGrill: Boolean(config.showChineseForGrill),
     forceChineseMenuItemIds: parseForceChineseMenuItemIds(config.forceChineseMenuItemIds),
   };
 }
@@ -581,6 +590,8 @@ export type ServerScreenOrderCardLine = {
   parentItemId?: string;
   /** Grill/BBQ line — sorted above non-grill lines on the card. */
   isGrill?: boolean;
+  /** Nested under grill (e.g. BBQ Sauces) — indented like companions. */
+  isSubitem?: boolean;
 };
 
 export type ServerScreenOrderCard = {
@@ -617,6 +628,8 @@ type BuildOrderCardsInput = {
   /** Wave/card ids still showing after the last pending line was marked done. */
   lingerUntilByCardId?: Map<string, number> | Record<string, number>;
   nowMs?: number;
+  /** When true, grill/BBQ dishes and companions also show Chinese. */
+  showChineseForGrill?: boolean;
   /** Menu item ids that should also show Chinese under the primary label. */
   forceChineseMenuItemIds?: Iterable<string>;
 };
@@ -635,6 +648,7 @@ function buildCompanionLinesForParent(
   parentId: string,
   language: LanguageCode,
   companionStore: GrillCompanionStore,
+  showChineseForGrill = true,
 ): { lines: ServerScreenOrderCardLine[]; pendingCount: number } {
   const lines: ServerScreenOrderCardLine[] = [];
   let pendingCount = 0;
@@ -644,11 +658,13 @@ function buildCompanionLinesForParent(
     if (!doneAt) pendingCount += 1;
     const primary = companion.names[language] || companion.names.en;
     const zh = companion.names.zh?.trim() || "";
+    const showZh =
+      showChineseForGrill && language !== "zh" && Boolean(zh) && zh !== primary;
     lines.push({
       key,
       kind: "companion",
       name: primary,
-      nameZh: language === "zh" || !zh || zh === primary ? null : zh,
+      nameZh: showZh ? zh : null,
       note: null,
       remainingIds: doneAt ? [] : [key],
       unitIds: [key],
@@ -679,6 +695,7 @@ export function buildServerScreenOrderCards(
     resolveNote,
     lingerUntilByCardId,
     nowMs = Date.now(),
+    showChineseForGrill = true,
     forceChineseMenuItemIds,
   } = input;
 
@@ -690,10 +707,12 @@ export function buildServerScreenOrderCards(
 
   const resolveForcedZh = (item: OrderItem, primary: string): string | null => {
     if (language === "zh") return null;
-    if (!item.menuItemId || !forceZhIds.has(item.menuItemId)) return null;
     const menu = resolveMenuItemForOrder(item, menuItems);
     const zh = menu?.nameZh?.trim() || "";
     if (!zh || zh === primary) return null;
+    const forced = Boolean(item.menuItemId && forceZhIds.has(item.menuItemId));
+    const grillZh = showChineseForGrill && orderIsGrillDish(item, menuItems);
+    if (!forced && !grillZh) return null;
     return zh;
   };
 
@@ -767,7 +786,12 @@ export function buildServerScreenOrderCards(
 
     const attachCompanionsForParent = (parentId: string) => {
       if (companionsAttached.has(parentId)) return;
-      const built = buildCompanionLinesForParent(parentId, language, companionStore);
+      const built = buildCompanionLinesForParent(
+        parentId,
+        language,
+        companionStore,
+        showChineseForGrill,
+      );
       companionLines = built.lines;
       pendingCompanions = built.pendingCount;
       companionsAttached.add(parentId);
@@ -803,6 +827,9 @@ export function buildServerScreenOrderCards(
 
     const lineMap = new Map<string, ServerScreenOrderCardLine>();
     const lineOrder: string[] = [];
+    const sauceLineMap = new Map<string, ServerScreenOrderCardLine>();
+    const sauceLineOrder: string[] = [];
+
     const ensureLine = (item: (typeof items)[number], pending: boolean) => {
       const agg = lineAggregateKey(item);
       const key = `item:${waveId}:${agg}`;
@@ -828,6 +855,35 @@ export function buildServerScreenOrderCards(
       else if (!pending) line.doneCount += 1;
     };
 
+    const ensureSauceSubLine = (item: (typeof items)[number], pending: boolean) => {
+      const agg = lineAggregateKey(item);
+      const key = `sauce:${waveId}:${agg}`;
+      let line = sauceLineMap.get(key);
+      if (!line) {
+        const primary = resolveName(item);
+        const zhName = grillGuestPrepDisplayName(item, "zh");
+        const showZh =
+          showChineseForGrill && language !== "zh" && Boolean(zhName) && zhName !== primary;
+        line = {
+          key,
+          kind: "item",
+          name: primary,
+          nameZh: showZh ? zhName : null,
+          note: null,
+          remainingIds: [],
+          unitIds: [],
+          doneCount: 0,
+          isSubitem: true,
+          parentItemId: companionParentId ?? undefined,
+        };
+        sauceLineMap.set(key, line);
+        sauceLineOrder.push(key);
+      }
+      if (item.id) line.unitIds.push(item.id);
+      if (pending && item.id) line.remainingIds.push(item.id);
+      else if (!pending) line.doneCount += 1;
+    };
+
     const waveSorted = wave.items.slice().sort((a, b) => {
       const aGrill = orderIsGrillDish(a, menuItems) ? 0 : 1;
       const bGrill = orderIsGrillDish(b, menuItems) ? 0 : 1;
@@ -838,6 +894,14 @@ export function buildServerScreenOrderCards(
       return (a.id ?? "").localeCompare(b.id ?? "");
     });
     for (const item of waveSorted) {
+      if (isGrillGuestPrepOrder(item)) {
+        if (isPreparingColumnVisible(item)) ensureSauceSubLine(item, true);
+        else {
+          const status = resolveKitchenStatus(item);
+          if (status === "ready" || status === "served") ensureSauceSubLine(item, false);
+        }
+        continue;
+      }
       if (isPreparingColumnVisible(item)) ensureLine(item, true);
       else {
         const status = resolveKitchenStatus(item);
@@ -846,7 +910,8 @@ export function buildServerScreenOrderCards(
     }
 
     const itemLines = lineOrder.map((key) => lineMap.get(key)!).filter(Boolean);
-    // Grill dishes first within the card; companions stay under their grill parent.
+    const sauceLines = sauceLineOrder.map((key) => sauceLineMap.get(key)!).filter(Boolean);
+    // Grill dishes first within the card; sauces + companions stay under their grill parent.
     itemLines.sort((a, b) => {
       const aGrill = a.isGrill ? 0 : 1;
       const bGrill = b.isGrill ? 0 : 1;
@@ -854,21 +919,25 @@ export function buildServerScreenOrderCards(
       return 0;
     });
     const lines: ServerScreenOrderCardLine[] = [];
-    let companionsPlaced = false;
+    let nestedPlaced = false;
+    const placeNestedUnderGrill = () => {
+      if (nestedPlaced) return;
+      nestedPlaced = true;
+      lines.push(...sauceLines);
+      lines.push(...companionLines);
+    };
     for (const line of itemLines) {
       lines.push(line);
       if (
         companionParentId &&
-        !companionsPlaced &&
         line.unitIds.includes(companionParentId)
       ) {
-        lines.push(...companionLines);
-        companionsPlaced = true;
+        placeNestedUnderGrill();
       }
     }
-    if (!companionsPlaced && companionLines.length > 0) {
-      // Grill set missing from wave (done/cancelled) — keep companions on this card.
-      lines.unshift(...companionLines);
+    if (!nestedPlaced && (sauceLines.length > 0 || companionLines.length > 0)) {
+      // Grill set missing from wave (done/cancelled) — keep sauces/companions on this card.
+      lines.unshift(...sauceLines, ...companionLines);
     }
 
     const ageFrom =

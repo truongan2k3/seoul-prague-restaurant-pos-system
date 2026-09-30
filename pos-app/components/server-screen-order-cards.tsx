@@ -278,11 +278,13 @@ export function ServerScreenOrderCards({
   return (
     <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
       {cards.map((card) => {
-        const leaving = card.lines.some(
-          (line) =>
-            line.remainingIds.some((id) => animatingOut.has(id)) ||
-            (line.companionKey ? animatingOut.has(line.companionKey) : false),
-        );
+        const leaving =
+          !card.lingering &&
+          card.lines.some(
+            (line) =>
+              line.remainingIds.some((id) => animatingOut.has(id)) ||
+              (line.companionKey ? animatingOut.has(line.companionKey) : false),
+          );
         return (
           <OrderCard
             key={card.id}

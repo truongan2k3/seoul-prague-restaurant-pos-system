@@ -10,13 +10,14 @@ export const DEFAULT_NOTE_PRESETS: NotePresetInput[] = [
   { labelEn: "Extra Spicy", labelCz: "Extra pálivé / Velmi hodně pálivé", labelZh: "超辣", displayOrder: 4 },
   { labelEn: "No Coriander", labelCz: "Bez koriandru", labelZh: "不要香菜", displayOrder: 5 },
   { labelEn: "No Spring Onions", labelCz: "Bez jarní cibulky", labelZh: "不要葱花", displayOrder: 6 },
-  { labelEn: "No Vegetable / Salad", labelCz: "Bez zeleniny / salátu", labelZh: "不要蔬菜", displayOrder: 7 },
-  { labelEn: "Sauces Separate", labelCz: "Omáčka zvlášť", labelZh: "酱汁分开装", displayOrder: 8 },
+  { labelEn: "No Onion", labelCz: "Bez cibule", labelZh: "不要洋葱", displayOrder: 7 },
+  { labelEn: "No Vegetable / Salad", labelCz: "Bez zeleniny / salátu", labelZh: "不要蔬菜", displayOrder: 8 },
+  { labelEn: "Sauces Separate", labelCz: "Omáčka zvlášť", labelZh: "酱汁分开装", displayOrder: 9 },
 ];
 
+/** Labels retired by catalog migration — sync deactivates matching active rows. */
 export const RETIRED_NOTE_PRESET_LABELS = new Set([
   "less spicy",
-  "no onion",
   "takeaway",
 ]);
 

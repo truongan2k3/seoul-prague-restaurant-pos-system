@@ -203,6 +203,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   serverScreen: {
     ...DEFAULT_SERVER_SCREEN_CONFIG,
     languages: [...DEFAULT_SERVER_SCREEN_CONFIG.languages],
+    forceChineseMenuItemIds: [...DEFAULT_SERVER_SCREEN_CONFIG.forceChineseMenuItemIds],
   },
   hiddenSidebarNav: [],
 };
@@ -1070,6 +1071,7 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     serverScreen: {
       ...settings.serverScreen,
       languages: [...settings.serverScreen.languages],
+      forceChineseMenuItemIds: [...(settings.serverScreen.forceChineseMenuItemIds ?? [])],
     },
     hiddenSidebarNav: [...settings.hiddenSidebarNav],
   };

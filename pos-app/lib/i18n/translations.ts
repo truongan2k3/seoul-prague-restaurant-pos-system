@@ -371,6 +371,12 @@ const en = {
   serverScreenPaymentOverlayKds: "Show payment on Kitchen (/kds)",
   serverScreenPaymentOverlayKdsHint:
     "When staff opens checkout, overlay the same payment bill on the Kitchen screen (like Client Display). Bar (/bar) is not affected. Returns to KDS when payment finishes or is cancelled.",
+  serverScreenForceChineseItems: "Also show Chinese for these dishes",
+  serverScreenForceChineseItemsHint:
+    "Selected dishes always show their Chinese name under the active KDS/Bar language. Grill / BBQ tables are sorted to the top of the preparing list.",
+  serverScreenForceChineseItemsSearch: "Search menu items…",
+  serverScreenForceChineseItemsEmpty: "No menu items match.",
+  serverScreenForceChineseItemsSelected: "{count} selected",
   pending: "Pending",
   table: "Table",
   tableOccupiedSince: "Seated for",
@@ -1780,6 +1786,12 @@ const cs: Record<TranslationKey, string> = {
   serverScreenPaymentOverlayKds: "Zobrazit platbu na kuchyni (/kds)",
   serverScreenPaymentOverlayKdsHint:
     "Když personál otevře platbu, na kuchyni se překryje stejný účet jako na Client Display. Bar (/bar) není ovlivněn. Po dokončení nebo zrušení se vrátí KDS.",
+  serverScreenForceChineseItems: "U těchto jídel zobrazit i čínštinu",
+  serverScreenForceChineseItemsHint:
+    "Vybraná jídla vždy ukazují čínský název pod aktivním jazykem KDS/Bar. Stoly s grilem / BBQ jsou nahoře v seznamu Preparing.",
+  serverScreenForceChineseItemsSearch: "Hledat položky menu…",
+  serverScreenForceChineseItemsEmpty: "Žádné položky neodpovídají.",
+  serverScreenForceChineseItemsSelected: "Vybráno: {count}",
   pending: "Čeká",
   table: "Stůl",
   tableOccupiedSince: "Obsazeno",
@@ -3181,6 +3193,12 @@ const zh: Record<TranslationKey, string> = {
   serverScreenPaymentOverlayKds: "在厨房屏 (/kds) 显示付款",
   serverScreenPaymentOverlayKdsHint:
     "员工打开结账时，厨房屏会像客显一样覆盖显示账单。吧台 (/bar) 不受影响。付款完成或取消后回到 KDS。",
+  serverScreenForceChineseItems: "这些菜品同时显示中文",
+  serverScreenForceChineseItemsHint:
+    "勾选的菜品在厨房/吧台屏当前语言下仍会显示中文名。有烤肉的桌会排在 Preparing 列表最上方。",
+  serverScreenForceChineseItemsSearch: "搜索菜单…",
+  serverScreenForceChineseItemsEmpty: "没有匹配的菜品。",
+  serverScreenForceChineseItemsSelected: "已选 {count} 项",
   pending: "待做",
   table: "桌号",
   tableOccupiedSince: "入座",

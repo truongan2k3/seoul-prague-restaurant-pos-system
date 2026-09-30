@@ -1,4 +1,8 @@
 import type { LanguageCode, MenuItem, OrderItem } from "@/lib/types";
+import {
+  grillGuestPrepDisplayName,
+  isGrillGuestPrepOrder,
+} from "@/lib/grill-guest-count";
 
 export function menuItemDisplayName(item: MenuItem, language: LanguageCode): string {
   if (language === "cs") return item.nameCz.trim() || item.nameEn;
@@ -39,10 +43,13 @@ export function resolveMenuItemForOrder(
 }
 
 export function orderItemDisplayName(
-  order: Pick<OrderItem, "menuItemId" | "name">,
+  order: Pick<OrderItem, "menuItemId" | "name" | "notes" | "notesTranslated">,
   menuItems: MenuItem[],
   language: LanguageCode,
 ): string {
+  if (isGrillGuestPrepOrder(order as OrderItem)) {
+    return grillGuestPrepDisplayName(order as OrderItem, language);
+  }
   const menu = resolveMenuItemForOrder(order, menuItems);
   if (menu) return menuItemDisplayName(menu, language);
   return order.name;

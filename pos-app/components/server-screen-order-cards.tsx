@@ -89,6 +89,16 @@ function OrderCardLineRow({
             <Check className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
           </span>
         </div>
+        {line.nameZh ? (
+          <p
+            className={`mt-0.5 truncate text-xs text-white/40 ${
+              line.kind === "companion" ? "pl-2" : ""
+            }`}
+            title={line.nameZh}
+          >
+            {line.nameZh}
+          </p>
+        ) : null}
         {line.note ? (
           <p className="mt-0.5 whitespace-pre-wrap break-words text-xs leading-snug text-white/40">
             {line.note}
@@ -110,16 +120,28 @@ function OrderCardLineRow({
         onClick={() => onToggle(line)}
         className="flex w-full min-w-0 items-baseline gap-2 px-2.5 py-1.5 text-left"
       >
-        <span
-          className={`min-w-0 flex-1 truncate text-[0.95rem] font-semibold leading-tight sm:text-[1.05rem] ${
-            line.kind === "companion" ? "pl-2 font-medium" : ""
-          } ${selected ? "text-zinc-950" : ""}`}
-          title={line.name}
-        >
-          {line.kind === "companion" ? (
-            <span className={`mr-1 ${selected ? "opacity-60" : "opacity-45"}`}>↳</span>
+        <span className="min-w-0 flex-1">
+          <span
+            className={`block truncate text-[0.95rem] font-semibold leading-tight sm:text-[1.05rem] ${
+              line.kind === "companion" ? "pl-2 font-medium" : ""
+            } ${selected ? "text-zinc-950" : ""}`}
+            title={line.name}
+          >
+            {line.kind === "companion" ? (
+              <span className={`mr-1 ${selected ? "opacity-60" : "opacity-45"}`}>↳</span>
+            ) : null}
+            {line.name}
+          </span>
+          {line.nameZh ? (
+            <span
+              className={`mt-0.5 block truncate text-xs font-medium sm:text-sm ${
+                line.kind === "companion" ? "pl-2" : ""
+              } ${selected ? "text-zinc-800/75" : "text-white/55"}`}
+              title={line.nameZh}
+            >
+              {line.nameZh}
+            </span>
           ) : null}
-          {line.name}
         </span>
         <span
           className={`shrink-0 text-right text-base font-bold tabular-nums sm:text-lg ${

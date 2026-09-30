@@ -1,9 +1,16 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import type { TranslationKey } from "@/lib/i18n/translations";
 import { LANGUAGE_OPTIONS } from "@/lib/i18n/languages";
+import { menuItemDisplayName } from "@/lib/menu-display";
 import { normalizeServerScreenLanguages } from "@/lib/server-screen";
-import type { LanguageCode, ServerScreenConfig, ServerScreenLanguageMode } from "@/lib/types";
+import type {
+  LanguageCode,
+  MenuItem,
+  ServerScreenConfig,
+  ServerScreenLanguageMode,
+} from "@/lib/types";
 
 const MODE_OPTIONS: { id: ServerScreenLanguageMode; labelKey: TranslationKey }[] = [
   { id: "single", labelKey: "serverScreenLangModeSingle" },
@@ -15,12 +22,39 @@ export function ServerScreenSettingsEditor({
   value,
   onChange,
   translate,
+  menuItems = [],
+  language = "en",
 }: {
   value: ServerScreenConfig;
   onChange: (next: ServerScreenConfig) => void;
   translate: (key: TranslationKey) => string;
+  menuItems?: MenuItem[];
+  language?: LanguageCode;
 }) {
   const languages = normalizeServerScreenLanguages(value.languageMode, value.languages);
+  const forceChineseIds = value.forceChineseMenuItemIds ?? [];
+  const [forceZhQuery, setForceZhQuery] = useState("");
+
+  const sortedMenuItems = useMemo(() => {
+    return menuItems
+      .slice()
+      .sort((a, b) =>
+        menuItemDisplayName(a, language).localeCompare(menuItemDisplayName(b, language), undefined, {
+          sensitivity: "base",
+        }),
+      );
+  }, [menuItems, language]);
+
+  const filteredMenuItems = useMemo(() => {
+    const q = forceZhQuery.trim().toLowerCase();
+    if (!q) return sortedMenuItems;
+    return sortedMenuItems.filter((item) => {
+      const hay = [item.nameEn, item.nameCz, item.nameZh, item.category]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [sortedMenuItems, forceZhQuery]);
 
   const setMode = (languageMode: ServerScreenLanguageMode) => {
     onChange({
@@ -53,6 +87,13 @@ export function ServerScreenSettingsEditor({
       ...value,
       languages: normalizeServerScreenLanguages(value.languageMode, next),
     });
+  };
+
+  const toggleForceChinese = (menuItemId: string) => {
+    const next = forceChineseIds.includes(menuItemId)
+      ? forceChineseIds.filter((id) => id !== menuItemId)
+      : [...forceChineseIds, menuItemId];
+    onChange({ ...value, forceChineseMenuItemIds: next });
   };
 
   return (
@@ -184,6 +225,66 @@ export function ServerScreenSettingsEditor({
           </span>
         </span>
       </label>
+
+      <fieldset className="space-y-3">
+        <legend className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          {translate("serverScreenForceChineseItems")}
+        </legend>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          {translate("serverScreenForceChineseItemsHint")}
+        </p>
+        <input
+          type="search"
+          value={forceZhQuery}
+          onChange={(event) => setForceZhQuery(event.target.value)}
+          placeholder={translate("serverScreenForceChineseItemsSearch")}
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-[var(--pos-brand)] focus:ring-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+        />
+        <div className="max-h-72 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700">
+          {filteredMenuItems.length === 0 ? (
+            <p className="px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
+              {translate("serverScreenForceChineseItemsEmpty")}
+            </p>
+          ) : (
+            <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+              {filteredMenuItems.map((item) => {
+                const checked = forceChineseIds.includes(item.id);
+                const primary = menuItemDisplayName(item, language);
+                const zh = item.nameZh.trim();
+                return (
+                  <li key={item.id}>
+                    <label className="flex cursor-pointer items-start gap-3 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/60">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleForceChinese(item.id)}
+                        className="mt-1 h-4 w-4 rounded border-gray-300"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {primary}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+                          {item.category}
+                          {zh ? ` · ${zh}` : ""}
+                        </span>
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+        {forceChineseIds.length > 0 ? (
+          <p className="text-xs tabular-nums text-gray-500 dark:text-gray-400">
+            {translate("serverScreenForceChineseItemsSelected").replace(
+              "{count}",
+              String(forceChineseIds.length),
+            )}
+          </p>
+        ) : null}
+      </fieldset>
     </div>
   );
 }

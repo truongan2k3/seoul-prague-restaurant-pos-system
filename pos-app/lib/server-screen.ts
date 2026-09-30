@@ -46,6 +46,7 @@ export const DEFAULT_SERVER_SCREEN_CONFIG: ServerScreenConfig = {
   languages: ["en", "cs"],
   autoRotateLanguage: true,
   showPaymentOverlayOnKds: false,
+  forceChineseMenuItemIds: [],
 };
 
 const LANG_SET = new Set<LanguageCode>(["en", "cs", "zh"]);
@@ -54,6 +55,18 @@ function asLanguage(value: unknown): LanguageCode | null {
   return typeof value === "string" && LANG_SET.has(value as LanguageCode)
     ? (value as LanguageCode)
     : null;
+}
+
+function parseForceChineseMenuItemIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const unique: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "string") continue;
+    const id = entry.trim();
+    if (!id || unique.includes(id)) continue;
+    unique.push(id);
+  }
+  return unique;
 }
 
 export function normalizeServerScreenLanguages(
@@ -73,7 +86,13 @@ export function normalizeServerScreenLanguages(
 }
 
 export function parseServerScreenConfig(raw: unknown): ServerScreenConfig {
-  if (!raw || typeof raw !== "object") return { ...DEFAULT_SERVER_SCREEN_CONFIG, languages: ["en"] };
+  if (!raw || typeof raw !== "object") {
+    return {
+      ...DEFAULT_SERVER_SCREEN_CONFIG,
+      languages: [...DEFAULT_SERVER_SCREEN_CONFIG.languages],
+      forceChineseMenuItemIds: [],
+    };
+  }
   const row = raw as Record<string, unknown>;
   const modeRaw = row.languageMode ?? row.language_mode;
   const languageMode: ServerScreenLanguageMode =
@@ -105,6 +124,9 @@ export function parseServerScreenConfig(raw: unknown): ServerScreenConfig {
         : typeof row.show_payment_overlay_on_kds === "boolean"
           ? row.show_payment_overlay_on_kds
           : DEFAULT_SERVER_SCREEN_CONFIG.showPaymentOverlayOnKds,
+    forceChineseMenuItemIds: parseForceChineseMenuItemIds(
+      row.forceChineseMenuItemIds ?? row.force_chinese_menu_item_ids,
+    ),
   };
 }
 
@@ -115,6 +137,7 @@ export function serverScreenConfigToDb(config: ServerScreenConfig) {
     languages,
     autoRotateLanguage: Boolean(config.autoRotateLanguage),
     showPaymentOverlayOnKds: Boolean(config.showPaymentOverlayOnKds),
+    forceChineseMenuItemIds: parseForceChineseMenuItemIds(config.forceChineseMenuItemIds),
   };
 }
 
@@ -224,11 +247,19 @@ function orderIsGrillSetDish(order: OrderItem, menuItems: MenuItem[]): boolean {
   );
 }
 
-function orderIsGrillDish(order: OrderItem, menuItems: MenuItem[]): boolean {
+export function orderIsGrillDish(order: OrderItem, menuItems: MenuItem[]): boolean {
   if (isGrillGuestPrepOrder(order)) return false;
   const menu = resolveMenuItemForOrder(order, menuItems);
   if (menu) return isGrillMenuItem(menu);
   return orderIsGrillSetDish(order, menuItems);
+}
+
+/** True when any open/visible line on this table session is grill/BBQ. */
+export function tableSessionHasGrill(
+  tableItems: OrderItem[],
+  menuItems: MenuItem[],
+): boolean {
+  return tableItems.some((item) => orderIsGrillDish(item, menuItems));
 }
 
 /**
@@ -537,6 +568,8 @@ export type ServerScreenOrderCardLine = {
   key: string;
   kind: ServerScreenOrderCardLineKind;
   name: string;
+  /** Optional Chinese name shown under the primary label for force-zh items. */
+  nameZh: string | null;
   note: string | null;
   /** Pending unit ids still needing prep (remaining quantity). */
   remainingIds: string[];
@@ -546,6 +579,8 @@ export type ServerScreenOrderCardLine = {
   doneCount: number;
   companionKey?: string;
   parentItemId?: string;
+  /** Grill/BBQ line — sorted above non-grill lines on the card. */
+  isGrill?: boolean;
 };
 
 export type ServerScreenOrderCard = {
@@ -561,6 +596,8 @@ export type ServerScreenOrderCard = {
   hasPending: boolean;
   /** Fully done but kept on-screen briefly after the last item was marked done. */
   lingering?: boolean;
+  /** Table session includes grill/BBQ — cards sort to the top of the board. */
+  hasGrill?: boolean;
 };
 
 type BuildOrderCardsInput = {
@@ -580,6 +617,8 @@ type BuildOrderCardsInput = {
   /** Wave/card ids still showing after the last pending line was marked done. */
   lingerUntilByCardId?: Map<string, number> | Record<string, number>;
   nowMs?: number;
+  /** Menu item ids that should also show Chinese under the primary label. */
+  forceChineseMenuItemIds?: Iterable<string>;
 };
 
 function lineAggregateKey(item: OrderItem): string {
@@ -603,16 +642,20 @@ function buildCompanionLinesForParent(
     const key = companionKeyFor(parentId, companion.id);
     const doneAt = companionStore.done[key];
     if (!doneAt) pendingCount += 1;
+    const primary = companion.names[language] || companion.names.en;
+    const zh = companion.names.zh?.trim() || "";
     lines.push({
       key,
       kind: "companion",
-      name: companion.names[language] || companion.names.en,
+      name: primary,
+      nameZh: language === "zh" || !zh || zh === primary ? null : zh,
       note: null,
       remainingIds: doneAt ? [] : [key],
       unitIds: [key],
       doneCount: doneAt ? 1 : 0,
       companionKey: key,
       parentItemId: parentId,
+      isGrill: true,
     });
   }
   return { lines, pendingCount };
@@ -636,7 +679,23 @@ export function buildServerScreenOrderCards(
     resolveNote,
     lingerUntilByCardId,
     nowMs = Date.now(),
+    forceChineseMenuItemIds,
   } = input;
+
+  const forceZhIds = new Set(
+    forceChineseMenuItemIds
+      ? Array.from(forceChineseMenuItemIds).map((id) => id.trim()).filter(Boolean)
+      : [],
+  );
+
+  const resolveForcedZh = (item: OrderItem, primary: string): string | null => {
+    if (language === "zh") return null;
+    if (!item.menuItemId || !forceZhIds.has(item.menuItemId)) return null;
+    const menu = resolveMenuItemForOrder(item, menuItems);
+    const zh = menu?.nameZh?.trim() || "";
+    if (!zh || zh === primary) return null;
+    return zh;
+  };
 
   const lingerUntil = (cardId: string): number => {
     if (!lingerUntilByCardId) return 0;
@@ -749,14 +808,17 @@ export function buildServerScreenOrderCards(
       const key = `item:${waveId}:${agg}`;
       let line = lineMap.get(key);
       if (!line) {
+        const primary = resolveName(item);
         line = {
           key,
           kind: "item",
-          name: resolveName(item),
+          name: primary,
+          nameZh: resolveForcedZh(item, primary),
           note: resolveNote(item),
           remainingIds: [],
           unitIds: [],
           doneCount: 0,
+          isGrill: orderIsGrillDish(item, menuItems),
         };
         lineMap.set(key, line);
         lineOrder.push(key);
@@ -767,6 +829,9 @@ export function buildServerScreenOrderCards(
     };
 
     const waveSorted = wave.items.slice().sort((a, b) => {
+      const aGrill = orderIsGrillDish(a, menuItems) ? 0 : 1;
+      const bGrill = orderIsGrillDish(b, menuItems) ? 0 : 1;
+      if (aGrill !== bGrill) return aGrill - bGrill;
       const at = a.createdAt ?? "";
       const bt = b.createdAt ?? "";
       if (at !== bt) return at < bt ? -1 : 1;
@@ -781,6 +846,13 @@ export function buildServerScreenOrderCards(
     }
 
     const itemLines = lineOrder.map((key) => lineMap.get(key)!).filter(Boolean);
+    // Grill dishes first within the card; companions stay under their grill parent.
+    itemLines.sort((a, b) => {
+      const aGrill = a.isGrill ? 0 : 1;
+      const bGrill = b.isGrill ? 0 : 1;
+      if (aGrill !== bGrill) return aGrill - bGrill;
+      return 0;
+    });
     const lines: ServerScreenOrderCardLine[] = [];
     let companionsPlaced = false;
     for (const line of itemLines) {
@@ -796,7 +868,7 @@ export function buildServerScreenOrderCards(
     }
     if (!companionsPlaced && companionLines.length > 0) {
       // Grill set missing from wave (done/cancelled) — keep companions on this card.
-      lines.push(...companionLines);
+      lines.unshift(...companionLines);
     }
 
     const ageFrom =
@@ -809,6 +881,11 @@ export function buildServerScreenOrderCards(
         : undefined) ??
       wave.orderedAt;
 
+    const hasGrill =
+      Boolean(companionParentId) ||
+      tableSessionHasGrill(tableSession, menuItems) ||
+      lines.some((line) => line.isGrill);
+
     cards.push({
       id: waveId,
       tableId: wave.tableId,
@@ -819,11 +896,15 @@ export function buildServerScreenOrderCards(
       lines,
       hasPending,
       lingering,
+      hasGrill,
     });
   }
 
-  // Newest appends at the end — stable by order creation time.
+  // Grill tables first, then by order creation time.
   return cards.sort((a, b) => {
+    const aGrill = a.hasGrill ? 0 : 1;
+    const bGrill = b.hasGrill ? 0 : 1;
+    if (aGrill !== bGrill) return aGrill - bGrill;
     if (a.orderedAt !== b.orderedAt) return a.orderedAt < b.orderedAt ? -1 : 1;
     return a.id.localeCompare(b.id);
   });

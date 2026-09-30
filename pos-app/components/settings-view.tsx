@@ -109,12 +109,8 @@ export function SettingsView({
     setUsdRate,
     soundMainEnabled,
     soundKitchenEnabled,
-    notifyMainNewOrderEnabled,
-    soundMainNewOrderEnabled,
     setSoundMainEnabled,
     setSoundKitchenEnabled,
-    setNotifyMainNewOrderEnabled,
-    setSoundMainNewOrderEnabled,
     currentStaffUser,
     refreshStaffList,
   } = useApp();
@@ -1959,24 +1955,6 @@ export function SettingsView({
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 Main POS
               </p>
-              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
-                <span className="text-sm text-gray-800 dark:text-gray-200">{translate("soundMainNewOrderNotify")}</span>
-                <input
-                  type="checkbox"
-                  checked={notifyMainNewOrderEnabled}
-                  onChange={(event) => setNotifyMainNewOrderEnabled(event.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300"
-                />
-              </label>
-              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
-                <span className="text-sm text-gray-800 dark:text-gray-200">{translate("soundMainNewOrderBell")}</span>
-                <input
-                  type="checkbox"
-                  checked={soundMainNewOrderEnabled}
-                  onChange={(event) => setSoundMainNewOrderEnabled(event.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300"
-                />
-              </label>
               <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
                 <span className="text-sm text-gray-800 dark:text-gray-200">{translate("soundMainPos")}</span>
                 <input

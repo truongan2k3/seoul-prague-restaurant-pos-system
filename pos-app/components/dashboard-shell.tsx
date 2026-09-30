@@ -14,8 +14,6 @@ import { GuestChatView } from "@/components/guest-chat-view";
 import { GuestChatListener } from "@/components/guest-chat-listener";
 import { VouchersView } from "@/components/vouchers-view";
 import { VoucherOrderListener } from "@/components/voucher-order-listener";
-import { ReadyNotificationListener } from "@/components/ready-notification-listener";
-import { MainNewOrderNotificationListener } from "@/components/main-new-order-notification-listener";
 import { CallWaiterListener } from "@/components/call-waiter-listener";
 import { PrintFailedListener } from "@/components/print-failed-listener";
 import { TableGuestRequestListener } from "@/components/table-guest-request-listener";
@@ -660,8 +658,6 @@ export function DashboardShell() {
 
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] bg-background pb-[env(safe-area-inset-bottom,0px)] text-[var(--foreground)]">
-      <ReadyNotificationListener tables={tables} menuItems={menuItems} />
-      <MainNewOrderNotificationListener tables={tables} />
       <CallWaiterListener />
       <PrintFailedListener />
       <TableGuestRequestListener />

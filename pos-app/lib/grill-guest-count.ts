@@ -18,7 +18,9 @@ export const BBQ_GRILL_CATEGORY_NAMES = new Set([
   "Mořské plody/Zelenina",
 ]);
 
-export const GRILL_GUEST_PREP_NOTE_ZH_PREFIX = "准备烤肉蘸料";
+export const GRILL_GUEST_PREP_NOTE_ZH_PREFIX = "BBQ酱料";
+/** Legacy Chinese note prefix — still detected for older open tickets. */
+export const GRILL_GUEST_PREP_NOTE_ZH_PREFIX_LEGACY = "准备烤肉蘸料";
 
 function normalizeCategory(category: string | undefined): string {
   return category?.trim() ?? "";
@@ -54,9 +56,13 @@ export function isGrillGuestPrepOrder(order: OrderItem): boolean {
   const name = order.name.toLowerCase();
   return (
     notesZh.includes(GRILL_GUEST_PREP_NOTE_ZH_PREFIX) ||
+    notesZh.includes(GRILL_GUEST_PREP_NOTE_ZH_PREFIX_LEGACY) ||
+    notes.includes("bbq sauces") ||
     notes.includes("bbq dipping sauce") ||
+    notes.includes("prepare dipping sauce") ||
     notes.includes("grill guest") ||
     notes.includes("omáčku ke grilu") ||
+    name.includes("bbq sauces") ||
     name.includes("bbq dipping sauce") ||
     name.includes("grill sauce prep")
   );
@@ -103,21 +109,50 @@ export function shouldPromptGrillGuestCount(options: {
 }
 
 export function grillGuestCountFromPrepOrder(order: OrderItem): number | null {
-  const zhMatch = order.notesTranslated?.match(/(\d+)位/);
+  const zhMatch = order.notesTranslated?.match(/(\d+)\s*位/);
   if (zhMatch) return Number(zhMatch[1]);
-  const enMatch = order.notes?.match(/(\d+)\s+guest/i);
-  if (enMatch) return Number(enMatch[1]);
+  const nameZhMatch = order.name.match(/(\d+)\s*位/);
+  if (nameZhMatch) return Number(nameZhMatch[1]);
+  const enGuestMatch = order.notes?.match(/(\d+)\s+guest/i) ?? order.name.match(/(\d+)\s+guest/i);
+  if (enGuestMatch) return Number(enGuestMatch[1]);
+  const enSaucesMatch =
+    order.name.match(/bbq\s+sauces?\s*[·•\-]?\s*(\d+)/i) ??
+    order.notes?.match(/bbq\s+sauces?\s*[·•\-]?\s*(\d+)/i);
+  if (enSaucesMatch) return Number(enSaucesMatch[1]);
   return null;
+}
+
+export function formatGrillGuestPrepNameEn(guestCount: number): string {
+  const safeCount = Math.max(1, Math.floor(guestCount));
+  return `BBQ Sauces · ${safeCount}`;
+}
+
+export function formatGrillGuestPrepNameZh(guestCount: number): string {
+  const safeCount = Math.max(1, Math.floor(guestCount));
+  return `${GRILL_GUEST_PREP_NOTE_ZH_PREFIX} · ${safeCount}位`;
+}
+
+export function grillGuestPrepDisplayName(
+  order: OrderItem,
+  language: "en" | "cs" | "zh",
+): string {
+  const count = grillGuestCountFromPrepOrder(order);
+  if (language === "zh") {
+    return count ? formatGrillGuestPrepNameZh(count) : GRILL_GUEST_PREP_NOTE_ZH_PREFIX;
+  }
+  return count ? formatGrillGuestPrepNameEn(count) : "BBQ Sauces";
 }
 
 export function buildGrillGuestPrepOrder(guestCount: number): OrderItem {
   const safeCount = Math.max(1, Math.floor(guestCount));
+  const nameEn = formatGrillGuestPrepNameEn(safeCount);
+  const nameZh = formatGrillGuestPrepNameZh(safeCount);
   return {
-    name: "BBQ dipping sauce prep",
+    name: nameEn,
     price: 0,
     quantity: 1,
-    notes: `Prepare dipping sauce for ${safeCount} guest${safeCount === 1 ? "" : "s"}`,
-    notesTranslated: `${GRILL_GUEST_PREP_NOTE_ZH_PREFIX} · ${safeCount}位`,
+    notes: nameEn,
+    notesTranslated: nameZh,
     isPrintedNote: false,
     station: "kitchen",
     status: "preparing",

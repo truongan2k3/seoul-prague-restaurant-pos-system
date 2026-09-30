@@ -64,17 +64,24 @@ function saucePrepLines(item: OrderItem): { primary: string; secondary: string }
   const enNote = stripIncludedRiceFromNote(item.notes?.trim() ?? "");
 
   if (zhNote || enNote) {
+    // Prefer the short BBQ Sauces / BBQ酱料 labels when we can resolve a count.
+    if (count) {
+      return {
+        primary: `BBQ酱料 · ${count}位`,
+        secondary: `BBQ Sauces · ${count}`,
+      };
+    }
     return { primary: zhNote, secondary: enNote };
   }
 
   if (count) {
     return {
-      primary: `准备烤肉蘸料 · ${count}位`,
-      secondary: `Prepare dipping sauce for ${count} guest${count === 1 ? "" : "s"}`,
+      primary: `BBQ酱料 · ${count}位`,
+      secondary: `BBQ Sauces · ${count}`,
     };
   }
 
-  return { primary: "准备烤肉蘸料", secondary: "Prepare dipping sauce for guests" };
+  return { primary: "BBQ酱料", secondary: "BBQ Sauces" };
 }
 
 export interface KitchenTicketItemDisplay {

@@ -77,9 +77,9 @@ const PREVIEW_MENU: MenuItem[] = [
 
 const PREVIEW_ORDERS: OrderItem[] = [
   {
-    name: "Prepare dipping sauce for 2 guests",
-    notesTranslated: "准备烤肉蘸料 · 2位",
-    notes: "Prepare dipping sauce for 2 guests",
+    name: "BBQ Sauces · 2",
+    notesTranslated: "BBQ酱料 · 2位",
+    notes: "BBQ Sauces · 2",
     quantity: 1,
     price: 0,
   },

@@ -1,5 +1,6 @@
 import type { AppSettings, OrderItem } from "@/lib/types";
 import { isBillOnlyOrderLine } from "@/lib/menu-item-dispatch";
+import { isKitchenMessageOrder } from "@/lib/kitchen-message-order";
 
 /** How sent orders reach the kitchen: KDS/bar screen, paper ticket, or both. */
 export type KitchenFulfillmentMode = "both" | "screen" | "paper";
@@ -36,6 +37,8 @@ export function applyFulfillmentModeToNewOrders(
   const readyAt = new Date().toISOString();
   return orders.map((item) => {
     if (isBillOnlyOrderLine(item)) return item;
+    // Keep table messages pending on KDS until staff acknowledges.
+    if (isKitchenMessageOrder(item)) return item;
     return {
       ...item,
       status: "served",

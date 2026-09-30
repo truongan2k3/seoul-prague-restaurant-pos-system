@@ -20,6 +20,7 @@ import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { useSettings } from "@/contexts/settings-context";
 import { useRegisterUnsavedWork } from "@/contexts/unsaved-work-context";
 import { shouldPrintKitchenOnSend } from "@/lib/kitchen-fulfillment-mode";
+import { buildKitchenMessageOrder, isKitchenMessageOrder } from "@/lib/kitchen-message-order";
 import { orderLineKitchenPanelClass, resolveKitchenStatus } from "@/lib/auto-serve";
 import {
   itemKitchenTimerStart,
@@ -585,6 +586,7 @@ export function NewOrderModal({
   const submittedOrdersRaw = useMemo(
     () =>
       existingOrders.filter((item) => {
+        if (isKitchenMessageOrder(item)) return false;
         const kitchen = resolveKitchenStatus(item);
         return kitchen !== "archived" && !item.isCancelled && kitchen !== "cancelled";
       }),
@@ -1249,14 +1251,19 @@ export function NewOrderModal({
 
   const flushPendingKitchenMessage = async () => {
     if (!pendingKitchenMessage) return;
-    if (!shouldPrintKitchenOnSend(settings)) {
-      throw new Error(translate("kitchenPrintDisabled"));
-    }
-    await printKitchenStaffMessage({
-      tableLabel,
+    const messageOrder = buildKitchenMessageOrder({
       message: pendingKitchenMessage.message,
       messageZh: pendingKitchenMessage.messageZh,
     });
+    // Always create a KDS card; print the staff ticket when printing is enabled.
+    await onSendToKitchen([messageOrder]);
+    if (shouldPrintKitchenOnSend(settings)) {
+      await printKitchenStaffMessage({
+        tableLabel,
+        message: pendingKitchenMessage.message,
+        messageZh: pendingKitchenMessage.messageZh,
+      });
+    }
     setPendingKitchenMessage(null);
   };
 

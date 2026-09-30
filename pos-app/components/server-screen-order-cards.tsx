@@ -17,9 +17,11 @@ function cardHeaderClass(
   tone: PrepHighlightTone,
   lingering: boolean,
   queued: boolean,
+  hasMessage = false,
 ): string {
   if (queued) return "bg-amber-300/90 text-zinc-950";
   if (lingering) return "bg-emerald-900/80 text-white";
+  if (hasMessage) return "bg-sky-800/90 text-white";
   if (tone === "critical") return "bg-red-800/90 text-white";
   if (tone === "warn") return "bg-orange-700/85 text-white";
   return "bg-[#1c1c1f] text-[#F5EDE4]";
@@ -54,6 +56,7 @@ function OrderCardLineRow({
   const selected = selectedCount > 0;
   const canPartial = line.kind === "item" && !line.isSubitem && remaining > 1 && selected;
   const nested = line.kind === "companion" || Boolean(line.isSubitem);
+  const isMessage = Boolean(line.isMessage);
   const lastTapRef = useRef(0);
 
   if (done) {
@@ -70,27 +73,32 @@ function OrderCardLineRow({
           }
           lastTapRef.current = now;
         }}
-        className="w-full px-2.5 py-1.5 text-left opacity-55 transition hover:opacity-80"
+        className={`w-full px-2.5 py-1.5 text-left opacity-55 transition hover:opacity-80 ${
+          isMessage ? "bg-sky-950/30" : ""
+        }`}
         title="Double-tap to undo"
       >
         <div className="flex min-w-0 items-baseline gap-2">
           <span
-            className={`min-w-0 flex-1 truncate text-[0.95rem] font-medium leading-tight text-white/70 line-through decoration-white/35 ${
-              nested ? "pl-2" : ""
+            className={`min-w-0 flex-1 text-[0.95rem] font-medium leading-tight text-white/70 line-through decoration-white/35 ${
+              nested ? "pl-2 truncate" : isMessage ? "whitespace-pre-wrap break-words" : "truncate"
             }`}
             title={line.name}
           >
             {nested ? <span className="mr-1 opacity-50">↳</span> : null}
+            {isMessage ? <span className="mr-1.5 opacity-70">✉</span> : null}
             {line.name}
           </span>
           <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold tabular-nums text-emerald-400/90">
-            {line.kind === "companion" ? null : <span>0</span>}
+            {line.kind === "companion" || isMessage ? null : <span>0</span>}
             <Check className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
           </span>
         </div>
         {line.nameZh ? (
           <p
-            className={`mt-0.5 truncate text-xs text-white/40 ${nested ? "pl-2" : ""}`}
+            className={`mt-0.5 text-xs text-white/40 ${
+              nested ? "pl-2 truncate" : isMessage ? "whitespace-pre-wrap break-words" : "truncate"
+            }`}
             title={line.nameZh}
           >
             {line.nameZh}
@@ -106,7 +114,15 @@ function OrderCardLineRow({
   }
 
   return (
-    <div className={`${selected ? "bg-amber-300/90 text-zinc-950" : "text-[#f5f2ef]"}`}>
+    <div
+      className={`${
+        selected
+          ? "bg-amber-300/90 text-zinc-950"
+          : isMessage
+            ? "bg-sky-500/15 text-[#f5f2ef]"
+            : "text-[#f5f2ef]"
+      }`}
+    >
       <button
         type="button"
         data-server-interactive
@@ -115,20 +131,23 @@ function OrderCardLineRow({
       >
         <span className="min-w-0 flex-1">
           <span
-            className={`block truncate text-[0.95rem] font-semibold leading-tight sm:text-[1.05rem] ${
-              nested ? "pl-2 font-medium" : ""
+            className={`block text-[0.95rem] font-semibold leading-tight sm:text-[1.05rem] ${
+              nested ? "pl-2 font-medium truncate" : isMessage ? "whitespace-pre-wrap break-words" : "truncate"
             } ${selected ? "text-zinc-950" : ""}`}
             title={line.name}
           >
             {nested ? (
               <span className={`mr-1 ${selected ? "opacity-60" : "opacity-45"}`}>↳</span>
             ) : null}
+            {isMessage ? (
+              <span className={`mr-1.5 ${selected ? "opacity-70" : "opacity-80"}`}>✉</span>
+            ) : null}
             {line.name}
           </span>
           {line.nameZh ? (
             <span
-              className={`mt-0.5 block truncate text-xs font-medium sm:text-sm ${
-                nested ? "pl-2" : ""
+              className={`mt-0.5 block text-xs font-medium sm:text-sm ${
+                nested ? "pl-2 truncate" : isMessage ? "whitespace-pre-wrap break-words" : "truncate"
               } ${selected ? "text-zinc-800/75" : "text-white/55"}`}
               title={line.nameZh}
             >
@@ -138,10 +157,10 @@ function OrderCardLineRow({
         </span>
         <span
           className={`shrink-0 text-right text-base font-bold tabular-nums sm:text-lg ${
-            selected ? "text-zinc-950" : "text-[#E8D5C4]"
+            selected ? "text-zinc-950" : isMessage ? "text-sky-200" : "text-[#E8D5C4]"
           }`}
         >
-          {line.kind === "companion" ? (selected ? "✓" : "–") : remaining}
+          {line.kind === "companion" || isMessage ? (selected ? "✓" : "–") : remaining}
         </span>
       </button>
       {line.note ? (
@@ -229,17 +248,18 @@ function OrderCard({
   return (
     <article
       data-server-interactive
-      className={`flex min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#121214] shadow-[0_6px_24px_rgba(0,0,0,0.35)] transition-all duration-200 ${
-        leaving ? "translate-y-1 scale-[0.98] opacity-0" : ""
-      } ${lingering ? "ring-1 ring-emerald-500/40" : ""} ${
-        queued ? "ring-1 ring-amber-300/70" : ""
-      }`}
+      className={`flex min-w-0 flex-col overflow-hidden rounded-xl border shadow-[0_6px_24px_rgba(0,0,0,0.35)] transition-all duration-200 ${
+        card.hasMessage ? "border-sky-400/40 bg-[#121214]" : "border-white/10 bg-[#121214]"
+      } ${leaving ? "translate-y-1 scale-[0.98] opacity-0" : ""} ${
+        lingering ? "ring-1 ring-emerald-500/40" : ""
+      } ${queued ? "ring-1 ring-amber-300/70" : ""}`}
     >
       <header
         className={`flex items-start justify-between gap-2 px-3 py-2.5 ${cardHeaderClass(
           tone,
           lingering,
           queued,
+          Boolean(card.hasMessage),
         )}`}
       >
         <button

@@ -52,7 +52,8 @@ function OrderCardLineRow({
   const done = remaining === 0 && (line.doneCount > 0 || line.unitIds.length > 0);
   const selectedCount = selectedCountForLine(line, selectedKeys);
   const selected = selectedCount > 0;
-  const canPartial = line.kind === "item" && remaining > 1 && selected;
+  const canPartial = line.kind === "item" && !line.isSubitem && remaining > 1 && selected;
+  const nested = line.kind === "companion" || Boolean(line.isSubitem);
   const lastTapRef = useRef(0);
 
   if (done) {
@@ -75,13 +76,11 @@ function OrderCardLineRow({
         <div className="flex min-w-0 items-baseline gap-2">
           <span
             className={`min-w-0 flex-1 truncate text-[0.95rem] font-medium leading-tight text-white/70 line-through decoration-white/35 ${
-              line.kind === "companion" ? "pl-2" : ""
+              nested ? "pl-2" : ""
             }`}
             title={line.name}
           >
-            {line.kind === "companion" ? (
-              <span className="mr-1 opacity-50">↳</span>
-            ) : null}
+            {nested ? <span className="mr-1 opacity-50">↳</span> : null}
             {line.name}
           </span>
           <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold tabular-nums text-emerald-400/90">
@@ -91,9 +90,7 @@ function OrderCardLineRow({
         </div>
         {line.nameZh ? (
           <p
-            className={`mt-0.5 truncate text-xs text-white/40 ${
-              line.kind === "companion" ? "pl-2" : ""
-            }`}
+            className={`mt-0.5 truncate text-xs text-white/40 ${nested ? "pl-2" : ""}`}
             title={line.nameZh}
           >
             {line.nameZh}
@@ -109,11 +106,7 @@ function OrderCardLineRow({
   }
 
   return (
-    <div
-      className={`${selected ? "bg-amber-300/90 text-zinc-950" : "text-[#f5f2ef]"} ${
-        line.kind === "companion" ? "" : ""
-      }`}
-    >
+    <div className={`${selected ? "bg-amber-300/90 text-zinc-950" : "text-[#f5f2ef]"}`}>
       <button
         type="button"
         data-server-interactive
@@ -123,11 +116,11 @@ function OrderCardLineRow({
         <span className="min-w-0 flex-1">
           <span
             className={`block truncate text-[0.95rem] font-semibold leading-tight sm:text-[1.05rem] ${
-              line.kind === "companion" ? "pl-2 font-medium" : ""
+              nested ? "pl-2 font-medium" : ""
             } ${selected ? "text-zinc-950" : ""}`}
             title={line.name}
           >
-            {line.kind === "companion" ? (
+            {nested ? (
               <span className={`mr-1 ${selected ? "opacity-60" : "opacity-45"}`}>↳</span>
             ) : null}
             {line.name}
@@ -135,7 +128,7 @@ function OrderCardLineRow({
           {line.nameZh ? (
             <span
               className={`mt-0.5 block truncate text-xs font-medium sm:text-sm ${
-                line.kind === "companion" ? "pl-2" : ""
+                nested ? "pl-2" : ""
               } ${selected ? "text-zinc-800/75" : "text-white/55"}`}
               title={line.nameZh}
             >
@@ -158,7 +151,7 @@ function OrderCardLineRow({
           onClick={() => onToggle(line)}
           className={`w-full px-2.5 pb-1.5 text-left text-xs leading-snug whitespace-pre-wrap break-words ${
             selected ? "text-zinc-800" : "text-white/55"
-          } ${line.kind === "companion" ? "pl-4" : ""}`}
+          } ${nested ? "pl-4" : ""}`}
         >
           {line.note}
         </button>

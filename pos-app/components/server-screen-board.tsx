@@ -28,7 +28,7 @@ import { useStationScreen } from "@/contexts/station-screen-context";
 import { useSessionHealth } from "@/hooks/use-session-health";
 import { AUTO_SERVE_POLL_MS, resolveKitchenStatus } from "@/lib/auto-serve";
 import { POS_EGRESS } from "@/lib/egress-config";
-import { isGrillGuestPrepOrder } from "@/lib/grill-guest-count";
+import { grillGuestPrepDisplayName, isGrillGuestPrepOrder } from "@/lib/grill-guest-count";
 import { usesKitchenScreen } from "@/lib/kitchen-fulfillment-mode";
 import { orderItemDisplayName, resolveMenuItemForOrder } from "@/lib/menu-display";
 import {
@@ -126,6 +126,8 @@ type BoardRow = {
   companionId?: string;
   companionName?: string;
   readyAt?: string;
+  /** Nested under grill (BBQ Sauces). */
+  isSubitem?: boolean;
 };
 
 type HistoryRow = {
@@ -828,7 +830,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         return (a.id ?? "").localeCompare(b.id ?? "");
       });
 
-    // Resolve grill-set parent per table (companions belong under that set).
+    // Resolve grill-set parent per table (companions + BBQ sauces belong under that set).
     const parentByTable = new Map<
       string,
       { parentId: string; host: StationOrderItem; createdAt: string }
@@ -839,7 +841,11 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         tableSession.find((item) => shouldShowGrillCompanions(item, tableSession, menuItems))?.id ??
         anchor?.parentId;
       if (!firstId) continue;
-      if (pendingCompanionIds(companionStore, firstId).length === 0) continue;
+      const hasPendingCompanions = pendingCompanionIds(companionStore, firstId).length > 0;
+      const hasPendingSauces = tableSession.some(
+        (item) => item.id && isGrillGuestPrepOrder(item) && isPreparingColumnVisible(item),
+      );
+      if (!hasPendingCompanions && !hasPendingSauces) continue;
       const host =
         tableSession.find((item) => item.id === firstId) ??
         ({
@@ -880,8 +886,26 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       }
     };
 
+    const pushBbqSauces = (tableId: string, parentId: string, tableLabel: string) => {
+      const sauces = (itemsByTable.get(tableId) ?? []).filter(
+        (item) => item.id && isGrillGuestPrepOrder(item) && isPreparingColumnVisible(item),
+      );
+      for (const sauce of sauces) {
+        if (!sauce.id) continue;
+        rows.push({
+          key: sauce.id,
+          kind: "item",
+          item: sauce,
+          tableLabel,
+          parentId,
+          isSubitem: true,
+        });
+      }
+    };
+
     for (const item of pending) {
       if (!item.id) continue;
+      if (isGrillGuestPrepOrder(item)) continue;
       const tableLabel = tableLabelById.get(item.tableId) ?? "—";
       rows.push({
         key: item.id,
@@ -891,21 +915,36 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       });
 
       const parent = parentByTable.get(item.tableId);
-      // Insert companions immediately under the grill set row.
+      // Insert BBQ sauces + companions immediately under the grill set row.
       if (parent && parent.parentId === item.id) {
+        pushBbqSauces(item.tableId, parent.parentId, tableLabel);
         pushCompanions(parent.parentId, parent.host, tableLabel);
       }
     }
 
-    // Grill set already done/cancelled but companions still pending — place by createdAt.
+    // Grill set already done/cancelled but sauces/companions still pending — place by createdAt.
     for (const [tableId, parent] of parentByTable) {
       if (attachedParents.has(parent.parentId)) continue;
       const tableLabel = tableLabelById.get(tableId) ?? "—";
-      const companionRows: BoardRow[] = [];
+      const nestedRows: BoardRow[] = [];
+      const sauces = (itemsByTable.get(tableId) ?? []).filter(
+        (item) => item.id && isGrillGuestPrepOrder(item) && isPreparingColumnVisible(item),
+      );
+      for (const sauce of sauces) {
+        if (!sauce.id) continue;
+        nestedRows.push({
+          key: sauce.id,
+          kind: "item",
+          item: sauce,
+          tableLabel,
+          parentId: parent.parentId,
+          isSubitem: true,
+        });
+      }
       for (const companion of GRILL_FIRST_ORDER_COMPANIONS) {
         const key = companionKeyFor(parent.parentId, companion.id);
         if (companionStore.done[key]) continue;
-        companionRows.push({
+        nestedRows.push({
           key,
           kind: "companion",
           item: parent.host,
@@ -915,11 +954,24 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
           companionName: companion.names[language] || companion.names.en,
         });
       }
-      if (companionRows.length === 0) continue;
+      if (nestedRows.length === 0) continue;
       attachedParents.add(parent.parentId);
       const insertAt = rows.findIndex((row) => (row.item.createdAt ?? "") > parent.createdAt);
-      if (insertAt < 0) rows.push(...companionRows);
-      else rows.splice(insertAt, 0, ...companionRows);
+      if (insertAt < 0) rows.push(...nestedRows);
+      else rows.splice(insertAt, 0, ...nestedRows);
+    }
+
+    // Fallback: BBQ sauces with no grill parent still visible (don't drop them).
+    const seenKeys = new Set(rows.map((row) => row.key));
+    for (const item of pending) {
+      if (!item.id || !isGrillGuestPrepOrder(item) || seenKeys.has(item.id)) continue;
+      rows.push({
+        key: item.id,
+        kind: "item",
+        item,
+        tableLabel: tableLabelById.get(item.tableId) ?? "—",
+        isSubitem: true,
+      });
     }
 
     return rows;
@@ -2101,14 +2153,22 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                       : orderItemDisplayName(row.item, menuItems, language);
                   const nameZh =
                     row.kind === "item"
-                      ? forcedChineseName(
-                          row.item,
-                          menuItems,
-                          language,
-                          serverScreen.forceChineseMenuItemIds,
-                          name,
-                          serverScreen.showChineseForGrill ?? true,
-                        )
+                      ? isGrillGuestPrepOrder(row.item)
+                        ? (() => {
+                            if (!(serverScreen.showChineseForGrill ?? true) || language === "zh") {
+                              return null;
+                            }
+                            const zh = grillGuestPrepDisplayName(row.item, "zh");
+                            return zh && zh !== name ? zh : null;
+                          })()
+                        : forcedChineseName(
+                            row.item,
+                            menuItems,
+                            language,
+                            serverScreen.forceChineseMenuItemIds,
+                            name,
+                            serverScreen.showChineseForGrill ?? true,
+                          )
                       : (() => {
                           if (!(serverScreen.showChineseForGrill ?? true) || language === "zh") {
                             return null;
@@ -2120,7 +2180,11 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                           if (!zh || zh === name) return null;
                           return zh;
                         })();
-                  const note = row.kind === "item" ? itemNote(row.item, language) : null;
+                  const note =
+                    row.kind === "item" && !isGrillGuestPrepOrder(row.item)
+                      ? itemNote(row.item, language)
+                      : null;
+                  const nested = row.kind === "companion" || Boolean(row.isSubitem);
 
                   return (
                     <li
@@ -2139,7 +2203,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                             ? "text-white/55"
                             : prepRowClass(tone, selected)
                         } ${leaving ? "translate-x-4 opacity-0 transition-all duration-200" : ""} ${
-                          row.kind === "companion" ? "pl-8" : ""
+                          nested ? "pl-8" : ""
                         }`}
                       >
                         <button
@@ -2153,12 +2217,10 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                         >
                           <span
                             className={`block truncate text-[1.35rem] font-semibold leading-tight sm:text-[1.5rem] ${
-                              row.kind === "companion" ? "font-medium" : ""
+                              nested ? "font-medium" : ""
                             }`}
                           >
-                            {row.kind === "companion" ? (
-                              <span className="mr-1.5 opacity-50">↳</span>
-                            ) : null}
+                            {nested ? <span className="mr-1.5 opacity-50">↳</span> : null}
                             {name}
                           </span>
                           {nameZh ? (
@@ -2199,7 +2261,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                           data-server-interactive
                           onClick={() => handleListRowActivate(row, lingering)}
                           className={`w-full px-4 pb-2.5 text-left text-sm leading-relaxed whitespace-pre-wrap break-words ${
-                            row.kind === "companion" ? "pl-8" : "pl-4"
+                            nested ? "pl-8" : "pl-4"
                           } ${selected ? "text-zinc-800" : "text-white/55"}`}
                         >
                           {note}

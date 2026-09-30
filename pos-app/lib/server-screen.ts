@@ -1,4 +1,5 @@
 import {
+  grillGuestPrepDisplayName,
   isGrillGuestPrepOrder,
   isGrillMenuItem,
   isGrillSetMenuItem,
@@ -589,6 +590,8 @@ export type ServerScreenOrderCardLine = {
   parentItemId?: string;
   /** Grill/BBQ line — sorted above non-grill lines on the card. */
   isGrill?: boolean;
+  /** Nested under grill (e.g. BBQ Sauces) — indented like companions. */
+  isSubitem?: boolean;
 };
 
 export type ServerScreenOrderCard = {
@@ -824,6 +827,9 @@ export function buildServerScreenOrderCards(
 
     const lineMap = new Map<string, ServerScreenOrderCardLine>();
     const lineOrder: string[] = [];
+    const sauceLineMap = new Map<string, ServerScreenOrderCardLine>();
+    const sauceLineOrder: string[] = [];
+
     const ensureLine = (item: (typeof items)[number], pending: boolean) => {
       const agg = lineAggregateKey(item);
       const key = `item:${waveId}:${agg}`;
@@ -849,6 +855,35 @@ export function buildServerScreenOrderCards(
       else if (!pending) line.doneCount += 1;
     };
 
+    const ensureSauceSubLine = (item: (typeof items)[number], pending: boolean) => {
+      const agg = lineAggregateKey(item);
+      const key = `sauce:${waveId}:${agg}`;
+      let line = sauceLineMap.get(key);
+      if (!line) {
+        const primary = resolveName(item);
+        const zhName = grillGuestPrepDisplayName(item, "zh");
+        const showZh =
+          showChineseForGrill && language !== "zh" && Boolean(zhName) && zhName !== primary;
+        line = {
+          key,
+          kind: "item",
+          name: primary,
+          nameZh: showZh ? zhName : null,
+          note: null,
+          remainingIds: [],
+          unitIds: [],
+          doneCount: 0,
+          isSubitem: true,
+          parentItemId: companionParentId ?? undefined,
+        };
+        sauceLineMap.set(key, line);
+        sauceLineOrder.push(key);
+      }
+      if (item.id) line.unitIds.push(item.id);
+      if (pending && item.id) line.remainingIds.push(item.id);
+      else if (!pending) line.doneCount += 1;
+    };
+
     const waveSorted = wave.items.slice().sort((a, b) => {
       const aGrill = orderIsGrillDish(a, menuItems) ? 0 : 1;
       const bGrill = orderIsGrillDish(b, menuItems) ? 0 : 1;
@@ -859,6 +894,14 @@ export function buildServerScreenOrderCards(
       return (a.id ?? "").localeCompare(b.id ?? "");
     });
     for (const item of waveSorted) {
+      if (isGrillGuestPrepOrder(item)) {
+        if (isPreparingColumnVisible(item)) ensureSauceSubLine(item, true);
+        else {
+          const status = resolveKitchenStatus(item);
+          if (status === "ready" || status === "served") ensureSauceSubLine(item, false);
+        }
+        continue;
+      }
       if (isPreparingColumnVisible(item)) ensureLine(item, true);
       else {
         const status = resolveKitchenStatus(item);
@@ -867,7 +910,8 @@ export function buildServerScreenOrderCards(
     }
 
     const itemLines = lineOrder.map((key) => lineMap.get(key)!).filter(Boolean);
-    // Grill dishes first within the card; companions stay under their grill parent.
+    const sauceLines = sauceLineOrder.map((key) => sauceLineMap.get(key)!).filter(Boolean);
+    // Grill dishes first within the card; sauces + companions stay under their grill parent.
     itemLines.sort((a, b) => {
       const aGrill = a.isGrill ? 0 : 1;
       const bGrill = b.isGrill ? 0 : 1;
@@ -875,21 +919,25 @@ export function buildServerScreenOrderCards(
       return 0;
     });
     const lines: ServerScreenOrderCardLine[] = [];
-    let companionsPlaced = false;
+    let nestedPlaced = false;
+    const placeNestedUnderGrill = () => {
+      if (nestedPlaced) return;
+      nestedPlaced = true;
+      lines.push(...sauceLines);
+      lines.push(...companionLines);
+    };
     for (const line of itemLines) {
       lines.push(line);
       if (
         companionParentId &&
-        !companionsPlaced &&
         line.unitIds.includes(companionParentId)
       ) {
-        lines.push(...companionLines);
-        companionsPlaced = true;
+        placeNestedUnderGrill();
       }
     }
-    if (!companionsPlaced && companionLines.length > 0) {
-      // Grill set missing from wave (done/cancelled) — keep companions on this card.
-      lines.unshift(...companionLines);
+    if (!nestedPlaced && (sauceLines.length > 0 || companionLines.length > 0)) {
+      // Grill set missing from wave (done/cancelled) — keep sauces/companions on this card.
+      lines.unshift(...sauceLines, ...companionLines);
     }
 
     const ageFrom =

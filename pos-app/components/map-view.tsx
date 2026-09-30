@@ -12,7 +12,7 @@ import {
   reservationOnVenueDateIso,
 } from "@/lib/reservation-floor-display";
 import { todayIsoDateInVenue, venueDayRangeUtc } from "@/lib/venue-timezone";
-import { TABLE_CARD_WIDTH } from "@/lib/table-layout";
+import { TABLE_CARD_WIDTH, resolveFloorCardOverlaps } from "@/lib/table-layout";
 import { tableIdsWithSlaBreach } from "@/lib/order-sla";
 import type { MenuItem, OrderItem, ReservationRecord, ReservationStatus, RestaurantTable } from "@/lib/types";
 import {
@@ -136,18 +136,29 @@ export function MapView({
   );
 
   useEffect(() => {
-    setPositions(
-      Object.fromEntries(tables.map((table) => [table.id, { x: table.posX, y: table.posY }])),
-    );
+    const raw = tables.map((table) => ({
+      id: table.id,
+      x: table.posX,
+      y: table.posY,
+    }));
+    setPositions(resolveFloorCardOverlaps(raw));
   }, [tables]);
 
+  const displayPositions = useMemo(() => {
+    if (editMode || dragState) return positions;
+    return resolveFloorCardOverlaps(
+      Object.entries(positions).map(([id, pos]) => ({ id, x: pos.x, y: pos.y })),
+    );
+  }, [positions, editMode, dragState]);
+
   const mapHeight = useMemo(() => {
+    const source = editMode || dragState ? positions : displayPositions;
     const bottom = tables.reduce((max, table) => {
-      const pos = positions[table.id] ?? { x: table.posX, y: table.posY };
+      const pos = source[table.id] ?? { x: table.posX, y: table.posY };
       return Math.max(max, pos.y + 200);
     }, 520);
     return bottom;
-  }, [tables, positions]);
+  }, [tables, positions, displayPositions, editMode, dragState]);
 
   const finishDrag = useCallback(async () => {
     if (!dragState) return;
@@ -296,7 +307,9 @@ export function MapView({
           style={{ height: mapHeight, width: "100%" }}
         >
           {tables.map((table) => {
-            const pos = positions[table.id] ?? { x: table.posX, y: table.posY };
+            const pos =
+              (editMode || dragState ? positions[table.id] : displayPositions[table.id]) ??
+              positions[table.id] ?? { x: table.posX, y: table.posY };
             const isDragging = dragState?.tableId === table.id;
             const tableOrderItems = orderItems.filter((item) => item.tableId === table.id);
 

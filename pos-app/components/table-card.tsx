@@ -76,16 +76,28 @@ export function TableCard({
 
   const content = (
     <>
-      <div className={`flex w-full shrink-0 items-start justify-between gap-2 ${isRound ? "flex-col items-center" : ""}`}>
-        <div>
-          <span className={`pos-serif font-medium tracking-tight text-[var(--foreground)] ${compact ? "text-lg sm:text-xl" : "text-xl sm:text-2xl"}`}>
-            {table.label}
-          </span>
-          {table.type === "special" && (
-            <span className="ml-1 rounded-full bg-[var(--pos-champagne)]/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[var(--pos-champagne)] sm:px-2 sm:text-[10px]">
-              VIP
+      <div className={`relative flex w-full shrink-0 items-start justify-between gap-2 ${isRound ? "flex-col items-center" : ""}`}>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <span
+              className={`pos-serif min-w-0 truncate font-medium tracking-tight text-[var(--foreground)] ${
+                compact ? "text-lg sm:text-xl" : "text-xl sm:text-2xl"
+              }`}
+              title={table.label}
+            >
+              {table.label}
             </span>
-          )}
+            {table.type === "special" && (
+              <span className="shrink-0 rounded-full bg-[var(--pos-champagne)]/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[var(--pos-champagne)] sm:px-2 sm:text-[10px]">
+                VIP
+              </span>
+            )}
+            {isPaidInProgress ? (
+              <span className="inline-flex shrink-0 rounded-md bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white sm:text-[10px]">
+                {translate("paidBadge")}
+              </span>
+            ) : null}
+          </div>
         </div>
         {occupiedSince && <TableTimer start={occupiedSince} />}
       </div>
@@ -124,13 +136,6 @@ export function TableCard({
           {translate("available")}
         </p>
       )}
-      {table.status !== "empty" && isPaidInProgress && (
-        <p className="mt-auto shrink-0 pt-1">
-          <span className="inline-flex rounded-md bg-emerald-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-            {translate("paidBadge")}
-          </span>
-        </p>
-      )}
       {table.status === "waiting" && !isPaidInProgress && (
         <p className="mt-auto shrink-0 pt-1 text-xs font-semibold text-amber-600 dark:text-amber-300">
           {translate("preparing")}
@@ -139,6 +144,11 @@ export function TableCard({
       {table.status === "ready" && !isPaidInProgress && (
         <p className="mt-auto shrink-0 pt-1 text-xs font-semibold text-emerald-600 dark:text-emerald-300">
           {translate("ready")}
+        </p>
+      )}
+      {table.status !== "empty" && isPaidInProgress && (
+        <p className="mt-auto shrink-0 pt-1 text-xs font-semibold text-emerald-600 dark:text-emerald-300">
+          {table.status === "ready" ? translate("ready") : translate("preparing")}
         </p>
       )}
     </>

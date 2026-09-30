@@ -18,7 +18,7 @@ import {
   type SupabaseOrderItemRow,
 } from "@/src/lib/supabase-data";
 import { supabase } from "@/src/lib/supabase";
-import { inferServiceChannel } from "@/lib/tax-summary";
+import { inferServiceChannel, isTakeawayTable } from "@/lib/tax-summary";
 
 type ActivityItemRow = {
   id: string;
@@ -747,23 +747,29 @@ export async function forceCloseTable(tableId: string) {
 }
 
 /**
- * After full payment: keep kitchen tickets on KDS/Bar until auto-serve finishes.
- * Only archive the table when every line is already served.
+ * After full payment: keep kitchen tickets on KDS/Bar while still cooking.
+ * Takeaway (S tables): clear as soon as kitchen marks everything ready.
+ * Dine-in early pay: keep until auto-serve finishes (served).
  */
 async function settlePaidTable(tableId: string) {
-  const { data: items } = await supabase
-    .from("order_items")
-    .select("status, kitchen_status, hide_on_kds")
-    .eq("table_id", tableId);
+  const [{ data: items }, { data: table }] = await Promise.all([
+    supabase
+      .from("order_items")
+      .select("status, kitchen_status, hide_on_kds")
+      .eq("table_id", tableId),
+    supabase.from("tables").select("label").eq("id", tableId).maybeSingle(),
+  ]);
 
-  const hasOpenKitchen = (items ?? []).some((item) =>
-    isKitchenStillOpen({
+  const takeaway = table?.label ? isTakeawayTable(table.label) : false;
+  const hasOpenKitchen = (items ?? []).some((item) => {
+    if (item.hide_on_kds || item.kitchen_status === "cancelled") return false;
+    const kitchenStatus = resolveKitchenStatus({
       status: item.status,
       kitchenStatus: item.kitchen_status ?? undefined,
-      isCancelled: item.kitchen_status === "cancelled",
-      hideOnKds: item.hide_on_kds ?? false,
-    }),
-  );
+    });
+    if (takeaway) return kitchenStatus === "pending";
+    return kitchenStatus === "pending" || kitchenStatus === "ready";
+  });
 
   if (hasOpenKitchen) {
     return supabase
@@ -786,6 +792,40 @@ async function settlePaidTable(tableId: string) {
     .eq("id", tableId);
 
   return clearTable(tableId);
+}
+
+/** Paid takeaway: once kitchen has marked every line ready, clear the floor card. */
+async function maybeClearPaidTakeawayIfKitchenDone(tableId: string) {
+  const { data: table } = await supabase
+    .from("tables")
+    .select("label, payment_status")
+    .eq("id", tableId)
+    .maybeSingle();
+  if (!table || table.payment_status !== "paid") return;
+  if (!isTakeawayTable(table.label ?? "")) return;
+
+  const { data: items } = await supabase
+    .from("order_items")
+    .select("status, kitchen_status, hide_on_kds")
+    .eq("table_id", tableId);
+
+  const stillCooking = (items ?? []).some((item) => {
+    if (item.hide_on_kds || item.kitchen_status === "cancelled") return false;
+    return (
+      resolveKitchenStatus({
+        status: item.status,
+        kitchenStatus: item.kitchen_status ?? undefined,
+      }) === "pending"
+    );
+  });
+  if (stillCooking) return;
+  if (!(items ?? []).length) return;
+
+  await supabase
+    .from("tables")
+    .update({ fulfillment_status: "completed" })
+    .eq("id", tableId);
+  await clearTable(tableId);
 }
 
 export async function checkoutTable(
@@ -1082,6 +1122,7 @@ export async function markItemsReady(
   if (tableId) {
     await syncTableOrdersFromDb(tableId);
     await markTableReadyIfAllDone(tableId);
+    await maybeClearPaidTakeawayIfKitchenDone(tableId);
   }
 
   return { error: null };

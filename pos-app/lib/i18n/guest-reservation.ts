@@ -39,6 +39,8 @@ export type GuestReservationCopy = {
   close: string;
   bookingCode: string;
   manageReservation: string;
+  emailAfterConfirmNote: string;
+  spamFolderReminder: string;
   gdprRequired: string;
   largePartyTitle: string;
   largePartyMessage: string;
@@ -93,6 +95,10 @@ const en: GuestReservationCopy = {
   close: "Close",
   bookingCode: "Booking code",
   manageReservation: "Manage reservation",
+  emailAfterConfirmNote:
+    "Confirmation email is sent after the restaurant confirms your reservation.",
+  spamFolderReminder:
+    "Please also check your Spam / Junk folder — the confirmation email may appear there.",
   gdprRequired: "Please agree to data processing before submitting.",
   largePartyTitle: "Large party (over 12 guests)",
   largePartyMessage:
@@ -148,6 +154,10 @@ const cs: GuestReservationCopy = {
   close: "Zavřít",
   bookingCode: "Kód rezervace",
   manageReservation: "Spravovat rezervaci",
+  emailAfterConfirmNote:
+    "Potvrzovací e-mail odešleme až po potvrzení rezervace restaurací.",
+  spamFolderReminder:
+    "Zkontrolujte prosím také složku Spam / Nevyžádaná — potvrzovací e-mail se může objevit tam.",
   gdprRequired: "Před odesláním prosím souhlaste se zpracováním údajů.",
   largePartyTitle: "Větší skupina (více než 12 hostů)",
   largePartyMessage:
@@ -203,6 +213,10 @@ const vi: GuestReservationCopy = {
   close: "Đóng",
   bookingCode: "Mã đặt bàn",
   manageReservation: "Quản lý đặt bàn",
+  emailAfterConfirmNote:
+    "Email xác nhận sẽ được gửi sau khi nhà hàng xác nhận đặt bàn của bạn.",
+  spamFolderReminder:
+    "Vui lòng kiểm tra thêm thư mục Spam / Thư rác — email xác nhận có thể nằm ở đó.",
   gdprRequired: "Vui lòng đồng ý xử lý dữ liệu trước khi gửi.",
   largePartyTitle: "Đoàn trên 12 khách",
   largePartyMessage:
@@ -258,6 +272,10 @@ const de: GuestReservationCopy = {
   close: "Schließen",
   bookingCode: "Buchungscode",
   manageReservation: "Reservierung verwalten",
+  emailAfterConfirmNote:
+    "Die Bestätigungs-E-Mail wird gesendet, nachdem das Restaurant Ihre Reservierung bestätigt hat.",
+  spamFolderReminder:
+    "Bitte prüfen Sie auch den Spam- / Junk-Ordner — die Bestätigungs-E-Mail kann dort landen.",
   gdprRequired: "Bitte stimmen Sie der Datenverarbeitung zu, bevor Sie absenden.",
   largePartyTitle: "Große Gruppe (über 12 Gäste)",
   largePartyMessage:
@@ -313,6 +331,10 @@ const ko: GuestReservationCopy = {
   close: "닫기",
   bookingCode: "예약 코드",
   manageReservation: "예약 관리",
+  emailAfterConfirmNote:
+    "확인 메일은 레스토랑이 예약을 확인한 후에 발송됩니다.",
+  spamFolderReminder:
+    "스팸/정크 메일함도 확인해 주세요 — 확인 메일이 그곳에 있을 수 있습니다.",
   gdprRequired: "제출 전에 데이터 처리에 동의해 주세요.",
   largePartyTitle: "12명 초과 단체",
   largePartyMessage:

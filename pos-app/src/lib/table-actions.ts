@@ -336,6 +336,46 @@ function isKitchenStillOpen(
   return kitchenStatus === "pending" || kitchenStatus === "ready";
 }
 
+/**
+ * Floor map Preparing vs Ready should follow KDS/Bar-visible work only.
+ * Silent / hide_on_kds lines (free banchan, paper-only, etc.) must not keep
+ * the amber frame after staff mark the real tickets done.
+ */
+function affectsFloorPrepStatus(
+  item: Pick<OrderItem, "kitchenStatus" | "status" | "isCancelled" | "hideOnKds">,
+): boolean {
+  if (item.hideOnKds) return false;
+  if (item.isCancelled) return false;
+  const kitchenStatus = resolveKitchenStatus(item);
+  return kitchenStatus !== "cancelled" && kitchenStatus !== "archived";
+}
+
+function computeTableFloorStatus(
+  items: Array<Pick<OrderItem, "kitchenStatus" | "status" | "isCancelled" | "hideOnKds">>,
+): "waiting" | "ready" {
+  const tracked = items.filter(affectsFloorPrepStatus);
+  if (tracked.length === 0) return "ready";
+
+  const hasOpenPrep = tracked.some((item) => {
+    const status = normalizeOrderItemStatus(item.status);
+    const kitchenStatus = resolveKitchenStatus(item);
+    return status === "preparing" || status === "pending" || status === "held" || kitchenStatus === "pending";
+  });
+  if (hasOpenPrep) return "waiting";
+
+  const allReadyOrServed = tracked.every((item) => {
+    const status = normalizeOrderItemStatus(item.status);
+    const kitchenStatus = resolveKitchenStatus(item);
+    return (
+      status === "ready" ||
+      status === "served" ||
+      kitchenStatus === "ready" ||
+      kitchenStatus === "served"
+    );
+  });
+  return allReadyOrServed ? "ready" : "waiting";
+}
+
 async function syncTableOrdersFromDb(tableId: string) {
   const { data: rows, error } = await supabase
     .from("order_items")
@@ -369,21 +409,11 @@ async function syncTableOrdersFromDb(tableId: string) {
 
   const orders = aggregateOrderItems(billable);
 
-  const hasPreparing = orders.some(
-    (item) => normalizeOrderItemStatus(item.status) === "preparing",
-  );
-  const allReadyOrServed =
-    orders.length > 0 &&
-    orders.every((item) => {
-      const status = normalizeOrderItemStatus(item.status);
-      return status === "ready" || status === "served";
-    });
-
   await supabase
     .from("tables")
     .update({
       orders,
-      status: allReadyOrServed && !hasPreparing ? "ready" : "waiting",
+      status: computeTableFloorStatus(mapped),
     })
     .eq("id", tableId);
 }
@@ -1078,24 +1108,22 @@ export async function updateOrderItemStatus(
 export async function markTableReadyIfAllDone(tableId: string) {
   const { data: items } = await supabase
     .from("order_items")
-    .select("status")
+    .select("status, kitchen_status, hide_on_kds, is_cancelled")
     .eq("table_id", tableId);
 
   if (!items?.length) return;
 
-  const hasPreparing = items.some(
-    (item) => normalizeOrderItemStatus(item.status) === "preparing",
-  );
-  const allReadyOrServed = items.every((item) => {
-    const status = normalizeOrderItemStatus(item.status);
-    return status === "ready" || status === "served";
-  });
+  const mapped = items.map((item) => ({
+    status: item.status,
+    kitchenStatus: item.kitchen_status ?? undefined,
+    hideOnKds: item.hide_on_kds ?? false,
+    isCancelled: Boolean(item.is_cancelled) || item.kitchen_status === "cancelled",
+  }));
 
-  if (!hasPreparing && allReadyOrServed) {
-    await supabase.from("tables").update({ status: "ready" }).eq("id", tableId);
-  } else {
-    await supabase.from("tables").update({ status: "waiting" }).eq("id", tableId);
-  }
+  await supabase
+    .from("tables")
+    .update({ status: computeTableFloorStatus(mapped) })
+    .eq("id", tableId);
 }
 
 /** Auto-fire any legacy pending rows to preparing (KDS workflow). */

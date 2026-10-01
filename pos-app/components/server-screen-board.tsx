@@ -26,6 +26,7 @@ import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
 import { useStationScreen } from "@/contexts/station-screen-context";
 import { useSessionHealth } from "@/hooks/use-session-health";
+import { useScreenWakeLock } from "@/hooks/use-screen-wake-lock";
 import { AUTO_SERVE_POLL_MS, resolveKitchenStatus } from "@/lib/auto-serve";
 import { POS_EGRESS } from "@/lib/egress-config";
 import { isGrillGuestPrepOrder, grillGuestPrepDisplayName } from "@/lib/grill-guest-count";
@@ -382,6 +383,8 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const { settings } = useSettings();
   const { currentStaffUser } = useApp();
   const screenEnabled = usesKitchenScreen(settings.kitchenFulfillmentMode);
+  // Kitchen + Bar tablets stay on while the board is open.
+  useScreenWakeLock(true);
   const serverScreen = settings.serverScreen;
   const languages = useMemo(
     () => normalizeServerScreenLanguages(serverScreen.languageMode, serverScreen.languages),

@@ -226,7 +226,9 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
     setError(null);
     // Always confirm table at check-in. Assigned table is a staff preview only.
     setCheckInTableIds(
-      [selected.tableId, selected.secondaryTableId].filter(Boolean) as string[],
+      [selected.tableId, selected.secondaryTableId, selected.tertiaryTableId].filter(
+        Boolean,
+      ) as string[],
     );
     setTablePickerOpen(true);
     void loadTables();

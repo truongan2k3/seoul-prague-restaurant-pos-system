@@ -41,6 +41,7 @@ export type CapacityReservationInput = {
   status: string;
   tableLabel?: string | null;
   secondaryTableLabel?: string | null;
+  tertiaryTableLabel?: string | null;
   notes?: string | null;
   wantsGrill?: GrillNeed;
   /** Staff-forced accept past Full for this booking. */
@@ -140,7 +141,7 @@ function configUsesLabel(config: SeatingConfiguration, label: string): boolean {
 }
 
 function assignedLabels(row: CapacityReservationInput): string[] {
-  return [row.tableLabel, row.secondaryTableLabel]
+  return [row.tableLabel, row.secondaryTableLabel, row.tertiaryTableLabel]
     .map(normalizeTableLabel)
     .filter(Boolean);
 }

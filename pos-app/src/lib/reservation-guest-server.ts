@@ -244,7 +244,7 @@ async function loadDayCapacityContext(dateIso: string): Promise<DayCapacityConte
     const { data: existingRows } = await admin
       .from("reservations")
       .select(
-        "id, party_size, actual_party_size, reserved_at, status, notes, wants_grill, tables!table_id(label), secondary_table:tables!secondary_table_id(label)",
+        "id, party_size, actual_party_size, reserved_at, status, notes, wants_grill, tables!table_id(label), secondary_table:tables!secondary_table_id(label), tertiary_table:tables!tertiary_table_id(label)",
       )
       .gte("reserved_at", startIso)
       .lt("reserved_at", endExclusiveIso);
@@ -259,6 +259,7 @@ async function loadDayCapacityContext(dateIso: string): Promise<DayCapacityConte
       wants_grill?: string | null;
       tables?: { label: string } | { label: string }[] | null;
       secondary_table?: { label: string } | { label: string }[] | null;
+      tertiary_table?: { label: string } | { label: string }[] | null;
     };
 
     reservations = ((existingRows ?? []) as ExistingRow[]).map((row) => {
@@ -268,6 +269,10 @@ async function loadDayCapacityContext(dateIso: string): Promise<DayCapacityConte
       const secondaryTableLabel = Array.isArray(secondaryJoin)
         ? secondaryJoin[0]?.label
         : secondaryJoin?.label;
+      const tertiaryJoin = row.tertiary_table;
+      const tertiaryTableLabel = Array.isArray(tertiaryJoin)
+        ? tertiaryJoin[0]?.label
+        : tertiaryJoin?.label;
       return {
         id: row.id,
         partySize: row.party_size,
@@ -281,6 +286,7 @@ async function loadDayCapacityContext(dateIso: string): Promise<DayCapacityConte
             : undefined,
         tableLabel,
         secondaryTableLabel,
+        tertiaryTableLabel,
       };
     });
   } catch {

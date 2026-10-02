@@ -13,7 +13,7 @@ import {
   countGuestsInSlot,
 } from "@/lib/reservation-slots";
 import { shouldAlertOnReservationInsert } from "@/lib/reservation-change-alert";
-import { normalizeReservationTableIds } from "@/lib/reservation-tables";
+import { normalizeReservationTableIds, reservationTableIdColumns } from "@/lib/reservation-tables";
 import { venueDayRangeUtc, venueWallTimeToUtc } from "@/lib/venue-timezone";
 import { notifyReservationPushEvent } from "@/lib/web-push-client";
 import { fetchAppSettings } from "@/src/lib/settings-actions";
@@ -24,9 +24,9 @@ import {
   type GuestReservationAlertPayload,
 } from "@/lib/reservation-guest-alert";
 
-/** Explicit FK hints — reservations has two FKs to tables. */
+/** Explicit FK hints — reservations has three FKs to tables. */
 const RESERVATION_SELECT =
-  "*, tables!table_id(label), secondary_table:tables!secondary_table_id(label)";
+  "*, tables!table_id(label), secondary_table:tables!secondary_table_id(label), tertiary_table:tables!tertiary_table_id(label)";
 
 export interface CreateReservationInput {
   guestName: string;
@@ -51,6 +51,7 @@ export interface UpdateReservationInput {
   notes?: string;
   tableId?: string | null;
   secondaryTableId?: string | null;
+  tertiaryTableId?: string | null;
   eventType?: string | null;
 }
 
@@ -129,6 +130,7 @@ export async function updateReservationStatus(
   extra?: {
     tableId?: string | null;
     secondaryTableId?: string | null;
+    tertiaryTableId?: string | null;
     checkedInAt?: Date;
     completedAt?: Date;
     actualPartySize?: number | null;
@@ -141,6 +143,7 @@ export async function updateReservationStatus(
 
   if (extra?.tableId !== undefined) payload.table_id = extra.tableId;
   if (extra?.secondaryTableId !== undefined) payload.secondary_table_id = extra.secondaryTableId;
+  if (extra?.tertiaryTableId !== undefined) payload.tertiary_table_id = extra.tertiaryTableId;
   if (extra?.checkedInAt) payload.checked_in_at = extra.checkedInAt.toISOString();
   if (extra?.completedAt) payload.completed_at = extra.completedAt.toISOString();
   if (extra?.actualPartySize !== undefined) {
@@ -294,9 +297,10 @@ export async function updateReservationDetails(
   };
 
   if (input.tableId !== undefined && status !== "checked_in") {
-    const ids = normalizeReservationTableIds([input.tableId, input.secondaryTableId]);
-    payload.table_id = ids[0] ?? null;
-    payload.secondary_table_id = ids[1] ?? null;
+    const cols = reservationTableIdColumns([input.tableId, input.secondaryTableId, input.tertiaryTableId]);
+    payload.table_id = cols.tableId;
+    payload.secondary_table_id = cols.secondaryTableId;
+    payload.tertiary_table_id = cols.tertiaryTableId;
   }
 
   const result = await supabase
@@ -329,12 +333,17 @@ export async function checkInReservation(
   reservationId: string,
   tableId?: string,
   secondaryTableId?: string | null,
-  options?: { actualPartySize?: number | null },
+  options?: { actualPartySize?: number | null; tertiaryTableId?: string | null },
 ) {
-  const ids = normalizeReservationTableIds([tableId, secondaryTableId]);
+  const cols = reservationTableIdColumns([
+    tableId,
+    secondaryTableId,
+    options?.tertiaryTableId,
+  ]);
   return updateReservationStatus(reservationId, "checked_in", {
-    tableId: ids[0] ?? null,
-    secondaryTableId: ids[1] ?? null,
+    tableId: cols.tableId,
+    secondaryTableId: cols.secondaryTableId,
+    tertiaryTableId: cols.tertiaryTableId,
     checkedInAt: new Date(),
     actualPartySize: options?.actualPartySize,
   });
@@ -345,7 +354,7 @@ export async function fetchReservationSnapshot(
 ): Promise<ReservationSnapshot | null> {
   const { data, error } = await supabase
     .from("reservations")
-    .select("id, status, table_id, secondary_table_id, checked_in_at, completed_at")
+    .select("id, status, table_id, secondary_table_id, tertiary_table_id, checked_in_at, completed_at")
     .eq("id", reservationId)
     .single();
 
@@ -356,6 +365,7 @@ export async function fetchReservationSnapshot(
     status: data.status as ReservationStatus,
     tableId: data.table_id ?? null,
     secondaryTableId: data.secondary_table_id ?? null,
+    tertiaryTableId: data.tertiary_table_id ?? null,
     checkedInAt: data.checked_in_at ?? null,
     completedAt: data.completed_at ?? null,
   };
@@ -384,6 +394,7 @@ export async function restoreReservationSnapshot(snapshot: ReservationSnapshot) 
       status: snapshot.status,
       table_id: snapshot.tableId,
       secondary_table_id: snapshot.secondaryTableId,
+      tertiary_table_id: snapshot.tertiaryTableId,
       checked_in_at: snapshot.checkedInAt,
       completed_at: snapshot.completedAt,
       updated_at: nowIso(),
@@ -447,7 +458,7 @@ async function ensureTableOccupiedForCheckIn(
   return { error: null };
 }
 
-/** Check in a reservation onto 1–2 tables (occupies empty tables). */
+/** Check in a reservation onto 1–3 tables (occupies empty tables). */
 export async function checkInReservationWithTables(
   reservationId: string,
   tableIds: string[],
@@ -465,6 +476,7 @@ export async function checkInReservationWithTables(
 
   return checkInReservation(reservationId, ids[0], ids[1] ?? null, {
     actualPartySize: options?.actualPartySize,
+    tertiaryTableId: ids[2] ?? null,
   });
 }
 
@@ -576,7 +588,7 @@ export async function createOnlineReservation(input: {
   });
 }
 
-/** Assign 1–2 planned tables (preview only — does not check in). */
+/** Assign 1–3 planned tables (preview only — does not check in). */
 export async function assignReservationTables(
   reservationId: string,
   tableIds: string[],
@@ -601,11 +613,13 @@ export async function assignReservationTables(
     }
   }
 
+  const cols = reservationTableIdColumns(ids);
   return supabase
     .from("reservations")
     .update({
-      table_id: ids[0] ?? null,
-      secondary_table_id: ids[1] ?? null,
+      table_id: cols.tableId,
+      secondary_table_id: cols.secondaryTableId,
+      tertiary_table_id: cols.tertiaryTableId,
       updated_at: nowIso(),
     })
     .eq("id", reservationId)
@@ -626,7 +640,9 @@ export async function findActiveReservationForTable(tableId: string) {
     .from("reservations")
     .select(RESERVATION_SELECT)
     .eq("status", "checked_in")
-    .or(`table_id.eq.${tableId},secondary_table_id.eq.${tableId}`)
+    .or(
+      `table_id.eq.${tableId},secondary_table_id.eq.${tableId},tertiary_table_id.eq.${tableId}`,
+    )
     .order("checked_in_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -640,7 +656,7 @@ export async function completeReservationForTable(tableId: string, reservationId
   const found = reservationId
     ? await supabase
         .from("reservations")
-        .select("id, status, table_id, secondary_table_id")
+        .select("id, status, table_id, secondary_table_id, tertiary_table_id")
         .eq("id", reservationId)
         .maybeSingle()
     : await findActiveReservationForTable(tableId);
@@ -651,38 +667,44 @@ export async function completeReservationForTable(tableId: string, reservationId
         status: string;
         table_id: string | null;
         secondary_table_id: string | null;
+        tertiary_table_id: string | null;
       }
     | null
     | undefined;
 
   if (!row || row.status !== "checked_in") return { data: null, error: found.error ?? null };
 
-  let primary = row.table_id;
-  let secondary = row.secondary_table_id;
+  const remaining = normalizeReservationTableIds([
+    row.table_id,
+    row.secondary_table_id,
+    row.tertiary_table_id,
+  ]).filter((id) => id !== tableId);
 
-  if (primary === tableId) {
-    primary = secondary;
-    secondary = null;
-  } else if (secondary === tableId) {
-    secondary = null;
-  } else {
+  if (remaining.length === normalizeReservationTableIds([
+    row.table_id,
+    row.secondary_table_id,
+    row.tertiary_table_id,
+  ]).length) {
     // Reservation not linked to this table id — leave as-is.
     return { data: null, error: null };
   }
 
-  if (!primary) {
+  if (remaining.length === 0) {
     return updateReservationStatus(row.id, "completed", {
       completedAt: new Date(),
       tableId: null,
       secondaryTableId: null,
+      tertiaryTableId: null,
     });
   }
 
+  const cols = reservationTableIdColumns(remaining);
   return supabase
     .from("reservations")
     .update({
-      table_id: primary,
-      secondary_table_id: secondary,
+      table_id: cols.tableId,
+      secondary_table_id: cols.secondaryTableId,
+      tertiary_table_id: cols.tertiaryTableId,
       updated_at: nowIso(),
     })
     .eq("id", row.id)
@@ -764,6 +786,7 @@ export function mapReservationRow(
     id: string;
     table_id: string | null;
     secondary_table_id?: string | null;
+    tertiary_table_id?: string | null;
     guest_name: string;
     guest_phone: string | null;
     guest_email: string | null;
@@ -798,6 +821,7 @@ export function mapReservationRow(
     confirm_email_status?: string | null;
     tables?: { label: string } | { label: string }[] | null;
     secondary_table?: { label: string } | { label: string }[] | null;
+    tertiary_table?: { label: string } | { label: string }[] | null;
   },
 ): ReservationRecord {
   const tableJoin = row.tables;
@@ -806,6 +830,10 @@ export function mapReservationRow(
   const secondaryTableLabel = Array.isArray(secondaryJoin)
     ? secondaryJoin[0]?.label
     : secondaryJoin?.label;
+  const tertiaryJoin = row.tertiary_table;
+  const tertiaryTableLabel = Array.isArray(tertiaryJoin)
+    ? tertiaryJoin[0]?.label
+    : tertiaryJoin?.label;
 
   const wantsGrill =
     row.wants_grill === "yes" || row.wants_grill === "no" || row.wants_grill === "undecided"
@@ -824,6 +852,8 @@ export function mapReservationRow(
     tableLabel,
     secondaryTableId: row.secondary_table_id ?? undefined,
     secondaryTableLabel,
+    tertiaryTableId: row.tertiary_table_id ?? undefined,
+    tertiaryTableLabel,
     guestName: row.guest_name,
     guestPhone: row.guest_phone ?? undefined,
     guestEmail: row.guest_email ?? undefined,

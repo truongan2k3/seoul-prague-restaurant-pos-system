@@ -1039,7 +1039,9 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           onClick={() => {
                             setCheckInTarget(row);
                             setCheckInTableIds(
-                              [row.tableId, row.secondaryTableId].filter(Boolean) as string[],
+                              [row.tableId, row.secondaryTableId, row.tertiaryTableId].filter(
+                                Boolean,
+                              ) as string[],
                             );
                             setCheckInActualParty(row.actualPartySize ?? row.partySize);
                           }}
@@ -1055,7 +1057,9 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           onClick={() => {
                             setAssignTarget(row);
                             setAssignTableIds(
-                              [row.tableId, row.secondaryTableId].filter(Boolean) as string[],
+                              [row.tableId, row.secondaryTableId, row.tertiaryTableId].filter(
+                                Boolean,
+                              ) as string[],
                             );
                           }}
                           className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-semibold dark:border-gray-600"

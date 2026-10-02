@@ -538,9 +538,12 @@ export interface ReservationRecord {
   id: string;
   tableId?: string;
   tableLabel?: string;
-  /** Optional second table for large parties (max 2 total). */
+  /** Optional second table for large parties (max 3 total). */
   secondaryTableId?: string;
   secondaryTableLabel?: string;
+  /** Optional third table for large parties (max 3 total). */
+  tertiaryTableId?: string;
+  tertiaryTableLabel?: string;
   guestName: string;
   guestPhone?: string;
   guestEmail?: string;

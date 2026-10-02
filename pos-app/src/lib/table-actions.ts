@@ -10,6 +10,10 @@ import type { CancelActivityAction } from "@/lib/order-activity";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
 import type { OrderItem, OrderLogEntry, Station } from "@/lib/types";
 import { resolveStaffActorLocal } from "@/lib/staff-actor-client";
+import {
+  normalizeReservationTableIds,
+  reservationTableIdColumns,
+} from "@/lib/reservation-tables";
 import { completeReservationForTable, findActiveReservationForTable, mapReservationRow } from "@/src/lib/reservation-actions";
 import {
   mapOrderItemRow,
@@ -932,7 +936,7 @@ export async function checkoutTable(
 
 /**
  * When staff moves/merges a floor table, keep checked-in guest data with the party:
- * reservation primary/secondary table links, applied vouchers, and activity logs.
+ * reservation primary/secondary/tertiary table links, applied vouchers, and activity logs.
  */
 async function reassignCheckedInGuestData(fromTableId: string, toTableId: string) {
   if (!fromTableId || !toTableId || fromTableId === toTableId) return;
@@ -941,21 +945,27 @@ async function reassignCheckedInGuestData(fromTableId: string, toTableId: string
 
   const { data: linked } = await supabase
     .from("reservations")
-    .select("id, table_id, secondary_table_id")
+    .select("id, table_id, secondary_table_id, tertiary_table_id")
     .eq("status", "checked_in")
-    .or(`table_id.eq.${fromTableId},secondary_table_id.eq.${fromTableId}`);
+    .or(
+      `table_id.eq.${fromTableId},secondary_table_id.eq.${fromTableId},tertiary_table_id.eq.${fromTableId}`,
+    );
 
   for (const row of linked ?? []) {
-    let primary = row.table_id === fromTableId ? toTableId : row.table_id;
-    let secondary =
-      row.secondary_table_id === fromTableId ? toTableId : row.secondary_table_id;
-    if (secondary && secondary === primary) secondary = null;
+    const cols = reservationTableIdColumns(
+      normalizeReservationTableIds([
+        row.table_id === fromTableId ? toTableId : row.table_id,
+        row.secondary_table_id === fromTableId ? toTableId : row.secondary_table_id,
+        row.tertiary_table_id === fromTableId ? toTableId : row.tertiary_table_id,
+      ]),
+    );
 
     await supabase
       .from("reservations")
       .update({
-        table_id: primary,
-        secondary_table_id: secondary,
+        table_id: cols.tableId,
+        secondary_table_id: cols.secondaryTableId,
+        tertiary_table_id: cols.tertiaryTableId,
         updated_at: now,
       })
       .eq("id", row.id);

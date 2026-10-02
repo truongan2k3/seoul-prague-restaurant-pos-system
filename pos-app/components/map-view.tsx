@@ -58,7 +58,7 @@ function buildPlannedByTableId(
       (row) =>
         reservationOnVenueDateIso(row.reservedAt, venueDateIso) &&
         PLANNED_FLOOR_STATUSES.includes(row.status) &&
-        Boolean(row.tableId || row.secondaryTableId),
+        Boolean(row.tableId || row.secondaryTableId || row.tertiaryTableId),
     )
     .sort((a, b) => a.reservedAt.getTime() - b.reservedAt.getTime());
 
@@ -72,7 +72,7 @@ function buildPlannedByTableId(
       }),
       reservedAtMs: row.reservedAt.getTime(),
     };
-    for (const tableId of [row.tableId, row.secondaryTableId]) {
+    for (const tableId of [row.tableId, row.secondaryTableId, row.tertiaryTableId]) {
       if (!tableId) continue;
       const existing = byTable[tableId];
       // Prefer the soonest upcoming assignment if multiple touch the same table.

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useApp } from "@/contexts/app-context";
 import { MAX_RESERVATION_TABLES, normalizeReservationTableIds } from "@/lib/reservation-tables";
 import type { RestaurantTable, TableStatus } from "@/lib/types";
@@ -22,7 +23,7 @@ interface ReservationTableSelectProps {
   onChange: (tableId: string) => void;
   className?: string;
   includeAnyTable?: boolean;
-  /** Exclude these table ids from the options (e.g. the other dual-table pick). */
+  /** Exclude these table ids from the options (e.g. the other multi-table picks). */
   excludeIds?: string[];
 }
 
@@ -61,7 +62,9 @@ export function ReservationTableSelect({
   );
 }
 
-/** Pick up to 2 tables for large-party assign / check-in. */
+const SLOT_LABEL_KEYS = ["selectTable", "selectSecondTable", "selectThirdTable"] as const;
+
+/** Pick up to 3 tables for large-party assign / check-in. Starts with 1 slot. */
 export function ReservationDualTableSelect({
   tables,
   value,
@@ -75,39 +78,67 @@ export function ReservationDualTableSelect({
 }) {
   const { translate } = useApp();
   const ids = normalizeReservationTableIds(value);
-  const primary = ids[0] ?? "";
-  const secondary = ids[1] ?? "";
+  const [slotCount, setSlotCount] = useState(() => Math.max(1, ids.length));
 
-  const setPrimary = (tableId: string) => {
-    onChange(normalizeReservationTableIds([tableId, secondary === tableId ? "" : secondary]));
+  useEffect(() => {
+    if (ids.length === 0) {
+      setSlotCount(1);
+      return;
+    }
+    setSlotCount((current) => Math.max(current, ids.length));
+  }, [ids.length]);
+
+  const slots = Array.from({ length: slotCount }, (_, index) => ids[index] ?? "");
+
+  const setAt = (index: number, tableId: string) => {
+    const next = Array.from({ length: slotCount }, (_, i) => (i === index ? tableId : slots[i] ?? ""));
+    onChange(normalizeReservationTableIds(next));
   };
 
-  const setSecondary = (tableId: string) => {
-    onChange(normalizeReservationTableIds([primary, tableId]));
-  };
+  const canAdd = slotCount < MAX_RESERVATION_TABLES;
+  const canRemoveLast =
+    slotCount > 1 && !(slots[slotCount - 1] ?? "") && slotCount > Math.max(1, ids.length);
 
   return (
     <div className="space-y-2">
-      <label className="block text-sm">
-        <span className="opacity-70">{translate("selectTable")}</span>
-        <ReservationTableSelect
-          tables={tables}
-          value={primary}
-          onChange={setPrimary}
-          className={`${className} mt-1`}
-          excludeIds={secondary ? [secondary] : []}
-        />
-      </label>
-      <label className="block text-sm">
-        <span className="opacity-70">{translate("selectSecondTable")}</span>
-        <ReservationTableSelect
-          tables={tables}
-          value={secondary}
-          onChange={setSecondary}
-          className={`${className} mt-1`}
-          excludeIds={primary ? [primary] : []}
-        />
-      </label>
+      {slots.map((tableId, index) => {
+        const excludeIds = slots.filter((_, i) => i !== index && slots[i]);
+        const labelKey = SLOT_LABEL_KEYS[index] ?? "selectTable";
+        return (
+          <label key={`table-slot-${index}`} className="block text-sm">
+            <span className="opacity-70">{translate(labelKey)}</span>
+            <ReservationTableSelect
+              tables={tables}
+              value={tableId}
+              onChange={(nextId) => setAt(index, nextId)}
+              className={`${className} mt-1`}
+              excludeIds={excludeIds}
+            />
+          </label>
+        );
+      })}
+
+      <div className="flex flex-wrap items-center gap-2">
+        {canAdd ? (
+          <button
+            type="button"
+            onClick={() => setSlotCount((count) => Math.min(MAX_RESERVATION_TABLES, count + 1))}
+            className="rounded-lg border border-dashed border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+          >
+            + {translate("addAnotherTable")}
+          </button>
+        ) : null}
+        {canRemoveLast ? (
+          <button
+            type="button"
+            onClick={() => setSlotCount((count) => Math.max(1, count - 1))}
+            className="rounded-lg px-2 py-1.5 text-xs text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+          >
+            {translate("removeTableSlot")}
+          </button>
+        ) : null}
+      </div>
+
       <p className="text-xs opacity-60">
         {translate("selectSecondTableHint").replace("{max}", String(MAX_RESERVATION_TABLES))}
       </p>

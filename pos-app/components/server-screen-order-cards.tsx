@@ -269,7 +269,13 @@ function OrderCard({
           className="min-w-0 flex-1 rounded-lg text-left transition hover:brightness-110"
           title={lingering ? "Double-tap to undo" : "Tap to mark all done"}
         >
-          <p className="font-serif text-2xl font-semibold leading-none tracking-tight sm:text-[1.65rem]">
+          <p className={`inline-block max-w-full break-words rounded-lg border px-3 py-1.5 font-serif text-2xl font-bold leading-none tracking-tight shadow-sm sm:text-[1.65rem] ${
+            queued
+              ? "border-zinc-950/20 bg-zinc-950/10 text-zinc-950"
+              : lingering || tone !== "normal" || card.hasMessage
+                ? "border-white/25 bg-black/25 text-white"
+                : "border-sky-400/50 bg-sky-700 text-white"
+          }`}>
             {card.tableLabel}
           </p>
           <p

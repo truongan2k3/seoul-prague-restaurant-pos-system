@@ -25,6 +25,7 @@ import {
   resolveCfdSlideshow,
 } from "@/lib/cfd-slideshow";
 import { formatCzk } from "@/lib/checkout-calculations";
+import { DEFAULT_EUR_RATE, formatEurFromCzk } from "@/lib/currency";
 import { t, type TranslationKey } from "@/lib/i18n/translations";
 import type { CfdSlideshowItem, LanguageCode } from "@/lib/types";
 import { LandingImage } from "@/lib/website/landing-image";
@@ -174,6 +175,8 @@ function CheckoutView({
   translate: (key: TranslationKey) => string;
   onTipAccepted: (payload: CfdCheckoutPayload) => void;
 }) {
+  const {settings} = useSettings();
+  const eurRate = Number.isFinite(settings.eurExchangeRate) && settings.eurExchangeRate > 0 ? settings.eurExchangeRate : DEFAULT_EUR_RATE;
   const [pending, setPending] = useState<CfdTipRequest | null>(null);
   const [tipError, setTipError] = useState(false);
   const currentRequest = useRef<string | null>(null);
@@ -206,7 +209,7 @@ function CheckoutView({
     }
   };
   const isSplitSelect = checkout.mode === "split-select";
-  const fadeRef = useDisplayFade(`${checkoutPayloadFingerprint(checkout)}:${displayTip}:${displayTotal}:${tipError}`);
+  const fadeRef = useDisplayFade(`${checkoutPayloadFingerprint(checkout)}:${displayTip}:${displayTotal}:${tipError}:${settings.showEurOnClient}:${eurRate}`);
 
   return (
     <div ref={fadeRef} className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0B0B0C]">
@@ -325,9 +328,12 @@ function CheckoutView({
             <span className="text-xl font-semibold uppercase tracking-wide text-white">
               {translate("total")}
             </span>
-            <span className="min-w-0 text-3xl font-semibold tracking-tight tabular-nums text-[#F5EDE4] sm:text-5xl">
-              {formatCzk(displayTotal)}
-            </span>
+            <div className="min-w-0 text-right tabular-nums">
+              <p className="text-3xl font-semibold tracking-tight text-[#F5EDE4] sm:text-5xl">{formatCzk(displayTotal)}</p>
+              {settings.showEurOnClient && (
+                <p className="mt-1 text-lg font-medium text-[#C9A88B] sm:text-2xl">≈ {formatEurFromCzk(displayTotal,eurRate)}</p>
+              )}
+            </div>
           </div>
           {!isSplitSelect && checkout.amountGiven != null && checkout.amountGiven > 0 && (
             <div className="flex justify-between pt-1 text-white/45">

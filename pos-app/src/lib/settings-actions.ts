@@ -147,6 +147,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   enablePriceRounding: true,
   showEurCurrency: false,
   showEurOnMenu: false,
+  showEurOnClient: false,
   eurExchangeRate: 25,
   reservationTimeStep: 30,
   reservationMaxGuestsPerSlot: 20,
@@ -246,6 +247,7 @@ type SettingsRow = {
   enable_price_rounding?: boolean | null;
   show_eur_currency?: boolean | null;
   show_eur_on_menu?: boolean | null;
+  show_eur_on_client?: boolean | null;
   eur_exchange_rate?: number | string | null;
   reservation_time_step?: number | null;
   reservation_max_guests_per_slot?: number | null;
@@ -496,6 +498,7 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     enablePriceRounding: row.enable_price_rounding ?? DEFAULT_APP_SETTINGS.enablePriceRounding,
     showEurCurrency: row.show_eur_currency ?? DEFAULT_APP_SETTINGS.showEurCurrency,
     showEurOnMenu: row.show_eur_on_menu ?? DEFAULT_APP_SETTINGS.showEurOnMenu,
+    showEurOnClient: row.show_eur_on_client ?? DEFAULT_APP_SETTINGS.showEurOnClient,
     eurExchangeRate: parseNumericSetting(row.eur_exchange_rate, DEFAULT_APP_SETTINGS.eurExchangeRate),
     reservationTimeStep: row.reservation_time_step ?? DEFAULT_APP_SETTINGS.reservationTimeStep,
     reservationMaxGuestsPerSlot:
@@ -647,6 +650,7 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   if (partial.enablePriceRounding !== undefined) payload.enable_price_rounding = partial.enablePriceRounding;
   if (partial.showEurCurrency !== undefined) payload.show_eur_currency = partial.showEurCurrency;
   if (partial.showEurOnMenu !== undefined) payload.show_eur_on_menu = partial.showEurOnMenu;
+  if (partial.showEurOnClient !== undefined) payload.show_eur_on_client = partial.showEurOnClient;
   if (partial.eurExchangeRate !== undefined) payload.eur_exchange_rate = partial.eurExchangeRate;
   if (partial.reservationTimeStep !== undefined) payload.reservation_time_step = partial.reservationTimeStep;
   if (partial.reservationMaxGuestsPerSlot !== undefined) {
@@ -769,6 +773,15 @@ export async function fetchAppSettings(businessId?: string | null) {
 
 export async function updateAppSettings(partial: Partial<AppSettings>, businessId?: string | null) {
   const payload = mapSettingsToRow(partial);
+  async function persist<T extends {error:{message:string}|null}>(write:()=>PromiseLike<T>):Promise<T> {
+    const result=await write();
+    if (result.error && payload.show_eur_on_client === false &&
+        /show_eur_on_client/i.test(result.error.message) && /column|schema cache/i.test(result.error.message)) {
+      delete payload.show_eur_on_client;
+      return write();
+    }
+    return result;
+  }
 
   if (businessId) {
     const { data: existing, error: lookupError } = await supabase
@@ -780,30 +793,30 @@ export async function updateAppSettings(partial: Partial<AppSettings>, businessI
     if (lookupError) return { data: null, error: lookupError };
 
     if (existing) {
-      const { data, error } = await supabase
+      const { data, error } = await persist(() => supabase
         .from("settings")
         .update(payload)
         .eq("business_id", businessId)
         .select("*")
-        .single();
+        .single());
       if (error) return { data: null, error };
       return { data: mapSettingsRow(data as SettingsRow), error: null };
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await persist(() => supabase
       .from("settings")
       .insert({ business_id: businessId, ...payload })
       .select("*")
-      .single();
+      .single());
     if (error) return { data: null, error };
     return { data: mapSettingsRow(data as SettingsRow), error: null };
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await persist(() => supabase
     .from("settings")
     .upsert({ id: 1, ...payload }, { onConflict: "id" })
     .select("*")
-    .single();
+    .single());
 
   if (error) return { data: null, error };
   return { data: mapSettingsRow(data as SettingsRow), error: null };
@@ -956,6 +969,7 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "enablePriceRounding"
     | "showEurCurrency"
     | "showEurOnMenu"
+    | "showEurOnClient"
     | "eurExchangeRate"
     | "reservationTimeStep"
     | "reservationMaxGuestsPerSlot"
@@ -1028,6 +1042,7 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     enablePriceRounding: settings.enablePriceRounding,
     showEurCurrency: settings.showEurCurrency,
     showEurOnMenu: settings.showEurOnMenu,
+    showEurOnClient: settings.showEurOnClient,
     eurExchangeRate: settings.eurExchangeRate,
     reservationTimeStep: settings.reservationTimeStep,
     reservationMaxGuestsPerSlot: settings.reservationMaxGuestsPerSlot,

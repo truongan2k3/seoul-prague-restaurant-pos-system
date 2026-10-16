@@ -1986,6 +1986,19 @@ export function SettingsView({
           <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("settingsCustomerDisplay")}</h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{translate("settingsCustomerDisplayHint")}</p>
+            <label className="mt-5 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+              <div>
+                <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{translate("settingsShowEurOnClient")}</span>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{translate("settingsShowEurOnClientHint")}</p>
+              </div>
+              <input type="checkbox" checked={draft.showEurOnClient} onChange={event => updateDraft("showEurOnClient",event.target.checked)} className="h-4 w-4 shrink-0 rounded border-gray-300" />
+            </label>
+            {draft.showEurOnClient && (
+              <label className="mt-4 block text-sm text-gray-600 dark:text-gray-300">
+                {translate("settingsEurExchangeRate")}
+                <input type="number" min={1} step={0.01} value={draft.eurExchangeRate} onChange={event => updateDraft("eurExchangeRate",Number(event.target.value))} className="pos-input mt-1" />
+              </label>
+            )}
 
             <div className="mt-6 space-y-3">
               <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{translate("settingsCfdAdVideo")}</p>

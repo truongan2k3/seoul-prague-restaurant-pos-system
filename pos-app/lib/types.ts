@@ -237,6 +237,8 @@ export interface AppSettings {
   showEurCurrency: boolean;
   /** When true, menu tiles show CZK + EUR; checkout uses showEurCurrency regardless. */
   showEurOnMenu: boolean;
+  /** Optional EUR equivalent below the customer display total. */
+  showEurOnClient: boolean;
   eurExchangeRate: number;
   reservationTimeStep: number;
   reservationMaxGuestsPerSlot: number;

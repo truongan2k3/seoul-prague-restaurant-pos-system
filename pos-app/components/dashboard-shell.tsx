@@ -660,7 +660,7 @@ export function DashboardShell() {
   })();
 
   return (
-    <div className="flex h-[100dvh] max-h-[100dvh] bg-background pb-[env(safe-area-inset-bottom,0px)] text-[var(--foreground)]">
+    <div data-pos-interaction={tableOrder.modal || tableOrder.isSaving ? "busy" : undefined} className="flex h-[100dvh] max-h-[100dvh] bg-background pb-[env(safe-area-inset-bottom,0px)] text-[var(--foreground)]">
       <CallWaiterListener />
       <PrintFailedListener />
       <TableGuestRequestListener />

@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -52,7 +53,7 @@ function readStoredNumber(key: string, fallback: number): number {
 function readStoredTheme(): ThemeMode {
   if (typeof window === "undefined") return "dark";
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
-  return stored === "light" ? "light" : "dark";
+  return stored === "light" || stored === "halloween" ? stored : "dark";
 }
 
 function readStoredLanguage(): LanguageCode {
@@ -146,10 +147,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCurrentStaffUser(member);
   }, []);
 
-  useEffect(() => {
-    setLanguageState(readStoredLanguage());
+  useLayoutEffect(() => {
     setTheme(readStoredTheme());
     setLightBackgroundState(readStoredLightBackground());
+  }, []);
+
+  useEffect(() => {
+    setLanguageState(readStoredLanguage());
     setReceiptShowEurState(readStoredBoolean(RECEIPT_EUR_KEY));
     setReceiptShowUsdState(readStoredBoolean(RECEIPT_USD_KEY));
     setEurRateState(readStoredNumber(EUR_RATE_KEY, DEFAULT_EUR_RATE));
@@ -211,12 +215,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const applyThemeToDocument = useCallback(
     (mode: ThemeMode, lightBg: LightBackgroundSelection) => {
       const root = document.documentElement;
-      if (mode === "dark") {
+      root.dataset.theme = mode;
+      if (mode !== "light") {
         root.classList.add("dark");
       } else {
         root.classList.remove("dark");
       }
-      applyLightBackgroundToDocument(lightBg, mode);
+      applyLightBackgroundToDocument(lightBg, mode === "light" ? "light" : "dark");
     },
     [],
   );
@@ -242,6 +247,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     applyThemeToDocument(theme, lightBackground);
   }, [theme, lightBackground, applyThemeToDocument]);
+
+  useEffect(() => {
+    const syncTheme = (event: StorageEvent) => {
+      if (event.key === THEME_STORAGE_KEY || event.key === null) setTheme(readStoredTheme());
+      if (event.key === LIGHT_BG_STORAGE_KEY || event.key === null) setLightBackgroundState(readStoredLightBackground());
+    };
+    window.addEventListener("storage", syncTheme);
+    return () => window.removeEventListener("storage", syncTheme);
+  }, []);
 
   const translate = useCallback((key: TranslationKey) => t(language, key), [language]);
 

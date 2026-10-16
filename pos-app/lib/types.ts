@@ -27,7 +27,7 @@ export type PaymentMethod = "cash" | "card";
 export type DiscountType = "percent" | "fixed";
 export type SplitMode = "total" | "equal" | "items";
 export type LanguageCode = "en" | "cs" | "zh";
-export type ThemeMode = "light" | "dark";
+export type ThemeMode = "light" | "dark" | "halloween";
 export type ServerScreenLanguageMode = "single" | "bilingual" | "multilingual";
 
 export interface ServerScreenConfig {

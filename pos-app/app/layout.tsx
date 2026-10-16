@@ -5,6 +5,7 @@ import { Providers } from "@/components/providers";
 import { ThemeScript } from "@/components/theme-script";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
+import "./halloween.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

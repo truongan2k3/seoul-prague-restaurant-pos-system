@@ -21,6 +21,7 @@ import {
   User,
   Users,
 } from "lucide-react";
+import { PosHalloweenEffectsToggle } from "@/components/landing/pos-halloween-effects-toggle";
 import { SidebarStatusIcons } from "@/components/connection-status-badge";
 import { LanguageSelector } from "@/components/language-selector";
 import { StaffSelfProfileModal } from "@/components/staff-self-profile-modal";
@@ -255,6 +256,8 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           <div className="flex justify-center">
             <LanguageSelector variant="flag-menu" />
           </div>
+
+          <PosHalloweenEffectsToggle compact={!isExpanded} />
 
           <button
             type="button"

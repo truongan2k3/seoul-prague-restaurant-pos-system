@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { BookingCta } from "@/components/landing/booking-cta";
+import { HalloweenHeroAtmosphere } from "@/components/landing/halloween-atmosphere";
 import { LandingImage } from "@/lib/website/landing-image";
 import type { WebsiteContent } from "@/lib/website/types";
 
@@ -128,6 +129,7 @@ export function LandingHero({ content }: LandingHeroProps) {
         )}
       </div>
       <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0C] via-[#0B0B0C]/70 to-black/30" />
+      <HalloweenHeroAtmosphere />
 
       <div className="relative z-10 mx-auto w-full max-w-7xl px-5 lg:px-8">
         <motion.p

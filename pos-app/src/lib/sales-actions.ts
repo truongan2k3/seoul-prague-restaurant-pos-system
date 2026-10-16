@@ -1,3 +1,4 @@
+import { adjustReferralSalesAction } from "@/src/lib/referral-actions";
 import type { OrderItem, PaymentMethod } from "@/lib/types";
 import { resolveEqualSplitProgress } from "@/lib/checkout-calculations";
 import { supabase } from "@/src/lib/supabase";
@@ -15,43 +16,46 @@ function localMonthRange(yearMonth: string): { start: string; end: string } {
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
-/** Soft-delete (void) sales — keeps rows for History audit trail. */
-export async function deleteSaleRecords(ids: string[]) {
-  if (ids.length === 0) {
-    return { data: [] as { id: string; deleted_at: string }[], error: null };
+/** Preserve the existing void flow; referred payments require a manager-backed server action. */
+async function voidSales(scope:{ids?:string[];start?:string;end?:string}) {
+  if(scope.ids?.length===0)return {data:[],error:null};
+  const ids:string[]=[];
+  for(let offset=0;;offset+=500){
+    let q=supabase.from("sales").select("id,referral_code_id").is("deleted_at",null).not("referral_code_id","is",null).order("id").range(offset,offset+499);
+    if(scope.ids)q=q.in("id",scope.ids);
+    if(scope.start)q=q.gte("closed_at",scope.start);
+    if(scope.end)q=q.lte("closed_at",scope.end);
+    const {data,error}=await q;
+    if(error){
+      if(error.code==="42703" || (/referral_code_id/i.test(error.message)&&/column|schema cache/i.test(error.message))){
+        let legacy=supabase.from("sales").update({deleted_at:new Date().toISOString()}).is("deleted_at",null);
+        if(scope.ids)legacy=legacy.in("id",scope.ids);
+        if(scope.start)legacy=legacy.gte("closed_at",scope.start);
+        if(scope.end)legacy=legacy.lte("closed_at",scope.end);
+        return legacy.select("id,deleted_at");
+      }
+      return {data:null,error};
+    }
+    ids.push(...(data??[]).filter(r=>r.referral_code_id).map(r=>r.id));
+    if((data??[]).length<500)break;
+    if(offset>=100000)return {data:null,error:new Error("Choose a narrower date range.")};
   }
-  const deletedAt = new Date().toISOString();
-  return supabase
-    .from("sales")
-    .update({ deleted_at: deletedAt })
-    .in("id", ids)
-    .is("deleted_at", null)
-    .select("id, deleted_at");
+  const deletedAt=new Date().toISOString();const referred: {id:string;deleted_at:string}[]=[];
+  for(let i=0;i<ids.length;i+=500){
+    const result=await adjustReferralSalesAction(ids.slice(i,i+500),{deleted_at:deletedAt},"History payment void / reversal");
+    if(result.error)return {data:null,error:new Error(result.error)};
+    referred.push(...(result.data??[]));
+  }
+  let q=supabase.from("sales").update({deleted_at:deletedAt}).is("deleted_at",null).is("referral_code_id",null);
+  if(scope.ids)q=q.in("id",scope.ids);
+  if(scope.start)q=q.gte("closed_at",scope.start);
+  if(scope.end)q=q.lte("closed_at",scope.end);
+  const result=await q.select("id,deleted_at");
+  return {data:result.error?null:[...(result.data??[]),...referred],error:result.error};
 }
-
-export async function deleteSalesByDate(dateStr: string) {
-  const { start, end } = localDayRange(dateStr);
-  const deletedAt = new Date().toISOString();
-  return supabase
-    .from("sales")
-    .update({ deleted_at: deletedAt })
-    .gte("closed_at", start)
-    .lte("closed_at", end)
-    .is("deleted_at", null)
-    .select("id, deleted_at");
-}
-
-export async function deleteSalesByMonth(yearMonth: string) {
-  const { start, end } = localMonthRange(yearMonth);
-  const deletedAt = new Date().toISOString();
-  return supabase
-    .from("sales")
-    .update({ deleted_at: deletedAt })
-    .gte("closed_at", start)
-    .lte("closed_at", end)
-    .is("deleted_at", null)
-    .select("id, deleted_at");
-}
+export async function deleteSaleRecords(ids:string[]){return voidSales({ids})}
+export async function deleteSalesByDate(dateStr:string){const {start,end}=localDayRange(dateStr);return voidSales({start,end})}
+export async function deleteSalesByMonth(yearMonth:string){const {start,end}=localMonthRange(yearMonth);return voidSales({start,end})}
 
 export async function updateSaleRecord(
   saleId: string,
@@ -93,6 +97,15 @@ export async function updateSaleRecord(
     payload.card_brand = null;
   }
 
+  const {data:sale,error:lookupError}=await supabase.from("sales").select("referral_code_id").eq("id",saleId).single();
+  if(lookupError){
+    if(lookupError.code==="42703" || (/referral_code_id/i.test(lookupError.message)&&/column|schema cache/i.test(lookupError.message)))return supabase.from("sales").update(payload).eq("id",saleId).is("deleted_at",null);
+    return {data:null,error:lookupError};
+  }
+  if(sale?.referral_code_id){
+    const result=await adjustReferralSalesAction([saleId],payload,"History payment edit / partial refund");
+    return {data:result.data,error:result.error?new Error(result.error):null};
+  }
   return supabase.from("sales").update(payload).eq("id", saleId).is("deleted_at", null);
 }
 

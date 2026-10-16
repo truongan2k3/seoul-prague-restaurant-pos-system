@@ -1,3 +1,4 @@
+import { requireValidReferralForBooking } from "@/src/lib/referral-actions";
 import {
   buildTimeSlotsForDate,
   countGuestsInSlot,
@@ -32,6 +33,7 @@ import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 import { sumActiveHoldsForSlot } from "@/src/lib/reservation-holds";
 
 export interface OnlineBookInput {
+  referralCode?: string;
   guestName: string;
   email: string;
   phone: string;
@@ -712,7 +714,13 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
   const admin = createSupabaseAdmin();
   const nowIso = new Date().toISOString();
 
+  let referralCode: string | undefined;
+  if(input.referralCode?.trim()) {
+    try { referralCode=await requireValidReferralForBooking(input.referralCode); }
+    catch(error) { return {data:null,error:error instanceof Error?error.message:"Invalid referral code."}; }
+  }
   const insertPayload: Record<string, unknown> = {
+    ...(referralCode ? {referral_code:referralCode} : {}),
     guest_name: guestName,
     guest_phone: phone || null,
     guest_email: email || null,
@@ -744,7 +752,7 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
     .single();
 
   // Backward compatible if capacity columns are not migrated yet.
-  if (error && /column .* does not exist/i.test(error.message)) {
+  if (error && !referralCode && /column .* does not exist/i.test(error.message)) {
     const legacy = await admin
       .from("reservations")
       .insert({

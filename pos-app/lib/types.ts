@@ -61,6 +61,7 @@ export type NavId =
   | "dynamicQr"
   | "guestChat"
   | "vouchers"
+  | "referrals"
   | "staff"
   | "settings"
   | "about";
@@ -535,6 +536,8 @@ export type ReservationStatus =
   | "late";
 
 export interface ReservationRecord {
+  referralCodeId?: string;
+  referralCode?: string;
   id: string;
   tableId?: string;
   tableLabel?: string;

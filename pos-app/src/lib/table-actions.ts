@@ -1,3 +1,4 @@
+import { commitReferralSaleAction } from "@/src/lib/referral-actions";
 import {
   buildEqualSplitShareAmounts,
   type CheckoutPaymentRecord,
@@ -871,7 +872,7 @@ export async function checkoutTable(
 
   const activityLog = await fetchTableCancelActivityLog(tableId, seatedAt);
 
-  const { error: saleError } = await supabase.from("sales").insert({
+  const salePayload = {
     table_id: tableId,
     table_label: tableLabel,
     staff_id: staff.staffId ?? null,
@@ -909,9 +910,15 @@ export async function checkoutTable(
     visit_source: activeReservation?.source ?? null,
     service_channel: inferServiceChannel(tableLabel),
     seated_at: seatedAt,
-  });
+  };
+  const referred = Boolean(payment.referral || activeReservation?.referralCodeId);
+  const saleResult = referred
+    ? await commitReferralSaleAction({...salePayload,referral_equal_scope:payment.referralEqualScope},payment.referral)
+    : await supabase.from("sales").insert(salePayload);
+  const saleError = typeof saleResult.error === "string" ? new Error(saleResult.error) : saleResult.error;
 
   if (saleError) return { data: null, error: saleError };
+  if ("skipSettlement" in saleResult && saleResult.skipSettlement) return {data:null,error:null};
 
   if (options?.closeTable !== false) {
     await completeReservationForTable(tableId, activeReservation?.id);

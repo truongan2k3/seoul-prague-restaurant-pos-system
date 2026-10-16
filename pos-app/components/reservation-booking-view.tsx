@@ -1,5 +1,7 @@
 "use client";
 
+import { ReferralCodeField } from "@/components/referral-code-field";
+
 import { useEffect, useMemo, useState } from "react";
 import { Clock, Globe, Mail, MapPin, Phone, UtensilsCrossed } from "lucide-react";
 import { Modal } from "@/components/modal";
@@ -85,6 +87,7 @@ export function ReservationBookingView({
   const [guestCount, setGuestCount] = useState(2);
   const [date, setDate] = useState(todayIsoDate());
   const [time, setTime] = useState("18:00");
+  const [referralCode, setReferralCode] = useState("");
   const [notes, setNotes] = useState("");
   const [eventType, setEventType] = useState("");
   const [wantsBbq, setWantsBbq] = useState<"yes" | "no" | "undecided" | null>(null);
@@ -332,6 +335,7 @@ export function ReservationBookingView({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          referralCode: referralCode.trim() || undefined,
           guestName: guestName.trim(),
           email: email.trim(),
           phone: phone.trim(),
@@ -671,6 +675,8 @@ export function ReservationBookingView({
             ) : null}
           </label>
         </div>
+
+        <ReferralCodeField value={referralCode} onChange={setReferralCode} />
 
         <label className="block text-sm text-white/80">
           {copy.additionalNotes}

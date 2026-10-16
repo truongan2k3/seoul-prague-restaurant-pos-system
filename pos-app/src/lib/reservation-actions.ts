@@ -783,6 +783,8 @@ export function subscribeToGuestReservationAlerts(
 
 export function mapReservationRow(
   row: {
+    referral_code_id?: string | null;
+    referral_code?: string | null;
     id: string;
     table_id: string | null;
     secondary_table_id?: string | null;
@@ -857,6 +859,8 @@ export function mapReservationRow(
     guestName: row.guest_name,
     guestPhone: row.guest_phone ?? undefined,
     guestEmail: row.guest_email ?? undefined,
+    referralCodeId: row.referral_code_id ?? undefined,
+    referralCode: row.referral_code ?? undefined,
     partySize: row.party_size,
     actualPartySize: row.actual_party_size ?? undefined,
     reservedAt: new Date(row.reserved_at),

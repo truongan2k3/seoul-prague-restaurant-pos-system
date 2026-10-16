@@ -16,7 +16,6 @@ import { useApp } from "@/contexts/app-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { useSettings } from "@/contexts/settings-context";
 import {
-  buildCheckoutTotals,
   calcTipFromPercent,
   lineTotal,
   mergeCheckoutLines,
@@ -35,6 +34,8 @@ import { buildReceiptLines } from "@/lib/receipt-calculations";
 import { buildCfdCheckoutPayload, type CfdCheckoutPayload } from "@/lib/cfd-display";
 import { buildCfdTipChoices, canApplyCfdTip, cfdTipAmount, newCfdTipId, type CfdTipOffer, type CfdTipRequest } from "@/lib/cfd-tip";
 import { acknowledgeCfdTip, subscribeCfdTipRequests } from "@/lib/cfd-tip-channel";
+import { buildReferralCheckoutTotals, referralAvailable, referralBillSubtotal, type ReferralQuote } from "@/lib/referrals";
+import { getReferralQuoteAction } from "@/src/lib/referral-actions";
 import { playPaymentSuccessSound } from "@/lib/notification-sound";
 import {
   clearEqualSplitSession,
@@ -139,7 +140,7 @@ export function CheckoutPanel({
   onVoucherApplied,
   onOpenVouchersTab,
 }: CheckoutPanelProps) {
-  const { translate, staff } = useApp();
+  const { translate, staff, currentStaffUser } = useApp();
   const { printProvisionalBill } = useReceiptPrint();
   const { settings } = useSettings();
   const priceOptions = useMemo(
@@ -164,6 +165,32 @@ export function CheckoutPanel({
 
   const customAmountRef = useRef<NumericInputFieldHandle>(null);
   const cashGivenRef = useRef<NumericInputFieldHandle>(null);
+
+  const referralContext = `${tableId ?? ""}:${sessionResetKey}`;
+  const [referralState, setReferralState] = useState<{context:string;data:ReferralQuote|null;error:string|null}>({context:"",data:null,error:null});
+  const [referralRetry, setReferralRetry] = useState(0);
+  const [referralOverride, setReferralOverride] = useState<{context:string;percent:number;reason:string}|null>(null);
+  const [overridePercent, setOverridePercent] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [successfulReferralPayments,setSuccessfulReferralPayments]=useState(0);
+  const [referralPaymentKey, setReferralPaymentKey] = useState(newCfdTipId);
+  const referralQuote = referralState.context === referralContext ? referralState.data : null;
+  const referralLoading = Boolean(tableId && referralState.context !== referralContext);
+  const referralError = referralState.context === referralContext ? referralState.error : null;
+  const referralIsAvailable = referralQuote ? referralAvailable(referralQuote, referralBillSubtotal(lines)) : false;
+  const effectiveOverride = referralOverride?.context === referralContext ? referralOverride : null;
+  const referralPercent = effectiveOverride?.percent ?? (referralIsAvailable ? referralQuote?.discountPercent ?? 0 : 0);
+  const canOverrideReferral = currentStaffUser?.role === "admin" || currentStaffUser?.role === "manager";
+  useEffect(() => {
+    if (!tableId) return;
+    let cancelled = false;
+    void getReferralQuoteAction(tableId).then(result => {
+      if(!cancelled) setReferralState({context:referralContext,...result});
+    }).catch(() => {
+      if(!cancelled) setReferralState({context:referralContext,data:null,error:"Unable to load referral. Please retry."});
+    });
+    return () => { cancelled=true; };
+  }, [tableId,referralContext,referralRetry]);
 
   const [guestTip, setGuestTip] = useState<CfdTipRequest | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -232,6 +259,9 @@ export function CheckoutPanel({
   }, []);
 
   const resetCheckoutForm = useCallback(() => {
+    setReferralPaymentKey(newCfdTipId());
+    setSuccessfulReferralPayments(0);
+    setReferralOverride(null);
     const currentLines = linesRef.current;
     setSelectedLineIds(currentLines.map((line) => line.lineId));
     resetPaymentAdjustments();
@@ -380,7 +410,8 @@ export function CheckoutPanel({
 
   const baseTotals = useMemo(
     () =>
-      buildCheckoutTotals({
+      buildReferralCheckoutTotals({
+        referralPercent,
         lines,
         discountType,
         discountValue,
@@ -396,6 +427,7 @@ export function CheckoutPanel({
       lines,
       discountType,
       discountValue,
+      referralPercent,
       splitMode,
       splitCount,
       selectedLineIds,
@@ -409,7 +441,7 @@ export function CheckoutPanel({
   const tipContext = JSON.stringify([
     tableId, sessionResetKey, splitMode, splitCount, splitPhase, panelView,
     equalPaymentsMade, equalAdjustScope, discountType, discountValue,
-    settings.enablePriceRounding,
+    settings.enablePriceRounding, referralPercent,
     lines.map((line) => [line.lineId, line.price, line.quantity]),
     selectedLineIds, appliedVouchers,
   ]);
@@ -424,12 +456,12 @@ export function CheckoutPanel({
     revision: tipSession.id,
     base: customerTipBase,
     choices: buildCfdTipChoices({
-      lines, discountType, discountValue, splitMode, splitCount,
+      lines, discountType, discountValue, referralPercent, splitMode, splitCount,
       selectedLineIds, allLines: lines, enablePriceRounding: settings.enablePriceRounding,
       equalAdjustScope,
     }, appliedVouchers.reduce((sum, voucher) => sum + Math.max(0, voucher.denominationCzk), 0)).choices,
     percent: customerSelection?.percent ?? null,
-    enabled: Boolean(customerTippingEnabled && onCfdUpdate && tableLabel && !isSaving && !submitting &&
+    enabled: Boolean(!referralLoading && !referralError && customerTippingEnabled && onCfdUpdate && tableLabel && !isSaving && !submitting &&
       !(panelView === "split" && splitMode === "items" && splitPhase === "pick-items") &&
       baseTotals.payableLines.length > 0),
     requestId: customerSelection?.requestId,
@@ -488,7 +520,8 @@ export function CheckoutPanel({
       };
     }
 
-    return buildCheckoutTotals({
+    return buildReferralCheckoutTotals({
+        referralPercent,
       lines,
       discountType,
       discountValue,
@@ -507,6 +540,7 @@ export function CheckoutPanel({
     lines,
     discountType,
     discountValue,
+    referralPercent,
     tipAmount,
     splitMode,
     splitCount,
@@ -659,6 +693,8 @@ export function CheckoutPanel({
     isSaving,
     submitting,
     customerTippingEnabled,
+    referralLoading,
+    referralError,
     tipSelectionVersion,
   ]);
 
@@ -746,7 +782,8 @@ export function CheckoutPanel({
   const discountValueDisplay = discountValue > 0 ? String(discountValue) : "";
 
   const handleCheckout = async (method: PaymentMethod = paymentMethod) => {
-    if (isSaving || paymentInFlight.current) return;
+    if (isSaving || paymentInFlight.current || referralLoading) return;
+    if (referralError) { setLocalError(referralError); return; }
     setLocalError(null);
     setPaymentMethod(method);
 
@@ -775,6 +812,7 @@ export function CheckoutPanel({
     const shareTip = totalTipWithKeep;
 
     const payment = {
+      ...(referralQuote ? {referral: {paymentKey:referralPaymentKey,installment:referralQuote.lastInstallment+successfulReferralPayments+1,codeId:referralQuote.codeId,version:referralQuote.version,discountPercent:referralPercent,discountAmount:totals.referralDiscountAmount,overrideReason:effectiveOverride?.reason},referralEqualScope:equalAdjustScope} : {}),
       paymentMethod: method,
       subtotal: totals.subtotal,
       discountType,
@@ -837,6 +875,16 @@ export function CheckoutPanel({
     } finally {
       paymentInFlight.current = false;
       setSubmitting(false);
+    }
+    setReferralPaymentKey(newCfdTipId());
+    if(referralQuote) {
+      setSuccessfulReferralPayments(value=>value+1);
+      if(referralIsAvailable) {
+        const visitSubtotal=referralBillSubtotal(lines);
+        setReferralState(previous=>previous.context===referralContext && previous.data ? {
+          ...previous,data:{...previous.data,redeemed:true,visitSubtotal:Math.max(previous.data.visitSubtotal,visitSubtotal)},
+        } : previous);
+      }
     }
     playPaymentSuccessSound(settings.soundConfigs.paymentSuccess);
 
@@ -1318,6 +1366,31 @@ export function CheckoutPanel({
         </label>
       )}
 
+      {referralLoading && <p role="status" className="text-sm text-amber-700 dark:text-amber-200">Loading reservation referral…</p>}
+      {referralError && <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-200">
+        {referralError}
+        <button type="button" className="ml-3 underline" disabled={submitting || isSaving} onClick={() => {
+          setReferralState({context:"",data:null,error:null});
+          setReferralRetry(value=>value+1);
+        }}>Retry</button>
+      </div>}
+      {referralQuote && (
+        <section className="rounded-2xl border border-[#C9A88B]/40 bg-[#C9A88B]/10 p-4 text-sm dark:text-[#F5EDE4]">
+          <p className="font-semibold">Referral · {referralQuote.code} · {referralQuote.partner}</p>
+          <p className="mt-1">Customer discount {referralPercent}% · −{displayPrice(totals.referralDiscountAmount)}</p>
+          <p className="mt-1 text-xs opacity-70">Applied before any additional staff discount. Partner commission is calculated separately after successful payment.</p>
+          {!referralIsAvailable && !effectiveOverride && <p className="mt-2 text-amber-600 dark:text-amber-200">Not eligible: inactive, expired, fully used, or below minimum spend ({displayPrice(referralQuote.minSpend)}).</p>}
+          {effectiveOverride && <p className="mt-2 text-xs">Manager override: {effectiveOverride.reason}</p>}
+          {canOverrideReferral && <details className="mt-3"><summary className="cursor-pointer">Adjust / remove referral discount</summary>
+            <div className="mt-2 grid gap-2 sm:grid-cols-[100px_1fr_auto]">
+              <input aria-label="Referral discount percent" type="number" min="0" max="100" step="0.01" value={overridePercent} onChange={e=>setOverridePercent(e.target.value)} placeholder={String(referralPercent)} className="pos-input" />
+              <input aria-label="Referral override reason" value={overrideReason} onChange={e=>setOverrideReason(e.target.value)} placeholder="Required reason (0% removes discount)" className="pos-input" />
+              <button type="button" disabled={submitting||isSaving||overridePercent===""||!Number.isFinite(Number(overridePercent))||Number(overridePercent)<0||Number(overridePercent)>100||overrideReason.trim().length<3} onClick={()=>setReferralOverride({context:referralContext,percent:Number(overridePercent),reason:overrideReason.trim()})} className="rounded-lg border border-[#C9A88B]/50 px-3 py-2 disabled:opacity-40">Apply override</button>
+            </div>
+          </details>}
+        </section>
+      )}
+
       {customerSelection && (
         <div className="rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100" role="status">
           <p className="text-sm font-semibold">Customer selected tip · {customerSelection.percent === 0 ? "No Tip" : `${customerSelection.percent}%`}</p>
@@ -1388,7 +1461,8 @@ export function CheckoutPanel({
     // Guest bill = full table bill. Keep tip only when it applies to the whole bill.
     const provisionalTip =
       splitMode === "equal" && equalAdjustScope === "person" ? 0 : tipAmount;
-    const provisionalTotals = buildCheckoutTotals({
+    const provisionalTotals = buildReferralCheckoutTotals({
+        referralPercent,
       lines: orderSummary,
       discountType,
       discountValue,
@@ -1434,7 +1508,7 @@ export function CheckoutPanel({
       ) : null}
       <button
         type="button"
-        disabled={isSaving || submitting || orderSummary.length === 0}
+        disabled={isSaving || submitting || referralLoading || Boolean(referralError) || orderSummary.length === 0}
         onClick={handlePrintProvisionalBill}
         className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm font-semibold text-gray-800 shadow-sm disabled:opacity-40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:text-base"
       >
@@ -1457,7 +1531,7 @@ export function CheckoutPanel({
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <button
           type="button"
-          disabled={isSaving || submitting || lines.length === 0 || !splitItemsSelected}
+          disabled={isSaving || submitting || referralLoading || Boolean(referralError) || lines.length === 0 || !splitItemsSelected}
           onClick={() => void handleCheckout("card")}
           className="min-h-[56px] rounded-xl bg-blue-600 px-3 py-3 text-base font-bold text-white shadow-sm disabled:opacity-40 sm:min-h-[60px] sm:text-lg"
         >
@@ -1468,6 +1542,7 @@ export function CheckoutPanel({
           disabled={
             isSaving ||
             submitting ||
+            referralLoading || Boolean(referralError) ||
             lines.length === 0 ||
             !splitItemsSelected ||
             (usingCashGiven && insufficientPayment)

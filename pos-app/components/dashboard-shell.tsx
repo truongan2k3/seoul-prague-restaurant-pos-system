@@ -5,6 +5,7 @@ import { MapView } from "@/components/map-view";
 import { OrderView } from "@/components/order-view";
 import { HistoryView } from "@/components/history-view";
 import { ReservationsView } from "@/components/reservations-view";
+import { ReferralDashboard } from "@/components/referral-dashboard";
 import { SummaryView } from "@/components/summary-view";
 import { StorageView } from "@/components/storage-view";
 import { SettingsView } from "@/components/settings-view";
@@ -612,6 +613,8 @@ export function DashboardShell() {
             }}
           />
         );
+      case "referrals":
+        return <ReferralDashboard />;
       case "summary":
         return <SummaryView sales={sales} menuItems={menuItems} onRefresh={reloadSales} />;
       case "storage":

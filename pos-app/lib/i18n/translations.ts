@@ -4,6 +4,7 @@ import type { LanguageCode } from "@/lib/types";
 export const menuCategories = ["Hotpot", "Meat", "Drinks"] as const;
 
 const en = {
+  referralsTitle: "Referrals",
   map: "Floor Map",
   order: "Active Orders",
   reservations: "Reservations",
@@ -1425,6 +1426,7 @@ const en = {
 } as const;
 
 const cs: Record<TranslationKey, string> = {
+  referralsTitle: "Doporučení",
   map: "Mapa sálu",
   order: "Aktivní objednávky",
   reservations: "Rezervace",
@@ -2846,6 +2848,7 @@ const cs: Record<TranslationKey, string> = {
 };
 
 const zh: Record<TranslationKey, string> = {
+  referralsTitle: "推荐合作",
   map: "楼面地图",
   order: "进行中订单",
   reservations: "预订",

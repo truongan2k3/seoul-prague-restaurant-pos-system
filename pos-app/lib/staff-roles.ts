@@ -8,6 +8,7 @@ export const ALL_NAV_TABS: NavId[] = [
   "reservations",
   "guestChat",
   "vouchers",
+  "referrals",
   "history",
   "summary",
   "storage",

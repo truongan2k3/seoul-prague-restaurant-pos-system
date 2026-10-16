@@ -31,6 +31,7 @@ import {
   SummaryGuestListButton,
   SummaryGuestListModal,
 } from "@/components/summary-guest-list-modal";
+import { ReferralDashboard } from "@/components/referral-dashboard";
 import { SummaryPrepTimeSection } from "@/components/summary-prep-time-section";
 
 const PERIOD_OPTIONS = ["today", "yesterday", "week", "month", "custom"] as const;
@@ -146,7 +147,8 @@ export function SummaryView({
   menuItems: MenuItem[];
   onRefresh: () => void;
 }) {
-  const { translate, language } = useApp();
+  const { translate, language, currentStaffUser } = useApp();
+  const [showReferrals,setShowReferrals]=useState(false);
   const { settings } = useSettings();
   const [period, setPeriod] = useState<SummaryPeriod>("today");
   const [customFrom, setCustomFrom] = useState(() => toDateInputValue(new Date()));
@@ -304,6 +306,10 @@ export function SummaryView({
 
       <div className="flex-1 overflow-auto p-6">
         <div className="mx-auto max-w-6xl space-y-6">
+          {(currentStaffUser?.role === "admin" || currentStaffUser?.role === "manager") && <section>
+            <button type="button" onClick={()=>setShowReferrals(value=>!value)} className="mb-3 rounded-xl border border-[#C9A88B]/40 px-4 py-2 text-sm">{showReferrals?"Hide":"Show"} referral earnings & payouts</button>
+            {showReferrals&&<ReferralDashboard key={`${activeRange.start.toISOString()}:${activeRange.end.toISOString()}`} compact initialFrom={toDateInputValue(activeRange.start)} initialTo={toDateInputValue(activeRange.end)} />}
+          </section>}
           <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
             <div className="flex flex-wrap gap-2">
               {PERIOD_OPTIONS.map((option) => (

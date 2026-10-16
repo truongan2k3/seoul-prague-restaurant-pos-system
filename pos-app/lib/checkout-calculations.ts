@@ -13,6 +13,8 @@ export interface CheckoutLine extends OrderItem {
 }
 
 export interface CheckoutPaymentRecord {
+  referral?: import("@/lib/referrals").ReferralPayment;
+  referralEqualScope?: EqualAdjustScope;
   paymentMethod: "cash" | "card";
   subtotal: number;
   discountType: DiscountType;

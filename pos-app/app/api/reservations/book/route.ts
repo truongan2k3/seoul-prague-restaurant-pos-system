@@ -9,6 +9,7 @@ import { reservationPushCopy, sendReservationPush } from "@/src/lib/push-server"
  */
 export async function POST(request: Request) {
   let body: {
+    referralCode?: string;
     guestName?: string;
     email?: string;
     phone?: string;
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
   }
 
   const { data, error } = await createOnlineReservationServer({
+    referralCode: typeof body.referralCode === "string" ? body.referralCode : undefined,
     guestName: body.guestName ?? "",
     email: body.email ?? "",
     phone: body.phone ?? "",

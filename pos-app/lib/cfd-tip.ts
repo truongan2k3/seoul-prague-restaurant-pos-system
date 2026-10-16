@@ -1,4 +1,5 @@
 import { buildCheckoutTotals } from "@/lib/checkout-calculations";
+import { buildReferralCheckoutTotals } from "@/lib/referrals";
 
 /** Draft-only guest choices. No sale or voucher is written by this protocol. */
 export const CFD_TIP_PERCENTAGES = [5, 10, 15, 20, 0] as const;
@@ -48,17 +49,17 @@ export function cfdTipAmount(base: number, percent: CfdTipPercent): number {
 
 /** Preview and checkout use the same discount, split, rounding and voucher rules. */
 export function buildCfdTipChoices(
-  input: Omit<Parameters<typeof buildCheckoutTotals>[0], "tip">,
+  input: Omit<Parameters<typeof buildCheckoutTotals>[0], "tip"> & {referralPercent?: number},
   voucherCredit: number,
 ) {
-  const baseTotals = buildCheckoutTotals({ ...input, tip: 0 });
+  const baseTotals = buildReferralCheckoutTotals({ ...input, tip: 0 });
   const factor = input.splitMode === "equal" && input.equalAdjustScope === "bill"
     ? input.splitCount : 1;
   const base = baseTotals.tipBase / factor;
   const voucher = Math.min(Math.max(0, voucherCredit), Math.max(0, baseTotals.afterDiscount));
   const choices = CFD_TIP_PERCENTAGES.map((percent) => {
     const tip = cfdTipAmount(base, percent);
-    const totals = buildCheckoutTotals({ ...input, tip: tip * factor });
+    const totals = buildReferralCheckoutTotals({ ...input, tip: tip * factor });
     return { percent, tip, total: Math.max(0, totals.amountDueNow - voucher) };
   });
   return { base, choices };

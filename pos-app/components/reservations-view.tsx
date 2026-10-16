@@ -857,7 +857,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-sm font-semibold sm:text-base lg:text-lg">{row.guestName}</h2>
+                        <h2 className="text-sm font-semibold sm:text-base lg:text-lg">{row.guestName}{row.referralCode && <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">{row.referralCode}</span>}</h2>
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide sm:text-xs ${
                             isLateReservation(row)

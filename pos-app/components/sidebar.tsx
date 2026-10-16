@@ -43,6 +43,7 @@ export const navItems = [
   { id: "order" as const, labelKey: "order" as const, icon: ClipboardList },
   { id: "reservations" as const, labelKey: "reservations" as const, icon: CalendarDays },
   { id: "guestChat" as const, labelKey: "guestChatTitle" as const, icon: MessageCircle },
+  { id: "referrals" as const, labelKey: "referralsTitle" as const, icon: Users },
   { id: "vouchers" as const, labelKey: "vouchersTitle" as const, icon: Gift },
   { id: "history" as const, labelKey: "history" as const, icon: History },
   { id: "summary" as const, labelKey: "summary" as const, icon: BarChart3 },

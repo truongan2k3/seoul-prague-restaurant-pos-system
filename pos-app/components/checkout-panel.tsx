@@ -163,7 +163,7 @@ export function CheckoutPanel({
   const [panelView, setPanelView] = useState<CheckoutPanelView>("main");
   const [splitPhase, setSplitPhase] = useState<SplitPhase>("checkout");
   const [adjustmentMode, setAdjustmentMode] = useState<AdjustmentMode>(null);
-  const [keepChangeAsTip, setKeepChangeAsTip] = useState(false);
+  const [keepChangeAsTip, setKeepChangeAsTip] = useState(true);
   const [discountType, setDiscountType] = useState<DiscountType>("percent");
   const [discountValue, setDiscountValue] = useState(0);
   const [discountPreset, setDiscountPreset] = useState<number | null>(null);
@@ -207,13 +207,13 @@ export function CheckoutPanel({
     setTipPreset(null);
     setTipMode("custom");
     setAdjustmentMode(null);
-    setKeepChangeAsTip(false);
+    setKeepChangeAsTip(true);
     setRoundUpTotal("");
   }, []);
 
   const clearCashOnly = useCallback(() => {
     setCashGiven("");
-    setKeepChangeAsTip(false);
+    setKeepChangeAsTip(true);
     setRoundUpTotal("");
     setAdjustmentMode(null);
   }, []);

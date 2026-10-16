@@ -24,7 +24,7 @@ function cardHeaderClass(
   if (hasMessage) return "bg-sky-800/90 text-white";
   if (tone === "critical") return "bg-red-800/90 text-white";
   if (tone === "warn") return "bg-orange-700/85 text-white";
-  return "bg-[#1c1c1f] text-[#F5EDE4]";
+  return "bg-gradient-to-r from-[#392631] to-[#2C232D] text-[#F5EDE4]";
 }
 
 function selectedCountForLine(
@@ -255,7 +255,7 @@ function OrderCard({
       } ${queued ? "ring-1 ring-amber-300/70" : ""}`}
     >
       <header
-        className={`flex items-start justify-between gap-2 px-3 py-2.5 ${cardHeaderClass(
+        className={`flex items-start justify-between gap-2 border-b border-white/[0.08] px-3 py-2.5 ${cardHeaderClass(
           tone,
           lingering,
           queued,
@@ -269,13 +269,7 @@ function OrderCard({
           className="min-w-0 flex-1 rounded-lg text-left transition hover:brightness-110"
           title={lingering ? "Double-tap to undo" : "Tap to mark all done"}
         >
-          <p className={`inline-block max-w-full break-words rounded-lg border px-3 py-1.5 font-serif text-2xl font-bold leading-none tracking-tight shadow-sm sm:text-[1.65rem] ${
-            queued
-              ? "border-zinc-950/20 bg-zinc-950/10 text-zinc-950"
-              : lingering || tone !== "normal" || card.hasMessage
-                ? "border-white/25 bg-black/25 text-white"
-                : "border-sky-400/50 bg-sky-700 text-white"
-          }`}>
+          <p className="max-w-full break-words font-serif text-2xl font-semibold leading-none tracking-tight sm:text-[1.65rem]">
             {card.tableLabel}
           </p>
           <p

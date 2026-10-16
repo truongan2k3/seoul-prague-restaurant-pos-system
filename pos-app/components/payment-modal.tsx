@@ -7,7 +7,6 @@ import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { useApp } from "@/contexts/app-context";
 import { expandCheckoutLines } from "@/lib/checkout-calculations";
 import {
-  buildCfdCheckoutPayload,
   sendCfdEvent,
   type CfdCheckoutPayload,
 } from "@/lib/cfd-display";
@@ -22,7 +21,7 @@ interface PaymentModalProps {
   menuItems: MenuItem[];
   onClose: () => void;
   onBack: () => void;
-  onConfirm: (payload: CheckoutSubmitPayload) => void | Promise<void>;
+  onConfirm: (payload: CheckoutSubmitPayload) => void | false | Promise<void | false>;
   isSaving?: boolean;
   error?: string | null;
   appliedVouchers?: { code: string; denominationCzk: number }[];
@@ -118,32 +117,7 @@ export function PaymentModal({
     void sendCfdEvent("START_CHECKOUT", payload);
   }, []);
 
-  useEffect(() => {
-    if (!open || !progressReady) return;
-    if (checkoutSessionKey === 0) return;
-
-    // Initial CFD only when a new checkout session starts (open / new visit).
-    const fullSubtotal = orders.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const resuming =
-      equalProgress.paymentsMade > 0 &&
-      equalProgress.splitCount > equalProgress.paymentsMade;
-    const shareCount = resuming ? equalProgress.splitCount : 1;
-    const amount = shareCount > 1 ? fullSubtotal / shareCount : fullSubtotal;
-
-    void sendCfdEvent(
-      "START_CHECKOUT",
-      buildCfdCheckoutPayload(table.label, orders, menuItems, {
-        subtotal: amount,
-        discount: 0,
-        tip: 0,
-        grandTotal: amount,
-        amountDueNow: amount,
-        staffInitiated: true,
-      }),
-    );
-    // Intentionally keyed by session — avoid rebroadcast on every order refresh mid-split.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, progressReady, checkoutSessionKey]);
+  // CheckoutPanel publishes the authoritative snapshot, including split and tip metadata.
 
   const title = `${translate("payment")} — ${translate("table")} ${table.label}`;
 
@@ -197,6 +171,7 @@ export function PaymentModal({
           menuItems={menuItems}
           tableLabel={table.label}
           tableId={table.id}
+          customerTippingEnabled={open && progressReady}
           isSaving={isSaving}
           onCheckout={onConfirm}
           onCfdUpdate={broadcastCheckoutUpdate}

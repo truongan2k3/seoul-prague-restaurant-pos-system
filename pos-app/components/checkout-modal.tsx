@@ -16,7 +16,7 @@ interface CheckoutModalProps {
   orders: OrderItem[];
   menuItems: MenuItem[];
   onClose: () => void;
-  onCheckout: (payload: CheckoutSubmitPayload) => void | Promise<void>;
+  onCheckout: (payload: CheckoutSubmitPayload) => void | false | Promise<void | false>;
   onTransfer: (toTableId: string) => void | Promise<void>;
   onMerge: (sourceIds: string[]) => void | Promise<void>;
   onAddItems?: () => void;

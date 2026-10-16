@@ -465,7 +465,7 @@ export function useTableOrderWorkflow({
   };
 
   const handleCheckout = async (payload: CheckoutSubmitPayload) => {
-    if (!modal || modal.type !== "checkout" || !selectedTable) return;
+    if (!modal || modal.type !== "checkout" || !selectedTable) return false;
     setIsSaving(true);
     setActionError(null);
     const remainingOrders = payload.remainingLines
@@ -484,7 +484,7 @@ export function useTableOrderWorkflow({
     setIsSaving(false);
     if (error) {
       setActionError(error.message);
-      return;
+      return false;
     }
     logAction(
       "checkout",

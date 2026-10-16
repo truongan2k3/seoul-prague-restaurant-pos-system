@@ -1,6 +1,7 @@
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { MenuItem, OrderItem } from "@/lib/types";
 import { supabase } from "@/src/lib/supabase";
+import type { CfdTipOffer } from "@/lib/cfd-tip";
 
 export const CFD_CHANNEL = "cfd_display";
 
@@ -31,6 +32,7 @@ export interface CfdCheckoutItem {
 }
 
 export interface CfdCheckoutPayload {
+  customerTip?: CfdTipOffer;
   tableNumber: string;
   items: CfdCheckoutItem[];
   subtotal: number;
@@ -468,6 +470,7 @@ export function checkoutPayloadFingerprint(payload: CfdCheckoutPayload | null): 
   if (!payload) return "";
   return [
     payload.tableNumber,
+    JSON.stringify(payload.customerTip ?? null),
     payload.mode ?? "checkout",
     payload.amountDueNow,
     payload.tip,

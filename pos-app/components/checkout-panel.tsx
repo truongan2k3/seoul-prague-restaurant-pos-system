@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import { ArrowLeft, ArrowRight, Calculator, Printer } from "lucide-react";
 import { FloatingCalculator } from "@/components/floating-calculator";
 import {
@@ -33,6 +33,8 @@ import { formatEurFromCzk } from "@/lib/currency";
 import { formatPosPrice, priceDisplayOptionsFromSettings } from "@/lib/price-display";
 import { buildReceiptLines } from "@/lib/receipt-calculations";
 import { buildCfdCheckoutPayload, type CfdCheckoutPayload } from "@/lib/cfd-display";
+import { buildCfdTipChoices, canApplyCfdTip, cfdTipAmount, newCfdTipId, type CfdTipOffer, type CfdTipRequest } from "@/lib/cfd-tip";
+import { acknowledgeCfdTip, subscribeCfdTipRequests } from "@/lib/cfd-tip-channel";
 import { playPaymentSuccessSound } from "@/lib/notification-sound";
 import {
   clearEqualSplitSession,
@@ -61,7 +63,9 @@ interface CheckoutPanelProps {
   tableLabel?: string;
   tableId?: string;
   isSaving?: boolean;
-  onCheckout: (payload: CheckoutSubmitPayload) => void | Promise<void>;
+  customerTippingEnabled?: boolean;
+  /** Return false on a failed payment; keep the draft and split position unchanged. */
+  onCheckout: (payload: CheckoutSubmitPayload) => void | false | Promise<void | false>;
   onCfdUpdate?: (payload: CfdCheckoutPayload) => void;
   confirmLabel?: string;
   className?: string;
@@ -121,6 +125,7 @@ export function CheckoutPanel({
   tableLabel,
   tableId,
   isSaving = false,
+  customerTippingEnabled = true,
   onCheckout,
   onCfdUpdate,
   confirmLabel,
@@ -160,6 +165,12 @@ export function CheckoutPanel({
   const customAmountRef = useRef<NumericInputFieldHandle>(null);
   const cashGivenRef = useRef<NumericInputFieldHandle>(null);
 
+  const [guestTip, setGuestTip] = useState<CfdTipRequest | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const paymentInFlight = useRef(false);
+  const acceptedTipRequest = useRef<string | null>(null);
+  const [tipSelectionVersion, setTipSelectionVersion] = useState(0);
+  const acknowledgedTipRequest = useRef<string | null>(null);
   const [panelView, setPanelView] = useState<CheckoutPanelView>("main");
   const [splitPhase, setSplitPhase] = useState<SplitPhase>("checkout");
   const [adjustmentMode, setAdjustmentMode] = useState<AdjustmentMode>(null);
@@ -201,6 +212,7 @@ export function CheckoutPanel({
   }, [settings.autoPrintOnPayment]);
 
   const resetPaymentAdjustments = useCallback(() => {
+    setGuestTip(null);
     setDiscountValue(0);
     setDiscountPreset(null);
     setCustomTip(0);
@@ -212,6 +224,7 @@ export function CheckoutPanel({
   }, []);
 
   const clearCashOnly = useCallback(() => {
+    setGuestTip(null);
     setCashGiven("");
     setKeepChangeAsTip(true);
     setRoundUpTotal("");
@@ -391,6 +404,56 @@ export function CheckoutPanel({
     ],
   );
 
+  // Only a draft belonging to this exact bill/guest can affect checkout totals.
+  // Vouchers are tender: the tip base stays after discount, before voucher credit.
+  const tipContext = JSON.stringify([
+    tableId, sessionResetKey, splitMode, splitCount, splitPhase, panelView,
+    equalPaymentsMade, equalAdjustScope, discountType, discountValue,
+    settings.enablePriceRounding,
+    lines.map((line) => [line.lineId, line.price, line.quantity]),
+    selectedLineIds, appliedVouchers,
+  ]);
+  const tipSession = useMemo(() => ({ key: tipContext, id: newCfdTipId() }), [tipContext]);
+  const customerSelection = guestTip?.sessionId === tipSession.id ? guestTip : null;
+  const customerTipBase = baseTotals.tipBase /
+    (splitMode === "equal" && equalAdjustScope === "bill" ? splitCount : 1);
+  const selectedGuestTip = customerSelection
+    ? cfdTipAmount(customerTipBase, customerSelection.percent) : null;
+  const tipOffer: CfdTipOffer = {
+    sessionId: tipSession.id,
+    revision: tipSession.id,
+    base: customerTipBase,
+    choices: buildCfdTipChoices({
+      lines, discountType, discountValue, splitMode, splitCount,
+      selectedLineIds, allLines: lines, enablePriceRounding: settings.enablePriceRounding,
+      equalAdjustScope,
+    }, appliedVouchers.reduce((sum, voucher) => sum + Math.max(0, voucher.denominationCzk), 0)).choices,
+    percent: customerSelection?.percent ?? null,
+    enabled: Boolean(customerTippingEnabled && onCfdUpdate && tableLabel && !isSaving && !submitting &&
+      !(panelView === "split" && splitMode === "items" && splitPhase === "pick-items") &&
+      baseTotals.payableLines.length > 0),
+    requestId: customerSelection?.requestId,
+    selectionVersion: tipSelectionVersion,
+  };
+  const tipOfferRef = useRef(tipOffer);
+  useLayoutEffect(() => { tipOfferRef.current = tipOffer; });
+
+  useEffect(() => {
+    if (!onCfdUpdate) return;
+    return subscribeCfdTipRequests((request) => {
+      if (paymentInFlight.current || !canApplyCfdTip(tipOfferRef.current, request)) return;
+      if (acceptedTipRequest.current === request.requestId) return;
+      acceptedTipRequest.current = request.requestId;
+      setTipSelectionVersion((version) => version + 1);
+      setRoundUpTotal("");
+      setTipMode("custom");
+      setTipPreset(null);
+      setCustomTip(0);
+      setKeepChangeAsTip(false);
+      setGuestTip(request);
+    });
+  }, [onCfdUpdate]);
+
   const parseAmountField = (raw: string) =>
     raw.trim() === "" ? null : Math.max(0, Number(raw) || 0);
 
@@ -411,7 +474,9 @@ export function CheckoutPanel({
   const roundUpTip = usingRoundUp ? Math.max(0, roundUpNum - billAmount) : 0;
   // Bill scope: tip amount is on the full bill (buildCheckoutTotals will divide).
   // Person scope: tip is already for one person.
-  const tipAmount = usingRoundUp ? roundUpTip : Math.max(0, manualTip);
+  const tipAmount = selectedGuestTip !== null
+    ? selectedGuestTip * (isEqualSplit && equalAdjustScope === "bill" ? splitCount : 1)
+    : usingRoundUp ? roundUpTip : Math.max(0, manualTip);
 
   const totals = useMemo(() => {
     if (usingRoundUp) {
@@ -473,8 +538,8 @@ export function CheckoutPanel({
   const totalTip = tipAmount;
   const rawChangeDue =
     usingCashGiven && !usingRoundUp ? Math.max(0, cashGivenNum - chargeTotal) : 0;
-  const keepAsTipAmount = keepChangeAsTip ? rawChangeDue : 0;
-  const changeDueAmount = keepChangeAsTip ? 0 : rawChangeDue;
+  const keepAsTipAmount = keepChangeAsTip && !customerSelection ? rawChangeDue : 0;
+  const changeDueAmount = keepChangeAsTip && !customerSelection ? 0 : rawChangeDue;
   const personTipShare =
     isEqualSplit && equalAdjustScope === "bill" && !usingRoundUp
       ? tipAmount / splitCount
@@ -529,8 +594,7 @@ export function CheckoutPanel({
           denominationCzk: voucher.denominationCzk,
         }));
 
-    onCfdUpdate(
-      buildCfdCheckoutPayload(tableLabel, displayOrders, menuItems, {
+    const payload = buildCfdCheckoutPayload(tableLabel, displayOrders, menuItems, {
         subtotal,
         discount,
         tip,
@@ -556,8 +620,13 @@ export function CheckoutPanel({
         staffInitiated: true,
         deferIfThankYou: panelView === "split",
         mode: isSplitSelecting ? "split-select" : "checkout",
-      }),
-    );
+      });
+    payload.customerTip = tipOfferRef.current;
+    onCfdUpdate(payload);
+    if (payload.customerTip.requestId && acknowledgedTipRequest.current !== payload.customerTip.requestId) {
+      acknowledgedTipRequest.current = payload.customerTip.requestId;
+      acknowledgeCfdTip(payload);
+    }
   }, [
     onCfdUpdate,
     tableLabel,
@@ -585,6 +654,12 @@ export function CheckoutPanel({
     panelView,
     appliedVouchers,
     voucherDiscountAmount,
+    tipSession,
+    guestTip,
+    isSaving,
+    submitting,
+    customerTippingEnabled,
+    tipSelectionVersion,
   ]);
 
   const remainingBillLines = useMemo(
@@ -626,6 +701,8 @@ export function CheckoutPanel({
   };
 
   const handleTipPreset = (percent: number) => {
+    setTipSelectionVersion((version) => version + 1);
+    setGuestTip(null);
     setRoundUpTotal("");
     if (tipMode === "preset" && tipPreset === percent) {
       setTipMode("custom");
@@ -639,6 +716,8 @@ export function CheckoutPanel({
   };
 
   const handleCustomTipChange = (raw: string) => {
+    setTipSelectionVersion((version) => version + 1);
+    setGuestTip(null);
     setRoundUpTotal("");
     setTipMode("custom");
     setTipPreset(null);
@@ -651,6 +730,8 @@ export function CheckoutPanel({
   };
 
   const handleRoundUpChange = (raw: string) => {
+    setTipSelectionVersion((version) => version + 1);
+    setGuestTip(null);
     setRoundUpTotal(raw);
     if (raw.trim() !== "") {
       setCashGiven("");
@@ -665,6 +746,7 @@ export function CheckoutPanel({
   const discountValueDisplay = discountValue > 0 ? String(discountValue) : "";
 
   const handleCheckout = async (method: PaymentMethod = paymentMethod) => {
+    if (isSaving || paymentInFlight.current) return;
     setLocalError(null);
     setPaymentMethod(method);
 
@@ -744,7 +826,18 @@ export function CheckoutPanel({
   };
 
   const submitCheckout = async (payload: CheckoutSubmitPayload) => {
-    await onCheckout(payload);
+    paymentInFlight.current = true;
+    setSubmitting(true);
+    try {
+      const result = await onCheckout(payload);
+      if (result === false) return;
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : "Payment failed. Please try again.");
+      return;
+    } finally {
+      paymentInFlight.current = false;
+      setSubmitting(false);
+    }
     playPaymentSuccessSound(settings.soundConfigs.paymentSuccess);
 
     if (!payload.closeTable && payload.payment.splitMode !== "total") {
@@ -1225,6 +1318,13 @@ export function CheckoutPanel({
         </label>
       )}
 
+      {customerSelection && (
+        <div className="rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100" role="status">
+          <p className="text-sm font-semibold">Customer selected tip · {customerSelection.percent === 0 ? "No Tip" : `${customerSelection.percent}%`}</p>
+          <p className="mt-1 text-lg font-bold tabular-nums">{displayPrice(selectedGuestTip ?? 0)}</p>
+        </div>
+      )}
+
       <label className="block">
         <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">
           {translate("amountGiven")}
@@ -1245,8 +1345,8 @@ export function CheckoutPanel({
       <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
         <input
           type="checkbox"
-          checked={keepChangeAsTip}
-          onChange={(event) => setKeepChangeAsTip(event.target.checked)}
+          checked={keepChangeAsTip && !customerSelection}
+          onChange={(event) => { setTipSelectionVersion((version) => version + 1); setGuestTip(null); setKeepChangeAsTip(event.target.checked); }}
           className="h-4 w-4 rounded border-gray-300"
         />
         {translate("keepAsTip")}
@@ -1334,7 +1434,7 @@ export function CheckoutPanel({
       ) : null}
       <button
         type="button"
-        disabled={isSaving || orderSummary.length === 0}
+        disabled={isSaving || submitting || orderSummary.length === 0}
         onClick={handlePrintProvisionalBill}
         className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm font-semibold text-gray-800 shadow-sm disabled:opacity-40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:text-base"
       >
@@ -1357,7 +1457,7 @@ export function CheckoutPanel({
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <button
           type="button"
-          disabled={isSaving || lines.length === 0 || !splitItemsSelected}
+          disabled={isSaving || submitting || lines.length === 0 || !splitItemsSelected}
           onClick={() => void handleCheckout("card")}
           className="min-h-[56px] rounded-xl bg-blue-600 px-3 py-3 text-base font-bold text-white shadow-sm disabled:opacity-40 sm:min-h-[60px] sm:text-lg"
         >
@@ -1367,6 +1467,7 @@ export function CheckoutPanel({
           type="button"
           disabled={
             isSaving ||
+            submitting ||
             lines.length === 0 ||
             !splitItemsSelected ||
             (usingCashGiven && insufficientPayment)

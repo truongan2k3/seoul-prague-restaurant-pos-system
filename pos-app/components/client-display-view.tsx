@@ -1,6 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type TouchEvent } from "react";
+import { CfdTipSelector } from "@/components/cfd-tip-selector";
+import { requestCfdTip, retainCfdTipChannel } from "@/lib/cfd-tip-channel";
+import { newCfdTipId, type CfdTipPercent, type CfdTipRequest } from "@/lib/cfd-tip";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { CfdReservationPanel } from "@/components/cfd-reservation-panel";
 import { CfdWelcomeOverlay, type CfdWelcomeContent } from "@/components/cfd-welcome-overlay";
@@ -151,11 +154,43 @@ function CfdHeader({
 function CheckoutView({
   checkout,
   translate,
+  onTipAccepted,
 }: {
   checkout: CfdCheckoutPayload;
   translate: (key: TranslationKey) => string;
+  onTipAccepted: (payload: CfdCheckoutPayload) => void;
 }) {
-  const displayTotal = checkout.total ?? checkout.amountDueNow;
+  const [pending, setPending] = useState<CfdTipRequest | null>(null);
+  const [tipError, setTipError] = useState(false);
+  const currentRequest = useRef<string | null>(null);
+  const liveCheckout = useRef(checkout);
+  useLayoutEffect(() => { liveCheckout.current = checkout; });
+  useEffect(() => {
+    const release = retainCfdTipChannel();
+    return () => { currentRequest.current = null; release(); };
+  }, []);
+  const offer = checkout.customerTip;
+  const pendingChoice = pending && pending.sessionId === offer?.sessionId
+    ? offer.choices.find((choice) => choice.percent === pending.percent) : null;
+  const displayTip = pendingChoice?.tip ?? checkout.tip;
+  const displayTotal = pendingChoice?.total ?? checkout.total ?? checkout.amountDueNow;
+  const selectTip = async (percent: CfdTipPercent) => {
+    if (!offer?.enabled) return;
+    const request: CfdTipRequest = { sessionId: offer.sessionId, revision: offer.revision, percent, requestId: newCfdTipId() };
+    currentRequest.current = request.requestId;
+    setPending(request);
+    setTipError(false);
+    const response = await requestCfdTip(request);
+    if (currentRequest.current !== request.requestId || liveCheckout.current.customerTip?.sessionId !== request.sessionId) return;
+    currentRequest.current = null;
+    setPending(null);
+    if (response?.customerTip?.sessionId === request.sessionId && response.customerTip.requestId === request.requestId) {
+      onTipAccepted(response);
+    } else {
+      // A persisted snapshot can acknowledge the choice even if the reply was lost.
+      setTipError(liveCheckout.current.customerTip?.requestId !== request.requestId);
+    }
+  };
   const isSplitSelect = checkout.mode === "split-select";
 
   return (
@@ -178,7 +213,7 @@ function CheckoutView({
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
+      <div className="min-h-[64px] flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
         <div className="overflow-hidden border border-white/10 bg-[#121214]">
           <table className="w-full text-left">
             <thead className="sticky top-0 z-10 bg-[#161618] text-xs font-semibold uppercase tracking-wider text-[#C9A88B]/85">
@@ -233,7 +268,7 @@ function CheckoutView({
         </div>
       </div>
 
-      <footer className="shrink-0 border-t border-white/10 bg-[#121214] px-4 py-5 sm:px-6">
+      <footer className="max-h-[70dvh] min-h-0 shrink overflow-y-auto overscroll-contain border-t border-white/10 bg-[#121214] px-4 py-4 sm:px-6 sm:py-5">
         <div className="mx-auto max-w-3xl space-y-2 text-lg text-white/65">
           {!isSplitSelect && (
             <>
@@ -253,20 +288,30 @@ function CheckoutView({
                   <span className="tabular-nums">−{formatCzk(checkout.voucherDiscount ?? 0)}</span>
                 </div>
               )}
-              {checkout.tip > 0 && (
+              {displayTip > 0 && (
                 <div className="flex justify-between text-[#E8D5C4]">
                   <span>{translate("tip")}</span>
-                  <span className="tabular-nums">{formatCzk(checkout.tip)}</span>
+                  <span className="tabular-nums">{formatCzk(displayTip)}</span>
                 </div>
               )}
             </>
           )}
-          <div className="flex items-end justify-between border-t border-white/10 pt-3">
+          {!isSplitSelect && offer && (
+            <CfdTipSelector
+              offer={offer}
+              percent={pending?.percent ?? offer.percent}
+              tip={displayTip}
+              pending={Boolean(pendingChoice)}
+              error={tipError}
+              onSelect={(percent) => void selectTip(percent)}
+            />
+          )}
+          <div className="flex flex-wrap items-end justify-between gap-2 border-t border-white/10 pt-3" aria-live="polite" aria-atomic="true">
             <span className="text-xl font-semibold uppercase tracking-wide text-white">
               {translate("total")}
             </span>
-            <span className="text-4xl font-black tabular-nums text-[#F5EDE4] sm:text-5xl">
-              {formatCzk(displayTotal)} CZK
+            <span className="min-w-0 text-3xl font-semibold tracking-tight tabular-nums text-[#F5EDE4] sm:text-5xl">
+              {formatCzk(displayTotal)}
             </span>
           </div>
           {!isSplitSelect && checkout.amountGiven != null && checkout.amountGiven > 0 && (
@@ -550,6 +595,10 @@ export function ClientDisplayView({
   const brandName = restaurantName.trim() || "SEOUL PRAGUE";
 
   const applyCheckout = useCallback((payload: CfdCheckoutPayload) => {
+    const current = checkoutRef.current;
+    if (current?.customerTip && payload.customerTip &&
+        current.customerTip.sessionId === payload.customerTip.sessionId &&
+        current.customerTip.selectionVersion > payload.customerTip.selectionVersion) return;
     queuedCheckoutRef.current = null;
     thankYouStartedAtRef.current = null;
     setPanelOpen(false);
@@ -808,7 +857,7 @@ export function ClientDisplayView({
 
           {clientState === "checkout" && checkout && (
             <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <CheckoutView checkout={checkout} translate={translate} />
+              <CheckoutView key={checkout.customerTip?.sessionId ?? checkout.tableNumber} checkout={checkout} translate={translate} onTipAccepted={applyCheckout} />
             </main>
           )}
 

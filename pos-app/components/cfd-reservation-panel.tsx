@@ -367,7 +367,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                             </p>
                             {row.notes?.trim() && (
                               <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-white/70">
-                                <span className="font-semibold text-[#C9A88B]">{translate("notes")}: </span>{row.notes}
+                                <span className="font-semibold text-[#C9A88B]">{translate("resNotes")}: </span>{row.notes}
                               </p>
                             )}
                             {row.referralCode && (

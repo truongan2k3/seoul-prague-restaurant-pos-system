@@ -241,8 +241,8 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
 
   return (
     <aside
-      className={`landing-theme absolute inset-0 z-40 flex w-full flex-col border-r-0 bg-[#0B0B0C] shadow-none transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-        open ? "translate-x-0" : "-translate-x-full pointer-events-none"
+      className={`landing-theme absolute inset-0 z-40 flex w-full flex-col border-r-0 bg-[#0B0B0C] shadow-none transition-[transform,opacity] motion-reduce:transition-none duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+        open ? "translate-x-0 opacity-100" : "-translate-x-full opacity-0 pointer-events-none"
       }`}
       aria-hidden={!open}
       aria-label="Today's reservations"
@@ -286,7 +286,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
       </div>
 
       {showCreate ? (
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
+        <div className="cfd-fade-enter min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
           <ReservationBookingView
             website={website}
             embedded
@@ -333,7 +333,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                       : `${translate("resTablePlanned")}: ${labels.join(" · ")}`
                     : "Table: Unassigned";
                   return (
-                    <li key={row.id}>
+                    <li key={row.id} className="cfd-fade-enter">
                       <button
                         type="button"
                         onClick={() => setSelectedId(row.id)}
@@ -365,6 +365,16 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                                 <span className="tabular-nums">{row.partySize}</span>
                               </span>
                             </p>
+                            {row.notes?.trim() && (
+                              <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-white/70">
+                                <span className="font-semibold text-[#C9A88B]">{translate("notes")}: </span>{row.notes}
+                              </p>
+                            )}
+                            {row.referralCode && (
+                              <p className="mt-2 text-xs font-semibold tracking-wide text-[#E8D5C4]">
+                                Referral: <span className="inline-block rounded-md border border-[#C9A88B]/30 bg-[#C9A88B]/10 px-2 py-1">{row.referralCode}</span>
+                              </p>
+                            )}
                           </div>
 
                           {hasTable ? (
@@ -418,7 +428,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
       )}
 
       {tablePickerOpen && selected ? (
-        <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/65 p-4 sm:items-center">
+        <div className="cfd-fade-enter absolute inset-0 z-50 flex items-end justify-center bg-black/65 p-4 sm:items-center">
           <div
             role="dialog"
             aria-modal="true"

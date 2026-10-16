@@ -13,6 +13,7 @@ interface OnScreenNumericKeyboardProps {
   value: string;
   onChange: (value: string) => void;
   onHide: () => void;
+  hideButton?: boolean;
   allowDecimal?: boolean;
   previewLabel?: string;
 }
@@ -21,6 +22,7 @@ export function OnScreenNumericKeyboard({
   value,
   onChange,
   onHide,
+  hideButton = false,
   allowDecimal = true,
   previewLabel,
 }: OnScreenNumericKeyboardProps) {
@@ -44,14 +46,14 @@ export function OnScreenNumericKeyboard({
         <p className="min-w-0 flex-1 truncate text-xs font-medium tabular-nums text-gray-500 dark:text-gray-400">
           {value || previewLabel || "0"}
         </p>
-        <button
+        {!hideButton && <button
           type="button"
           onClick={onHide}
           className="inline-flex min-h-[32px] shrink-0 items-center gap-1 rounded-lg border border-gray-300 bg-white px-2 text-xs font-semibold text-gray-700 sm:min-h-[36px] sm:px-3 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
         >
           <ChevronDown className="h-4 w-4" />
           {translate("hideKeyboard")}
-        </button>
+        </button>}
       </div>
 
       <div className="space-y-1 sm:space-y-1.5">

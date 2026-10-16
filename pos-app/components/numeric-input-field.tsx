@@ -39,6 +39,8 @@ interface NumericInputFieldProps {
   hideKeyboardToggle?: boolean;
   /** Open keyboard when the input receives focus */
   openOnFocus?: boolean;
+  /** Keep an inline keyboard visible for payment entry. */
+  alwaysOpen?: boolean;
 }
 
 export const NumericInputField = forwardRef<NumericInputFieldHandle, NumericInputFieldProps>(
@@ -56,6 +58,7 @@ export const NumericInputField = forwardRef<NumericInputFieldHandle, NumericInpu
       floatingKeyboard = false,
       hideKeyboardToggle = false,
       openOnFocus = false,
+      alwaysOpen = false,
     },
     ref,
   ) {
@@ -140,6 +143,7 @@ export const NumericInputField = forwardRef<NumericInputFieldHandle, NumericInpu
         value={value}
         onChange={(next) => onChange(sanitize(next))}
         onHide={closeKeyboard}
+        hideButton={alwaysOpen}
         allowDecimal={allowDecimal}
         previewLabel={previewLabel}
       />
@@ -173,7 +177,7 @@ export const NumericInputField = forwardRef<NumericInputFieldHandle, NumericInpu
             }}
             className={`min-w-0 flex-1 ${inputClassName}`}
           />
-          {!hideKeyboardToggle && (
+          {!hideKeyboardToggle && !alwaysOpen && (
             <button
               type="button"
               onClick={toggleKeyboard}
@@ -189,9 +193,9 @@ export const NumericInputField = forwardRef<NumericInputFieldHandle, NumericInpu
             </button>
           )}
         </div>
-        {keyboardOpen &&
+        {(alwaysOpen || keyboardOpen) &&
           (() => {
-            if (floatingKeyboard && typeof document !== "undefined") {
+            if (!alwaysOpen && floatingKeyboard && typeof document !== "undefined") {
               return (
                 <DraggableNumericKeyboard
                   ref={keyboardPanelRef}
@@ -204,7 +208,7 @@ export const NumericInputField = forwardRef<NumericInputFieldHandle, NumericInpu
               );
             }
 
-            if (keyboardPortalTargetId && typeof document !== "undefined") {
+            if (!alwaysOpen && keyboardPortalTargetId && typeof document !== "undefined") {
               const target = document.getElementById(keyboardPortalTargetId);
               if (target) {
                 return createPortal(keyboardNode, target);

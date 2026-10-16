@@ -33,6 +33,20 @@ import { useSettings } from "@/contexts/settings-context";
 import { useBlobUrl, useBlobUrlCache } from "@/hooks/use-blob-url-cache";
 import { playCfdWelcomeSound, unlockNotificationAudio } from "@/lib/notification-sound";
 
+/** Animate presentation only; keep checkout state and cached media mounted. */
+function useDisplayFade(change: string) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node?.animate || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const animation = node.animate([{ opacity: 0.45 }, { opacity: 1 }], {
+      duration: 320, easing: "ease-out",
+    });
+    return () => animation.cancel();
+  }, [change]);
+  return ref;
+}
+
 const THANK_YOU_SECONDS = 20;
 /** Minimum thank-you time before advancing to the next split guest. */
 const MIN_THANK_YOU_BEFORE_NEXT_SECONDS = 5;
@@ -192,9 +206,10 @@ function CheckoutView({
     }
   };
   const isSplitSelect = checkout.mode === "split-select";
+  const fadeRef = useDisplayFade(`${checkoutPayloadFingerprint(checkout)}:${displayTip}:${displayTotal}:${tipError}`);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0B0B0C]">
+    <div ref={fadeRef} className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0B0B0C]">
       <div className="shrink-0 border-b border-white/10 bg-[#0B0B0C] px-4 py-4 sm:px-6">
         <p className="landing-serif text-2xl text-[#F5EDE4] sm:text-3xl">
           {translate("table")}: {checkout.tableNumber}
@@ -841,8 +856,8 @@ export function ClientDisplayView({
           <div
             className={
               clientState === "idle"
-                ? "flex min-h-0 flex-1 flex-col overflow-hidden"
-                : "pointer-events-none invisible absolute h-0 w-0 overflow-hidden"
+                ? "cfd-fade-enter flex min-h-0 flex-1 flex-col overflow-hidden opacity-100"
+                : "pointer-events-none absolute inset-0 flex flex-col overflow-hidden opacity-0 transition-opacity duration-300 motion-reduce:transition-none"
             }
             aria-hidden={clientState !== "idle"}
           >
@@ -856,13 +871,13 @@ export function ClientDisplayView({
           </div>
 
           {clientState === "checkout" && checkout && (
-            <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <main className="cfd-fade-enter relative flex min-h-0 flex-1 flex-col overflow-hidden">
               <CheckoutView key={checkout.customerTip?.sessionId ?? checkout.tableNumber} checkout={checkout} translate={translate} onTipAccepted={applyCheckout} />
             </main>
           )}
 
           {clientState === "thankyou" && (
-            <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <main className="cfd-fade-enter relative flex min-h-0 flex-1 flex-col overflow-hidden">
               <ThankYouView
                 secondsLeft={secondsLeft}
                 reviewQrImageUrl={reviewQrImageUrl}

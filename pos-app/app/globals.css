@@ -926,3 +926,15 @@ input[type="search"] {
 .server-screen-ready-row {
   animation: server-screen-ready-in 220ms ease-out;
 }
+
+/* Customer display transitions preserve the live order and media cache. */
+@keyframes cfd-fade-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.cfd-fade-enter {
+  animation: cfd-fade-enter 360ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cfd-fade-enter { animation: none; }
+}

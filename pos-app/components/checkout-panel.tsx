@@ -201,7 +201,6 @@ export function CheckoutPanel({
   const [panelView, setPanelView] = useState<CheckoutPanelView>("main");
   const [splitPhase, setSplitPhase] = useState<SplitPhase>("checkout");
   const [adjustmentMode, setAdjustmentMode] = useState<AdjustmentMode>(null);
-  const [keepChangeAsTip, setKeepChangeAsTip] = useState(true);
   const [discountType, setDiscountType] = useState<DiscountType>("percent");
   const [discountValue, setDiscountValue] = useState(0);
   const [discountPreset, setDiscountPreset] = useState<number | null>(null);
@@ -246,14 +245,12 @@ export function CheckoutPanel({
     setTipPreset(null);
     setTipMode("custom");
     setAdjustmentMode(null);
-    setKeepChangeAsTip(true);
     setRoundUpTotal("");
   }, []);
 
   const clearCashOnly = useCallback(() => {
     setGuestTip(null);
     setCashGiven("");
-    setKeepChangeAsTip(true);
     setRoundUpTotal("");
     setAdjustmentMode(null);
   }, []);
@@ -481,7 +478,6 @@ export function CheckoutPanel({
       setTipMode("custom");
       setTipPreset(null);
       setCustomTip(0);
-      setKeepChangeAsTip(false);
       setGuestTip(request);
     });
   }, [onCfdUpdate]);
@@ -572,8 +568,8 @@ export function CheckoutPanel({
   const totalTip = tipAmount;
   const rawChangeDue =
     usingCashGiven && !usingRoundUp ? Math.max(0, cashGivenNum - chargeTotal) : 0;
-  const keepAsTipAmount = keepChangeAsTip && !customerSelection ? rawChangeDue : 0;
-  const changeDueAmount = keepChangeAsTip && !customerSelection ? 0 : rawChangeDue;
+  const keepAsTipAmount = !customerSelection ? rawChangeDue : 0;
+  const changeDueAmount = !customerSelection ? 0 : rawChangeDue;
   const personTipShare =
     isEqualSplit && equalAdjustScope === "bill" && !usingRoundUp
       ? tipAmount / splitCount
@@ -676,7 +672,6 @@ export function CheckoutPanel({
     totals.grandTotal,
     totals.amountDueNow,
     totalTipWithKeep,
-    keepChangeAsTip,
     keepAsTipAmount,
     payTotal,
     changeDueAmount,
@@ -761,6 +756,8 @@ export function CheckoutPanel({
   };
 
   const handleCashGivenChange = (raw: string) => {
+    setTipSelectionVersion((version) => version + 1);
+    setGuestTip(null);
     setCashGiven(raw);
     if (raw.trim() !== "") setRoundUpTotal("");
   };
@@ -1411,27 +1408,18 @@ export function CheckoutPanel({
           placeholder={displayPrice(chargeTotal)}
           className={`mt-1.5 ${insufficientPayment && usingCashGiven ? "[&_input]:border-red-400 dark:[&_input]:border-red-600" : ""}`}
           inputClassName="pos-input min-h-[52px] text-lg font-semibold tabular-nums"
-          {...numericFieldProps}
+          alwaysOpen
+          hideKeyboardToggle
         />
       </label>
 
-      <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-        <input
-          type="checkbox"
-          checked={keepChangeAsTip && !customerSelection}
-          onChange={(event) => { setTipSelectionVersion((version) => version + 1); setGuestTip(null); setKeepChangeAsTip(event.target.checked); }}
-          className="h-4 w-4 rounded border-gray-300"
-        />
-        {translate("keepAsTip")}
-      </label>
-
-      {usingCashGiven && !insufficientPayment && rawChangeDue > 0 && !keepChangeAsTip && (
+      {usingCashGiven && !insufficientPayment && rawChangeDue > 0 && customerSelection && (
         <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
           → {translate("changeDue")}: {displayPrice(rawChangeDue)}
         </p>
       )}
 
-      {keepChangeAsTip && keepAsTipAmount > 0 && (
+      {keepAsTipAmount > 0 && (
         <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
           + {translate("tip")}: {displayPrice(keepAsTipAmount)}
         </p>

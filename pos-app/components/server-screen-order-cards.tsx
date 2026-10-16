@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { Check, Minus, Plus } from "lucide-react";
 import {
   formatPreparationMinutes,
@@ -332,12 +332,35 @@ export function ServerScreenOrderCards({
   onTableTagActivate: (card: ServerScreenOrderCard) => void;
   onUndoDoneLine: (line: ServerScreenOrderCardLine) => void;
 }) {
+  const masonryRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const container = masonryRef.current;
+    if (!container) return;
+    // One-pixel rows pack variable-height tickets without changing their DOM order.
+    const tickets = Array.from(container.children) as HTMLElement[];
+    const measure = (ticket: HTMLElement) => {
+      const card = ticket.firstElementChild as HTMLElement | null;
+      if (card) ticket.style.gridRowEnd = `span ${Math.ceil(card.offsetHeight) + 12}`;
+    };
+    tickets.forEach(measure);
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const ticket = entry.target.parentElement;
+        if (ticket) measure(ticket);
+      }
+    });
+    tickets.forEach(ticket => {
+      if (ticket.firstElementChild) observer.observe(ticket.firstElementChild);
+    });
+    return () => observer.disconnect();
+  }, [cards]);
+
   if (cards.length === 0) {
     return <p className="px-4 py-10 text-center text-base text-white/35">{emptyLabel}</p>;
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+    <div ref={masonryRef} style={{gridAutoRows:"1px"}} className="grid grid-cols-1 items-start gap-x-3 p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
       {cards.map((card) => {
         const leaving =
           !card.lingering &&
@@ -347,8 +370,8 @@ export function ServerScreenOrderCards({
               (line.companionKey ? animatingOut.has(line.companionKey) : false),
           );
         return (
+          <div key={card.id} className="min-w-0">
           <OrderCard
-            key={card.id}
             card={card}
             nowMs={nowMs}
             minLabel={minLabel}
@@ -359,6 +382,7 @@ export function ServerScreenOrderCards({
             onTableTagActivate={onTableTagActivate}
             onUndoDoneLine={onUndoDoneLine}
           />
+          </div>
         );
       })}
     </div>

@@ -25,7 +25,8 @@ export function PercentPresetButtons({
           key={pct}
           type="button"
           onClick={() => onSelect(pct)}
-          className={`min-h-[44px] rounded-lg text-sm font-semibold sm:min-h-[48px] sm:text-base ${
+          aria-pressed={selected === pct}
+          className={`min-h-[44px] rounded-lg text-sm font-semibold transition-colors motion-reduce:transition-none sm:min-h-[48px] sm:text-base ${
             selected === pct ? activeClassName : inactiveClassName
           }`}
         >

@@ -720,6 +720,11 @@ export function CheckoutPanel({
   };
 
   const handleDiscountPreset = (percent: number) => {
+    if (discountType === "percent" && discountPreset === percent) {
+      setDiscountPreset(null);
+      setDiscountValue(0);
+      return;
+    }
     setDiscountType("percent");
     setDiscountPreset(percent);
     setDiscountValue(percent);
@@ -944,9 +949,13 @@ export function CheckoutPanel({
   const discountActive = totals.discountAmount > 0;
   const tipActive = totalTipWithKeep > 0;
 
-  const optionButtonClass = (active: boolean) =>
-    `min-h-[52px] flex-1 rounded-xl border px-3 py-3 text-base font-semibold transition-colors sm:min-h-[56px] sm:text-lg ${
-      active
+  const optionButtonClass = (active: boolean, applied?: "tip" | "discount") =>
+    `min-h-[52px] flex-1 rounded-xl border px-3 py-3 text-base font-semibold transition-[background-color,border-color,box-shadow] motion-reduce:transition-none sm:min-h-[56px] sm:text-lg ${
+      applied === "tip"
+        ? "border-amber-500 bg-amber-100 text-amber-950 ring-1 ring-amber-500/35 shadow-[0_0_18px_-8px_rgba(201,168,139,0.65)] dark:border-[#DCC1A5] dark:bg-[#C9A88B]/20 dark:text-[#F4DFC8]"
+        : applied === "discount"
+        ? "border-orange-500 bg-orange-100 text-orange-950 ring-1 ring-orange-500/35 shadow-[0_0_18px_-8px_rgba(249,115,22,0.6)] dark:border-orange-400 dark:bg-orange-500/20 dark:text-orange-100"
+        : active
         ? "border-blue-400 bg-blue-50 text-blue-900 dark:border-blue-600 dark:bg-blue-950/40 dark:text-blue-100"
         : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200"
     }`;
@@ -1272,16 +1281,20 @@ export function CheckoutPanel({
         <button
           type="button"
           onClick={() => toggleAdjustmentMode("tip")}
-          className={optionButtonClass(adjustmentMode === "tip")}
+          aria-expanded={adjustmentMode === "tip"}
+          className={optionButtonClass(adjustmentMode === "tip", tipActive ? "tip" : undefined)}
         >
           💡 {translate("tip")}
+          {tipActive && <span className="ml-2 inline-block rounded-md bg-black/5 px-2 py-0.5 text-xs tabular-nums dark:bg-black/20">{displayPrice(totalTipWithKeep)}</span>}
         </button>
         <button
           type="button"
           onClick={() => toggleAdjustmentMode("discount")}
-          className={optionButtonClass(adjustmentMode === "discount")}
+          aria-expanded={adjustmentMode === "discount"}
+          className={optionButtonClass(adjustmentMode === "discount", discountActive ? "discount" : undefined)}
         >
           🏷️ {translate("discount")}
+          {discountActive && <span className="ml-2 inline-block rounded-md bg-black/5 px-2 py-0.5 text-xs tabular-nums dark:bg-black/20">−{displayPrice(totals.discountAmount)}</span>}
         </button>
       </div>
 

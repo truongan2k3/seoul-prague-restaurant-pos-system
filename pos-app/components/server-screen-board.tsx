@@ -63,6 +63,7 @@ import {
   formatServerScreenTicketId,
   GRILL_FIRST_ORDER_COMPANIONS,
   historyWithinRetention,
+  isCompanionPending,
   isPreparingColumnVisible,
   mergeGrillCompanionAnchors,
   migrateGrillCompanionStore,
@@ -800,15 +801,16 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     return map;
   }, [items]);
 
-  // Persist first-grill anchors so companions survive grill done/cancel/delete.
+  // Wait for the first live snapshot before reconciling persisted table visits.
   useEffect(() => {
+    if (!bootstrapped) return;
     setCompanionStore((prev) => {
       const merged = mergeGrillCompanionAnchors(prev, itemsByTable, menuItems);
       if (merged === prev) return prev;
       writeCompanionStore(station, merged);
       return merged;
     });
-  }, [itemsByTable, menuItems, station]);
+  }, [itemsByTable, menuItems, station, bootstrapped]);
 
   const preparingRows = useMemo(() => {
     const grillTableIds = new Set<string>();
@@ -841,9 +843,8 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     >();
     for (const [tableId, tableSession] of itemsByTable) {
       const anchor = companionStore.anchors[tableId];
-      const firstId =
-        tableSession.find((item) => shouldShowGrillCompanions(item, tableSession, menuItems))?.id ??
-        anchor?.parentId;
+      const firstId = anchor?.parentId ??
+        tableSession.find((item) => shouldShowGrillCompanions(item, tableSession, menuItems))?.id;
       if (!firstId) continue;
       const hasPendingCompanions = pendingCompanionIds(companionStore, firstId).length > 0;
       const hasPendingSauces = tableSession.some(
@@ -877,7 +878,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       attachedParents.add(parentId);
       for (const companion of GRILL_FIRST_ORDER_COMPANIONS) {
         const key = companionKeyFor(parentId, companion.id);
-        if (companionStore.done[key]) continue;
+        if (!isCompanionPending(companionStore, parentId, companion.id)) continue;
         rows.push({
           key,
           kind: "companion",
@@ -947,7 +948,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       }
       for (const companion of GRILL_FIRST_ORDER_COMPANIONS) {
         const key = companionKeyFor(parent.parentId, companion.id);
-        if (companionStore.done[key]) continue;
+        if (!isCompanionPending(companionStore, parent.parentId, companion.id)) continue;
         nestedRows.push({
           key,
           kind: "companion",
@@ -979,7 +980,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     }
 
     return rows;
-  }, [items, itemsByTable, menuItems, tableLabelById, language, companionStore]);
+  }, [items, itemsByTable, menuItems, tableLabelById, language, companionStore, nowMs]);
   preparingRowsRef.current = preparingRows;
 
   const visiblePreparingRows = useMemo(() => {

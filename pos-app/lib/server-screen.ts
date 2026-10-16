@@ -363,7 +363,10 @@ export function isCompanionPending(
   parentId: string,
   companionId: string,
 ): boolean {
-  return !store.done[companionKeyFor(parentId, companionId)];
+  if (store.done[companionKeyFor(parentId, companionId)]) return false;
+  const anchor = Object.values(store.anchors).find(row => row.parentId === parentId);
+  const createdMs = anchor ? new Date(anchor.createdAt).getTime() : NaN;
+  return !Number.isFinite(createdMs) || Date.now() - createdMs <= SERVER_SCREEN_COMPANION_MAX_AGE_MS;
 }
 
 export function pendingCompanionIds(
@@ -415,63 +418,26 @@ export function mergeGrillCompanionAnchors(
     : store;
 }
 
-/**
- * Drop aged-out done keys and stale anchors.
- * Pending companions older than SERVER_SCREEN_COMPANION_MAX_AGE_MS are discarded
- * so overnight leftovers cannot haunt the preparing board the next day.
- */
+/** Keep completion markers for the entire active table visit; history retention is display-only. */
 export function pruneGrillCompanionStore(
   store: GrillCompanionStore,
   nowMs = Date.now(),
 ): GrillCompanionStore {
+  const activeParents = new Set(Object.values(store.anchors).map(anchor => anchor.parentId));
   const done: Record<string, string> = {};
   let changed = false;
-
   for (const [key, readyAt] of Object.entries(store.done)) {
     const readyMs = new Date(readyAt).getTime();
-    if (Number.isNaN(readyMs) || nowMs - readyMs > SERVER_SCREEN_HISTORY_VISIBLE_MS) {
+    const parentId = key.split("::")[0];
+    if (!Number.isFinite(readyMs) || (!activeParents.has(parentId) && nowMs - readyMs > SERVER_SCREEN_HISTORY_VISIBLE_MS)) {
       changed = true;
       continue;
     }
     done[key] = readyAt;
   }
-
-  const anchors: Record<string, GrillCompanionAnchor> = {};
-  for (const [tableId, anchor] of Object.entries(store.anchors)) {
-    const createdMs = new Date(anchor.createdAt).getTime();
-    if (
-      !Number.isNaN(createdMs) &&
-      nowMs - createdMs > SERVER_SCREEN_COMPANION_MAX_AGE_MS
-    ) {
-      // Stale overnight / forgotten companions — drop the whole table anchor.
-      changed = true;
-      continue;
-    }
-
-    const pending = pendingCompanionIds({ done, anchors: store.anchors }, anchor.parentId);
-    if (pending.length > 0) {
-      anchors[tableId] = anchor;
-      continue;
-    }
-    // All companions done — keep anchor until the newest companion ages out of history.
-    let newestDone = 0;
-    for (const companion of GRILL_FIRST_ORDER_COMPANIONS) {
-      const readyAt = done[companionKeyFor(anchor.parentId, companion.id)];
-      if (!readyAt) continue;
-      const ms = new Date(readyAt).getTime();
-      if (!Number.isNaN(ms)) newestDone = Math.max(newestDone, ms);
-    }
-    if (newestDone > 0 && nowMs - newestDone <= SERVER_SCREEN_HISTORY_VISIBLE_MS) {
-      anchors[tableId] = anchor;
-    } else {
-      changed = true;
-    }
-  }
-
-  if (!changed && Object.keys(done).length === Object.keys(store.done).length) {
-    if (Object.keys(anchors).length === Object.keys(store.anchors).length) return store;
-  }
-  return { version: store.version ?? GRILL_COMPANION_STORE_VERSION, done, anchors };
+  // Live-item reconciliation removes anchors at checkout. Never expire an active
+  // anchor here: recreating it would generate another set of pending companions.
+  return changed ? { ...store, done } : store;
 }
 
 export function historyWithinRetention(
@@ -660,6 +626,7 @@ function buildCompanionLinesForParent(
   for (const companion of GRILL_FIRST_ORDER_COMPANIONS) {
     const key = companionKeyFor(parentId, companion.id);
     const doneAt = companionStore.done[key];
+    if (!doneAt && !isCompanionPending(companionStore, parentId, companion.id)) continue;
     if (!doneAt) pendingCount += 1;
     const primary = companion.names[language] || companion.names.en;
     const zh = companion.names.zh?.trim() || "";
@@ -802,12 +769,14 @@ export function buildServerScreenOrderCards(
       companionsAttached.add(parentId);
     };
 
-    // Prefer live first-grill in this wave; fall back to persisted table anchor.
+    // Keep the visit's original parent even if it was removed or cancelled.
     let companionParentId: string | null = null;
-    for (const item of wave.items) {
-      if (shouldShowGrillCompanions(item, tableSession, menuItems)) {
-        companionParentId = item.id ?? null;
-        break;
+    if (!anchor) {
+      for (const item of wave.items) {
+        if (shouldShowGrillCompanions(item, tableSession, menuItems)) {
+          companionParentId = item.id ?? null;
+          break;
+        }
       }
     }
     if (

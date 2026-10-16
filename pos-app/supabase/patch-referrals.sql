@@ -29,6 +29,11 @@ ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS referral_code_id uuid REFERENC
  ADD COLUMN IF NOT EXISTS referral_payment_key uuid, ADD COLUMN IF NOT EXISTS referral_override_reason text,
  ADD COLUMN IF NOT EXISTS referral_installment integer,
  ADD COLUMN IF NOT EXISTS referral_visit_subtotal numeric(12,2), ADD COLUMN IF NOT EXISTS referral_discount_percent numeric(5,2);
+ALTER TABLE public.referral_codes ADD COLUMN IF NOT EXISTS updated_by uuid, ADD COLUMN IF NOT EXISTS updated_by_name text;
+ALTER TABLE public.reservations ADD COLUMN IF NOT EXISTS referral_override_reason text, ADD COLUMN IF NOT EXISTS referral_changed_by uuid;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS referral_code_version timestamptz,
+ ADD COLUMN IF NOT EXISTS referral_actor_id uuid, ADD COLUMN IF NOT EXISTS referral_actor_name text,
+ ADD COLUMN IF NOT EXISTS referral_adjustment_reason text;
 CREATE UNIQUE INDEX IF NOT EXISTS sales_referral_payment_key_idx ON public.sales(referral_payment_key) WHERE referral_payment_key IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS sales_referral_full_visit ON public.sales(table_id,seated_at) WHERE referral_code_id IS NOT NULL AND split_mode='total' AND deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS sales_referral_installment_idx ON public.sales(table_id,seated_at,referral_installment) WHERE referral_code_id IS NOT NULL;
@@ -83,7 +88,7 @@ BEGIN
   changed:=NEW.referral_code IS DISTINCT FROM OLD.referral_code OR NEW.referral_code_id IS DISTINCT FROM OLD.referral_code_id;
   IF NOT changed THEN RETURN NEW; END IF;
   IF OLD.checked_in_at IS NOT NULL OR OLD.status IN ('checked_in','completed') OR EXISTS(SELECT 1 FROM referral_attributions WHERE reservation_id=OLD.id AND locked_at IS NOT NULL) THEN
-   IF auth.role() IS DISTINCT FROM 'service_role' OR nullif(current_setting('seoul.referral_override',true),'') IS NULL THEN RAISE EXCEPTION 'Only authorized staff may change a checked-in referral.'; END IF;
+   IF auth.role() IS DISTINCT FROM 'service_role' OR nullif(NEW.referral_override_reason,'') IS NULL THEN RAISE EXCEPTION 'Only authorized staff may change a checked-in referral.'; END IF;
   END IF;
  END IF;
  NEW.referral_code:=nullif(upper(trim(NEW.referral_code)),'');
@@ -101,6 +106,11 @@ DECLARE c referral_codes;
 BEGIN
  IF TG_OP='UPDATE' AND NEW.referral_code_id IS NOT DISTINCT FROM OLD.referral_code_id THEN RETURN NEW; END IF;
  IF EXISTS(SELECT 1 FROM sales WHERE reservation_id=NEW.id) THEN RAISE EXCEPTION 'Referral cannot change after a payment. Reverse the payment first.'; END IF;
+ IF TG_OP='UPDATE' THEN
+  INSERT INTO referral_audit(business_id,code_id,action,actor_id,actor_name,details)
+  SELECT a.business_id,a.code_id,'reservation_referral_changed',NEW.referral_changed_by,coalesce((SELECT name FROM staff WHERE id=NEW.referral_changed_by),'Guest'),jsonb_build_object('reservationId',NEW.id,'reason',NEW.referral_override_reason,'code',NEW.referral_code)
+  FROM referral_attributions a WHERE a.reservation_id=NEW.id;
+ END IF;
  DELETE FROM referral_attributions WHERE reservation_id=NEW.id;
  IF NEW.referral_code_id IS NOT NULL THEN
   SELECT * INTO c FROM referral_codes WHERE id=NEW.referral_code_id;
@@ -118,7 +128,7 @@ CREATE TRIGGER referral_lock_attribution AFTER UPDATE OF status,checked_in_at ON
 
 CREATE OR REPLACE FUNCTION public.referral_sale_guard() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
-DECLARE a referral_attributions; c referral_codes; eligible boolean; used boolean;
+DECLARE a referral_attributions; c referral_codes; eligible boolean; used boolean; visit timestamptz; next_installment integer;
 BEGIN
  IF TG_OP='UPDATE' THEN
   IF OLD.referral_code_id IS NULL THEN
@@ -147,6 +157,14 @@ BEGIN
  IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Referral payments require the secure checkout action.'; END IF;
  IF NEW.referral_payment_key IS NULL THEN RAISE EXCEPTION 'Referral payment idempotency key is required.'; END IF;
  SELECT * INTO c FROM referral_codes WHERE id=a.code_id FOR UPDATE;
+ IF c.updated_at IS DISTINCT FROM NEW.referral_code_version THEN RAISE EXCEPTION 'Referral changed. Refresh checkout.'; END IF;
+ SELECT occupied_at INTO visit FROM tables WHERE id=NEW.table_id FOR UPDATE;
+ IF visit IS NULL THEN SELECT created_at INTO visit FROM order_items WHERE table_id=NEW.table_id ORDER BY created_at LIMIT 1; END IF;
+ IF visit IS NULL THEN SELECT checked_in_at INTO visit FROM reservations WHERE id=NEW.reservation_id; END IF;
+ IF visit IS DISTINCT FROM NEW.seated_at THEN RAISE EXCEPTION 'Table visit changed. Refresh checkout.'; END IF;
+ SELECT coalesce(max(referral_installment),0)+1 INTO next_installment FROM sales WHERE table_id=NEW.table_id AND seated_at IS NOT DISTINCT FROM visit;
+ IF NEW.referral_installment IS DISTINCT FROM next_installment THEN RAISE EXCEPTION 'Another payment was recorded. Refresh checkout.'; END IF;
+
  SELECT EXISTS(SELECT 1 FROM referral_redemptions WHERE reservation_id=NEW.reservation_id) INTO used;
  eligible:=c.active AND (c.expires_at IS NULL OR c.expires_at>now()) AND (used OR c.usage_limit IS NULL OR c.usage_count<c.usage_limit)
   AND coalesce(NEW.referral_visit_subtotal,0)>=(a.rules->>'min_spend')::numeric;
@@ -187,7 +205,9 @@ BEGIN
   VALUES((rules->>'business_id')::uuid,NEW.referral_code_id,NEW.id,NEW.reservation_id,CASE WHEN TG_OP='INSERT' THEN 'earned' ELSE 'adjustment' END,
    target-previous,base-previous_base,gross-previous_gross,discount-previous_discount,rules,
    CASE WHEN TG_OP='INSERT' THEN 'Successful payment' WHEN NEW.deleted_at IS NOT NULL THEN 'Payment void / reversal' ELSE 'Payment financial adjustment / refund' END);
-  INSERT INTO referral_audit(business_id,code_id,action,actor_name,details) VALUES((rules->>'business_id')::uuid,NEW.referral_code_id,'commission_'||lower(TG_OP),coalesce(current_setting('seoul.referral_actor_name',true),'System'),jsonb_build_object('saleId',NEW.id,'delta',target-previous));
+  INSERT INTO referral_audit(business_id,code_id,action,actor_id,actor_name,details) VALUES((rules->>'business_id')::uuid,NEW.referral_code_id,'commission_'||lower(TG_OP),NEW.referral_actor_id,coalesce(NEW.referral_actor_name,NEW.staff_name,'System'),jsonb_build_object('saleId',NEW.id,'delta',target-previous,'reason',coalesce(NEW.referral_adjustment_reason,NEW.referral_override_reason)));
+ ELSIF TG_OP='UPDATE' AND NEW IS DISTINCT FROM OLD THEN
+  INSERT INTO referral_audit(business_id,code_id,action,actor_id,actor_name,details) VALUES((rules->>'business_id')::uuid,NEW.referral_code_id,'payment_adjusted',NEW.referral_actor_id,coalesce(NEW.referral_actor_name,'System'),jsonb_build_object('saleId',NEW.id,'reason',NEW.referral_adjustment_reason));
  END IF;
  RETURN NEW;
 END $$;
@@ -204,144 +224,34 @@ CREATE OR REPLACE FUNCTION public.referral_protect_sale_delete() RETURNS trigger
 DROP TRIGGER IF EXISTS referral_protect_sale_delete ON public.sales;
 CREATE TRIGGER referral_protect_sale_delete BEFORE DELETE ON public.sales FOR EACH ROW EXECUTE FUNCTION public.referral_protect_sale_delete();
 
-CREATE OR REPLACE FUNCTION public.referral_commit_sale(p_sale jsonb,p_business uuid,p_actor uuid,p_version timestamptz) RETURNS uuid
+-- Ordinary server inserts/updates; no separate management/payment RPC layer.
+CREATE OR REPLACE FUNCTION public.referral_admin_audit() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
-DECLARE result uuid; a referral_attributions; c referral_codes; cols text; vals text; actor staff; next_installment integer; visit timestamptz;
+DECLARE c referral_codes; balance numeric; actor_id uuid; actor_name text; details jsonb; code_id uuid;
 BEGIN
- IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Unauthorized'; END IF;
- SELECT * INTO actor FROM staff WHERE id=p_actor AND business_id=p_business AND active;
- IF NOT FOUND OR actor.role NOT IN ('admin','manager','server','cashier') THEN RAISE EXCEPTION 'Unauthorized staff'; END IF;
- PERFORM pg_advisory_xact_lock(hashtextextended(p_sale->>'referral_payment_key',0));
- SELECT id INTO result FROM sales WHERE referral_payment_key=(p_sale->>'referral_payment_key')::uuid;
- IF FOUND THEN
-  IF NOT EXISTS(SELECT 1 FROM sales WHERE id=result AND referral_snapshot->>'business_id'=p_business::text) THEN RAISE EXCEPTION 'Payment key conflict'; END IF;
-  RETURN result;
- END IF;
- SELECT * INTO a FROM referral_attributions WHERE reservation_id=(p_sale->>'reservation_id')::uuid;
- IF NOT FOUND OR a.business_id<>p_business THEN RAISE EXCEPTION 'Referral does not belong to this business'; END IF;
- SELECT * INTO c FROM referral_codes WHERE id=a.code_id FOR UPDATE;
- IF c.updated_at<>p_version THEN RAISE EXCEPTION 'Referral changed. Reopen checkout to refresh the offer.'; END IF;
- SELECT occupied_at INTO visit FROM tables WHERE id=(p_sale->>'table_id')::uuid FOR UPDATE;
- IF visit IS NULL THEN SELECT created_at INTO visit FROM order_items WHERE table_id=(p_sale->>'table_id')::uuid ORDER BY created_at LIMIT 1; END IF;
- IF visit IS NULL THEN SELECT checked_in_at INTO visit FROM reservations WHERE id=(p_sale->>'reservation_id')::uuid; END IF;
- IF visit IS DISTINCT FROM (p_sale->>'seated_at')::timestamptz THEN RAISE EXCEPTION 'Table visit changed. Refresh checkout.'; END IF;
- SELECT coalesce(max(referral_installment),0)+1 INTO next_installment FROM sales WHERE table_id=(p_sale->>'table_id')::uuid AND seated_at IS NOT DISTINCT FROM visit;
- IF (p_sale->>'referral_installment')::integer IS DISTINCT FROM next_installment THEN RAISE EXCEPTION 'Another payment was recorded. Refresh checkout before continuing.'; END IF;
- PERFORM 1 FROM order_items WHERE table_id=(p_sale->>'table_id')::uuid FOR UPDATE;
- IF EXISTS(
-  SELECT paid.id FROM jsonb_to_recordset(p_sale->'items') paid(id uuid,price numeric,quantity numeric)
-  LEFT JOIN order_items oi ON oi.id=paid.id AND oi.table_id=(p_sale->>'table_id')::uuid
-  GROUP BY paid.id,oi.id,oi.quantity,oi.price,oi.is_cancelled,oi.kitchen_status,oi.status
-  HAVING oi.id IS NULL OR sum(paid.quantity)>oi.quantity OR bool_or(paid.quantity<=0)
-   OR min(paid.price)<>round(oi.price/CASE WHEN p_sale->>'split_mode'='equal' THEN greatest(1,(p_sale->>'split_count')::integer) ELSE 1 END,2)
-   OR max(paid.price)<>round(oi.price/CASE WHEN p_sale->>'split_mode'='equal' THEN greatest(1,(p_sale->>'split_count')::integer) ELSE 1 END,2)
-   OR coalesce(oi.is_cancelled,false) OR coalesce(oi.kitchen_status,oi.status) IN ('cancelled','archived')
- ) THEN RAISE EXCEPTION 'Order changed before payment. Refresh checkout.'; END IF;
-
- PERFORM set_config('seoul.referral_actor_name',actor.name,true);
- p_sale:=p_sale || jsonb_build_object('id',gen_random_uuid(),'closed_at',now(),'staff_id',p_actor,'staff_name',actor.name);
- SELECT string_agg(format('%I',k),','),string_agg(format('r.%I',k),',') INTO cols,vals
- FROM jsonb_object_keys(p_sale) k JOIN pg_attribute a ON a.attrelid='public.sales'::regclass AND a.attname=k AND a.attnum>0 AND NOT a.attisdropped;
- EXECUTE format('INSERT INTO public.sales (%s) SELECT %s FROM jsonb_populate_record(NULL::public.sales,$1) r RETURNING id',cols,vals) INTO result USING p_sale;
- IF nullif(p_sale->>'referral_override_reason','') IS NOT NULL THEN
-  INSERT INTO referral_audit(business_id,code_id,action,actor_id,actor_name,details) VALUES(p_business,c.id,'discount_override',p_actor,actor.name,jsonb_build_object('saleId',result,'reason',p_sale->>'referral_override_reason','percent',p_sale->>'referral_discount_percent'));
- END IF;
- RETURN result;
-END $$;
-
-CREATE OR REPLACE FUNCTION public.referral_pay_commission(p_code uuid,p_amount numeric,p_date timestamptz,p_notes text,p_key uuid,p_business uuid,p_actor uuid) RETURNS uuid
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
-DECLARE c referral_codes; actor staff; balance numeric; result uuid; prior referral_payouts;
-BEGIN
- IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Unauthorized'; END IF;
- SELECT * INTO actor FROM staff WHERE id=p_actor AND business_id=p_business AND active AND role IN ('admin','manager','cashier');
- IF NOT FOUND THEN RAISE EXCEPTION 'Manager authorization required'; END IF;
- SELECT * INTO c FROM referral_codes WHERE id=p_code AND business_id=p_business FOR UPDATE;
- IF NOT FOUND THEN RAISE EXCEPTION 'Code not found'; END IF;
- SELECT * INTO prior FROM referral_payouts WHERE request_key=p_key;
- IF FOUND THEN
-  IF prior.business_id<>p_business OR prior.code_id<>p_code OR prior.amount<>round(p_amount,2) THEN RAISE EXCEPTION 'Payout key conflict'; END IF;
-  RETURN prior.id;
- END IF;
- IF p_amount IS NULL OR p_amount<=0 OR p_amount<>round(p_amount,2) OR p_date IS NULL OR p_date>now() THEN RAISE EXCEPTION 'Invalid payout amount or date'; END IF;
- SELECT coalesce((SELECT sum(amount) FROM referral_commissions WHERE code_id=p_code),0)-coalesce((SELECT sum(amount) FROM referral_payouts WHERE code_id=p_code),0) INTO balance;
- IF p_amount>balance THEN RAISE EXCEPTION 'Payout exceeds outstanding commission'; END IF;
- INSERT INTO referral_payouts(business_id,code_id,amount,paid_at,notes,actor_id,actor_name,request_key)
- VALUES(p_business,p_code,p_amount,p_date,left(coalesce(p_notes,''),2000),p_actor,actor.name,p_key) RETURNING id INTO result;
- INSERT INTO referral_audit(business_id,code_id,action,actor_id,actor_name,details) VALUES(p_business,p_code,'payout',p_actor,actor.name,jsonb_build_object('payoutId',result,'amount',p_amount,'notes',p_notes));
- RETURN result;
-END $$;
-
-CREATE OR REPLACE FUNCTION public.referral_save_code(p_values jsonb,p_business uuid,p_actor uuid,p_version timestamptz DEFAULT NULL) RETURNS uuid
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
-DECLARE actor staff; c referral_codes; old_values jsonb; result uuid; v referral_codes;
-BEGIN
- IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Unauthorized'; END IF;
- SELECT * INTO actor FROM staff WHERE id=p_actor AND business_id=p_business AND active AND role IN ('admin','manager','cashier');
- IF NOT FOUND THEN RAISE EXCEPTION 'Manager authorization required'; END IF;
- v:=jsonb_populate_record(NULL::referral_codes,p_values);
- IF v.id IS NOT NULL THEN
-  SELECT * INTO c FROM referral_codes WHERE id=v.id AND business_id=p_business FOR UPDATE;
-  IF NOT FOUND OR c.updated_at IS DISTINCT FROM p_version THEN RAISE EXCEPTION 'Code changed. Refresh before editing.'; END IF;
-  old_values:=to_jsonb(c);
-  IF EXISTS(SELECT 1 FROM referral_attributions WHERE code_id=c.id) AND v.partner_name<>c.partner_name THEN RAISE EXCEPTION 'Create a new code to change the partner after reservations are linked.'; END IF;
-  UPDATE referral_codes SET code=v.code,partner_name=v.partner_name,partner_contact=coalesce(v.partner_contact,''),active=v.active,
-   discount_percent=v.discount_percent,commission_percent=v.commission_percent,min_spend=v.min_spend,
-   expires_at=v.expires_at,usage_limit=v.usage_limit,deduct_vouchers=v.deduct_vouchers,
-   deduct_other_discounts=v.deduct_other_discounts,exclude_tax=v.exclude_tax,tax_rates=v.tax_rates,updated_at=clock_timestamp()
-   WHERE id=c.id RETURNING id INTO result;
+ IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Server authorization required'; END IF;
+ IF TG_TABLE_NAME='referral_codes' THEN
+  IF TG_OP='UPDATE' THEN
+   IF (to_jsonb(NEW)-ARRAY['usage_count','updated_at'])=(to_jsonb(OLD)-ARRAY['usage_count','updated_at']) THEN RETURN NEW; END IF;
+   IF NEW.partner_name<>OLD.partner_name AND EXISTS(SELECT 1 FROM referral_attributions WHERE referral_attributions.code_id=OLD.id) THEN RAISE EXCEPTION 'Create a new code to change an attributed partner.'; END IF;
+  END IF;
+  code_id:=NEW.id; actor_id:=NEW.updated_by; actor_name:=NEW.updated_by_name;
+  details:=jsonb_build_object('after',to_jsonb(NEW)); IF TG_OP='UPDATE' THEN details:=details||jsonb_build_object('before',to_jsonb(OLD)); END IF;
  ELSE
-  INSERT INTO referral_codes(business_id,code,partner_name,partner_contact,active,discount_percent,commission_percent,min_spend,expires_at,usage_limit,deduct_vouchers,deduct_other_discounts,exclude_tax,tax_rates)
-  VALUES(p_business,v.code,v.partner_name,coalesce(v.partner_contact,''),v.active,v.discount_percent,v.commission_percent,v.min_spend,v.expires_at,v.usage_limit,v.deduct_vouchers,v.deduct_other_discounts,v.exclude_tax,v.tax_rates) RETURNING id INTO result;
- END IF;
- INSERT INTO referral_audit(business_id,code_id,action,actor_id,actor_name,details) VALUES(p_business,result,CASE WHEN v.id IS NULL THEN 'code_created' ELSE 'code_updated' END,p_actor,actor.name,jsonb_build_object('before',old_values,'after',p_values));
- RETURN result;
-END $$;
-
-CREATE OR REPLACE FUNCTION public.referral_change_reservation(p_reservation uuid,p_code text,p_reason text,p_business uuid,p_actor uuid) RETURNS void
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
-DECLARE actor staff; c referral_codes; old_code uuid;
-BEGIN
- IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Unauthorized'; END IF;
- SELECT * INTO actor FROM staff WHERE id=p_actor AND business_id=p_business AND active AND role IN ('admin','manager','cashier');
- IF NOT FOUND OR length(trim(p_reason))<3 THEN RAISE EXCEPTION 'Manager authorization and reason required'; END IF;
- SELECT referral_code_id INTO old_code FROM reservations WHERE id=p_reservation FOR UPDATE;
- IF old_code IS NOT NULL AND NOT EXISTS(SELECT 1 FROM referral_codes WHERE id=old_code AND business_id=p_business) THEN RAISE EXCEPTION 'Reservation belongs to another business'; END IF;
- IF nullif(trim(p_code),'') IS NOT NULL THEN
-  SELECT * INTO c FROM referral_codes WHERE code=upper(trim(p_code)) AND business_id=p_business;
+  SELECT * INTO c FROM referral_codes WHERE id=NEW.code_id AND business_id=NEW.business_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Code not found'; END IF;
+  SELECT coalesce((SELECT sum(amount) FROM referral_commissions WHERE referral_commissions.code_id=c.id),0)-coalesce((SELECT sum(amount) FROM referral_payouts WHERE referral_payouts.code_id=c.id),0) INTO balance;
+  IF NEW.amount>balance OR NEW.amount<=0 OR NEW.paid_at>now() THEN RAISE EXCEPTION 'Invalid payout or amount exceeds outstanding balance'; END IF;
+  code_id:=NEW.code_id; actor_id:=NEW.actor_id; actor_name:=NEW.actor_name; details:=to_jsonb(NEW);
  END IF;
- PERFORM set_config('seoul.referral_override',p_reason,true);
- UPDATE reservations SET referral_code=nullif(upper(trim(p_code)),''),updated_at=now() WHERE id=p_reservation;
- INSERT INTO referral_audit(business_id,code_id,action,actor_id,actor_name,details) VALUES(p_business,coalesce(c.id,old_code),'reservation_referral_override',p_actor,actor.name,jsonb_build_object('reservationId',p_reservation,'reason',p_reason,'code',p_code));
+ INSERT INTO referral_audit(business_id,code_id,action,actor_id,actor_name,details) VALUES(NEW.business_id,code_id,TG_TABLE_NAME||'_'||lower(TG_OP),actor_id,coalesce(actor_name,'System'),details);
+ RETURN NEW;
 END $$;
+DROP TRIGGER IF EXISTS referral_admin_audit ON public.referral_codes;
+CREATE TRIGGER referral_admin_audit AFTER INSERT OR UPDATE ON public.referral_codes FOR EACH ROW EXECUTE FUNCTION public.referral_admin_audit();
+DROP TRIGGER IF EXISTS referral_admin_audit ON public.referral_payouts;
+CREATE TRIGGER referral_admin_audit BEFORE INSERT ON public.referral_payouts FOR EACH ROW EXECUTE FUNCTION public.referral_admin_audit();
 
-CREATE OR REPLACE FUNCTION public.referral_adjust_sales(p_ids uuid[],p_updates jsonb,p_reason text,p_business uuid,p_actor uuid) RETURNS jsonb
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
-DECLARE actor staff; s sales; assignments text; result jsonb;
-BEGIN
- IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Unauthorized'; END IF;
- SELECT * INTO actor FROM staff WHERE id=p_actor AND business_id=p_business AND active AND role IN ('admin','manager','cashier');
- IF NOT FOUND OR length(trim(p_reason))<3 THEN RAISE EXCEPTION 'Manager and reason required'; END IF;
- FOR s IN SELECT * FROM sales WHERE id=ANY(p_ids) FOR UPDATE LOOP
-  IF s.referral_snapshot->>'business_id' IS DISTINCT FROM p_business::text THEN RAISE EXCEPTION 'Payment access denied'; END IF;
- END LOOP;
- IF (SELECT count(*) FROM sales WHERE id=ANY(p_ids))<>cardinality(p_ids) THEN RAISE EXCEPTION 'Payment not found'; END IF;
- IF EXISTS(SELECT 1 FROM jsonb_object_keys(p_updates) k WHERE k NOT IN ('items','subtotal','discount_amount','tip','tip_payment_method','grand_total','payment_method','amount_given','change_due','card_auth_code','card_last4','card_brand','deleted_at')) THEN RAISE EXCEPTION 'Unsupported adjustment'; END IF;
- SELECT string_agg(format('%I=(jsonb_populate_record(NULL::public.sales,$1)).%I',k,k),',') INTO assignments FROM jsonb_object_keys(p_updates) k;
- IF assignments IS NULL THEN RAISE EXCEPTION 'No changes supplied'; END IF;
- PERFORM set_config('seoul.referral_actor_name',actor.name,true);
- EXECUTE format('WITH changed AS (UPDATE public.sales SET %s WHERE id=ANY($2) RETURNING id,deleted_at) SELECT jsonb_agg(to_jsonb(changed)) FROM changed',assignments) INTO result USING p_updates,p_ids;
- INSERT INTO referral_audit(business_id,code_id,action,actor_id,actor_name,details) SELECT DISTINCT p_business,referral_code_id,'financial_adjustment',p_actor,actor.name,jsonb_build_object('ids',p_ids,'reason',p_reason,'changes',p_updates) FROM sales WHERE id=ANY(p_ids);
- RETURN result;
-END $$;
-REVOKE ALL ON FUNCTION public.referral_adjust_sales(uuid[],jsonb,text,uuid,uuid) FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION public.referral_adjust_sales(uuid[],jsonb,text,uuid,uuid) TO service_role;
-
-REVOKE ALL ON FUNCTION public.referral_commit_sale(jsonb,uuid,uuid,timestamptz),public.referral_pay_commission(uuid,numeric,timestamptz,text,uuid,uuid,uuid),public.referral_save_code(jsonb,uuid,uuid,timestamptz),public.referral_change_reservation(uuid,text,text,uuid,uuid) FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION public.referral_commit_sale(jsonb,uuid,uuid,timestamptz),public.referral_pay_commission(uuid,numeric,timestamptz,text,uuid,uuid,uuid),public.referral_save_code(jsonb,uuid,uuid,timestamptz),public.referral_change_reservation(uuid,text,text,uuid,uuid) TO service_role;
--- Subscribe only while the dashboard is open; existing reservation/sales realtime covers checkout.
-DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.referral_codes,public.referral_commissions,public.referral_payouts; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 CREATE OR REPLACE VIEW public.referral_balances AS
  SELECT c.id AS code_id,c.business_id,
  coalesce((SELECT sum(amount) FROM public.referral_commissions l WHERE l.code_id=c.id),0) AS earned,

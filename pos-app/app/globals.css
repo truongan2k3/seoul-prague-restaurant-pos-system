@@ -943,3 +943,22 @@ input[type="search"] {
 
 .dish-selection-countdown { animation: dish-selection-countdown 5s linear var(--dish-countdown-delay, 0ms) forwards; }
 @media (prefers-reduced-motion: reduce) { .dish-selection-countdown { animation: none; } }
+
+/* Layout 2 only: balanced landscape columns keep complete dish rows together. */
+@media (orientation: landscape) and (min-width: 640px) {
+  .dish-layout-columns {
+    column-count: 2;
+    column-gap: 1.5rem;
+    column-rule: 1px solid var(--border);
+    column-fill: balance;
+  }
+  .dish-layout-section {
+    break-inside: avoid;
+    display: flow-root;
+    width: 100%;
+  }
+  .dish-layout-columns .dish-layout-row {
+    grid-template-columns: minmax(90px, 0.85fr) minmax(0, 2fr);
+    gap: 0.5rem;
+  }
+}

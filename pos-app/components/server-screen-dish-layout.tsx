@@ -40,9 +40,9 @@ export function ServerScreenDishLayout({entries,selections,externalSelected,nowM
 
   return <div className="px-3 py-1 sm:px-4">
     {error&&<p role="alert" className="mb-3 rounded-xl border border-amber-400/30 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">{error}</p>}
-    {!dishes.length?<p className="py-10 text-center text-base text-white/35">{emptyLabel}</p>:<div className="divide-y divide-white/10">
-      {dishes.map(dish=><section key={dish.key} className="py-2 sm:py-2.5">
-        <div className="grid grid-cols-[minmax(110px,0.85fr)_minmax(0,2fr)] items-center gap-2 md:grid-cols-[minmax(170px,0.8fr)_minmax(0,2.5fr)] md:gap-4">
+    {!dishes.length?<p className="py-10 text-center text-base text-white/35">{emptyLabel}</p>:<div className="dish-layout-columns divide-y divide-white/10">
+      {dishes.map(dish=><section key={dish.key} className="dish-layout-section py-2 sm:py-2.5">
+        <div className="dish-layout-row grid grid-cols-[minmax(110px,0.85fr)_minmax(0,2fr)] items-center gap-2 md:grid-cols-[minmax(170px,0.8fr)_minmax(0,2.5fr)] md:gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
               <h2 className="break-words text-base font-semibold leading-snug text-[#F5EDE4] sm:text-lg lg:text-xl">{dish.name}</h2>

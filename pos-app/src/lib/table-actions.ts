@@ -439,7 +439,7 @@ function fetchTableWithOrders(tableId: string) {
   return supabase.from("tables").select(TABLE_WITH_ORDERS_COLUMNS).eq("id", tableId).single();
 }
 
-async function updateOrderItemsStatusBatch(itemIds: string[], status: OrderItem["status"]) {
+async function updateOrderItemsStatusBatch(itemIds: string[], status: OrderItem["status"], onlyPreparing = false) {
   if (itemIds.length === 0) return { error: null as Error | null };
 
   const normalized = normalizeOrderItemStatus(status);
@@ -456,8 +456,15 @@ async function updateOrderItemsStatusBatch(itemIds: string[], status: OrderItem[
     patch.ready_at = null;
   }
 
-  const { error } = await supabase.from("order_items").update(patch).in("id", itemIds);
-  return { error };
+  const query = supabase.from("order_items").update(patch).in("id", itemIds);
+  if (onlyPreparing) {
+    const {data,error} = await query.not("is_cancelled","is",true)
+      .or("kitchen_status.in.(pending,preparing),and(kitchen_status.is.null,status.in.(pending,preparing,held))")
+      .select("id,ready_at");
+    return {error,completedItems:(data??[]) as Array<{id:string;ready_at:string}>};
+  }
+  const {error} = await query;
+  return {error};
 }
 
 function buildOrderRows(tableId: string, orders: OrderItem[], staffId?: string) {
@@ -1119,8 +1126,9 @@ export async function markItemsReady(
   itemIds: string[],
   staffName: string,
   tableId?: string,
+  options?: {onlyPreparing?:boolean},
 ) {
-  return markItemsServed(itemIds, staffName, tableId);
+  return markItemsServed(itemIds, staffName, tableId, options);
 }
 
 export async function markItemsPreparing(
@@ -1189,16 +1197,17 @@ export async function markItemsServed(
   itemIds: string[],
   staffName: string,
   tableId?: string,
+  options?: {onlyPreparing?:boolean},
 ) {
-  const { error } = await updateOrderItemsStatusBatch(itemIds, "served");
-  if (error) return { error };
+  const result = await updateOrderItemsStatusBatch(itemIds, "served", options?.onlyPreparing);
+  if (result.error) return result;
 
   if (tableId) {
     await syncTableOrdersFromDb(tableId);
     await markTableFulfillmentIfAllServed(tableId);
   }
 
-  return { error: null };
+  return result;
 }
 
 /** Promote any leftover ready rows to served (ready = auto-serve; no delay). */

@@ -19,6 +19,10 @@ import {
 } from "lucide-react";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { ServerScreenOrderCards } from "@/components/server-screen-order-cards";
+import { ServerScreenDishLayout } from "@/components/server-screen-dish-layout";
+import { useDishPreparation } from "@/hooks/use-dish-preparation";
+import { useSharedGrillCompanions } from "@/hooks/use-shared-grill-companions";
+import { DISH_DONE_VISIBLE_MS, type DishEntry, type DishCompletion } from "@/lib/dish-preparation";
 import { ServerScreenPaymentOverlay } from "@/components/server-screen-payment-overlay";
 import { ServerScreenPrepStatsPanel } from "@/components/server-screen-prep-stats";
 import { ServerScreenReservationPanel } from "@/components/server-screen-reservation-panel";
@@ -1300,13 +1304,11 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
 
   const toggleLayoutMode = () => {
     unlockNotificationAudio();
-    clearAutoDoneTimer();
     setLayoutMode((prev) => {
       const next: ServerScreenLayoutMode = prev === "cards" ? "list" : "cards";
       writeServerScreenLayoutMode(next);
       return next;
     });
-    setSelectedKeys(new Set());
   };
 
   const registerLingerAfterMark = useCallback(
@@ -1364,6 +1366,93 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     },
     [],
   );
+
+  const sharedGrill = useSharedGrillCompanions(companionStore,setCompanionStore,station,bootstrapped);
+
+  const dishEntries = useMemo(() => {
+    const result = new Map<string,DishEntry>();
+    const add = (row:BoardRow,completedAt?:string) => {
+      const companion = row.kind === "companion";
+      const message = !companion && isKitchenMessageOrder(row.item);
+      const name = companion ? row.companionName ?? "" : message
+        ? (language === "zh" ? row.item.notesTranslated?.trim() : row.item.notes?.trim()) || orderItemDisplayName(row.item,menuItems,language)
+        : orderItemDisplayName(row.item,menuItems,language);
+      const nameZh = companion
+        ? language !== "zh" && serverScreen.showChineseForGrill ? GRILL_FIRST_ORDER_COMPANIONS.find(entry=>entry.id===row.companionId)?.names.zh ?? null : null
+        : isGrillGuestPrepOrder(row.item)
+          ? language !== "zh" && serverScreen.showChineseForGrill ? grillGuestPrepDisplayName(row.item,"zh") : null
+          : forcedChineseName(row.item,menuItems,language,serverScreen.forceChineseMenuItemIds,name,serverScreen.showChineseForGrill);
+      result.set(row.key,{
+        id:row.key,dishKey:companion?`companion:${row.companionId}`:message?`message:${row.key}`:`item:${row.item.menuItemId??row.item.name}`,
+        name,nameZh:nameZh===name?null:nameZh,tableId:row.item.tableId,tableLabel:row.tableLabel,
+        orderedAt:row.item.createdAt??"",quantity:companion?1:Math.max(1,Number(row.item.quantity)||1),
+        note:companion||message?null:itemNote(row.item,language),completedAt,companion,
+      });
+    };
+    preparingRows.forEach(row=>add(row));
+    for(const item of items){
+      const state=resolveKitchenStatus(item);
+      if(!item.id||item.hideOnKds||item.isCancelled||!item.readyAt||!["ready","served"].includes(state))continue;
+      if(nowMs-new Date(item.readyAt).getTime()>=DISH_DONE_VISIBLE_MS)continue;
+      add({key:item.id,kind:"item",item,tableLabel:tableLabelById.get(item.tableId)??"—"},item.readyAt);
+    }
+    for(const [key,completedAt] of Object.entries(companionStore.done)){
+      if(nowMs-new Date(completedAt).getTime()>=DISH_DONE_VISIBLE_MS)continue;
+      const [parentId,companionId]=key.split("::");
+      const companion=GRILL_FIRST_ORDER_COMPANIONS.find(entry=>entry.id===companionId);
+      const anchor=Object.values(companionStore.anchors).find(entry=>entry.parentId===parentId);
+      const parent=items.find(item=>item.id===parentId);
+      if(!companion||(!anchor&&!parent))continue;
+      const item=parent??{id:parentId,name:"Grill",quantity:1,price:0,tableId:anchor!.tableId,createdAt:anchor!.createdAt};
+      add({key,kind:"companion",item,companionId,parentId,companionName:companion.names[language]||companion.names.en,tableLabel:tableLabelById.get(item.tableId)??"—"},completedAt);
+    }
+    return Array.from(result.values());
+  },[preparingRows,items,companionStore,menuItems,language,serverScreen.showChineseForGrill,serverScreen.forceChineseMenuItemIds,tableLabelById,nowMs]);
+
+  const dishCompletionTimes = useMemo(() => {
+    const result=new Map<string,string>();
+    const pendingIds=new Set(dishEntries.filter(entry=>!entry.completedAt).map(entry=>entry.id));
+    for(const row of historyCache)if(!pendingIds.has(row.key)&&row.completedAt&&nowMs-new Date(row.completedAt).getTime()<DISH_DONE_VISIBLE_MS)result.set(row.key,row.completedAt);
+    for(const entry of dishEntries)if(entry.completedAt)result.set(entry.id,entry.completedAt);
+    return result;
+  },[dishEntries,historyCache,nowMs]);
+
+  const completeDishEntries = useCallback(async(ids:string[]):Promise<DishCompletion[]>=>{
+    const completed:DishCompletion[]=[];
+    const rows=new Map(preparingRowsRef.current.map(row=>[row.key,row]));
+    const byTable=new Map<string,string[]>();
+    const companionKeys:string[]=[];
+    for(const id of ids){
+      const row=rows.get(id);if(!row)continue;
+      if(row.kind==="companion")companionKeys.push(id);
+      else byTable.set(row.item.tableId,[...(byTable.get(row.item.tableId)??[]),id]);
+    }
+    try {
+      for(const [tableId,itemIds] of byTable){
+        const result=await markItemsReady(itemIds,actor,tableId,{onlyPreparing:true});
+        if(result.error)throw new Error(result.error.message);
+        const changed=("completedItems" in result ? result.completedItems??[] : []) as Array<{id:string;ready_at:string}>;
+        const ready=new Map(changed.map(row=>[row.id,row.ready_at]));
+        completed.push(...changed.map(row=>({id:row.id,completedAt:row.ready_at})));
+        if(changed.length){
+          registerLingerAfterMark(changed.map(row=>row.id));
+          setItems(previous=>previous.map(item=>item.id&&ready.has(item.id)?{...item,status:"served" as const,kitchenStatus:"served" as const,readyAt:ready.get(item.id)}:item));
+        }
+      }
+      if(companionKeys.length){
+        const sides=await sharedGrill.complete(companionKeys);
+        completed.push(...sides);registerLingerAfterMark(sides.map(row=>row.id));
+      }
+      return completed;
+    } catch(cause){
+      throw Object.assign(new Error(cause instanceof Error?cause.message:"Unable to complete these items."),{completed});
+    } finally {
+      if(completed.length)playReadySound();
+      void reloadStationItems();void reloadTables();
+    }
+  },[actor,sharedGrill.complete,registerLingerAfterMark,playReadySound,reloadStationItems,reloadTables]);
+
+  const dishPreparation = useDishPreparation({entries:dishEntries,completedTimes:dishCompletionTimes,nowMs,blocked:busy,externalSelected:selectedKeys,onComplete:completeDishEntries});
 
   const handleMarkDone = useCallback(
     async (keysOverride?: string[]) => {
@@ -2081,7 +2170,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
 
   return withPaymentOverlay(
     <div
-      data-display-interaction={busy || selectedKeys.size > 0 ? "busy" : undefined}
+      data-display-interaction={busy || selectedKeys.size > 0 || dishPreparation.hasPending ? "busy" : undefined}
       className={shellClass}
       onPointerDown={onBackgroundPointerDown}
       onTouchStart={onTouchStart}
@@ -2122,7 +2211,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
           <span className="text-sm tabular-nums text-white/40">
             {layoutMode === "cards"
               ? orderCards.length
-              : preparingRows.filter((row) => row.kind === "item").length}
+              : dishPreparation.entries.filter(entry=>!entry.completedAt).reduce((sum,entry)=>sum+entry.quantity,0)}
           </span>
         </header>
 
@@ -2136,167 +2225,16 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
                 selectedKeys={selectedKeys}
                 animatingOut={animatingOut}
                 emptyLabel={translate("noOrders")}
-                onToggleLine={toggleCardLine}
-                onSetLineCount={setCardLineSelectedCount}
-                onTableTagActivate={handleTableTagActivate}
+                onToggleLine={line=>{if(!line.remainingIds.some(id=>dishPreparation.selections.has(id)))toggleCardLine(line);}}
+                onSetLineCount={(line,count)=>{if(!line.remainingIds.some(id=>dishPreparation.selections.has(id)))setCardLineSelectedCount(line,count);}}
+                onTableTagActivate={card=>{if(!remainingKeysForCard(card).some(id=>dishPreparation.selections.has(id)))handleTableTagActivate(card);}}
                 onUndoDoneLine={(line) => void handleUndoDoneLine(line)}
               />
-            ) : visiblePreparingRows.length === 0 ? (
-              <p className="px-4 py-10 text-center text-base text-white/35">{translate("noOrders")}</p>
             ) : (
-              <ul className="divide-y divide-white/[0.06]">
-                {visiblePreparingRows.map((row) => {
-                  const lingering =
-                    !preparingRows.some((active) => active.key === row.key) &&
-                    (lingerUntilByRowKey.get(row.key) ?? 0) > nowMs;
-                  const selected = !lingering && selectedKeys.has(row.key);
-                  const age = preparationAgeMinutes(row.item.createdAt, nowMs);
-                  const tone = preparationHighlightTone(age);
-                  const leaving = animatingOut.has(row.key);
-                  const isMessage =
-                    row.kind === "item" && isKitchenMessageOrder(row.item);
-                  const name =
-                    row.kind === "companion"
-                      ? row.companionName ?? ""
-                      : isMessage
-                        ? language === "zh"
-                          ? row.item.notesTranslated?.trim() ||
-                            orderItemDisplayName(row.item, menuItems, language)
-                          : row.item.notes?.trim() ||
-                            orderItemDisplayName(row.item, menuItems, language)
-                        : orderItemDisplayName(row.item, menuItems, language);
-                  const nameZh =
-                    row.kind === "item"
-                      ? isMessage
-                        ? (() => {
-                            if (language === "zh") return null;
-                            const zh =
-                              row.item.notesTranslated?.trim() || row.item.name;
-                            return zh && zh !== name ? zh : null;
-                          })()
-                        : isGrillGuestPrepOrder(row.item)
-                        ? (() => {
-                            if (!(serverScreen.showChineseForGrill ?? true) || language === "zh") {
-                              return null;
-                            }
-                            const zh = grillGuestPrepDisplayName(row.item, "zh");
-                            return zh && zh !== name ? zh : null;
-                          })()
-                        : forcedChineseName(
-                            row.item,
-                            menuItems,
-                            language,
-                            serverScreen.forceChineseMenuItemIds,
-                            name,
-                            serverScreen.showChineseForGrill ?? true,
-                          )
-                      : (() => {
-                          if (!(serverScreen.showChineseForGrill ?? true) || language === "zh") {
-                            return null;
-                          }
-                          const companion = GRILL_FIRST_ORDER_COMPANIONS.find(
-                            (entry) => entry.id === row.companionId,
-                          );
-                          const zh = companion?.names.zh?.trim() || "";
-                          if (!zh || zh === name) return null;
-                          return zh;
-                        })();
-                  const note =
-                    row.kind === "item" &&
-                    !isGrillGuestPrepOrder(row.item) &&
-                    !isMessage
-                      ? itemNote(row.item, language)
-                      : null;
-                  const nested = row.kind === "companion" || Boolean(row.isSubitem);
-
-                  return (
-                    <li
-                      key={row.key}
-                      className={
-                        selected
-                          ? "bg-amber-300/85"
-                          : lingering
-                            ? "bg-emerald-950/40"
-                            : isMessage
-                              ? "bg-sky-950/45"
-                              : undefined
-                      }
-                    >
-                      <div
-                        className={`flex w-full flex-nowrap items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ${
-                          lingering
-                            ? "text-white/55"
-                            : prepRowClass(tone, selected)
-                        } ${leaving ? "translate-x-4 opacity-0 transition-all duration-200" : ""} ${
-                          nested ? "pl-8" : ""
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          data-server-interactive
-                          onClick={() => handleListRowActivate(row, lingering)}
-                          className={`min-w-0 flex-1 text-left ${
-                            lingering ? "line-through decoration-white/30" : ""
-                          }`}
-                          title={name}
-                        >
-                          <span
-                            className={`block text-[1.35rem] font-semibold leading-tight sm:text-[1.5rem] ${
-                              nested ? "font-medium truncate" : isMessage ? "whitespace-pre-wrap break-words" : "truncate"
-                            }`}
-                          >
-                            {nested ? <span className="mr-1.5 opacity-50">↳</span> : null}
-                            {isMessage ? <span className="mr-1.5 opacity-80">✉</span> : null}
-                            {name}
-                          </span>
-                          {nameZh ? (
-                            <span
-                              className={`mt-0.5 block text-sm font-medium ${
-                                isMessage ? "whitespace-pre-wrap break-words" : "truncate"
-                              } ${selected ? "text-zinc-800/75" : "text-white/55"}`}
-                              title={nameZh}
-                            >
-                              {nameZh}
-                            </span>
-                          ) : null}
-                        </button>
-                        <span
-                          className={`shrink-0 whitespace-nowrap text-sm tabular-nums sm:text-[0.95rem] ${
-                            selected ? "text-zinc-800/75" : "text-white/45"
-                          }`}
-                        >
-                          {lingering
-                            ? "✓"
-                            : formatPreparationMinutes(row.item.createdAt, nowMs, minLabel)}
-                        </span>
-                        <button
-                          type="button"
-                          data-server-interactive
-                          onClick={() => handleListTableTagActivate(row.item.tableId, lingering)}
-                          className={`shrink-0 whitespace-nowrap text-right text-base font-bold tabular-nums sm:text-lg ${
-                            selected ? "text-zinc-950" : "text-[#E8D5C4]"
-                          }`}
-                          title={lingering ? "Double-tap to undo" : "Tap to mark all done"}
-                        >
-                          {row.tableLabel}
-                        </button>
-                      </div>
-                      {note ? (
-                        <button
-                          type="button"
-                          data-server-interactive
-                          onClick={() => handleListRowActivate(row, lingering)}
-                          className={`w-full px-4 pb-2.5 text-left text-sm leading-relaxed whitespace-pre-wrap break-words ${
-                            nested ? "pl-8" : "pl-4"
-                          } ${selected ? "text-zinc-800" : "text-white/55"}`}
-                        >
-                          {note}
-                        </button>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
+              <ServerScreenDishLayout entries={dishPreparation.entries} selections={dishPreparation.selections}
+                externalSelected={selectedKeys} nowMs={nowMs} language={language} minLabel={minLabel}
+                emptyLabel={translate("noOrders")} error={dishPreparation.error??sharedGrill.error}
+                onSelect={ids=>{unlockNotificationAudio();dishPreparation.select(ids);}} />
             )}
           </div>
 

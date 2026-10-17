@@ -40,6 +40,8 @@ export interface CreateReservationInput {
   source?: VisitSource;
   tableId?: string;
   status?: ReservationStatus;
+  eventType?: string;
+  referralCode?: string;
 }
 
 export interface UpdateReservationInput {
@@ -94,6 +96,8 @@ export async function createReservation(input: CreateReservationInput) {
       party_size: input.partySize,
       reserved_at: input.reservedAt.toISOString(),
       notes: input.notes ?? null,
+      ...(input.eventType?.trim()?{event_type:input.eventType.trim()}:{}),
+      ...(input.referralCode?.trim()?{referral_code:input.referralCode.trim().toUpperCase()}:{}),
       staff_id: input.staffId ?? null,
       staff_name: input.staffName ?? null,
       source,

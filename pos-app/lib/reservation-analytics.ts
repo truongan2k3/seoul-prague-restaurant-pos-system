@@ -158,11 +158,16 @@ export function sortReservationsForDayList(
 }
 
 export function computeReservationStats(rows: ReservationRecord[]): ReservationStats {
-  const active = rows.filter((row) => row.status !== "cancelled");
+  const active = rows.filter((row) =>
+    row.status === "pending" || row.status === "confirmed" || row.status === "checked_in" || row.status === "completed",
+  );
 
   return {
-    totalGuests: active.reduce((sum, row) => sum + row.partySize, 0),
-    totalBookings: rows.filter((row) => row.source === "reservation").length,
+    totalGuests: active.reduce((sum, row) => sum + (
+      (row.status === "checked_in" || row.status === "completed") && row.actualPartySize != null && row.actualPartySize > 0
+        ? row.actualPartySize : row.partySize
+    ), 0),
+    totalBookings: active.length,
     pendingConfirmation: rows.filter((row) => row.status === "pending").length,
     checkedIn: rows.filter((row) => row.status === "checked_in").length,
     walkIns: rows.filter((row) => row.source === "walk_in").length,

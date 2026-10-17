@@ -2,7 +2,7 @@
 
 import { ReferralCodeField } from "@/components/referral-code-field";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Clock, Globe, Mail, MapPin, Phone, UtensilsCrossed } from "lucide-react";
 import { Modal } from "@/components/modal";
 import {
@@ -40,6 +40,16 @@ type AvailabilitySlot = {
   status: SlotStatus;
 };
 
+export type ReservationStaffDraft = {
+  guestName:string;email:string;phone:string;guestCount:number;date:string;time:string;
+  notes:string;eventType:string;referralCode:string;wantsBbq:"yes"|"no"|"undecided"|null;
+};
+
+type StaffBookingOptions = {
+  settings:AppSettings;language:GuestReservationLang;submitLabel:string;fields?:ReactNode;
+  onSubmit:(draft:ReservationStaffDraft)=>Promise<string|null>;
+};
+
 const GUEST_LANG_LABELS: Record<GuestReservationLang, string> = {
   en: "English",
   cs: "Čeština",
@@ -67,8 +77,11 @@ export function ReservationBookingView({
   embedded = false,
   emailOptional = false,
   onBooked,
+  staff,
 }: {
   website?: WebsiteContent;
+  /** Uses this same guest form with optional contact fields and the existing staff save flow. */
+  staff?: StaffBookingOptions;
   /** Form-only layout for Client Screen panel. */
   embedded?: boolean;
   /** Force email optional (overrides admin required-fields for this form). */
@@ -76,11 +89,13 @@ export function ReservationBookingView({
   /** When set (typically embedded), skip success modal and notify parent. */
   onBooked?: (info: { id: string; bookingCode: string }) => void;
 }) {
-  const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const isStaff=Boolean(staff);
+  const staffSettings=staff?.settings;
+  const [appSettings, setAppSettings] = useState<AppSettings>(staffSettings??DEFAULT_APP_SETTINGS);
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
-  const [settingsLoading, setSettingsLoading] = useState(true);
-  const [lang, setLang] = useState<GuestReservationLang>("en");
+  const [settingsLoading, setSettingsLoading] = useState(!isStaff);
+  const [lang, setLang] = useState<GuestReservationLang>(staff?.language??"en");
   const [guestName, setGuestName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -104,6 +119,7 @@ export function ReservationBookingView({
   const required = {
     ...appSettings.reservationRequiredFields,
     email: emailOptional ? false : appSettings.reservationRequiredFields.email,
+    ...(isStaff?{name:false,email:false,phone:false,guestCount:true,date:true,time:true,notes:false,eventType:false}:{}),
   };
   const eventTypes = appSettings.reservationEventTypes;
   const guestTexts = appSettings.reservationGuestTexts;
@@ -121,7 +137,7 @@ export function ReservationBookingView({
   const minDate = useMemo(() => todayIsoDate(), []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (isStaff || typeof window === "undefined") return;
     try {
       window.localStorage.removeItem("reservation-guest-lang");
     } catch {
@@ -136,21 +152,22 @@ export function ReservationBookingView({
           ].filter(Boolean)
         : [];
     setLang(resolveInitialGuestReservationLang(stored, navigatorLangs));
-  }, []);
+  }, [isStaff]);
 
   useEffect(() => {
-    persistGuestReservationLang(lang);
-  }, [lang]);
+    if(!isStaff)persistGuestReservationLang(lang);
+  }, [lang,isStaff]);
 
   useEffect(() => {
+    if(staffSettings){setAppSettings(staffSettings);setSettingsLoading(false);return;}
     void fetchAppSettings().then(({ data }) => {
       setAppSettings(data);
       setSettingsLoading(false);
     });
-  }, []);
+  }, [staffSettings]);
 
   useEffect(() => {
-    if (embedded) {
+    if (embedded || isStaff) {
       if (guestCount > appSettings.reservationMaxGuestsPerSlot) {
         setGuestCount(appSettings.reservationMaxGuestsPerSlot);
       }
@@ -160,9 +177,9 @@ export function ReservationBookingView({
     if (guestCount !== ONLINE_LARGE_PARTY_OPTION && guestCount > ONLINE_SELF_SERVE_MAX_PARTY) {
       setGuestCount(ONLINE_SELF_SERVE_MAX_PARTY);
     }
-  }, [appSettings.reservationMaxGuestsPerSlot, embedded, guestCount]);
+  }, [appSettings.reservationMaxGuestsPerSlot, embedded, guestCount,isStaff]);
 
-  const requiresLargePartyContact = !embedded && guestCount === ONLINE_LARGE_PARTY_OPTION;
+  const requiresLargePartyContact = !isStaff && !embedded && guestCount === ONLINE_LARGE_PARTY_OPTION;
 
   // Release hold on unmount / abandon.
   useEffect(() => {
@@ -178,6 +195,7 @@ export function ReservationBookingView({
   }, [holdToken]);
 
   useEffect(() => {
+    if(isStaff){setSlotsLoading(false);return;}
     if (requiresLargePartyContact) {
       setAvailabilitySlots([]);
       setSlotsLoading(false);
@@ -230,17 +248,18 @@ export function ReservationBookingView({
     guestCount,
     wantsBbq,
     requiresLargePartyContact,
+    isStaff,
   ]);
 
   const guestOptions = useMemo(() => {
-    if (embedded) {
+    if (embedded || isStaff) {
       return Array.from(
         { length: appSettings.reservationMaxGuestsPerSlot },
         (_, index) => index + 1,
       );
     }
     return Array.from({ length: ONLINE_SELF_SERVE_MAX_PARTY }, (_, index) => index + 1);
-  }, [appSettings.reservationMaxGuestsPerSlot, embedded]);
+  }, [appSettings.reservationMaxGuestsPerSlot, embedded,isStaff]);
 
   /** Bookable slots for guests — Full is hidden (staff may still override in POS). */
   const availableTimeSlots = useMemo(
@@ -254,11 +273,11 @@ export function ReservationBookingView({
   );
 
   useEffect(() => {
-    if (availableTimeSlots.length === 0) return;
+    if (isStaff || availableTimeSlots.length === 0) return;
     if (!availableTimeSlots.some((row) => row.time === time)) {
       setTime(availableTimeSlots[0].time);
     }
-  }, [availableTimeSlots, time]);
+  }, [availableTimeSlots, time,isStaff]);
 
   const openingHoursSummary = useMemo(
     () => formatOperatingHoursSummary(appSettings.reservationOperatingHours),
@@ -286,7 +305,7 @@ export function ReservationBookingView({
     if (required.phone && !phone.trim()) return copy.errorPhone;
     if ((required.date || required.time) && (!date || !time)) return copy.errorDateTime;
     if (required.eventType && showEventTypeField && !eventType.trim()) return copy.errorEventType;
-    if (!gdprConsent) {
+    if (!isStaff && !gdprConsent) {
       setGdprError(true);
       return copy.errorGdpr;
     }
@@ -310,6 +329,14 @@ export function ReservationBookingView({
     }
 
     setSubmitting(true);
+    if(staff){
+      try {
+        const failure=await staff.onSubmit({guestName:guestName.trim(),email:email.trim(),phone:phone.trim(),guestCount,date,time,notes:notes.trim(),eventType,referralCode:referralCode.trim(),wantsBbq});
+        if(failure)setError(failure);
+      } catch {setError(copy.errorSubmitRetry);}
+      finally {setSubmitting(false);}
+      return;
+    }
     let activeHold = holdToken;
     try {
       const holdResponse = await fetch("/api/reservations/hold", {
@@ -478,8 +505,8 @@ export function ReservationBookingView({
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-5 rounded-none border border-white/10 bg-[#111113]/80 p-5 backdrop-blur sm:p-8">
-        {embedded ? (
+      <form onSubmit={handleSubmit} className={`space-y-5 border border-white/10 bg-[#111113]/80 p-5 backdrop-blur sm:p-8 ${isStaff?"rounded-2xl [&_input]:rounded-xl [&_select]:rounded-xl [&_textarea]:rounded-xl":"rounded-none"}`}>
+        {embedded && !isStaff ? (
           <div className="mb-2 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-white">
               <UtensilsCrossed className="h-4 w-4 text-[#C9A88B]" />
@@ -524,7 +551,7 @@ export function ReservationBookingView({
                   {count} {count === 1 ? copy.guestSingular : copy.guestPlural}
                 </option>
               ))}
-              {!embedded ? (
+              {!embedded && !isStaff ? (
                 <option value={ONLINE_LARGE_PARTY_OPTION}>{copy.largePartyOption}</option>
               ) : null}
             </select>
@@ -575,7 +602,7 @@ export function ReservationBookingView({
               placeholder={copy.emailPlaceholder}
               autoComplete="email"
             />
-            {emailHint ? <p className="mt-1 text-xs text-white/40">{emailHint}</p> : null}
+            {emailHint && !isStaff ? <p className="mt-1 text-xs text-white/40">{emailHint}</p> : null}
           </label>
           <label className="block text-sm text-white/80">
             {copy.phoneNumber}
@@ -643,7 +670,7 @@ export function ReservationBookingView({
             <RequiredMark show={required.date} />
             <input
               type="date"
-              min={minDate}
+              min={isStaff?undefined:minDate}
               value={date}
               onChange={(event) => setDate(event.target.value)}
               className="mt-2 w-full rounded-none border border-white/15 bg-[#0B0B0C] px-4 py-3 text-white outline-none transition focus:border-[#C9A88B] focus:ring-2 focus:ring-[#C9A88B]/30"
@@ -652,6 +679,8 @@ export function ReservationBookingView({
           <label className="block text-sm text-white/80">
             {copy.selectTime}
             <RequiredMark show={required.time} />
+            {isStaff?<input type="time" value={time} onChange={event=>setTime(event.target.value)}
+              className="mt-2 w-full border border-white/15 bg-[#0B0B0C] px-4 py-3 text-white outline-none transition focus:border-[#C9A88B]"/>:(
             <select
               value={time}
               onChange={(event) => setTime(event.target.value)}
@@ -665,11 +694,12 @@ export function ReservationBookingView({
               ) : (
                 availableTimeSlots.map((slot) => (
                   <option key={slot.time} value={slot.time}>
-                    {slot.time} — {slotStatusLabel(slot.status, copy)}
+                    {slot.time}{isStaff?"":` — ${slotStatusLabel(slot.status, copy)}`}
                   </option>
                 ))
               )}
             </select>
+            )}
             {selectedSlotStatus === "limited" ? (
               <p className="mt-1 text-xs text-amber-300/90">{copy.slotLimited}</p>
             ) : null}
@@ -689,7 +719,8 @@ export function ReservationBookingView({
           />
         </label>
 
-        <label
+        {staff?.fields}
+        {!isStaff&&<label
           className={`flex cursor-pointer items-start gap-3 rounded-none border px-3 py-3 text-sm ${
             gdprError ? "border-red-500/60 bg-red-950/20 text-red-200" : "border-white/10 text-white/70"
           }`}
@@ -704,7 +735,7 @@ export function ReservationBookingView({
             className="mt-1"
           />
           <span>{gdprText || copy.gdprRequired}</span>
-        </label>
+        </label>}
 
         {error ? (
           <p className="rounded-none border border-red-500/40 bg-red-950/30 px-3 py-2 text-sm text-red-200">
@@ -714,10 +745,10 @@ export function ReservationBookingView({
 
         <button
           type="submit"
-          disabled={submitting || availableTimeSlots.length === 0}
+          disabled={submitting || (!isStaff && availableTimeSlots.length === 0)}
           className="w-full rounded-none bg-[#8B1E2D] py-4 text-base font-semibold text-white transition hover:bg-[#A02435] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {submitting ? copy.submitting : copy.submitReservation}
+          {submitting ? copy.submitting : staff?.submitLabel??copy.submitReservation}
         </button>
         </>
         )}

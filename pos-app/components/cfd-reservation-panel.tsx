@@ -16,9 +16,9 @@ import { formatInVenueTz, todayIsoDateInVenue, venueDayRangeUtc } from "@/lib/ve
 import type { WebsiteContent } from "@/lib/website/types";
 import { ReservationBookingView } from "@/components/reservation-booking-view";
 import {
-  ReservationDualTableSelect,
   isAnyOccupiedTable,
 } from "@/components/reservation-table-select";
+import { ReservationTableMap } from "@/components/reservation-table-map";
 import { fetchGuestVisitProfile } from "@/src/lib/guest-history-actions";
 import {
   checkInReservationWithTables,
@@ -433,7 +433,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
             role="dialog"
             aria-modal="true"
             aria-label={translate("checkIn")}
-            className="w-full max-w-md border border-white/15 bg-[#121214] p-5 shadow-2xl"
+            className="max-h-[90dvh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-white/15 bg-[#121214] p-5 shadow-2xl"
           >
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
@@ -459,11 +459,12 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
             </div>
 
             <div className="text-sm text-white">
-              <ReservationDualTableSelect
+              <ReservationTableMap
                 tables={tables}
                 value={checkInTableIds}
                 onChange={setCheckInTableIds}
-                className="pos-input"
+                language={language}
+                disabled={busyId===selected.id}
               />
             </div>
 

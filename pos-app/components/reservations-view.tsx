@@ -37,9 +37,11 @@ import {
 import { pickEventTypeLabel, parseReservationBbqNotes } from "@/lib/reservation-guest-form";
 import type { ReservationRecord, RestaurantTable } from "@/lib/types";
 import {
-  ReservationDualTableSelect,
   isAnyOccupiedTable,
 } from "@/components/reservation-table-select";
+import { ReservationTableMap } from "@/components/reservation-table-map";
+import { ReservationBookingView, type ReservationStaffDraft } from "@/components/reservation-booking-view";
+import { venueWallTimeToUtc } from "@/lib/venue-timezone";
 import { ReservationUndoBar } from "@/components/reservation-undo-bar";
 import { PartySizeStepper } from "@/components/reservation-party-size-stepper";
 import { ReservationDateTimeFields } from "@/components/reservation-datetime-fields";
@@ -64,7 +66,7 @@ import {
   subscribeToReservationChanges,
   updateReservationDetails,
 } from "@/src/lib/reservation-actions";
-import { formatReservationTableLabels } from "@/lib/reservation-tables";
+import { formatReservationTableLabels, reservationTableLabels } from "@/lib/reservation-tables";
 import { fetchGuestVisitProfile } from "@/src/lib/guest-history-actions";
 import { sendCfdEvent } from "@/lib/cfd-display";
 import {
@@ -416,43 +418,27 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     void loadReservations();
   };
 
-  const handleCreateReservation = async () => {
-    if (!formGuestName.trim() || !formDateTime) return;
+  const handleCreateReservation = async (draft:ReservationStaffDraft):Promise<string|null> => {
     setBusyId("new");
-    const guestEmail = formEmail.trim();
-    const { data: created, error: createError } = await createReservation({
-      guestName: formGuestName.trim(),
-      guestPhone: formPhone.trim() || undefined,
-      guestEmail: guestEmail || undefined,
-      partySize: Math.max(1, formPartySize),
-      reservedAt: new Date(formDateTime),
-      notes: formNotes.trim() || undefined,
-      tableId: formTableId || undefined,
-      staffId: currentStaffUser?.id,
-      staffName: currentStaffUser?.name,
-      source: formSource,
-    });
-    setBusyId(null);
-    if (createError) {
-      setError(createError.message);
-      return;
-    }
-    // Same "received" email as online booking when staff enters a guest email.
-    if (guestEmail && created?.id) {
-      void fetch("/api/reservations/notify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: created.id, type: "received" }),
-      }).catch(() => undefined);
-    }
-    setShowNewModal(false);
-    setFormGuestName("");
-    setFormPhone("");
-    setFormEmail("");
-    setFormNotes("");
-    setFormTableId("");
-    setFormSource("reservation");
-    void loadReservations();
+    try {
+      const bbqTag=draft.wantsBbq?`[BBQ: ${draft.wantsBbq==="yes"?"Yes":draft.wantsBbq==="no"?"No":"Undecided"}]`:"";
+      const { data:created,error:createError }=await createReservation({
+        guestName:draft.guestName|| (language==="cs"?"Host":language==="zh"?"客人":"Guest"),
+        guestPhone:draft.phone||undefined,guestEmail:draft.email||undefined,
+        partySize:Math.max(1,draft.guestCount),reservedAt:venueWallTimeToUtc(draft.date,draft.time),
+        notes:[bbqTag,draft.notes].filter(Boolean).join(" ")||undefined,
+        eventType:draft.eventType||undefined,referralCode:draft.referralCode||undefined,
+        tableId:formTableId||undefined,staffId:currentStaffUser?.id,staffName:currentStaffUser?.name,source:formSource,
+      });
+      if(createError)return createError.message;
+      if(draft.email&&created?.id){
+        void fetch("/api/reservations/notify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:created.id,type:"received"})}).catch(()=>undefined);
+      }
+      setShowNewModal(false);
+      setFormTableId("");setFormSource("reservation");
+      void loadReservations();
+      return null;
+    } finally {setBusyId(null);}
   };
 
   const openEditModal = (row: ReservationRecord) => {
@@ -668,8 +654,8 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
   const cardClassName = (row: ReservationRecord) =>
     isLateReservation(row)
-      ? "rounded-xl border-2 border-orange-500 bg-orange-50 p-2.5 shadow-sm animate-pulse dark:border-orange-500 dark:bg-orange-950/40 sm:p-4"
-      : "rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-4";
+      ? "rounded-2xl border border-orange-400/60 bg-orange-50 p-4 shadow-sm dark:bg-orange-950/20 sm:p-5"
+      : "rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm transition-colors hover:border-[#C9A88B]/40 sm:p-5";
 
   return (
     <div className="flex h-full flex-col bg-background text-[var(--foreground)]">
@@ -691,6 +677,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             type="button"
             onClick={() => {
               setFormSource("reservation");
+              setFormTableId("");
               setShowNewModal(true);
             }}
             className="inline-flex items-center gap-1 rounded-md bg-gray-900 px-2 py-1 text-[11px] font-semibold text-white dark:bg-gray-100 dark:text-gray-900 sm:gap-1.5 sm:rounded-lg sm:px-2.5 sm:py-1.5 sm:text-xs"
@@ -721,7 +708,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
       <div className="flex-1 overflow-auto p-2.5 sm:p-4 lg:p-6">
         <div className="mx-auto max-w-6xl space-y-3 sm:space-y-4 lg:space-y-6">
-          <section className="rounded-xl border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:p-3">
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 sm:px-5">
             <div className="flex flex-wrap items-center gap-2">
               <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">
                 {translate("resAdvancedStats")}
@@ -815,25 +802,21 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             </div>
           </section>
 
-          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <section className="grid grid-cols-2 gap-3">
             {(
               [
                 { label: "resTotalGuests" as const, value: stats.totalGuests },
-                { label: "resTotalBookings" as const, value: stats.totalBookings },
-                { label: "resPending" as const, value: stats.pendingConfirmation },
-                { label: "resLate" as const, value: stats.late },
-                { label: "resCheckedIn" as const, value: stats.checkedIn },
-                { label: "resNoShows" as const, value: stats.noShows },
+                { label: "resTotalTables" as const, value: stats.totalBookings },
               ] as const
             ).map(({ label, value }) => (
               <div
                 key={label}
                 className="rounded-xl border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:p-3"
               >
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--muted)] sm:text-xs">
                   {translate(label)}
                 </p>
-                <p className="mt-1 text-lg font-bold tabular-nums text-gray-900 dark:text-gray-100 sm:mt-2 sm:text-2xl">{value}</p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums text-[var(--foreground)] sm:text-3xl">{value}</p>
               </div>
             ))}
           </section>
@@ -854,8 +837,8 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             <div className="space-y-3">
               {filtered.map((row) => (
                 <article key={row.id} className={cardClassName(row)}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
+                  <div className="grid items-center gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(140px,0.65fr)_minmax(220px,0.8fr)]">
+                    <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="text-sm font-semibold sm:text-base lg:text-lg">{row.guestName}{row.referralCode && <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">{row.referralCode}</span>}</h2>
                         <span
@@ -899,52 +882,6 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           </p>
                         );
                       })()}
-                      {formatReservationTableLabels(row) ? (
-                        <p
-                          className={`mt-1 inline-flex items-center gap-1 text-sm font-medium ${
-                            row.status === "checked_in"
-                              ? "text-emerald-700 dark:text-emerald-300"
-                              : "text-gray-600 dark:text-gray-300"
-                          }`}
-                        >
-                          <MapPin className="h-4 w-4" />
-                          {row.status === "checked_in"
-                            ? `${translate("table")} ${formatReservationTableLabels(row)}`
-                            : `${translate("resTablePlanned")}: ${formatReservationTableLabels(row)}`}
-                        </p>
-                      ) : row.suggestedSeating ? (
-                        <p className="mt-1 inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
-                          <MapPin className="h-4 w-4" />
-                          {translate("resSuggestedSeating")}: {row.suggestedSeating}
-                          {row.suggestedCapacity ? ` · ${row.suggestedCapacity}` : ""}
-                        </p>
-                      ) : null}
-                      {row.capacityStatus ? (
-                        <p className="mt-1">
-                          <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${
-                              row.capacityStatus === "full"
-                                ? "bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-200"
-                                : row.capacityStatus === "limited"
-                                  ? "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100"
-                                  : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
-                            }`}
-                          >
-                            {translate("resCapacityWarning")}:{" "}
-                            {row.capacityStatus === "full"
-                              ? translate("resCapacityFull")
-                              : row.capacityStatus === "limited"
-                                ? translate("resCapacityLimited")
-                                : translate("resCapacityAvailable")}
-                            {row.staffOverrideCapacity ? ` · ${translate("resStaffOverride")}` : ""}
-                          </span>
-                        </p>
-                      ) : null}
-                      {row.capacityWarnings ? (
-                        <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                          {row.capacityWarnings}
-                        </p>
-                      ) : null}
                       {row.status === "cancelled" && row.cancellationReason ? (
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                           {translate("resCancelReasonTitle")}: {row.cancellationReason}
@@ -965,7 +902,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                                 ko: row.eventType,
                               },
                             },
-                            "en",
+                            language==="cs"?"cs":"en",
                           )}
                         </p>
                       ) : null}
@@ -996,7 +933,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                               </p>
                             ) : null}
                             {noteText ? (
-                              <p className="mt-1 text-sm italic text-gray-500">{noteText}</p>
+                              <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--muted)]">{noteText}</p>
                             ) : null}
                           </>
                         );
@@ -1009,7 +946,15 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                       />
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
+                    <div className={reservationTableLabels(row).length?"flex min-w-0 items-center justify-center":"hidden lg:block"}>
+                      {reservationTableLabels(row).length>0&&<div className={`cfd-fade-enter w-full rounded-2xl border px-4 py-3 text-center ${row.status==="checked_in"?"border-emerald-400/30 bg-emerald-500/5":"border-[#C9A88B]/30 bg-[#C9A88B]/5"}`}>
+                        <p className="mb-2 flex items-center justify-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--muted)]"><MapPin className="h-3 w-3"/>{row.status==="checked_in"?translate("table"):translate("resTablePlanned")}</p>
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                          {reservationTableLabels(row).map(label=><span key={label} className="rounded-xl border border-[#C9A88B]/20 bg-[#C9A88B]/10 px-3 py-2 text-2xl font-semibold tracking-wide text-[var(--foreground)]">{label}</span>)}
+                        </div>
+                      </div>}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                       {canEditReservation(row.status) && (
                         <button
                           type="button"
@@ -1017,7 +962,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           onClick={() => openEditModal(row)}
                           aria-label={translate("editReservation")}
                           title={translate("editReservation")}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200 dark:hover:bg-blue-900"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] text-[var(--muted)] transition hover:bg-[var(--accent)] disabled:opacity-50"
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
@@ -1045,7 +990,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                             );
                             setCheckInActualParty(row.actualPartySize ?? row.partySize);
                           }}
-                          className="rounded-md bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-sky-500 sm:rounded-lg sm:px-3 sm:py-1.5 sm:text-xs"
+                          className="min-h-9 rounded-xl bg-[#C9A88B] px-3 py-2 text-xs font-semibold text-[#171211] transition hover:bg-[#DCC1A5] disabled:opacity-50"
                         >
                           {translate("checkIn")}
                         </button>
@@ -1062,7 +1007,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                               ) as string[],
                             );
                           }}
-                          className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-semibold dark:border-gray-600"
+                          className="min-h-9 rounded-xl border border-[#C9A88B]/40 bg-[#C9A88B]/5 px-3 py-2 text-xs font-medium transition hover:bg-[#C9A88B]/15 disabled:opacity-50"
                         >
                           {translate("assignTable")}
                         </button>
@@ -1072,7 +1017,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           type="button"
                           disabled={busyId === row.id}
                           onClick={() => void handleMarkNoShow(row)}
-                          className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-amber-950"
+                          className="min-h-9 rounded-xl border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-500/15 dark:text-amber-200 disabled:opacity-50"
                         >
                           {translate("markNoShow")}
                         </button>
@@ -1082,7 +1027,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           type="button"
                           disabled={busyId === row.id}
                           onClick={() => openCancelDialog(row)}
-                          className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white"
+                          className="min-h-9 rounded-xl border border-red-400/25 bg-red-500/5 px-3 py-2 text-xs font-medium text-red-700 transition hover:bg-red-500/15 dark:text-red-300 disabled:opacity-50"
                         >
                           {translate("cancelReservation")}
                         </button>
@@ -1098,68 +1043,20 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
       <Modal
         open={showNewModal}
-        onClose={() => {
-          setFormSource("reservation");
-          setShowNewModal(false);
-        }}
+        onClose={()=>{if(busyId!=="new"){setFormSource("reservation");setShowNewModal(false);}}}
         title={translate("newReservation")}
+        size="xl"
       >
-        <div className="space-y-3">
-          <label className="block text-sm">
-            <span className="text-gray-500">{translate("guestName")}</span>
-            <input value={formGuestName} onChange={(e) => setFormGuestName(e.target.value)} className="pos-input mt-1" />
-          </label>
-          <div className="block text-sm">
-            <span className="text-gray-500">{translate("reservationSource")}</span>
-            <div className="mt-1">
-              <ReservationSourcePicker
-                value={formSource}
-                onChange={setFormSource}
-                posLabel={translate("resSourceReservation")}
-                phoneLabel={translate("resSourcePhoneCall")}
-              />
+        {showNewModal&&<ReservationBookingView embedded staff={{
+          settings,language:language==="cs"?"cs":"en",submitLabel:translate("saveReservation"),onSubmit:handleCreateReservation,
+          fields:<div className="space-y-4 border-t border-white/10 pt-4">
+            <div className="space-y-2 text-sm text-white/70">
+              <p>{translate("reservationSource")}</p>
+              <ReservationSourcePicker value={formSource} onChange={setFormSource} posLabel={translate("resSourceReservation")} phoneLabel={translate("resSourcePhoneCall")}/>
             </div>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-sm">
-              <span className="text-gray-500">{translate("guestPhone")}</span>
-              <input value={formPhone} onChange={(e) => setFormPhone(e.target.value)} className="pos-input mt-1" />
-            </label>
-            <PartySizeStepper
-              value={formPartySize}
-              onChange={setFormPartySize}
-              max={settings.reservationMaxGuestsPerSlot || 50}
-              label={translate("partySize")}
-            />
-          </div>
-          <label className="block text-sm">
-            <span className="text-gray-500">{translate("guestEmail")}</span>
-            <input type="email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} className="pos-input mt-1" />
-          </label>
-          <ReservationDateTimeFields
-            value={formDateTime}
-            onChange={setFormDateTime}
-            settings={settings}
-            dateLabel={translate("reservedDate")}
-            timeLabel={translate("reservedTime")}
-          />
-          <label className="block text-sm">
-            <span className="text-gray-500">{translate("selectTable")}</span>
-            <select value={formTableId} onChange={(e) => setFormTableId(e.target.value)} className="pos-input mt-1">
-              <option value="">{translate("selectEmptyTable")}</option>
-              {emptyTables.map((table) => (
-                <option key={table.id} value={table.id}>{translate("table")} {table.label}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-sm">
-            <span className="text-gray-500">{translate("resNotes")}</span>
-            <textarea value={formNotes} onChange={(e) => setFormNotes(e.target.value)} className="pos-input mt-1 min-h-[72px]" />
-          </label>
-          <button type="button" disabled={busyId === "new"} onClick={() => void handleCreateReservation()} className="w-full rounded-xl bg-gray-900 py-3 text-sm font-semibold text-white dark:bg-gray-100 dark:text-gray-900">
-            {translate("saveReservation")}
-          </button>
-        </div>
+            <ReservationTableMap tables={tables} language={language} value={formTableId?[formTableId]:[]} onChange={ids=>setFormTableId(ids[0]??"")} maxTables={1} allowOccupied={false} disabled={busyId==="new"}/>
+          </div>,
+        }}/>} 
       </Modal>
 
       <Modal
@@ -1244,16 +1141,18 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
         ) : null}
       </Modal>
 
-      <Modal open={assignTarget !== null} onClose={() => setAssignTarget(null)} title={translate("assignTable")}>
+      <Modal open={assignTarget !== null} onClose={() => setAssignTarget(null)} title={translate("assignTable")} size="xl">
         <div className="space-y-3">
           <p className="text-sm text-gray-600 dark:text-gray-300">
             {assignTarget?.guestName} · {assignTarget?.partySize} {translate("partySize").toLowerCase()}
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-400">{translate("assignTableHint")}</p>
-          <ReservationDualTableSelect
+          <ReservationTableMap
             tables={tables}
             value={assignTableIds}
             onChange={setAssignTableIds}
+            language={language}
+            disabled={busyId===assignTarget?.id}
           />
           {assignOccupied ? (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
@@ -1274,13 +1173,11 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           setCheckInActualParty(2);
         }}
         title={translate("checkIn")}
+        size="xl"
       >
         <div className="space-y-3">
           <p className="text-sm text-gray-600 dark:text-gray-300">
             {checkInTarget?.guestName} · {checkInTarget?.partySize} {translate("partySize").toLowerCase()}
-            {checkInTarget?.suggestedSeating
-              ? ` · ${translate("resSuggestedSeating")}: ${checkInTarget.suggestedSeating}`
-              : ""}
           </p>
           <PartySizeStepper
             value={checkInActualParty}
@@ -1288,11 +1185,12 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             max={settings.reservationMaxGuestsPerSlot || 50}
             label={translate("resActualPartySize")}
           />
-          <ReservationDualTableSelect
+          <ReservationTableMap
             tables={tables}
             value={checkInTableIds}
             onChange={setCheckInTableIds}
-            className="pos-input"
+            language={language}
+            disabled={busyId===checkInTarget?.id}
           />
           {checkInOccupied ? (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">

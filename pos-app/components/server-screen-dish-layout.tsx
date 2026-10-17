@@ -138,8 +138,7 @@ export function ServerScreenDishLayout({entries,selections,externalSelected,nowM
               const chosenCount=choosing?Math.min(quantityChoice?.count??1,entryIds.length):1;
               const locked=done||Boolean(table.selection?.saving)||(table.external&&processing);
               const tone=preparationHighlightTone(preparationAgeMinutes(entry.orderedAt,nowMs));
-              const clock=entry.orderedAt?new Date(entry.orderedAt):null;
-              const orderTime=clock&&Number.isFinite(clock.getTime())?clock.toLocaleTimeString(language==="cs"?"cs-CZ":language==="zh"?"zh-CN":"en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}):"—";
+              const waitTime=formatPreparationMinutes(entry.orderedAt,nowMs,minLabel);
               return <motion.div key={entryKey}
                 layout={reduceMotion?false:"position"}
                 initial={reduceMotion?false:{opacity:0,x:24}}
@@ -151,8 +150,8 @@ export function ServerScreenDishLayout({entries,selections,externalSelected,nowM
                 <button type="button" data-server-interactive
                 disabled={locked} aria-pressed={selected}
                 aria-expanded={canChooseQuantity?choosing:undefined}
-                aria-label={`${entry.tableLabel}, ${quantity} ${dish.name}, ordered ${orderTime}${canChooseQuantity?`, ${choosing?quantityLabels.cancel:quantityLabels.choose}`:""}${done?", completed":table.selection?.saving?", completing":selected?", selected, tap to deselect":tone==="critical"?", overdue":tone==="warn"?", long wait":""}`}
-                title={`${entry.tableLabel} · ${orderTime}${entry.note?` · ${entry.note}`:""}`}
+                aria-label={`${entry.tableLabel}, ${quantity} ${dish.name}, waiting ${waitTime}${canChooseQuantity?`, ${choosing?quantityLabels.cancel:quantityLabels.choose}`:""}${done?", completed":table.selection?.saving?", completing":selected?", selected, tap to deselect":tone==="critical"?", overdue":tone==="warn"?", long wait":""}`}
+                title={`${entry.tableLabel} · ${waitTime}${entry.note?` · ${entry.note}`:""}`}
                 onClick={()=>{
                   if(canChooseQuantity){setQuantityChoice(choosing?null:{key:entryKey,count:1});return;}
                   setQuantityChoice(null);
@@ -164,8 +163,7 @@ export function ServerScreenDishLayout({entries,selections,externalSelected,nowM
                   {done?<Check className="h-4 w-4" aria-hidden/>:table.selection?.saving?<Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden/>:!selected&&tone!=="normal"?<TriangleAlert className="h-3.5 w-3.5" aria-hidden/>:null}
                 </div>
                 <p className="mt-0.5 break-words font-sans text-[1.85rem] font-bold leading-none tracking-wide tabular-nums sm:text-[2rem]">{entry.tableLabel}</p>
-                <p className={`mt-1 text-[11px] leading-none tabular-nums ${selected?"text-zinc-800/80":!done&&tone!=="normal"?"font-bold text-white":"text-current/65"}`}>{done?"✓ Done":formatPreparationMinutes(entry.orderedAt,nowMs,minLabel)}</p>
-                <time dateTime={entry.orderedAt||undefined} className={`mt-1 block text-[9px] leading-none tabular-nums ${selected?"text-zinc-800/65":!done&&tone!=="normal"?"text-white/80":"text-current/45"}`}>{orderTime}</time>
+                <p className={`mt-1.5 text-sm font-semibold leading-none tabular-nums ${selected?"text-zinc-800/80":!done&&tone!=="normal"?"font-bold text-white":"text-current/65"}`}>{done?"✓ Done":waitTime}</p>
                 {entry.note&&<p className="mt-1.5 max-w-[200px] whitespace-pre-wrap break-words border-t border-current/15 pt-1 text-left text-xs leading-snug">{entry.note}</p>}
                 {table.selection&&!table.selection.saving&&<SelectionCountdown deadline={table.selection.deadline}/>}
                 </button>

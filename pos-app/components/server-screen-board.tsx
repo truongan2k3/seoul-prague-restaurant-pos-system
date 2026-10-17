@@ -83,7 +83,6 @@ import {
   SERVER_SCREEN_DONE_LINGER_MS,
   SERVER_SCREEN_HISTORY_VISIBLE_MS,
   SERVER_SCREEN_LANG_ROTATE_MS,
-  SERVER_SCREEN_TABLE_AUTO_DONE_MS,
   serverScreenOrderWaveKey,
   shouldShowGrillCompanions,
   tableSessionHasGrill,
@@ -1426,16 +1425,17 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const completeDishEntries = useCallback(async(ids:string[]):Promise<DishCompletion[]>=>{
     const completed:DishCompletion[]=[];
     const rows=new Map(preparingRowsRef.current.map(row=>[row.key,row]));
-    const byTable=new Map<string,string[]>();
+    const realIds:string[]=[];
+    const tableIds=new Set<string>();
     const companionKeys:string[]=[];
-    for(const id of ids){
+    for(const id of new Set(ids)){
       const row=rows.get(id);if(!row)continue;
       if(row.kind==="companion")companionKeys.push(id);
-      else byTable.set(row.item.tableId,[...(byTable.get(row.item.tableId)??[]),id]);
+      else {realIds.push(id);tableIds.add(row.item.tableId);}
     }
     try {
-      for(const [tableId,itemIds] of byTable){
-        const result=await markItemsReady(itemIds,actor,tableId,{onlyPreparing:true});
+      if(realIds.length){
+        const result=await markItemsReady(realIds,actor,undefined,{onlyPreparing:true,tableIds:Array.from(tableIds)});
         if(result.error)throw new Error(result.error.message);
         const changed=("completedItems" in result ? result.completedItems??[] : []) as Array<{id:string;ready_at:string}>;
         const ready=new Map(changed.map(row=>[row.id,row.ready_at]));
@@ -1778,7 +1778,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
           for (const key of keys) next.add(key);
         }
         if (next.size === 0) clearAutoDoneTimer();
-        else scheduleAutoDone(SERVER_SCREEN_TABLE_AUTO_DONE_MS);
+        else scheduleAutoDone(SERVER_SCREEN_AUTO_DONE_MS);
         return next;
       });
     },
@@ -1899,7 +1899,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
           for (const key of keys) next.add(key);
         }
         if (next.size === 0) clearAutoDoneTimer();
-        else scheduleAutoDone(SERVER_SCREEN_TABLE_AUTO_DONE_MS);
+        else scheduleAutoDone(SERVER_SCREEN_AUTO_DONE_MS);
         return next;
       });
     },

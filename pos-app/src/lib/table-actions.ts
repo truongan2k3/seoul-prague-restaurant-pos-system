@@ -1126,7 +1126,7 @@ export async function markItemsReady(
   itemIds: string[],
   staffName: string,
   tableId?: string,
-  options?: {onlyPreparing?:boolean},
+  options?: {onlyPreparing?:boolean;tableIds?:string[]},
 ) {
   return markItemsServed(itemIds, staffName, tableId, options);
 }
@@ -1197,14 +1197,15 @@ export async function markItemsServed(
   itemIds: string[],
   staffName: string,
   tableId?: string,
-  options?: {onlyPreparing?:boolean},
+  options?: {onlyPreparing?:boolean;tableIds?:string[]},
 ) {
   const result = await updateOrderItemsStatusBatch(itemIds, "served", options?.onlyPreparing);
   if (result.error) return result;
 
-  if (tableId) {
-    await syncTableOrdersFromDb(tableId);
-    await markTableFulfillmentIfAllServed(tableId);
+  // A KDS selection can update items across tables in one status write.
+  for (const affectedTableId of new Set([...(tableId?[tableId]:[]),...(options?.tableIds??[])])) {
+    await syncTableOrdersFromDb(affectedTableId);
+    await markTableFulfillmentIfAllServed(affectedTableId);
   }
 
   return result;

@@ -17,22 +17,22 @@ export function useDishPreparation({entries,completedTimes,nowMs,blocked,externa
   const [error,setError]=useState<string|null>(null);
   const live=useRef({entries,completedTimes,blocked,externalSelected,onComplete});
   useLayoutEffect(()=>{live.current={entries,completedTimes,blocked,externalSelected,onComplete};});
-  const timers=useRef(new Map<string,ReturnType<typeof setTimeout>>());
+  const batchTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const selected=useRef(new Map<string,DishSelection>());
   const lastEntries=useRef(new Map<string,DishEntry>());
   const due=useRef(new Set<string>());
-  const queuedDrain=useRef<ReturnType<typeof setTimeout>|null>(null);
   const missingSince=useRef(new Map<string,number>());
   const running=useRef(false);
   const mounted=useRef(true);
   const drainRef=useRef<()=>void>(()=>{});
 
   const clearEntry=useCallback((id:string)=>{
-    const timer=timers.current.get(id);
-    if(timer)clearTimeout(timer);
-    timers.current.delete(id);
     selected.current.delete(id);
     due.current.delete(id);
+    if(!Array.from(selected.current.values()).some(selection=>!selection.saving)){
+      if(batchTimer.current)clearTimeout(batchTimer.current);
+      batchTimer.current=null;
+    }
   },[]);
 
   const drain=useCallback(async()=>{
@@ -84,10 +84,8 @@ export function useDishPreparation({entries,completedTimes,nowMs,blocked,externa
     mounted.current=true;
     return()=>{
       mounted.current=false;
-      if(queuedDrain.current)clearTimeout(queuedDrain.current);
-      queuedDrain.current=null;
-      timers.current.forEach(clearTimeout);
-      timers.current.clear();
+      if(batchTimer.current)clearTimeout(batchTimer.current);
+      batchTimer.current=null;
       selected.current.clear();
       due.current.clear();
     };
@@ -139,17 +137,39 @@ export function useDishPreparation({entries,completedTimes,nowMs,blocked,externa
     lastEntries.current=remembered;
   },[entries,completedTimes,nowMs,clearEntry]);
 
+  // One trailing timer for the whole selection. In-flight writes stay locked.
+  const scheduleBatch=useCallback(()=>{
+    if(batchTimer.current)clearTimeout(batchTimer.current);
+    batchTimer.current=null;
+    const waiting=Array.from(selected.current).filter(([,selection])=>!selection.saving);
+    if(waiting.length){
+      const deadline=Date.now()+DISH_SELECTION_MS;
+      for(const [id,selection] of waiting)selected.current.set(id,{...selection,deadline});
+      batchTimer.current=setTimeout(()=>{
+        batchTimer.current=null;
+        if(!mounted.current)return;
+        for(const [id,selection] of selected.current){
+          if(selection.saving)continue;
+          selected.current.set(id,{...selection,saving:true});
+          due.current.add(id);
+        }
+        setSelections(new Map(selected.current));
+        drainRef.current();
+      },DISH_SELECTION_MS);
+    }
+    setSelections(new Map(selected.current));
+  },[]);
+
   const select=useCallback((ids:string[],count?:number)=>{
     const current=new Map(live.current.entries.map(entry=>[entry.id,entry]));
     setError(null);
     const cancellable=ids.filter(id=>{const selection=selected.current.get(id);return selection&&!selection.saving;});
     if(count===undefined&&cancellable.length){
       cancellable.forEach(clearEntry);
-      setSelections(new Map(selected.current));
+      scheduleBatch();
       return;
     }
     if(count!==undefined){
-      // Adjust only this send's exact IDs; other tables keep their deadlines.
       if(ids.some(id=>selected.current.get(id)?.saving))return;
       const eligible=Array.from(new Set(ids)).filter(id=>{
         const entry=current.get(id);
@@ -158,26 +178,15 @@ export function useDishPreparation({entries,completedTimes,nowMs,blocked,externa
       cancellable.forEach(clearEntry);
       ids=eligible.slice(0,Math.max(0,Math.min(eligible.length,Math.floor(count))));
     }
-    const deadline=Date.now()+DISH_SELECTION_MS;
+    let changed=cancellable.length>0;
     for(const id of ids){
       const entry=current.get(id);
-      // Saving entries are locked; independent timers for other entries stay untouched.
       if(!entry||entry.completedAt||selected.current.has(id)||live.current.externalSelected.has(id))continue;
-      selected.current.set(id,{deadline,saving:false});
-      timers.current.set(id,setTimeout(()=>{
-        timers.current.delete(id);
-        const selection=selected.current.get(id);
-        if(!selection||!mounted.current)return;
-        selected.current.set(id,{...selection,saving:true});
-        setSelections(new Map(selected.current));
-        due.current.add(id);
-        if(!queuedDrain.current)queuedDrain.current=setTimeout(()=>{
-          queuedDrain.current=null;drainRef.current();
-        },0);
-      },Math.max(0,deadline-Date.now())));
+      selected.current.set(id,{deadline:0,saving:false});
+      changed=true;
     }
-    setSelections(new Map(selected.current));
-  },[clearEntry]);
+    if(changed)scheduleBatch();
+  },[clearEntry,scheduleBatch]);
 
   const visible=useMemo(()=>{
     const result=new Map(completed);

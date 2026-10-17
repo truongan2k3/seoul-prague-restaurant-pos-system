@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowRight, Check, Loader2 } from "lucide-react";
+import { ArrowRight, Check, Loader2, TriangleAlert } from "lucide-react";
 import { formatPreparationMinutes, preparationAgeMinutes, preparationHighlightTone } from "@/lib/server-screen";
 import { DISH_SELECTION_MS, type DishEntry, type DishSelection } from "@/lib/dish-preparation";
 import type { LanguageCode } from "@/lib/types";
@@ -137,17 +137,17 @@ export function ServerScreenDishLayout({entries,selections,externalSelected,nowM
                 {index>0&&<ArrowRight aria-hidden="true" strokeWidth={2.5} className="mx-1 h-6 w-6 shrink-0 text-[#DCC1A5]/90 sm:h-7 sm:w-7"/>}
                 <button type="button" data-server-interactive
                 disabled={done||Boolean(table.selection?.saving)||(table.external&&processing)} aria-pressed={selected}
-                aria-label={`${entry.tableLabel}, ${quantity} ${dish.name}, ordered ${orderTime}${done?", completed":table.selection?.saving?", completing":selected?", selected, tap to deselect":""}`}
+                aria-label={`${entry.tableLabel}, ${quantity} ${dish.name}, ordered ${orderTime}${done?", completed":table.selection?.saving?", completing":selected?", selected, tap to deselect":tone==="critical"?", overdue":tone==="warn"?", long wait":""}`}
                 title={`${entry.tableLabel} · ${orderTime}${entry.note?` · ${entry.note}`:""}`}
                 onClick={()=>onSelect(table.entries.map(row=>row.id))}
-                className={`relative min-h-[78px] min-w-[72px] max-w-[220px] overflow-hidden rounded-lg border px-2 py-1 text-center transition-colors motion-reduce:transition-none ${done?"border-emerald-500/25 bg-emerald-950/35 text-emerald-200/80":selected?"border-amber-300 bg-amber-300/90 text-zinc-950":tone==="critical"?"border-red-500/50 bg-red-950/25 text-white":tone==="warn"?"border-orange-400/40 bg-orange-950/20 text-white":"border-transparent bg-transparent text-[#F5EDE4] hover:border-[#C9A88B]/60 hover:bg-[#C9A88B]/10"}`}>
+                className={`relative min-h-[78px] min-w-[72px] max-w-[220px] overflow-hidden rounded-lg border px-2 py-1 text-center transition-colors motion-reduce:transition-none ${done?"border-emerald-500/25 bg-emerald-950/35 text-emerald-200/80":selected?"border-amber-300 bg-amber-300/90 text-zinc-950":tone==="critical"?"border-red-400 bg-[#86272E] text-red-50 shadow-[0_0_14px_rgba(248,113,113,0.2)]":tone==="warn"?"border-orange-400 bg-[#8A3B12] text-orange-50 shadow-[0_0_10px_rgba(251,146,60,0.12)]":"border-transparent bg-transparent text-[#F5EDE4] hover:border-[#C9A88B]/60 hover:bg-[#C9A88B]/10"}`}>
                 <div className="flex h-3.5 items-center justify-center gap-1.5">
                   <span className={`text-[11px] font-semibold leading-none tabular-nums ${done?"line-through decoration-emerald-300/40":""}`}>{quantity}×</span>
-                  {done?<Check className="h-4 w-4" aria-hidden/>:table.selection?.saving?<Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden/>:null}
+                  {done?<Check className="h-4 w-4" aria-hidden/>:table.selection?.saving?<Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden/>:!selected&&tone!=="normal"?<TriangleAlert className="h-3.5 w-3.5" aria-hidden/>:null}
                 </div>
                 <p className="mt-0.5 break-words font-sans text-[1.85rem] font-bold leading-none tracking-wide tabular-nums sm:text-[2rem]">{entry.tableLabel}</p>
-                <p className={`mt-1 text-[11px] leading-none tabular-nums ${selected?"text-zinc-800/80":"text-current/65"}`}>{done?"✓ Done":formatPreparationMinutes(entry.orderedAt,nowMs,minLabel)}</p>
-                <time dateTime={entry.orderedAt||undefined} className={`mt-1 block text-[9px] leading-none tabular-nums ${selected?"text-zinc-800/65":"text-current/45"}`}>{orderTime}</time>
+                <p className={`mt-1 text-[11px] leading-none tabular-nums ${selected?"text-zinc-800/80":!done&&tone!=="normal"?"font-bold text-white":"text-current/65"}`}>{done?"✓ Done":formatPreparationMinutes(entry.orderedAt,nowMs,minLabel)}</p>
+                <time dateTime={entry.orderedAt||undefined} className={`mt-1 block text-[9px] leading-none tabular-nums ${selected?"text-zinc-800/65":!done&&tone!=="normal"?"text-white/80":"text-current/45"}`}>{orderTime}</time>
                 {entry.note&&<p className="mt-1.5 max-w-[200px] whitespace-pre-wrap break-words border-t border-current/15 pt-1 text-left text-xs leading-snug">{entry.note}</p>}
                 {table.selection&&!table.selection.saving&&<SelectionCountdown deadline={table.selection.deadline}/>}
                 </button>

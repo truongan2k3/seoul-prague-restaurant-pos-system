@@ -2200,11 +2200,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
           }}
         >
           <h1
-            className={`text-xl font-semibold text-white sm:text-2xl ${
-              layoutMode === "cards"
-                ? "font-serif tracking-tight"
-                : "uppercase tracking-[0.14em]"
-            }`}
+            className="font-serif text-xl font-semibold tracking-tight text-white sm:text-2xl"
           >
             {translate("preparing")}
           </h1>

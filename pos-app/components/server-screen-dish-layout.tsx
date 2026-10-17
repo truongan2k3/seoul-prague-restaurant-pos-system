@@ -108,9 +108,9 @@ export function ServerScreenDishLayout({entries,selections,externalSelected,nowM
   return <div className="px-3 py-1 sm:px-4">
     {error&&<p role="alert" className="mb-3 rounded-xl border border-amber-400/30 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">{error}</p>}
     {!dishes.length?<p className="py-10 text-center text-base text-white/35">{emptyLabel}</p>:<div className="dish-layout-frame" style={{minHeight:columns.split?columns.height:undefined}}>
-      <motion.div aria-hidden="true" className="dish-layout-divider" initial={false}
+      {[1,2].map(divider=><motion.div key={divider} aria-hidden="true" className="dish-layout-divider" data-divider={divider} initial={false}
         animate={{opacity:columns.split?1:0,scaleY:columns.split?1:0}}
-        transition={{duration:reduceMotion?0:0.45,ease:[0.22,1,0.36,1]}}/>
+        transition={{duration:reduceMotion?0:0.45,delay:reduceMotion?0:(divider-1)*0.07,ease:[0.22,1,0.36,1]}}/>)}
       <div ref={columns.listRef} data-split={columns.split} className="dish-layout-columns divide-y divide-white/10">
       {dishes.map(dish=>{
         const tables=Array.from(dish.tables.values()).sort((a,b)=>a.entries[0].orderedAt.localeCompare(b.entries[0].orderedAt)||a.entries[0].id.localeCompare(b.entries[0].id));

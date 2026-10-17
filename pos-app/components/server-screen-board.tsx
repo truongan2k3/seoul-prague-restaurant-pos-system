@@ -2229,8 +2229,20 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             ) : (
               <ServerScreenDishLayout entries={dishPreparation.entries} selections={dishPreparation.selections}
                 externalSelected={selectedKeys} nowMs={nowMs} language={language} minLabel={minLabel}
-                emptyLabel={translate("noOrders")} error={dishPreparation.error??sharedGrill.error}
-                onSelect={ids=>{unlockNotificationAudio();dishPreparation.select(ids);}} />
+                emptyLabel={translate("noOrders")} error={dishPreparation.error??sharedGrill.error} processing={busy}
+                onSelect={ids=>{
+                  unlockNotificationAudio();
+                  if(ids.some(id=>selectedKeys.has(id))){
+                    if(busy)return;
+                    setSelectedKeys(previous=>{
+                      const next=new Set(previous);ids.forEach(id=>next.delete(id));
+                      if(!next.size)clearAutoDoneTimer();
+                      return next;
+                    });
+                    return;
+                  }
+                  dishPreparation.select(ids);
+                }} />
             )}
           </div>
 

@@ -142,10 +142,16 @@ export function useDishPreparation({entries,completedTimes,nowMs,blocked,externa
   const select=useCallback((ids:string[])=>{
     const current=new Map(live.current.entries.map(entry=>[entry.id,entry]));
     setError(null);
+    const cancellable=ids.filter(id=>{const selection=selected.current.get(id);return selection&&!selection.saving;});
+    if(cancellable.length){
+      cancellable.forEach(clearEntry);
+      setSelections(new Map(selected.current));
+      return;
+    }
     const deadline=Date.now()+DISH_SELECTION_MS;
     for(const id of ids){
       const entry=current.get(id);
-      // Repeated taps never restart a timer or enqueue duplicate work.
+      // Saving entries are locked; independent timers for other entries stay untouched.
       if(!entry||entry.completedAt||selected.current.has(id)||live.current.externalSelected.has(id))continue;
       selected.current.set(id,{deadline,saving:false});
       timers.current.set(id,setTimeout(()=>{
@@ -161,7 +167,7 @@ export function useDishPreparation({entries,completedTimes,nowMs,blocked,externa
       },Math.max(0,deadline-Date.now())));
     }
     setSelections(new Map(selected.current));
-  },[]);
+  },[clearEntry]);
 
   const visible=useMemo(()=>{
     const result=new Map(completed);

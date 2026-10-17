@@ -113,6 +113,7 @@ export function parseServerScreenConfig(raw: unknown): ServerScreenConfig {
   }
 
   return {
+    sharedTheme: row.sharedTheme === "light" || row.sharedTheme === "dark" || row.sharedTheme === "halloween" ? row.sharedTheme : undefined,
     languageMode,
     languages: normalizeServerScreenLanguages(languageMode, parsed),
     autoRotateLanguage:
@@ -142,6 +143,7 @@ export function parseServerScreenConfig(raw: unknown): ServerScreenConfig {
 export function serverScreenConfigToDb(config: ServerScreenConfig) {
   const languages = normalizeServerScreenLanguages(config.languageMode, config.languages);
   return {
+    ...(config.sharedTheme === "light" || config.sharedTheme === "dark" || config.sharedTheme === "halloween" ? { sharedTheme: config.sharedTheme } : {}),
     languageMode: config.languageMode,
     languages,
     autoRotateLanguage: Boolean(config.autoRotateLanguage),

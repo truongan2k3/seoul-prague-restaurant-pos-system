@@ -820,6 +820,7 @@ export function ClientDisplayView({
 
   return (
     <div
+      data-display-interaction={clientState === "checkout" ? "busy" : undefined}
       className="landing-theme relative flex h-[100dvh] flex-col overflow-hidden bg-[#0B0B0C] text-white"
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}

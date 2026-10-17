@@ -3,7 +3,8 @@
 import { useEffect, useId, useLayoutEffect, type CSSProperties } from "react";
 import { usePathname } from "next/navigation";
 import { useApp } from "@/contexts/app-context";
-import { CUSTOMER_WEBSITE_PATH } from "@/lib/website/theme";
+import { useSettings } from "@/contexts/settings-context";
+import { CUSTOMER_WEBSITE_PATH, OPERATIONAL_DISPLAY_PATH } from "@/lib/website/theme";
 import { usePosSeasonalEffects } from "@/lib/pos-seasonal-effects";
 
 function CopperLeaf({ slender = false }: { slender?: boolean }) {
@@ -93,10 +94,15 @@ export function HalloweenHeroAtmosphere() {
 /** Public decoration and POS palette are scoped separately, including portal dialogs. */
 export function HalloweenThemeRuntime() {
   const pathname = usePathname();
-  const { theme } = useApp();
+  const { theme, setTheme } = useApp();
+  const { settings, loading } = useSettings();
+  const sharedTheme = settings.serverScreen.sharedTheme;
+  useLayoutEffect(() => {
+    if (!loading && sharedTheme) setTheme(sharedTheme);
+  }, [loading, sharedTheme, setTheme]);
   const [posEffectsEnabled] = usePosSeasonalEffects();
   const active = theme === "halloween" && CUSTOMER_WEBSITE_PATH.test(pathname ?? "");
-  const posActive = theme === "halloween" && (pathname === "/app" || pathname === "/app/");
+  const posActive = theme === "halloween" && OPERATIONAL_DISPLAY_PATH.test(pathname ?? "");
   useLayoutEffect(() => {
     const root = document.documentElement;
     if (active) root.dataset.websiteTheme = "halloween";

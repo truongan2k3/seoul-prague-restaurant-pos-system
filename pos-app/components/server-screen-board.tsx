@@ -2081,6 +2081,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
 
   return withPaymentOverlay(
     <div
+      data-display-interaction={busy || selectedKeys.size > 0 ? "busy" : undefined}
       className={shellClass}
       onPointerDown={onBackgroundPointerDown}
       onTouchStart={onTouchStart}

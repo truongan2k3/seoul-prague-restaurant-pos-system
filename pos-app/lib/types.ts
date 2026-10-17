@@ -31,6 +31,8 @@ export type ThemeMode = "light" | "dark" | "halloween";
 export type ServerScreenLanguageMode = "single" | "bilingual" | "multilingual";
 
 export interface ServerScreenConfig {
+  /** Shared venue theme; absent keeps existing device preferences. */
+  sharedTheme?: ThemeMode;
   languageMode: ServerScreenLanguageMode;
   /** Ordered languages used for display / rotation. */
   languages: LanguageCode[];

@@ -40,6 +40,12 @@ html[data-pos-theme="halloween"] .pos-input:focus-visible {
   border-color: #d6a17a;
   box-shadow: 0 0 0 2px rgb(197 131 80 / 25%);
 }
+html[data-pos-theme="halloween"] :is([class~="bg-[#0B0B0C]"], [class~="bg-[#0b0b0c]"]) {
+  background-color: #100d10;
+}
+html[data-pos-theme="halloween"] :is([class~="bg-[#121214]"], [class~="bg-[#141416]"]) {
+  background-color: #1a1416;
+}
 html[data-pos-theme="halloween"] select option {
   background-color: #1a1416;
   color: #f3e7d7;
@@ -164,6 +170,7 @@ html[data-website-theme="halloween"] .landing-theme #home h1 {
 .hw-scene--pos * { animation-play-state: var(--pos-hw-play-state, running); }
 html[data-pos-theme="halloween"] body:has(
   [data-pos-interaction="busy"],
+  [data-display-interaction="busy"],
   [role="dialog"]:not([aria-hidden="true"]):not([hidden]),
   [aria-modal="true"]:not([aria-hidden="true"]):not([hidden]),
   [role="menu"]:not([aria-hidden="true"]):not([hidden]),

@@ -122,7 +122,7 @@ export function ServerScreenDishLayout({entries,selections,externalSelected,nowM
         layout={reduceMotion?false:"position"} layoutDependency={columns.split} initial={false}
         transition={{layout:{duration:reduceMotion?0:0.5,ease:[0.22,1,0.36,1]}}}>
         <span aria-hidden="true" className="dish-line-status"/>
-        <div className="dish-layout-row grid grid-cols-[minmax(110px,0.85fr)_minmax(0,2fr)] items-center gap-2 md:grid-cols-[minmax(170px,0.8fr)_minmax(0,2.5fr)] md:gap-4">
+        <div className="dish-layout-row grid ps-3 grid-cols-[minmax(110px,0.85fr)_minmax(0,2fr)] items-center gap-2 md:grid-cols-[minmax(170px,0.8fr)_minmax(0,2.5fr)] md:gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
               {dish.outstanding===0&&<Check aria-hidden="true" className="h-5 w-5 shrink-0 text-emerald-300"/>}

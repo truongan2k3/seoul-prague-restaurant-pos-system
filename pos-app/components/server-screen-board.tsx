@@ -301,6 +301,7 @@ function FloatingToolbar({
   showPrepStats = false,
   historyBack = false,
   layoutActive = false,
+  inHeader = false,
 }: {
   refreshing: boolean;
   onHistory: () => void;
@@ -314,23 +315,28 @@ function FloatingToolbar({
   showPrepStats?: boolean;
   historyBack?: boolean;
   layoutActive?: boolean;
+  inHeader?: boolean;
 }) {
-  const btnBase =
-    "inline-flex items-center justify-center gap-2 rounded-xl border border-white/12 bg-white/[0.04] text-[#E8D5C4] transition hover:bg-white/[0.08] min-h-12 landscape:min-h-9 landscape:min-w-9 landscape:flex-none landscape:rounded-lg landscape:px-0 landscape:gap-0";
-  const labelClass = "hidden sm:inline landscape:hidden";
+  const btnBase = inHeader
+    ? "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-white/12 bg-white/[0.04] text-[#E8D5C4] transition hover:bg-white/[0.08]"
+    : "inline-flex items-center justify-center gap-2 rounded-xl border border-white/12 bg-white/[0.04] text-[#E8D5C4] transition hover:bg-white/[0.08] min-h-12 landscape:min-h-9 landscape:min-w-9 landscape:flex-none landscape:rounded-lg landscape:px-0 landscape:gap-0";
+  const labelClass = inHeader ? "sr-only" : "hidden sm:inline landscape:hidden";
 
   return (
-    <div className="relative z-20 shrink-0 px-3 pb-2 pt-1 sm:px-4 landscape:absolute landscape:bottom-[3.15rem] landscape:right-2 landscape:z-30 landscape:w-auto landscape:p-0">
+    <div
+      onPointerDown={inHeader ? event => event.stopPropagation() : undefined}
+      className={inHeader ? "shrink-0" : "relative z-20 shrink-0 px-3 pb-2 pt-1 sm:px-4 landscape:absolute landscape:bottom-[3.15rem] landscape:right-2 landscape:z-30 landscape:w-auto landscape:p-0"}
+    >
       <div
         data-server-interactive
-        className="mx-auto flex max-w-4xl items-center gap-2 rounded-2xl border border-white/12 bg-[#121214]/95 px-2 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-md sm:gap-3 sm:px-3 landscape:mx-0 landscape:max-w-none landscape:flex-col landscape:gap-1 landscape:rounded-xl landscape:px-1.5 landscape:py-1.5 landscape:shadow-[0_6px_20px_rgba(0,0,0,0.5)]"
+        className={inHeader ? "flex items-center gap-1 sm:gap-1.5" : "mx-auto flex max-w-4xl items-center gap-2 rounded-2xl border border-white/12 bg-[#121214]/95 px-2 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-md sm:gap-3 sm:px-3 landscape:mx-0 landscape:max-w-none landscape:flex-col landscape:gap-1 landscape:rounded-xl landscape:px-1.5 landscape:py-1.5 landscape:shadow-[0_6px_20px_rgba(0,0,0,0.5)]"}
       >
         <button
           type="button"
           onClick={onHistory}
           aria-label={historyLabel}
           title={historyLabel}
-          className={`${btnBase} flex-1 px-3 text-sm font-medium sm:px-4 landscape:flex-none`}
+          className={inHeader ? btnBase : `${btnBase} flex-1 px-3 text-sm font-medium sm:px-4 landscape:flex-none`}
         >
           {historyBack ? <ArrowLeft className="h-4 w-4" /> : <History className="h-4 w-4" />}
           <span className={labelClass}>{historyLabel}</span>
@@ -341,7 +347,7 @@ function FloatingToolbar({
             onClick={onPrepStats}
             aria-label={prepStatsLabel ?? "Stats"}
             title={prepStatsLabel}
-            className={`${btnBase} min-w-12 shrink-0`}
+            className={inHeader ? btnBase : `${btnBase} min-w-12 shrink-0`}
           >
             <BarChart3 className="h-4 w-4" />
           </button>
@@ -353,7 +359,7 @@ function FloatingToolbar({
             aria-label={layoutLabel ?? "Layout"}
             title={layoutLabel}
             aria-pressed={layoutActive}
-            className={`inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-medium transition sm:px-4 landscape:min-h-9 landscape:min-w-9 landscape:rounded-lg landscape:px-0 landscape:gap-0 ${
+            className={`${inHeader ? "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border transition" : "inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-medium transition sm:px-4 landscape:min-h-9 landscape:min-w-9 landscape:rounded-lg landscape:px-0 landscape:gap-0"} ${
               layoutActive
                 ? "border-[#C9A88B]/45 bg-[#C9A88B]/15 text-[#F5EDE4]"
                 : "border-white/12 bg-white/[0.04] text-[#E8D5C4] hover:bg-white/[0.08]"
@@ -369,7 +375,7 @@ function FloatingToolbar({
           onClick={onRefresh}
           aria-label={refreshLabel}
           title={refreshLabel}
-          className={`${btnBase} min-w-12 shrink-0 px-3 text-sm font-medium disabled:opacity-50`}
+          className={`${inHeader ? btnBase : `${btnBase} min-w-12 shrink-0 px-3 text-sm font-medium`} disabled:opacity-50`}
         >
           <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
           <span className={labelClass}>{refreshLabel}</span>
@@ -2191,7 +2197,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
 
       <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <header
-          className="flex shrink-0 cursor-pointer items-center justify-between gap-3 border-b border-white/10 px-4 py-3"
+          className="flex shrink-0 cursor-pointer items-center justify-between gap-2 border-b border-white/10 px-3 py-2 sm:px-4"
           onPointerDown={(event) => {
             // Tapping the title area cycles language (manual override).
             event.stopPropagation();
@@ -2199,8 +2205,10 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             cycleLanguage();
           }}
         >
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
           <h1
-            className="font-serif text-xl font-semibold tracking-tight text-white sm:text-2xl"
+            title={translate("preparing")}
+            className="min-w-0 truncate font-serif text-xl font-semibold tracking-tight text-white sm:text-2xl"
           >
             {translate("preparing")}
           </h1>
@@ -2209,6 +2217,21 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
               ? orderCards.length
               : dishPreparation.entries.filter(entry=>!entry.completedAt).reduce((sum,entry)=>sum+entry.quantity,0)}
           </span>
+          </div>
+          <FloatingToolbar
+        refreshing={refreshing}
+        onHistory={() => setHistoryOpen(true)}
+        onLayout={toggleLayoutMode}
+        onRefresh={() => void handleRefresh()}
+        onPrepStats={openPrepStats}
+        historyLabel={translate("history")}
+        layoutLabel={translate("serverScreenLayout")}
+        refreshLabel={translate("serverScreenRefresh")}
+        prepStatsLabel={translate("prepStatsTodayTitle")}
+        inHeader
+        showPrepStats
+        layoutActive={layoutMode === "cards"}
+      />
         </header>
 
         <div className="relative min-h-0 flex-1">
@@ -2272,19 +2295,6 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         </div>
       </section>
 
-      <FloatingToolbar
-        refreshing={refreshing}
-        onHistory={() => setHistoryOpen(true)}
-        onLayout={toggleLayoutMode}
-        onRefresh={() => void handleRefresh()}
-        onPrepStats={openPrepStats}
-        historyLabel={translate("history")}
-        layoutLabel={translate("serverScreenLayout")}
-        refreshLabel={translate("serverScreenRefresh")}
-        prepStatsLabel={translate("prepStatsTodayTitle")}
-        showPrepStats
-        layoutActive={layoutMode === "cards"}
-      />
       <ServerScreenFooter language={language} />
     </div>,
   );

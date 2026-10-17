@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type CSSProperties } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, Check, Loader2 } from "lucide-react";
 import { formatPreparationMinutes, preparationAgeMinutes, preparationHighlightTone } from "@/lib/server-screen";
@@ -12,6 +12,67 @@ type TableEntry = {key:string;entries:DishEntry[];selection?:DishSelection;exter
 function SelectionCountdown({deadline}:{deadline:number}) {
   const style=useMemo(()=>({"--dish-countdown-delay":`${-Math.max(0,Date.now()-(deadline-DISH_SELECTION_MS))}ms`}) as CSSProperties,[deadline]);
   return <span aria-hidden className="dish-selection-countdown absolute inset-x-0 bottom-0 h-0.5 origin-left bg-zinc-950/45" style={style}/>;
+}
+
+function useDishColumns(hasDishes: boolean) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const [columns, setColumns] = useState({split:false, height:0});
+
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const viewport = list?.closest<HTMLElement>("[data-server-scroll]");
+    if (!list || !viewport) return;
+    const landscape = window.matchMedia("(orientation: landscape) and (min-width: 640px)");
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const offset = list.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop;
+      const height = Math.max(0, Math.floor(viewport.clientHeight - offset - 4));
+      let naturalHeight = list.offsetHeight;
+      if (landscape.matches && list.dataset.split === "true") {
+        // Measure at full width so the narrower columns cannot cause a split/merge loop.
+        const probe = list.cloneNode(true) as HTMLDivElement;
+        probe.dataset.split = "false";
+        probe.setAttribute("aria-hidden", "true");
+        probe.inert = true;
+        Object.assign(probe.style, {
+          position:"absolute", top:"0", left:"0", visibility:"hidden",
+          pointerEvents:"none", width:`${list.getBoundingClientRect().width}px`,
+        });
+        list.parentElement?.appendChild(probe);
+        naturalHeight = probe.offsetHeight;
+        probe.remove();
+      }
+      const split = landscape.matches && height > 0 && naturalHeight > height + 2;
+      setColumns(previous => previous.split === split && previous.height === height ? previous : {split, height});
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(measure);
+    };
+    const resize = new ResizeObserver(schedule);
+    resize.observe(viewport);
+    resize.observe(list);
+    const observeRows = () => {
+      resize.disconnect();
+      resize.observe(viewport);
+      resize.observe(list);
+      Array.from(list.children).forEach(row => resize.observe(row));
+      schedule();
+    };
+    const changes = new MutationObserver(observeRows);
+    changes.observe(list, {childList:true, subtree:true});
+    landscape.addEventListener("change", schedule);
+    measure();
+    observeRows();
+    return () => {
+      resize.disconnect();
+      changes.disconnect();
+      landscape.removeEventListener("change", schedule);
+      cancelAnimationFrame(frame);
+    };
+  }, [hasDishes]);
+
+  return {listRef, ...columns};
 }
 
 export function ServerScreenDishLayout({entries,selections,externalSelected,nowMs,language,minLabel,emptyLabel,error,onSelect,processing=false}:{
@@ -38,10 +99,18 @@ export function ServerScreenDishLayout({entries,selections,externalSelected,nowM
     return Array.from(grouped,([key,dish])=>({key,...dish})).sort((a,b)=>a.first.localeCompare(b.first)||a.key.localeCompare(b.key));
   },[entries,selections,externalSelected]);
 
+  const columns=useDishColumns(dishes.length>0);
+
   return <div className="px-3 py-1 sm:px-4">
     {error&&<p role="alert" className="mb-3 rounded-xl border border-amber-400/30 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">{error}</p>}
-    {!dishes.length?<p className="py-10 text-center text-base text-white/35">{emptyLabel}</p>:<div className="dish-layout-columns divide-y divide-white/10">
-      {dishes.map(dish=><section key={dish.key} className="dish-layout-section py-2 sm:py-2.5">
+    {!dishes.length?<p className="py-10 text-center text-base text-white/35">{emptyLabel}</p>:<div className="dish-layout-frame" style={{minHeight:columns.split?columns.height:undefined}}>
+      <motion.div aria-hidden="true" className="dish-layout-divider" initial={false}
+        animate={{opacity:columns.split?1:0,scaleY:columns.split?1:0}}
+        transition={{duration:reduceMotion?0:0.45,ease:[0.22,1,0.36,1]}}/>
+      <div ref={columns.listRef} data-split={columns.split} className="dish-layout-columns divide-y divide-white/10">
+      {dishes.map(dish=><motion.section key={dish.key} className="dish-layout-section py-2 sm:py-2.5"
+        layout={reduceMotion?false:"position"} layoutDependency={columns.split} initial={false}
+        transition={{layout:{duration:reduceMotion?0:0.5,ease:[0.22,1,0.36,1]}}}>
         <div className="dish-layout-row grid grid-cols-[minmax(110px,0.85fr)_minmax(0,2fr)] items-center gap-2 md:grid-cols-[minmax(170px,0.8fr)_minmax(0,2.5fr)] md:gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -86,7 +155,8 @@ export function ServerScreenDishLayout({entries,selections,externalSelected,nowM
             })}
           </div>
         </div>
-      </section>)}
+      </motion.section>)}
+      </div>
     </div>}
   </div>;
 }

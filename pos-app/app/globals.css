@@ -944,20 +944,29 @@ input[type="search"] {
 .dish-selection-countdown { animation: dish-selection-countdown 5s linear var(--dish-countdown-delay, 0ms) forwards; }
 @media (prefers-reduced-motion: reduce) { .dish-selection-countdown { animation: none; } }
 
-/* Layout 2 only: balanced landscape columns keep complete dish rows together. */
+/* Layout 2 fills one column first; the display measures when a split is needed. */
+.dish-layout-frame { position: relative; }
+.dish-layout-divider {
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  width: 1px;
+  background: rgba(220, 193, 165, 0.3);
+  transform-origin: top;
+  pointer-events: none;
+}
+.dish-layout-section {
+  break-inside: avoid;
+  display: flow-root;
+  width: 100%;
+}
 @media (orientation: landscape) and (min-width: 640px) {
-  .dish-layout-columns {
+  .dish-layout-columns[data-split="true"] {
     column-count: 2;
     column-gap: 1.5rem;
-    column-rule: 1px solid var(--border);
     column-fill: balance;
   }
-  .dish-layout-section {
-    break-inside: avoid;
-    display: flow-root;
-    width: 100%;
-  }
-  .dish-layout-columns .dish-layout-row {
+  .dish-layout-columns[data-split="true"] .dish-layout-row {
     grid-template-columns: minmax(90px, 0.85fr) minmax(0, 2fr);
     gap: 0.5rem;
   }

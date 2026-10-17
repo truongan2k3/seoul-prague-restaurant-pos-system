@@ -112,10 +112,16 @@ export function ServerScreenDishLayout({entries,selections,externalSelected,nowM
         animate={{opacity:columns.split?1:0,scaleY:columns.split?1:0}}
         transition={{duration:reduceMotion?0:0.45,ease:[0.22,1,0.36,1]}}/>
       <div ref={columns.listRef} data-split={columns.split} className="dish-layout-columns divide-y divide-white/10">
-      {dishes.map(dish=><motion.section key={dish.key} className="dish-layout-section relative isolate py-2 sm:py-2.5" data-done={dish.outstanding===0}
+      {dishes.map(dish=>{
+        const tables=Array.from(dish.tables.values()).sort((a,b)=>a.entries[0].orderedAt.localeCompare(b.entries[0].orderedAt)||a.entries[0].id.localeCompare(b.entries[0].id));
+        const firstTable=tables[0];
+        const firstEntry=firstTable.entries[0];
+        const lineState=firstEntry.completedAt?"done":firstTable.external||firstTable.entries.some(entry=>selections.has(entry.id))
+          ?"selected":preparationHighlightTone(preparationAgeMinutes(firstEntry.orderedAt,nowMs));
+        return <motion.section key={dish.key} className="dish-layout-section relative isolate py-2 sm:py-2.5" data-done={dish.outstanding===0} data-state={lineState}
         layout={reduceMotion?false:"position"} layoutDependency={columns.split} initial={false}
         transition={{layout:{duration:reduceMotion?0:0.5,ease:[0.22,1,0.36,1]}}}>
-        <span aria-hidden="true" className="dish-line-completion"/>
+        <span aria-hidden="true" className="dish-line-status"/>
         <div className="dish-layout-row grid grid-cols-[minmax(110px,0.85fr)_minmax(0,2fr)] items-center gap-2 md:grid-cols-[minmax(170px,0.8fr)_minmax(0,2.5fr)] md:gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -126,7 +132,7 @@ export function ServerScreenDishLayout({entries,selections,externalSelected,nowM
             {dish.nameZh&&<p className="mt-0.5 text-xs text-white/50">{dish.nameZh}</p>}
           </div>
           <div className="flex min-w-0 flex-wrap items-start justify-end gap-y-1">
-            {Array.from(dish.tables.values()).sort((a,b)=>a.entries[0].orderedAt.localeCompare(b.entries[0].orderedAt)||a.entries[0].id.localeCompare(b.entries[0].id)).map((table,index)=>{
+            {tables.map((table,index)=>{
               const entry=table.entries[0];
               const done=Boolean(entry.completedAt);
               const ownSelections=table.entries.flatMap(row=>{const state=selections.get(row.id);return state?[state]:[];});
@@ -179,7 +185,8 @@ export function ServerScreenDishLayout({entries,selections,externalSelected,nowM
             })}
           </div>
         </div>
-      </motion.section>)}
+      </motion.section>;
+      })}
       </div>
     </div>}
   </div>;

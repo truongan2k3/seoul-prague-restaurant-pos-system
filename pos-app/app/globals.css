@@ -972,19 +972,31 @@ input[type="search"] {
   }
 }
 
-/* A dish celebrates completion only after every outstanding unit is saved. */
-.dish-line-completion {
+/* Layout 2's row follows the first visible table's current preparation state. */
+.dish-line-status {
   position: absolute;
   inset: 0;
   z-index: -1;
-  border-inline-start: 3px solid #6ee7b7;
-  background: linear-gradient(90deg, rgba(6, 95, 70, 0.65), rgba(6, 78, 59, 0.35));
-  opacity: 0;
+  border-inline-start: 3px solid transparent;
+  background-color: transparent;
   pointer-events: none;
-  transition: opacity 350ms ease-out;
+  transition: background-color 350ms ease-out, border-color 350ms ease-out;
 }
-.dish-layout-section[data-done="true"] .dish-line-completion {
-  opacity: 1;
+.dish-layout-section[data-state="warn"] .dish-line-status {
+  border-color: #fb923c;
+  background-color: rgba(138, 59, 18, 0.42);
+}
+.dish-layout-section[data-state="critical"] .dish-line-status {
+  border-color: #f87171;
+  background-color: rgba(134, 39, 46, 0.52);
+}
+.dish-layout-section[data-state="selected"] .dish-line-status {
+  border-color: #fcd34d;
+  background-color: rgba(146, 99, 19, 0.5);
+}
+.dish-layout-section[data-state="done"] .dish-line-status {
+  border-color: #6ee7b7;
+  background-color: rgba(6, 95, 70, 0.55);
   animation: dish-line-complete 700ms ease-out;
 }
 @keyframes dish-line-complete {
@@ -994,6 +1006,6 @@ input[type="search"] {
   100% { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .dish-line-completion { transition: none; }
-  .dish-layout-section[data-done="true"] .dish-line-completion { animation: none; }
+  .dish-line-status { transition: none; }
+  .dish-layout-section[data-state="done"] .dish-line-status { animation: none; }
 }

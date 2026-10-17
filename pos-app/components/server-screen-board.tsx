@@ -2253,6 +2253,10 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
               <ServerScreenDishLayout entries={dishPreparation.entries} selections={dishPreparation.selections}
                 externalSelected={selectedKeys} nowMs={nowMs} language={language} minLabel={minLabel}
                 emptyLabel={translate("noOrders")} error={dishPreparation.error??sharedGrill.error} processing={busy}
+                onSetQuantity={(ids,count)=>{
+                  unlockNotificationAudio();
+                  dishPreparation.select(ids,count);
+                }}
                 onSelect={ids=>{
                   unlockNotificationAudio();
                   if(ids.some(id=>selectedKeys.has(id))){

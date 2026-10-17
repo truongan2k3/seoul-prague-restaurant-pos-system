@@ -971,3 +971,29 @@ input[type="search"] {
     gap: 0.5rem;
   }
 }
+
+/* A dish celebrates completion only after every outstanding unit is saved. */
+.dish-line-completion {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-inline-start: 3px solid #6ee7b7;
+  background: linear-gradient(90deg, rgba(6, 95, 70, 0.65), rgba(6, 78, 59, 0.35));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 350ms ease-out;
+}
+.dish-layout-section[data-done="true"] .dish-line-completion {
+  opacity: 1;
+  animation: dish-line-complete 700ms ease-out;
+}
+@keyframes dish-line-complete {
+  0% { opacity: 0; }
+  45% { opacity: 1; }
+  70% { opacity: 0.65; }
+  100% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dish-line-completion { transition: none; }
+  .dish-layout-section[data-done="true"] .dish-line-completion { animation: none; }
+}

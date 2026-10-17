@@ -7,7 +7,7 @@ import { formatPreparationMinutes, preparationAgeMinutes, preparationHighlightTo
 import { DISH_SELECTION_MS, type DishEntry, type DishSelection } from "@/lib/dish-preparation";
 import type { LanguageCode } from "@/lib/types";
 
-type TableEntry = {key:string;entries:DishEntry[];selection?:DishSelection;external:boolean};
+type TableEntry = {key:string;entries:DishEntry[];external:boolean};
 
 function SelectionCountdown({deadline}:{deadline:number}) {
   const style=useMemo(()=>({"--dish-countdown-delay":`${-Math.max(0,Date.now()-(deadline-DISH_SELECTION_MS))}ms`}) as CSSProperties,[deadline]);
@@ -75,18 +75,17 @@ function useDishColumns(hasDishes: boolean) {
   return {listRef, ...columns};
 }
 
-export function ServerScreenDishLayout({entries,selections,externalSelected,nowMs,language,minLabel,emptyLabel,error,onSelect,processing=false}:{
+export function ServerScreenDishLayout({entries,selections,externalSelected,nowMs,language,minLabel,emptyLabel,error,onSelect,onSetQuantity,processing=false}:{
   entries:DishEntry[];selections:Map<string,DishSelection>;externalSelected:Set<string>;
   nowMs:number;language:LanguageCode;minLabel:string;emptyLabel:string;error:string|null;
-  onSelect:(ids:string[])=>void;processing?:boolean;
+  onSelect:(ids:string[])=>void;onSetQuantity:(ids:string[],count:number)=>void;processing?:boolean;
 }) {
   const reduceMotion=useReducedMotion();
-  const [quantityChoice,setQuantityChoice]=useState<{key:string;count:number}|null>(null);
   const quantityLabels=language==="cs"
-    ? {choose:"Vybrat počet",less:"Snížit počet",more:"Zvýšit počet",confirm:"Potvrdit výběr",cancel:"Zrušit výběr"}
+    ? {choose:"Vybrat počet",less:"Snížit počet",more:"Zvýšit počet"}
     : language==="zh"
-      ? {choose:"选择数量",less:"减少数量",more:"增加数量",confirm:"确认选择",cancel:"取消选择"}
-      : {choose:"Choose quantity",less:"Decrease quantity",more:"Increase quantity",confirm:"Confirm selection",cancel:"Cancel selection"};
+      ? {choose:"选择数量",less:"减少数量",more:"增加数量"}
+      : {choose:"Choose quantity",less:"Decrease quantity",more:"Increase quantity"};
   const dishes=useMemo(()=>{
     const grouped=new Map<string,{name:string;nameZh:string|null;outstanding:number;first:string;tables:Map<string,TableEntry>}>();
     for(const entry of entries){
@@ -94,16 +93,15 @@ export function ServerScreenDishLayout({entries,selections,externalSelected,nowM
       if(!dish){dish={name:entry.name,nameZh:entry.nameZh,outstanding:0,first:entry.orderedAt,tables:new Map()};grouped.set(entry.dishKey,dish);}
       if(!entry.completedAt)dish.outstanding+=entry.quantity;
       if(entry.orderedAt<dish.first)dish.first=entry.orderedAt;
-      const selection=selections.get(entry.id);
       const external=externalSelected.has(entry.id);
-      // Same table's different sends, notes, timers and completion times remain separate.
-      const key=JSON.stringify([entry.tableId,entry.orderedAt,entry.note,entry.completedAt??null,selection?.deadline??null,selection?.saving??false,external]);
+      // Keep each send separate; selected units stay grouped so staff can adjust their count.
+      const key=JSON.stringify([entry.tableId,entry.orderedAt,entry.note,entry.completedAt??null,external]);
       const table=dish.tables.get(key);
       if(table)table.entries.push(entry);
-      else dish.tables.set(key,{key,entries:[entry],selection,external});
+      else dish.tables.set(key,{key,entries:[entry],external});
     }
     return Array.from(grouped,([key,dish])=>({key,...dish})).sort((a,b)=>a.first.localeCompare(b.first)||a.key.localeCompare(b.key));
-  },[entries,selections,externalSelected]);
+  },[entries,externalSelected]);
 
   const columns=useDishColumns(dishes.length>0);
 
@@ -114,12 +112,14 @@ export function ServerScreenDishLayout({entries,selections,externalSelected,nowM
         animate={{opacity:columns.split?1:0,scaleY:columns.split?1:0}}
         transition={{duration:reduceMotion?0:0.45,ease:[0.22,1,0.36,1]}}/>
       <div ref={columns.listRef} data-split={columns.split} className="dish-layout-columns divide-y divide-white/10">
-      {dishes.map(dish=><motion.section key={dish.key} className="dish-layout-section py-2 sm:py-2.5"
+      {dishes.map(dish=><motion.section key={dish.key} className="dish-layout-section relative isolate py-2 sm:py-2.5" data-done={dish.outstanding===0}
         layout={reduceMotion?false:"position"} layoutDependency={columns.split} initial={false}
         transition={{layout:{duration:reduceMotion?0:0.5,ease:[0.22,1,0.36,1]}}}>
+        <span aria-hidden="true" className="dish-line-completion"/>
         <div className="dish-layout-row grid grid-cols-[minmax(110px,0.85fr)_minmax(0,2fr)] items-center gap-2 md:grid-cols-[minmax(170px,0.8fr)_minmax(0,2.5fr)] md:gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              {dish.outstanding===0&&<Check aria-hidden="true" className="h-5 w-5 shrink-0 text-emerald-300"/>}
               <h2 className="break-words text-base font-semibold leading-snug text-[#F5EDE4] sm:text-lg lg:text-xl">{dish.name}</h2>
               <span aria-label={`${dish.outstanding} outstanding`} aria-live="polite" aria-atomic="true" className={`whitespace-nowrap text-lg font-bold tabular-nums sm:text-xl ${dish.outstanding>0?"text-[#DCC1A5]":"text-emerald-400/65"}`}>{dish.outstanding}×</span>
             </div>
@@ -129,14 +129,15 @@ export function ServerScreenDishLayout({entries,selections,externalSelected,nowM
             {Array.from(dish.tables.values()).sort((a,b)=>a.entries[0].orderedAt.localeCompare(b.entries[0].orderedAt)||a.entries[0].id.localeCompare(b.entries[0].id)).map((table,index)=>{
               const entry=table.entries[0];
               const done=Boolean(entry.completedAt);
-              const selected=Boolean(table.selection)||table.external;
+              const ownSelections=table.entries.flatMap(row=>{const state=selections.get(row.id);return state?[state]:[];});
+              const selection=ownSelections.length?{deadline:Math.min(...ownSelections.map(state=>state.deadline)),saving:ownSelections.some(state=>state.saving)}:undefined;
+              const selected=Boolean(selection)||table.external;
+              const selectedCount=table.entries.filter(row=>selections.has(row.id)||externalSelected.has(row.id)).length;
               const quantity=table.entries.reduce((sum,row)=>sum+row.quantity,0);
               const entryIds=table.entries.map(row=>row.id).sort();
               const entryKey=JSON.stringify(entryIds);
-              const canChooseQuantity=!done&&!selected&&table.entries.length>1;
-              const choosing=canChooseQuantity&&quantityChoice?.key===entryKey;
-              const chosenCount=choosing?Math.min(quantityChoice?.count??1,entryIds.length):1;
-              const locked=done||Boolean(table.selection?.saving)||(table.external&&processing);
+              const canChooseQuantity=!done&&selected&&!table.external&&entryIds.length>1;
+              const locked=done||Boolean(selection?.saving)||(table.external&&processing);
               const tone=preparationHighlightTone(preparationAgeMinutes(entry.orderedAt,nowMs));
               const waitTime=formatPreparationMinutes(entry.orderedAt,nowMs,minLabel);
               return <motion.div key={entryKey}
@@ -149,39 +150,29 @@ export function ServerScreenDishLayout({entries,selections,externalSelected,nowM
                 <div className="flex min-w-0 max-w-[220px] flex-col">
                 <button type="button" data-server-interactive
                 disabled={locked} aria-pressed={selected}
-                aria-expanded={canChooseQuantity?choosing:undefined}
-                aria-label={`${entry.tableLabel}, ${quantity} ${dish.name}, waiting ${waitTime}${canChooseQuantity?`, ${choosing?quantityLabels.cancel:quantityLabels.choose}`:""}${done?", completed":table.selection?.saving?", completing":selected?", selected, tap to deselect":tone==="critical"?", overdue":tone==="warn"?", long wait":""}`}
+                aria-label={`${entry.tableLabel}, ${quantity} ${dish.name}, waiting ${waitTime}${done?", completed":selection?.saving?", completing":selected?", selected, tap to deselect":tone==="critical"?", overdue":tone==="warn"?", long wait":""}`}
                 title={`${entry.tableLabel} · ${waitTime}${entry.note?` · ${entry.note}`:""}`}
-                onClick={()=>{
-                  if(canChooseQuantity){setQuantityChoice(choosing?null:{key:entryKey,count:1});return;}
-                  setQuantityChoice(null);
-                  onSelect(entryIds);
-                }}
+                onClick={()=>onSelect(entryIds)}
                 className={`relative min-h-[78px] min-w-[72px] max-w-[220px] overflow-hidden rounded-lg border px-2 py-1 text-center transition-colors motion-reduce:transition-none ${done?"border-emerald-500/25 bg-emerald-950/35 text-emerald-200/80":selected?"border-amber-300 bg-amber-300/90 text-zinc-950":tone==="critical"?"border-red-400 bg-[#86272E] text-red-50 shadow-[0_0_14px_rgba(248,113,113,0.2)]":tone==="warn"?"border-orange-400 bg-[#8A3B12] text-orange-50 shadow-[0_0_10px_rgba(251,146,60,0.12)]":"border-transparent bg-transparent text-[#F5EDE4] hover:border-[#C9A88B]/60 hover:bg-[#C9A88B]/10"}`}>
                 <div className="flex h-3.5 items-center justify-center gap-1.5">
-                  <span className={`text-[11px] font-semibold leading-none tabular-nums ${done?"line-through decoration-emerald-300/40":""}`}>{quantity}×</span>
-                  {done?<Check className="h-4 w-4" aria-hidden/>:table.selection?.saving?<Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden/>:!selected&&tone!=="normal"?<TriangleAlert className="h-3.5 w-3.5" aria-hidden/>:null}
+                  <span className={`text-[11px] font-semibold leading-none tabular-nums ${done?"line-through decoration-emerald-300/40":""}`}>{selected&&selectedCount<entryIds.length?`${selectedCount}/${quantity}`:quantity}×</span>
+                  {done?<Check className="h-4 w-4" aria-hidden/>:selection?.saving?<Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden/>:!selected&&tone!=="normal"?<TriangleAlert className="h-3.5 w-3.5" aria-hidden/>:null}
                 </div>
                 <p className="mt-0.5 break-words font-sans text-[1.85rem] font-bold leading-none tracking-wide tabular-nums sm:text-[2rem]">{entry.tableLabel}</p>
                 <p className={`mt-1.5 text-sm font-semibold leading-none tabular-nums ${selected?"text-zinc-800/80":!done&&tone!=="normal"?"font-bold text-white":"text-current/65"}`}>{done?"✓ Done":waitTime}</p>
                 {entry.note&&<p className="mt-1.5 max-w-[200px] whitespace-pre-wrap break-words border-t border-current/15 pt-1 text-left text-xs leading-snug">{entry.note}</p>}
-                {table.selection&&!table.selection.saving&&<SelectionCountdown deadline={table.selection.deadline}/>}
+                {selection&&!selection.saving&&<SelectionCountdown key={selection.deadline} deadline={selection.deadline}/>}
                 </button>
-                {choosing&&<div data-server-interactive role="group" aria-label={`${quantityLabels.choose}: ${entry.tableLabel}, ${dish.name}`}
+                {canChooseQuantity&&<div data-server-interactive role="group" aria-label={`${quantityLabels.choose}: ${entry.tableLabel}, ${dish.name}`}
                   className="mt-1 grid min-w-[132px] grid-cols-3 items-center gap-1 rounded-lg border border-[#C9A88B]/45 bg-[#241D19] p-1 text-[#F5EDE4]"
                   onPointerDown={event=>event.stopPropagation()}>
-                  <button type="button" aria-label={quantityLabels.less} disabled={locked||chosenCount<=1}
+                  <button type="button" aria-label={quantityLabels.less} disabled={locked||selectedCount<=0}
                     className="flex h-11 items-center justify-center rounded-md bg-white/5 transition hover:bg-white/10 disabled:opacity-30"
-                    onClick={()=>setQuantityChoice({key:entryKey,count:Math.max(1,chosenCount-1)})}><Minus className="h-4 w-4" aria-hidden/></button>
-                  <output aria-live="polite" className="text-center text-sm font-bold tabular-nums">{chosenCount}/{entryIds.length}</output>
-                  <button type="button" aria-label={quantityLabels.more} disabled={locked||chosenCount>=entryIds.length}
+                    onClick={()=>onSetQuantity(entryIds,Math.max(0,selectedCount-1))}><Minus className="h-4 w-4" aria-hidden/></button>
+                  <output aria-live="polite" className="text-center text-sm font-bold tabular-nums">{selectedCount}/{entryIds.length}</output>
+                  <button type="button" aria-label={quantityLabels.more} disabled={locked||selectedCount>=entryIds.length}
                     className="flex h-11 items-center justify-center rounded-md bg-white/5 transition hover:bg-white/10 disabled:opacity-30"
-                    onClick={()=>setQuantityChoice({key:entryKey,count:Math.min(entryIds.length,chosenCount+1)})}><Plus className="h-4 w-4" aria-hidden/></button>
-                  <button type="button" aria-label={quantityLabels.confirm} title={quantityLabels.confirm} disabled={locked}
-                    className="col-span-3 flex min-h-11 items-center justify-center gap-2 rounded-md bg-[#C9A88B] px-2 text-sm font-semibold text-zinc-950 transition hover:bg-[#DCC1A5] disabled:opacity-40"
-                    onClick={()=>{setQuantityChoice(null);onSelect(entryIds.slice(0,chosenCount));}}>
-                    <Check className="h-4 w-4" aria-hidden/>{chosenCount}×
-                  </button>
+                    onClick={()=>onSetQuantity(entryIds,Math.min(entryIds.length,selectedCount+1))}><Plus className="h-4 w-4" aria-hidden/></button>
                 </div>}
                 </div>
               </motion.div>;

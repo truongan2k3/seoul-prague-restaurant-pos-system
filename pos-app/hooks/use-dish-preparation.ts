@@ -139,14 +139,24 @@ export function useDishPreparation({entries,completedTimes,nowMs,blocked,externa
     lastEntries.current=remembered;
   },[entries,completedTimes,nowMs,clearEntry]);
 
-  const select=useCallback((ids:string[])=>{
+  const select=useCallback((ids:string[],count?:number)=>{
     const current=new Map(live.current.entries.map(entry=>[entry.id,entry]));
     setError(null);
     const cancellable=ids.filter(id=>{const selection=selected.current.get(id);return selection&&!selection.saving;});
-    if(cancellable.length){
+    if(count===undefined&&cancellable.length){
       cancellable.forEach(clearEntry);
       setSelections(new Map(selected.current));
       return;
+    }
+    if(count!==undefined){
+      // Adjust only this send's exact IDs; other tables keep their deadlines.
+      if(ids.some(id=>selected.current.get(id)?.saving))return;
+      const eligible=Array.from(new Set(ids)).filter(id=>{
+        const entry=current.get(id);
+        return entry&&!entry.completedAt&&!live.current.externalSelected.has(id);
+      });
+      cancellable.forEach(clearEntry);
+      ids=eligible.slice(0,Math.max(0,Math.min(eligible.length,Math.floor(count))));
     }
     const deadline=Date.now()+DISH_SELECTION_MS;
     for(const id of ids){

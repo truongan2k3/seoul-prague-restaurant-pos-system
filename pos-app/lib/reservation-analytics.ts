@@ -82,7 +82,9 @@ export type ReservationStatusFilter =
   | "confirmed"
   | "late"
   | "checked_in"
-  | "no_show";
+  | "no_show"
+  | "completed"
+  | "cancelled";
 
 export interface ReservationStats {
   totalGuests: number;

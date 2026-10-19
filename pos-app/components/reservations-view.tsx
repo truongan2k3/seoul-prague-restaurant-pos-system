@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, MapPin, ChevronLeft, ChevronRight, Pencil, Plus } from "lucide-react";
+import { Activity, Eye, MapPin, ChevronLeft, ChevronRight, Pencil, Plus } from "lucide-react";
 import { GuestReturningBadge } from "@/components/guest-returning-badge";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { Modal } from "@/components/modal";
@@ -189,13 +189,15 @@ const PERIOD_LABEL_KEYS = {
   today: "summaryToday",
 } as const;
 
-const STATUS_FILTER_OPTIONS: { value: ReservationStatusFilter; labelKey: "resFilterAll" | "resFilterPending" | "resFilterConfirmed" | "resFilterLate" | "resFilterCheckedIn" | "resFilterNoShow" }[] = [
+const STATUS_FILTER_OPTIONS: { value: ReservationStatusFilter; labelKey: "resFilterAll" | "resFilterPending" | "resFilterConfirmed" | "resFilterLate" | "resFilterCheckedIn" | "resFilterNoShow" | "resFilterCompleted" | "resFilterCancelled" }[] = [
   { value: "all", labelKey: "resFilterAll" },
   { value: "pending", labelKey: "resFilterPending" },
   { value: "confirmed", labelKey: "resFilterConfirmed" },
   { value: "late", labelKey: "resFilterLate" },
   { value: "checked_in", labelKey: "resFilterCheckedIn" },
   { value: "no_show", labelKey: "resFilterNoShow" },
+  { value: "completed", labelKey: "resFilterCompleted" },
+  { value: "cancelled", labelKey: "resFilterCancelled" },
 ];
 
 const LATE_SLA_INTERVAL_MS = 60_000;
@@ -222,6 +224,8 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const [assignTarget, setAssignTarget] = useState<ReservationRecord | null>(null);
   const [checkInTarget, setCheckInTarget] = useState<ReservationRecord | null>(null);
   const [editTarget, setEditTarget] = useState<ReservationRecord | null>(null);
+  const [detailsId,setDetailsId]=useState<string|null>(null);
+  const detailsTarget=reservations.find(row=>row.id===detailsId)??null;
   const [cancelTarget, setCancelTarget] = useState<ReservationRecord | null>(null);
   const [cancelReason, setCancelReason] = useState<ReservationCancelReasonId | "">("");
   const [cancelNote, setCancelNote] = useState("");
@@ -840,7 +844,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                   <div className="grid items-center gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(140px,0.65fr)_minmax(220px,0.8fr)]">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-sm font-semibold sm:text-base lg:text-lg">{row.guestName}{row.referralCode && <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">{row.referralCode}</span>}</h2>
+                        <h2 className="text-sm font-semibold sm:text-base lg:text-lg"><button type="button" onClick={()=>setDetailsId(row.id)} className="text-left transition-colors hover:text-[#C9A88B] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[#C9A88B]" aria-label={`${translate("resGuestDetails")}: ${row.guestName}`}>{row.guestName}</button>{row.referralCode && <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">{row.referralCode}</span>}</h2>
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide sm:text-xs ${
                             isLateReservation(row)
@@ -955,6 +959,10 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                       </div>}
                     </div>
                     <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                      <button type="button" onClick={()=>setDetailsId(row.id)}
+                        className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#C9A88B]/30 bg-[#C9A88B]/5 px-3 py-2 text-xs font-medium transition hover:bg-[#C9A88B]/15">
+                        <Eye className="h-3.5 w-3.5" aria-hidden/>{translate("resGuestDetails")}
+                      </button>
                       {canEditReservation(row.status) && (
                         <button
                           type="button"
@@ -1040,6 +1048,48 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           )}
         </div>
       </div>
+
+      <Modal open={detailsTarget!==null} onClose={()=>setDetailsId(null)} title={translate("resGuestDetails")} size="lg">
+        {detailsTarget&&<div className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
+            <h3 className="pos-serif break-words text-2xl text-[var(--foreground)]">{detailsTarget.guestName}</h3>
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${reservationStatusTone(detailsTarget.status)}`}>{translate(reservationStatusLabelKey(detailsTarget.status))}</span>
+          </div>
+          <dl className="grid gap-4 text-sm sm:grid-cols-2">
+            <div><dt className="text-xs text-[var(--muted)]">{translate("guestPhone")}</dt><dd className="mt-1 break-words font-medium">{detailsTarget.guestPhone?<a href={`tel:${detailsTarget.guestPhone.replace(/[^\d+]/g,"")}`} className="hover:text-[#C9A88B]">{detailsTarget.guestPhone}</a>:"—"}</dd></div>
+            <div><dt className="text-xs text-[var(--muted)]">{translate("guestEmail")}</dt><dd className="mt-1 break-words font-medium">{detailsTarget.guestEmail?<a href={`mailto:${detailsTarget.guestEmail}`} className="hover:text-[#C9A88B]">{detailsTarget.guestEmail}</a>:"—"}</dd></div>
+            {[
+              [translate("reservedAt"),formatDateTime(detailsTarget.reservedAt)],
+              [translate("bookingCode"),detailsTarget.bookingCode],
+              [translate("partySize"),String(detailsTarget.partySize)],
+              [translate("resActualPartySize"),detailsTarget.actualPartySize?.toString()],
+              [translate("table"),formatReservationTableLabels(detailsTarget)],
+              [translate("resReferralCode"),detailsTarget.referralCode],
+              [translate("reservationSource"),translate(({reservation:"resSourceReservation",phone_call:"resSourcePhoneCall",online:"resSourceOnline",walk_in:"resSourceWalkIn"} as const)[detailsTarget.source])],
+              [translate("resEventType"),settings.reservationEventTypes.find(option=>option.id===detailsTarget.eventType)?pickEventTypeLabel(settings.reservationEventTypes.find(option=>option.id===detailsTarget.eventType)!,language==="cs"?"cs":"en"):detailsTarget.eventType],
+              [translate("checkIn"),detailsTarget.checkedInAt?formatDateTime(detailsTarget.checkedInAt):undefined],
+              [translate("resStatusCompleted"),detailsTarget.completedAt?formatDateTime(detailsTarget.completedAt):undefined],
+              [translate("staff"),detailsTarget.staffName],
+            ].map(([label,value])=><div key={label}><dt className="text-xs text-[var(--muted)]">{label}</dt><dd className="mt-1 break-words font-medium">{value||"—"}</dd></div>)}
+          </dl>
+          {(()=>{
+            const parsed=parseReservationBbqNotes(detailsTarget.notes);
+            const bbq=detailsTarget.wantsGrill??parsed.bbq;
+            return <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--accent)]/30 p-4">
+              {bbq&&<p className="text-xs font-semibold text-[#C9A88B]">{bbq==="yes"?translate("mapResTickerBbqYes"):bbq==="no"?translate("mapResTickerBbqNo"):translate("resBbqUndecided")}</p>}
+              <p className="text-xs text-[var(--muted)]">{translate("resNotes")}</p>
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{parsed.noteText||"—"}</p>
+            </div>;
+          })()}
+          {detailsTarget.status==="cancelled"&&<div className="space-y-2 rounded-2xl border border-red-400/20 bg-red-500/5 p-4 text-sm">
+            <p className="font-semibold text-red-700 dark:text-red-200">{translate("resStatusCancelled")}</p>
+            {(detailsTarget.cancelledAt||detailsTarget.cancelledBy)&&<p className="text-xs text-[var(--muted)]">{[detailsTarget.cancelledAt?formatDateTime(detailsTarget.cancelledAt):null,detailsTarget.cancelledBy].filter(Boolean).join(" · ")}</p>}
+            {detailsTarget.cancellationReason&&<p>{detailsTarget.cancellationReason}</p>}
+            {detailsTarget.cancellationNote&&<div><p className="text-xs text-[var(--muted)]">{translate("resCancelNoteLabel")}</p><p className="mt-1 whitespace-pre-wrap break-words">{detailsTarget.cancellationNote}</p></div>}
+          </div>}
+          <button type="button" onClick={()=>setDetailsId(null)} className="min-h-11 w-full rounded-xl border border-[var(--border)] text-sm font-medium transition hover:bg-[var(--accent)]">{translate("close")}</button>
+        </div>}
+      </Modal>
 
       <Modal
         open={showNewModal}

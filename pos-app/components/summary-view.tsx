@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, Download, Minus, Printer } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowDownRight, ArrowUpRight, Download, FileText, Minus, Printer } from "lucide-react";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { DateRangeInputs } from "@/components/date-range-inputs";
 import { useApp } from "@/contexts/app-context";
@@ -12,11 +12,13 @@ import {
   computeRevenueChange,
   computeRevenueStats,
   computeTopSellers,
+  activeSalesOnly,
   filterSalesInRange,
   formatSummaryDate,
   getPeriodRange,
   toDateInputValue,
   type CategoryTopSellers,
+  type DateRange,
   type SummaryPeriod,
   type TopSellerGroup,
   type TopSellerRow,
@@ -24,7 +26,7 @@ import {
 import { downloadSummaryItemsExcel } from "@/lib/summary-excel-export";
 import { computeSummaryItemStats } from "@/lib/summary-item-stats";
 import { computeTaxSummaryReport } from "@/lib/tax-summary";
-import { printTaxSummaryReport } from "@/src/lib/printTaxSummary";
+import { printTaxSummaryPdf, printTaxSummaryReport } from "@/src/lib/printTaxSummary";
 import { filterButtonClass, segmentButtonClass } from "@/lib/theme-classes";
 import type { MenuItem, SaleRecord } from "@/lib/types";
 import {
@@ -142,10 +144,18 @@ export function SummaryView({
   sales,
   menuItems,
   onRefresh,
+  onRangeChange,
+  loadedRange,
+  salesLoading,
+  salesError,
 }: {
   sales: SaleRecord[];
   menuItems: MenuItem[];
   onRefresh: () => void;
+  onRangeChange: (range: DateRange) => void;
+  loadedRange: DateRange | null;
+  salesLoading: boolean;
+  salesError: string | null;
 }) {
   const { translate, language, currentStaffUser } = useApp();
   const [showReferrals,setShowReferrals]=useState(false);
@@ -155,6 +165,7 @@ export function SummaryView({
   const [customTo, setCustomTo] = useState(() => toDateInputValue(new Date()));
   const [sellerGroup, setSellerGroup] = useState<TopSellerGroup>("all");
   const [taxPrinting, setTaxPrinting] = useState(false);
+  const [printError, setPrintError] = useState<string | null>(null);
   const [excelExporting, setExcelExporting] = useState(false);
   const [guestListOpen, setGuestListOpen] = useState(false);
 
@@ -168,6 +179,17 @@ export function SummaryView({
       ),
     [period, customFrom, customTo],
   );
+  const requiredRange = useMemo(() => ({
+    start: period === "today" ? yesterdayRange.start : activeRange.start,
+    end: activeRange.end,
+  }), [period, yesterdayRange, activeRange]);
+
+  useEffect(() => {
+    onRangeChange(requiredRange);
+  }, [onRangeChange, requiredRange]);
+
+  const dataReady = !salesLoading && !salesError && loadedRange !== null
+    && loadedRange.start <= requiredRange.start && loadedRange.end >= requiredRange.end;
 
   const filteredSales = useMemo(
     () => filterSalesInRange(sales, activeRange),
@@ -195,7 +217,7 @@ export function SummaryView({
   const taxReport = useMemo(
     () =>
       computeTaxSummaryReport({
-        sales: filteredSales,
+        sales: activeSalesOnly(filteredSales),
         menuItems,
         range: activeRange,
         business: {
@@ -216,21 +238,26 @@ export function SummaryView({
     [filteredSales, menuItems, language],
   );
 
-  const handlePrintTaxSummary = async () => {
+  const handlePrintTaxSummary = async (pdf = false) => {
+    if (!dataReady || taxReport.documentCount === 0) return;
     setTaxPrinting(true);
+    setPrintError(null);
     try {
-      await printTaxSummaryReport(taxReport, {
+      if (pdf) await printTaxSummaryPdf(taxReport);
+      else await printTaxSummaryReport(taxReport, {
         receiptFontSize: settings.receiptFontSize,
         receiptFontWeight: settings.receiptFontWeight,
         receiptFontFamily: settings.receiptFontFamily,
       });
+    } catch (err) {
+      setPrintError(err instanceof Error ? err.message : String(err));
     } finally {
       setTaxPrinting(false);
     }
   };
 
   const handleDownloadExcel = () => {
-    if (itemStatsReport.rows.length === 0) return;
+    if (!dataReady || itemStatsReport.rows.length === 0) return;
     setExcelExporting(true);
     try {
       downloadSummaryItemsExcel(itemStatsReport, activeRange, language, {
@@ -282,10 +309,11 @@ export function SummaryView({
           <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{periodLabel}</p>
         </div>
         <div className="flex items-center gap-3">
-          <SummaryGuestListButton onClick={() => setGuestListOpen(true)} />
+          {dataReady && <SummaryGuestListButton onClick={() => setGuestListOpen(true)} />}
           <button
             type="button"
             onClick={onRefresh}
+            disabled={salesLoading}
             className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 dark:border-gray-700 dark:text-gray-300"
           >
             Refresh
@@ -298,6 +326,7 @@ export function SummaryView({
         open={guestListOpen}
         onClose={() => setGuestListOpen(false)}
         sales={sales}
+        loadedSalesRange={loadedRange}
         menuItems={menuItems}
         initialPeriod={period}
         initialCustomFrom={customFrom}
@@ -333,6 +362,15 @@ export function SummaryView({
             )}
           </section>
 
+          {!dataReady ? (
+            <div role={salesError ? "alert" : "status"} className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+              <p className="text-sm">{salesError ? translate("summaryLoadError") : translate("loading")}</p>
+              {salesError && <>
+                <p className="mt-2 break-words text-xs text-red-500">{salesError}</p>
+                <button type="button" onClick={onRefresh} className="mt-3 rounded-lg border px-3 py-2 text-sm">{translate("retry")}</button>
+              </>}
+            </div>
+          ) : <>
           <div className="grid gap-6 lg:grid-cols-2">
             <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
               <div className="flex items-start justify-between gap-3">
@@ -453,18 +491,31 @@ export function SummaryView({
                   {translate("taxSummaryHint")}
                 </p>
               </div>
+              <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                disabled={filteredSales.length === 0 || taxPrinting}
+                disabled={taxReport.documentCount === 0 || taxPrinting}
+                onClick={() => void handlePrintTaxSummary(true)}
+                className="inline-flex items-center gap-2 rounded-lg border border-[#C9A88B]/50 bg-[#C9A88B]/10 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <FileText className="h-4 w-4" />
+                {taxPrinting ? "…" : translate("taxSummaryPdf")}
+              </button>
+              <button
+                type="button"
+                disabled={taxReport.documentCount === 0 || taxPrinting}
                 onClick={() => void handlePrintTaxSummary()}
                 className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900"
               >
                 <Printer className="h-4 w-4" />
                 {taxPrinting ? "…" : translate("taxSummaryPrint")}
               </button>
+              </div>
             </div>
 
-            {filteredSales.length === 0 ? (
+            {printError && <p role="alert" className="mt-3 text-sm text-red-500">{printError}</p>}
+
+            {taxReport.documentCount === 0 ? (
               <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
                 {translate("summaryNoSales")}
               </p>
@@ -522,6 +573,7 @@ export function SummaryView({
               </div>
             )}
           </section>
+          </>}
 
           <SummaryPrepTimeSection />
         </div>

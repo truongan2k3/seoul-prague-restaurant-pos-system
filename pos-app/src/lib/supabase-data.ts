@@ -652,25 +652,34 @@ export type SupabaseSaleRow = {
  * A bare `.select()` silently truncates at ~1000 newest rows and made older bills
  * "disappear" from History / Summary.
  */
-export async function fetchSales(since?: Date) {
+export async function fetchSales(since?: Date, until?: Date) {
   const rows: SupabaseSaleRow[] = [];
-  let from = 0;
+  let cursor: SupabaseSaleRow | undefined;
 
   for (;;) {
     let query = supabase
       .from("sales")
       .select(SALES_COLUMNS)
       .order("closed_at", { ascending: false })
-      .range(from, from + SALES_PAGE_SIZE - 1);
+      .order("id", { ascending: false })
+      .limit(SALES_PAGE_SIZE);
     if (since) query = query.gte("closed_at", since.toISOString());
+    if (until) query = query.lte("closed_at", until.toISOString());
+    if (cursor) {
+      query = query.or(
+        `closed_at.lt.${cursor.closed_at},and(closed_at.eq.${cursor.closed_at},id.lt.${cursor.id})`,
+      );
+    }
 
     const { data, error } = await query;
     if (error) return { data: null, error };
 
     const page = (data as SupabaseSaleRow[] | null) ?? [];
+    if (page.length === 0) break;
     rows.push(...page);
-    if (page.length < SALES_PAGE_SIZE) break;
-    from += SALES_PAGE_SIZE;
+    // Continue even if the project's PostgREST row cap is below our page size.
+    // A timestamp + ID cursor also keeps equal-time bills on separate pages.
+    cursor = page[page.length - 1];
   }
 
   return { data: rows, error: null };

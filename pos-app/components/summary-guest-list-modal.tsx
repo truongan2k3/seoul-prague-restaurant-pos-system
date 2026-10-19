@@ -28,6 +28,7 @@ import {
   fetchReservations,
   mapReservationsResponse,
 } from "@/src/lib/reservation-actions";
+import { fetchSales, mapSalesResponse } from "@/src/lib/supabase-data";
 
 const STATUS_OPTIONS: Array<ReservationStatus | "all"> = [
   "all",
@@ -65,6 +66,7 @@ export function SummaryGuestListModal({
   open,
   onClose,
   sales,
+  loadedSalesRange,
   menuItems,
   initialPeriod,
   initialCustomFrom,
@@ -73,21 +75,27 @@ export function SummaryGuestListModal({
   open: boolean;
   onClose: () => void;
   sales: SaleRecord[];
+  loadedSalesRange: DateRange | null;
   menuItems: MenuItem[];
   initialPeriod: SummaryPeriod;
   initialCustomFrom: string;
   initialCustomTo: string;
 }) {
   const { translate, language } = useApp();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [reservationsLoading, setLoading] = useState(false);
+  const [reservationError, setError] = useState<string | null>(null);
+  const [salesLoading, setSalesLoading] = useState(false);
+  const [salesError, setSalesError] = useState<string | null>(null);
+  const [guestSales, setGuestSales] = useState(sales);
+  const [reservations, setReservations] = useState<ReturnType<typeof mapReservationsResponse>>([]);
+  const loading = reservationsLoading || salesLoading;
+  const error = reservationError ?? salesError;
   const [period, setPeriod] = useState<SummaryPeriod>(initialPeriod);
   const [customFrom, setCustomFrom] = useState(initialCustomFrom);
   const [customTo, setCustomTo] = useState(initialCustomTo);
   const [filters, setFilters] = useState<GuestListFilters>(DEFAULT_GUEST_LIST_FILTERS);
-  const [rawRows, setRawRows] = useState(() =>
-    buildGuestListRows([], sales, menuItems),
-  );
+  const rawRows = useMemo(() => buildGuestListRows(reservations, guestSales, menuItems),
+    [reservations, guestSales, menuItems]);
 
   const activeRange: DateRange = useMemo(
     () =>
@@ -120,17 +128,17 @@ export function SummaryGuestListModal({
         if (cancelled) return;
         if (fetchError) {
           setError(fetchError.message);
-          setRawRows([]);
+          setReservations([]);
           return;
         }
-        const reservations = mapReservationsResponse(
+        const loadedReservations = mapReservationsResponse(
           data as Parameters<typeof mapReservationsResponse>[0],
         );
-        setRawRows(buildGuestListRows(reservations, sales, menuItems));
+        setReservations(loadedReservations);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Failed to load guests.");
-          setRawRows([]);
+          setReservations([]);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -139,7 +147,34 @@ export function SummaryGuestListModal({
     return () => {
       cancelled = true;
     };
-  }, [open, sales, menuItems]);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setSalesError(null);
+    if (loadedSalesRange && loadedSalesRange.start <= activeRange.start && loadedSalesRange.end >= activeRange.end) {
+      setGuestSales(sales);
+      setSalesLoading(false);
+      return;
+    }
+    setSalesLoading(true);
+    void (async () => {
+      try {
+        const { data, error: fetchError } = await fetchSales(activeRange.start, activeRange.end);
+        if (fetchError) throw fetchError;
+        if (!cancelled) setGuestSales(mapSalesResponse(data));
+      } catch (err) {
+        if (!cancelled) {
+          setSalesError(err instanceof Error ? err.message : String((err as { message?: string })?.message ?? err));
+          setGuestSales([]);
+        }
+      } finally {
+        if (!cancelled) setSalesLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, activeRange, loadedSalesRange, sales]);
 
   const rows = useMemo(
     () => filterGuestListRows(rawRows, filters, activeRange),
@@ -351,7 +386,7 @@ export function SummaryGuestListModal({
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            disabled={rows.length === 0}
+            disabled={loading || Boolean(error) || rows.length === 0}
             onClick={() => downloadGuestListExcel(rows, activeRange, language, exportLabels)}
             className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -360,7 +395,7 @@ export function SummaryGuestListModal({
           </button>
           <button
             type="button"
-            disabled={rows.length === 0}
+            disabled={loading || Boolean(error) || rows.length === 0}
             onClick={() => downloadGuestListCsv(rows, activeRange, language, exportLabels)}
             className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-800 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:text-gray-100"
           >

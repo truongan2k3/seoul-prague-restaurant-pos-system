@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { MapView } from "@/components/map-view";
 import { OrderView } from "@/components/order-view";
 import { HistoryView } from "@/components/history-view";
@@ -25,6 +25,7 @@ import { ReservationIncomingListener } from "@/components/reservation-incoming-l
 import { PushSubscriptionBootstrap } from "@/components/push-subscription-bootstrap";
 import { ReservationReminderListener } from "@/components/reservation-reminder-listener";
 import { POS_EGRESS } from "@/lib/egress-config";
+import { getPeriodRange, type DateRange } from "@/lib/summary-analytics";
 import { clearPosInitCache, patchPosInitCacheMenu, readPosInitCache, readPosInitCacheStale, writePosInitCache } from "@/lib/pos-init-cache";
 import { withTimeout } from "@/lib/fetch-timeout";
 import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
@@ -211,13 +212,6 @@ function LoadingShell({
   );
 }
 
-function salesSince(days: number) {
-  const since = new Date();
-  since.setDate(since.getDate() - days);
-  since.setHours(0, 0, 0, 0);
-  return since;
-}
-
 export function DashboardShell() {
   const { currentStaffUser, refreshStaffList, translate } = useApp();
   const [activeTab, setActiveTab] = useState<NavId>("map");
@@ -229,6 +223,13 @@ export function DashboardShell() {
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [salesLoaded, setSalesLoaded] = useState(false);
+  const [salesLoading, setSalesLoading] = useState(false);
+  const [salesError, setSalesError] = useState<string | null>(null);
+  const [loadedSalesRange, setLoadedSalesRange] = useState<DateRange | null>(null);
+  const loadedSalesRangeRef = useRef<DateRange | null>(null);
+  const requestedSalesRange = useRef<DateRange | null>(null);
+  const salesRequestId = useRef(0);
+  const pendingSalesRange = useRef<string | null>(null);
   const [inventoryLoaded, setInventoryLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadSteps, setLoadSteps] = useState<PosLoadStep[]>(initialPosLoadSteps);
@@ -276,12 +277,43 @@ export function DashboardShell() {
   }, []);
 
   const reloadSales = useCallback(async () => {
-    const { data, error: err } = await fetchSales(salesSince(POS_EGRESS.SUMMARY_SALES_DAYS));
-    if (!err) {
+    const range = requestedSalesRange.current ?? {
+      start: getPeriodRange("yesterday").start,
+      end: getPeriodRange("today").end,
+    };
+    const key = `${range.start.toISOString()}:${range.end.toISOString()}`;
+    if (pendingSalesRange.current === key) return;
+    const requestId = ++salesRequestId.current;
+    pendingSalesRange.current = key;
+    setSalesLoading(true);
+    setSalesError(null);
+    try {
+      const { data, error: err } = await fetchSales(range.start, range.end);
+      if (requestId !== salesRequestId.current) return;
+      if (err) throw err;
       setSales(mapSalesResponse(data));
       setSalesLoaded(true);
+      loadedSalesRangeRef.current = range;
+      setLoadedSalesRange(range);
+    } catch (err) {
+      if (requestId !== salesRequestId.current) return;
+      setSalesError(err instanceof Error ? err.message : String((err as { message?: string })?.message ?? err));
+      loadedSalesRangeRef.current = null;
+      setLoadedSalesRange(null);
+    } finally {
+      if (requestId === salesRequestId.current) {
+        pendingSalesRange.current = null;
+        setSalesLoading(false);
+      }
     }
   }, []);
+
+  const loadSalesRange = useCallback((range: DateRange) => {
+    requestedSalesRange.current = range;
+    const loaded = loadedSalesRangeRef.current;
+    if (!pendingSalesRange.current && loaded && loaded.start <= range.start && loaded.end >= range.end) return;
+    void reloadSales();
+  }, [reloadSales]);
 
   const reloadInventory = useCallback(async () => {
     const { data, error: err } = await fetchInventory();
@@ -482,11 +514,6 @@ export function DashboardShell() {
   }, [loading, error, activeTab, inventoryLoaded, reloadInventory]);
 
   useEffect(() => {
-    if (loading || error || activeTab !== "summary") return;
-    if (!salesLoaded) void reloadSales();
-  }, [loading, error, activeTab, salesLoaded, reloadSales]);
-
-  useEffect(() => {
     if (loading || error) return;
     let cancelled = false;
     const run = async () => {
@@ -616,7 +643,9 @@ export function DashboardShell() {
       case "referrals":
         return <ReferralDashboard />;
       case "summary":
-        return <SummaryView sales={sales} menuItems={menuItems} onRefresh={reloadSales} />;
+        return <SummaryView sales={sales} menuItems={menuItems} onRefresh={reloadSales}
+          onRangeChange={loadSalesRange} loadedRange={loadedSalesRange}
+          salesLoading={salesLoading} salesError={salesError} />;
       case "storage":
         return (
           <StorageView

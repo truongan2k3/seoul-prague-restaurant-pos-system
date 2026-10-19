@@ -415,6 +415,7 @@ input[type="search"] {
 
 .sla-alert-pulse {
   animation: sla-pulse 1.4s ease-in-out infinite;
+  background-color: color-mix(in srgb, #dc2626 28%, var(--card)) !important;
   border-width: 2px !important;
   border-color: rgb(239, 68, 68) !important;
 }

@@ -1,7 +1,7 @@
 import { normalizeOrderItemStatus } from "@/lib/order-status";
 import type { OrderItem } from "@/lib/types";
 
-export const SLA_THRESHOLD_MS = 10 * 60 * 1000;
+export const SLA_THRESHOLD_MS = 15 * 60 * 1000;
 
 export function isSlaTrackedStatus(status: OrderItem["status"] | undefined): boolean {
   const normalized = normalizeOrderItemStatus(status);

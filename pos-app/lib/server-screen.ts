@@ -7,6 +7,7 @@ import {
 import { isKitchenMessageOrder } from "@/lib/kitchen-message-order";
 import { resolveKitchenStatus } from "@/lib/auto-serve";
 import { resolveMenuItemForOrder } from "@/lib/menu-display";
+import { SLA_THRESHOLD_MS } from "@/lib/order-sla";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
 import type {
   LanguageCode,
@@ -180,7 +181,7 @@ export function preparationAgeMinutes(
 export type PrepHighlightTone = "normal" | "warn" | "critical";
 
 export function preparationHighlightTone(ageMinutes: number): PrepHighlightTone {
-  if (ageMinutes > 20) return "critical";
+  if (ageMinutes >= SLA_THRESHOLD_MS / 60_000) return "critical";
   if (ageMinutes > 10) return "warn";
   return "normal";
 }

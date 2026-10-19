@@ -319,7 +319,7 @@ function orderItemRowUpdate(unit: OrderItem) {
     ready_at: unit.readyAt ?? null,
     selected_addons: unit.selectedAddons ?? [],
     menu_item_id: unit.menuItemId ?? null,
-    modifiers: unit.modifiers ?? null,
+    modifiers: {...unit.modifiers,originalUnitPrice:unit.modifiers?.originalUnitPrice??unit.originalPrice??unit.price},
   };
 }
 
@@ -487,7 +487,7 @@ function buildOrderRows(tableId: string, orders: OrderItem[], staffId?: string) 
       kitchen_status: item.kitchenStatus ?? "pending",
       ready_at: item.readyAt ?? null,
       selected_addons: item.selectedAddons ?? [],
-      modifiers: item.modifiers ?? null,
+      modifiers: {...item.modifiers,originalUnitPrice:item.modifiers?.originalUnitPrice??item.originalPrice??item.price},
     }));
   });
 }

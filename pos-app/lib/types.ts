@@ -394,6 +394,8 @@ export interface SelectedMenuOption {
 }
 
 export interface OrderLineModifiers {
+  /** Unit price before staff price changes; retained with the original order. */
+  originalUnitPrice?: number;
   selectedOptions?: SelectedMenuOption[];
   specialRequestIds?: string[];
   /** Staff table → kitchen message (KDS card until ack; not billed). */

@@ -6,6 +6,8 @@ import { readStaffSession } from "@/src/lib/auth/staff-session";
 import { supabase } from "@/src/lib/supabase";
 import { normalizeReferralCode, referralAvailable, buildReferralCheckoutTotals, type ReferralCode, type ReferralDashboardData, type ReferralPayment, type ReferralQuote } from "@/lib/referrals";
 import type { CheckoutLine } from "@/lib/checkout-calculations";
+import { computeCustomizedPrice } from "@/lib/menu-customization";
+import type { OrderLineModifiers, SelectedAddon } from "@/lib/types";
 import { inferServiceChannel } from "@/lib/tax-summary";
 
 function adminClient() {
@@ -109,7 +111,7 @@ export async function saveReferralCodeAction(input: Partial<ReferralCode>) {
   try {
     const {db,businessId,staff}=await actor(true);
     const values={id:input.id??null,code:normalizeReferralCode(String(input.code??"")),partner_name:String(input.partner_name??"").trim(),partner_contact:String(input.partner_contact??"").trim().slice(0,500),
-      active:input.active===true,discount_percent:Number(input.discount_percent),commission_percent:Number(input.commission_percent),min_spend:Number(input.min_spend),
+      active:input.active===true,discount_percent:Number(input.discount_percent),commission_percent:10,min_spend:Number(input.min_spend),
       expires_at:input.expires_at||null,usage_limit:input.usage_limit??null,deduct_vouchers:false,deduct_other_discounts:false,
       exclude_tax:false,tax_rates:{A:21,B:12}};
     if(!/^[A-Z0-9][A-Z0-9_-]{1,31}$/.test(values.code)||!values.partner_name)throw new Error("Code and partner name are required.");
@@ -173,11 +175,11 @@ export async function commitReferralSaleAction(sale:Record<string,unknown>,refer
     const quoteResult=await loadReferralQuote(String(sale.table_id),context);
     const quote=quoteResult.data;if(quoteResult.error||!quote)throw new Error(quoteResult.error??"Reservation referral changed. Reopen checkout.");
     if(!referral||referral.codeId!==quote.codeId||referral.version!==quote.version)throw new Error("Refresh checkout before applying this referral.");
-    const {data:allTableLines,error:le}=await db.from("order_items").select("id,name,price,quantity,menu_item_id,kitchen_status,status,is_cancelled").eq("table_id",String(sale.table_id));
+    const {data:allTableLines,error:le}=await db.from("order_items").select("id,name,price,quantity,menu_item_id,kitchen_status,status,is_cancelled,modifiers,selected_addons").eq("table_id",String(sale.table_id));
     if(le)throw new Error(le.message);
     const tableLines=(allTableLines??[]).filter(row=>!row.is_cancelled&&!["cancelled","archived"].includes(row.kitchen_status??row.status));
     const menuIds=[...new Set((tableLines??[]).map(row=>row.menu_item_id).filter(Boolean))];
-    const {data:menuRows,error:menuError}=menuIds.length?await db.from("menu_items").select("id,tax_group,item_type").in("id",menuIds):{data:[],error:null};
+    const {data:menuRows,error:menuError}=menuIds.length?await db.from("menu_items").select("id,price,customization_config,tax_group,item_type").in("id",menuIds):{data:[],error:null};
     if(menuError)throw new Error(menuError.message);
     const visitSubtotal=(tableLines??[]).reduce((sum,row)=>sum+Number(row.price)*Number(row.quantity),0);
     const available=referralAvailable(quote,visitSubtotal);
@@ -185,7 +187,7 @@ export async function commitReferralSaleAction(sale:Record<string,unknown>,refer
     const percent=Number(referral.discountPercent);
     if(!Number.isFinite(percent)||percent<0||percent>100)throw new Error("Invalid referral discount.");
     if(percent!==expectedPercent){if(!["admin","cashier","manager"].includes(staff.role)||!referral.overrideReason?.trim())throw new Error("A manager and override reason are required to change the referral discount.");}
-    const items=sale.items as Array<{id?:string;name:string;price:number;quantity:number;taxGroup?:string}>;
+    const items=sale.items as Array<{id?:string;name:string;price:number;quantity:number;taxGroup?:string;originalPrice?:number;commissionUnitPrice?:number}>;
     if(!Array.isArray(items)||!items.length)throw new Error("No payable items.");
     const divisor=sale.split_mode==="equal"?Number(sale.split_count):1;
     if(!Number.isInteger(divisor)||divisor<1||divisor>20)throw new Error("Invalid split count.");
@@ -199,6 +201,15 @@ export async function commitReferralSaleAction(sale:Record<string,unknown>,refer
       usedQuantities.set(stored.id,used);
       item.id=stored.id;
       const menu=menuRows?.find(m=>m.id===stored.menu_item_id);
+      const modifiers=stored.modifiers as OrderLineModifiers|null;
+      const snapshot=modifiers?.originalUnitPrice;
+      const original=typeof snapshot==="number"&&Number.isFinite(snapshot)&&snapshot>=0?snapshot:menu
+        ?computeCustomizedPrice({price:Number(menu.price),customizationConfig:menu.customization_config??undefined},modifiers?.selectedOptions??[])
+          +((stored.selected_addons as SelectedAddon[]|null)??[]).reduce((sum,addon)=>sum+Number(addon.price||0),0)
+        :Number(stored.price);
+      if(!Number.isFinite(original)||original<0)throw new Error("Original product price is unavailable.");
+      item.originalPrice=original;
+      item.commissionUnitPrice=original/divisor;
       item.taxGroup=menu?.tax_group==="A"||(!menu?.tax_group&&menu?.item_type==="drink")?"A":"B";
     }
     const subtotal=items.reduce((sum,item)=>sum+item.price*item.quantity,0);

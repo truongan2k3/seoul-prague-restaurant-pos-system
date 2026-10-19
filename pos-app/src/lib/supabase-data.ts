@@ -242,6 +242,7 @@ export function mapOrderItemRow(row: SupabaseOrderItemRow): OrderItem {
     id: row.id,
     name: row.name,
     price: Number(row.price),
+    originalPrice: typeof row.modifiers?.originalUnitPrice==="number"&&Number.isFinite(row.modifiers.originalUnitPrice)?row.modifiers.originalUnitPrice:undefined,
     quantity: row.quantity,
     notes: row.notes ?? undefined,
     notesTranslated: row.notes_translated ?? undefined,

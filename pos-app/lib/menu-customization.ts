@@ -198,7 +198,7 @@ export function resolveSelectedOptions(
 }
 
 export function computeCustomizedPrice(
-  item: MenuItem,
+  item: Pick<MenuItem,"price"|"customizationConfig">,
   selected: SelectedMenuOption[],
 ): number {
   const config = item.customizationConfig;

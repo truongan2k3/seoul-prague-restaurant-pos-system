@@ -110,8 +110,8 @@ export async function saveReferralCodeAction(input: Partial<ReferralCode>) {
     const {db,businessId,staff}=await actor(true);
     const values={id:input.id??null,code:normalizeReferralCode(String(input.code??"")),partner_name:String(input.partner_name??"").trim(),partner_contact:String(input.partner_contact??"").trim().slice(0,500),
       active:input.active===true,discount_percent:Number(input.discount_percent),commission_percent:Number(input.commission_percent),min_spend:Number(input.min_spend),
-      expires_at:input.expires_at||null,usage_limit:input.usage_limit??null,deduct_vouchers:input.deduct_vouchers===true,deduct_other_discounts:input.deduct_other_discounts!==false,
-      exclude_tax:input.exclude_tax===true,tax_rates:{A:21,B:12}};
+      expires_at:input.expires_at||null,usage_limit:input.usage_limit??null,deduct_vouchers:false,deduct_other_discounts:false,
+      exclude_tax:false,tax_rates:{A:21,B:12}};
     if(!/^[A-Z0-9][A-Z0-9_-]{1,31}$/.test(values.code)||!values.partner_name)throw new Error("Code and partner name are required.");
     for(const n of [values.discount_percent,values.commission_percent])if(!Number.isFinite(n)||n<0||n>100)throw new Error("Percentages must be between 0 and 100.");
     if(!Number.isFinite(values.min_spend)||values.min_spend<0)throw new Error("Minimum spend must be nonnegative.");

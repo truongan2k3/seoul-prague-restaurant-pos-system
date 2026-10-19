@@ -1,12 +1,12 @@
 BEGIN;
 CREATE OR REPLACE FUNCTION public.referral_product_subtotal(p_items jsonb,p_split_mode text,p_split_count integer)
 RETURNS numeric LANGUAGE sql IMMUTABLE SET search_path=public,pg_temp AS $products$
- SELECT round(coalesce(sum(greatest(0,coalesce(
-  (j->>'commissionUnitPrice')::numeric,
-  coalesce((j->>'originalPrice')::numeric,(j->'modifiers'->>'originalUnitPrice')::numeric)
+ SELECT round(sum(greatest(0,coalesce(
+  nullif(j->>'commissionUnitPrice','')::numeric,
+  coalesce(nullif(j->>'originalPrice','')::numeric,nullif(j->'modifiers'->>'originalUnitPrice','')::numeric)
    /CASE WHEN p_split_mode='equal' THEN greatest(1,coalesce(p_split_count,1)) ELSE 1 END,
-  (j->>'price')::numeric,0)) * greatest(0,(j->>'quantity')::numeric)),0),2)
- FROM jsonb_array_elements(coalesce(p_items,'[]'::jsonb)) j;
+  nullif(j->>'price','')::numeric,0)) * greatest(0,nullif(j->>'quantity','')::numeric)),2)
+ FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p_items)='array' THEN p_items ELSE '[]'::jsonb END) j;
 $products$;
 
 CREATE OR REPLACE FUNCTION public.referral_record_commission() RETURNS trigger
@@ -23,7 +23,7 @@ BEGIN
  -- Discounts are recorded for reporting only, never used to calculate commission.
  IF NEW.deleted_at IS NULL THEN gross:=NEW.subtotal; discount:=NEW.referral_discount_amount; END IF;
  IF NEW.deleted_at IS NULL AND coalesce((rules->>'eligible')::boolean,false) THEN
-  base:=public.referral_product_subtotal(NEW.items,NEW.split_mode,NEW.split_count);
+  base:=greatest(0,coalesce(public.referral_product_subtotal(NEW.items,NEW.split_mode,NEW.split_count),NEW.subtotal,0));
   target:=round(base*0.10,2);
  END IF;
  SELECT coalesce(sum(amount),0),coalesce(sum(eligible_amount),0),coalesce(sum(gross_amount),0),coalesce(sum(discount_amount),0)

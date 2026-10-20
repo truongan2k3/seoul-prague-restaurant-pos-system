@@ -384,7 +384,7 @@ export function MapView({
         </div>
 
         <MapReservationTicker reservations={plannedReservations} selectedId={assignment.selectedId} busyId={assignment.busyId}
-          disabled={editMode} onSelect={assignment.select} onPointerDown={assignment.start} />
+          disabled={editMode} onSelect={assignment.select} onPointerDown={assignment.start} onCollapse={assignment.cancel} />
       </div>
       {assignment.dragging && <motion.div aria-hidden className="pointer-events-none fixed left-0 top-0 z-[100] w-52 rounded-xl border border-[#C9A88B]/60 bg-[#19191D]/95 px-4 py-3 text-white shadow-2xl backdrop-blur-md"
         style={{ x: assignment.dragX, y: assignment.dragY }}>

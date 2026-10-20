@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, type PointerEvent } from "react";
-import { CalendarClock, GripVertical, Loader2, MapPin, Users } from "lucide-react";
+import { useMemo, useState, type PointerEvent, type ReactNode } from "react";
+import { CalendarClock, ChevronDown, ChevronUp, GripVertical, Loader2, MapPin, Users } from "lucide-react";
+import { CompactReservationTicker } from "@/components/compact-reservation-ticker";
 import { useApp } from "@/contexts/app-context";
 import { reservationStatusLabelKey, reservationStatusTone } from "@/lib/reservation-analytics";
 import { parseReservationBbqNotes } from "@/lib/reservation-guest-form";
@@ -9,12 +10,35 @@ import { reservationOnVenueDateIso } from "@/lib/reservation-floor-display";
 import { formatInVenueTz, todayIsoDateInVenue } from "@/lib/venue-timezone";
 import type { ReservationRecord } from "@/lib/types";
 
-/** Uses parent data; assignment controls are available only on the floor map. */
-export function MapReservationTicker({ reservations, selectedId = null, busyId = null, disabled = false, onSelect, onPointerDown }: {
+type MapReservationTickerProps = {
   reservations: ReservationRecord[]; selectedId?: string | null; busyId?: string | null; disabled?: boolean;
   onSelect?: (id: string) => void;
   onPointerDown?: (id: string, event: PointerEvent<HTMLButtonElement>) => void;
-}) {
+  onCollapse?: () => void;
+};
+
+/** Uses parent data; assignment controls are available only on the floor map. */
+export function MapReservationTicker(props: MapReservationTickerProps) {
+  const { translate } = useApp();
+  const [expanded, setExpanded] = useState(false);
+  const canExpand = Boolean(props.onSelect && props.onPointerDown);
+  const action = canExpand ? <button type="button" aria-expanded={expanded}
+    disabled={props.disabled || props.busyId != null}
+    onClick={() => {
+      if (expanded) props.onCollapse?.();
+      setExpanded((value) => !value);
+    }}
+    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[var(--border)] px-2.5 text-[11px] font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] disabled:opacity-40">
+    {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+    {translate(expanded ? "mapResCollapse" : "mapResExpand")}
+  </button> : null;
+
+  return canExpand && expanded
+    ? <ReservationAssignmentCards {...props} headerAction={action} />
+    : <CompactReservationTicker reservations={props.reservations} action={action} />;
+}
+
+function ReservationAssignmentCards({ reservations, selectedId = null, busyId = null, disabled = false, onSelect, onPointerDown, headerAction }: MapReservationTickerProps & { headerAction?: ReactNode }) {
   const { translate, language } = useApp();
   const today = todayIsoDateInVenue();
   const rows = useMemo(() => reservations.filter((row) => row.source !== "walk_in"
@@ -28,6 +52,7 @@ export function MapReservationTicker({ reservations, selectedId = null, busyId =
         <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">{translate("mapResTickerTitle")}</span>
         <span className="rounded-full bg-[#C9A88B]/10 px-1.5 text-[10px] tabular-nums text-[#C9A88B]">{rows.length}</span>
         {onSelect && <p className="ml-auto hidden text-[10px] text-[var(--muted)] sm:block">{translate("mapResAssignHint")}</p>}
+        <div className="ml-auto shrink-0">{headerAction}</div>
       </div>
       <div className="flex gap-2 overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:thin]">
         {rows.map((row) => {

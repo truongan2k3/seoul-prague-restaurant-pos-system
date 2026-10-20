@@ -36,8 +36,11 @@ import { supabase } from "@/src/lib/supabase";
 import type { Station } from "@/lib/types";
 
 /** Floor map / KDS metadata — excludes heavy `orders` JSON (use order_items instead). */
+const LEGACY_TABLE_SUMMARY_COLUMNS =
+  "id, label, type, shape, status, payment_status, fulfillment_status, grid_column, grid_row, pos_x, pos_y, occupied_at";
+
 export const TABLE_SUMMARY_COLUMNS =
-  "id, label, type, shape, status, payment_status, fulfillment_status, grid_column, grid_row, pos_x, pos_y, occupied_at, availability_blocked";
+  `${LEGACY_TABLE_SUMMARY_COLUMNS}, availability_blocked`;
 
 export const TABLE_WITH_ORDERS_COLUMNS = `${TABLE_SUMMARY_COLUMNS}, orders`;
 
@@ -292,7 +295,7 @@ export async function fetchTables() {
 export async function fetchTableSummaries() {
   const result = await supabase.from("tables").select(TABLE_SUMMARY_COLUMNS).order("label");
   if (result.error && /availability_blocked/i.test(result.error.message)) {
-    return supabase.from("tables").select(TABLE_SUMMARY_COLUMNS.replace(", availability_blocked", "")).order("label");
+    return supabase.from("tables").select(LEGACY_TABLE_SUMMARY_COLUMNS).order("label");
   }
   return result;
 }
@@ -300,7 +303,7 @@ export async function fetchTableSummaries() {
 export async function fetchTablesWithOrders() {
   const result = await supabase.from("tables").select(TABLE_WITH_ORDERS_COLUMNS).order("label");
   if (result.error && /availability_blocked/i.test(result.error.message)) {
-    return supabase.from("tables").select(TABLE_WITH_ORDERS_COLUMNS.replace(", availability_blocked", "")).order("label");
+    return supabase.from("tables").select(`${LEGACY_TABLE_SUMMARY_COLUMNS}, orders`).order("label");
   }
   return result;
 }

@@ -331,15 +331,17 @@ export async function loadDayCapacityContext(dateIso: string): Promise<DayCapaci
 
   let occupiedTables: OccupiedTableInput[] = [];
   try {
-    let floorResult = await admin
+    const floorResult = await admin
       .from("tables")
       .select("label, status, occupied_at, availability_blocked");
-    if (floorResult.error && /availability_blocked/i.test(floorResult.error.message)) {
+    let floorRows = floorResult.data;
+    if (floorResult.error) {
+      if (!/availability_blocked/i.test(floorResult.error.message)) throw floorResult.error;
       const legacy = await admin.from("tables").select("label, status, occupied_at");
-      floorResult = { ...legacy, data: legacy.data?.map((row) => ({ ...row, availability_blocked: false })) ?? null };
+      if (legacy.error) throw legacy.error;
+      floorRows = (legacy.data ?? []).map((row) => ({ ...row, availability_blocked: false }));
     }
-    if (floorResult.error) throw floorResult.error;
-    occupiedTables = (floorResult.data ?? []).map((row) => ({
+    occupiedTables = (floorRows ?? []).map((row) => ({
       label: String(row.label),
       occupied: row.status === "waiting" || row.status === "ready",
       occupiedAt: (row as { occupied_at?: string | null }).occupied_at ?? null,

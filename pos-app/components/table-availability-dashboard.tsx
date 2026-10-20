@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ChevronDown, Clock3, LockKeyhole, RefreshCw, UnlockKeyhole, Wifi, WifiOff } from "lucide-react";
 import { useSettings } from "@/contexts/settings-context";
 import { useConnectionStatus } from "@/contexts/connection-status-context";
-import { calculateTableAvailability, type TableAvailabilitySource } from "@/lib/table-availability";
+import { calculateTableAvailability, suggestWalkInTables, type TableAvailabilitySource } from "@/lib/table-availability";
 import type { LanguageCode, ReservationRecord, RestaurantTable } from "@/lib/types";
 
 const COPY = {
@@ -24,6 +24,11 @@ const COPY = {
 } as const;
 
 const TONE = { available: "text-emerald-300", occupied: "text-rose-300", reserved: "text-amber-200", blocked: "text-zinc-400" };
+const DETAIL_COPY = {
+  en: { walkIn: "Walk-in seating", guests: "guests", bbq: "BBQ required", suggest: "Suggested now", soon: "Next options", bookings: "Upcoming bookings", seating: "Next seating", noReady: "No suitable table ready now", seats: "seats" },
+  cs: { walkIn: "Usazení bez rezervace", guests: "hostů", bbq: "Vyžaduje BBQ", suggest: "Doporučeno nyní", soon: "Další možnosti", bookings: "Následující rezervace", seating: "Další usazení", noReady: "Vhodný stůl nyní není volný", seats: "míst" },
+  zh: { walkIn: "现场入座建议", guests: "位客人", bbq: "需要烧烤", suggest: "现在推荐", soon: "稍后可选", bookings: "接下来的预订", seating: "下次可入座", noReady: "暂无合适的空桌", seats: "位" },
+} as const;
 
 export function TableAvailabilityDashboard({ tables, reservations, language, staff = false, enabled = true, realtimeConnected, refreshKey = 0 }: {
   tables: RestaurantTable[]; reservations: ReservationRecord[]; language: LanguageCode;
@@ -31,6 +36,7 @@ export function TableAvailabilityDashboard({ tables, reservations, language, sta
   refreshKey?: number;
 }) {
   const copy = COPY[language];
+  const detail = DETAIL_COPY[language];
   const { settings } = useSettings();
   const { status: connectionStatus } = useConnectionStatus();
   const reduced = useReducedMotion();
@@ -42,6 +48,8 @@ export function TableAvailabilityDashboard({ tables, reservations, language, sta
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [partySize, setPartySize] = useState(2);
+  const [needsGrill, setNeedsGrill] = useState(false);
   const refresh = useCallback(() => setRevision((value) => value + 1), []);
   const tableVersion = useMemo(() => JSON.stringify(tables.map((table) => [table.id, table.label,
     table.status === "empty", table.occupiedAt?.getTime(), table.availabilityBlocked])), [tables]);
@@ -94,6 +102,7 @@ export function TableAvailabilityDashboard({ tables, reservations, language, sta
 
   const now = source ? new Date(source.serverNow).getTime() + Math.max(0, clock - receivedAt) : clock;
   const view = useMemo(() => source ? calculateTableAvailability(source, now) : null, [source, now]);
+  const suggestions = useMemo(() => suggestWalkInTables(view?.tables ?? [], partySize, needsGrill, now), [view, partySize, needsGrill, now]);
   const live = enabled && Boolean(source) && realtimeConnected && connectionStatus === "online" && !error;
   const duration = (at: number) => {
     const minutes = Math.max(1, Math.ceil((at - now) / 60_000));
@@ -102,6 +111,12 @@ export function TableAvailabilityDashboard({ tables, reservations, language, sta
   const time = (at: number | string) => new Intl.DateTimeFormat(language === "cs" ? "cs-CZ" : "en-GB", {
     timeZone: "Europe/Prague", hour: "2-digit", minute: "2-digit", hour12: false,
   }).format(new Date(at));
+  const bookingTime = (at: number) => {
+    const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Prague" });
+    if (day.format(new Date(at)) === day.format(new Date(now))) return time(at);
+    return new Intl.DateTimeFormat(language === "cs" ? "cs-CZ" : "en-GB", { timeZone: "Europe/Prague",
+      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(at));
+  };
 
   const block = async (tableId: string, blocked: boolean) => {
     setBusyId(tableId); setActionError(null);
@@ -150,26 +165,53 @@ export function TableAvailabilityDashboard({ tables, reservations, language, sta
         <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#C9A88B]" />
         <div className="min-w-0 flex-1"><p className="text-xs text-white/70">{copy.next}<span className="ml-2 font-semibold text-[#E8D5C4]">{live && view?.nextAvailableAt ? `~${duration(view.nextAvailableAt)}` : copy.ask}</span></p>
           <p className="mt-0.5 text-[10px] text-white/40">{copy.estimate}</p></div>
-        {staff && <button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}
+        <button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}
           className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[#C9A88B]/25 px-2.5 text-[11px] text-[#D7BDA5] hover:bg-white/5">
-          {copy.details}<ChevronDown className={`h-3.5 w-3.5 transition-transform motion-reduce:transition-none ${expanded ? "rotate-180" : ""}`} /></button>}
+          {copy.details}<ChevronDown className={`h-3.5 w-3.5 transition-transform motion-reduce:transition-none ${expanded ? "rotate-180" : ""}`} /></button>
+      </div>
+      <div className="mt-3 rounded-xl border border-[#C9A88B]/15 bg-black/15 p-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h3 className="mr-auto text-[11px] font-semibold text-[#E8D5C4]">{detail.walkIn}</h3>
+          <label className="flex items-center gap-2 text-[11px] text-white/65">
+            <select value={partySize} onChange={(event) => setPartySize(Number(event.target.value))} aria-label={detail.guests}
+              className="min-h-9 rounded-lg border border-white/15 bg-[#242426] px-2 text-sm text-white [color-scheme:dark]">
+              {Array.from({ length: Math.max(1, ...(view?.tables.map((t) => t.capacity) ?? [10])) }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}
+            </select>{detail.guests}
+          </label>
+          <label className="inline-flex min-h-9 items-center gap-2 text-[11px] text-white/65"><input type="checkbox" checked={needsGrill} onChange={(event) => setNeedsGrill(event.target.checked)} className="h-4 w-4 accent-[#C9A88B]" />{detail.bbq}</label>
+        </div>
+        <div className="mt-2 space-y-1.5 text-[11px]">
+          <div className="flex flex-wrap items-center gap-1.5"><span className="mr-1 text-white/45">{detail.suggest}:</span>
+            {live && suggestions.ready.length ? suggestions.ready.slice(0, 4).map((table, index) => <span key={table.id} className={`rounded-md border px-2 py-1 ${index === 0 ? "border-emerald-300/40 bg-emerald-300/10 font-semibold text-emerald-100" : "border-white/10 text-white/70"}`}>{table.label} · {table.capacity}</span>) : <span className="text-white/60">{live ? detail.noReady : copy.ask}</span>}
+          </div>
+          {live && suggestions.upcoming.length > 0 && <div className="flex flex-wrap items-center gap-1.5"><span className="mr-1 text-white/45">{detail.soon}:</span>
+            {suggestions.upcoming.slice(0, 3).map((table) => <span key={table.id} className="rounded-md border border-amber-200/15 bg-amber-200/5 px-2 py-1 text-amber-100/80">{table.label} · ~{duration(table.earliestSeatingAt!)} ({bookingTime(table.earliestSeatingAt!)})</span>)}
+          </div>}
+        </div>
       </div>
       <AnimatePresence initial={false}>
-        {staff && expanded && view && !error && <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: reduced ? 0 : .25 }} className="overflow-hidden">
+        {expanded && view && !error && <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: reduced ? 0 : .25 }} className="overflow-hidden">
           {actionError && <p role="alert" className="mt-3 text-xs text-rose-200">{actionError}</p>}
           <div className="mt-3 grid gap-1.5 border-t border-white/10 pt-3 sm:grid-cols-2">
-            {view.tables.map((table) => <div key={table.id} className="flex items-center gap-2 rounded-lg bg-white/[0.035] px-3 py-2.5">
+            {[...view.tables].sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true })).map((table) => <div key={table.id} className={`flex items-start gap-2 rounded-xl border px-3 py-3 ${live && suggestions.ready[0]?.id === table.id ? "border-emerald-300/30 bg-emerald-300/[0.06]" : "border-white/[0.04] bg-white/[0.035]"}`}>
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full bg-current ${TONE[table.status]}`} />
-              <strong className="min-w-7 text-base text-white">{table.label}</strong>
-              <div className="min-w-0 flex-1 text-[11px]"><p className={TONE[table.status]}>{copy[table.status === "available" ? "ready" : table.status]}</p>
+              <strong className="min-w-7 text-xl leading-6 text-white">{table.label}</strong>
+              <div className="min-w-0 flex-1 text-[11px]"><p className={TONE[table.status]}>{copy[table.status === "available" ? "ready" : table.status]}<span className="ml-2 text-[10px] text-white/40">{table.capacity} {detail.seats}{table.grill ? " · BBQ" : ""}</span></p>
                 <p className="text-white/45">{table.status === "occupied" ? table.overEstimatedTime ? copy.over : table.estimatedReleaseAt ? `~${duration(table.estimatedReleaseAt)} ${copy.remaining}` : copy.ask
                   : table.status === "reserved" ? table.nextReservationAt ? time(table.nextReservationAt) : table.earliestSeatingAt ? `~${duration(table.earliestSeatingAt)}` : copy.ask
-                  : table.status === "blocked" ? copy.ask : `${table.capacity} ${language === "cs" ? "míst" : language === "zh" ? "位" : "seats"}${table.grill ? " · BBQ" : ""}`}</p>
+                  : table.status === "blocked" ? copy.ask : ""}</p>
+                {table.status !== "available" && table.earliestSeatingAt !== null && table.earliestSeatingAt > now && <p className="mt-1 text-[#D7BDA5]">{detail.seating}: ~{duration(table.earliestSeatingAt)} · {bookingTime(table.earliestSeatingAt)}</p>}
+                {table.upcomingReservations.length > 0 && <div className="mt-2 border-t border-white/[0.06] pt-1.5"><p className="text-[9px] uppercase tracking-wide text-white/35">{detail.bookings}</p>
+                  {table.upcomingReservations.slice(0, 3).map((booking, index) => <p key={`${booking.reservedAt}:${index}`} className="mt-0.5 tabular-nums text-amber-100/75">{bookingTime(booking.reservedAt)} · {booking.partySize} {detail.guests}</p>)}
+                  {table.upcomingReservations.length > 3 && <details className="mt-1 text-white/50"><summary className="min-h-7 cursor-pointer py-1">+{table.upcomingReservations.length - 3}</summary>
+                    {table.upcomingReservations.slice(3).map((booking, index) => <p key={`${booking.reservedAt}:${index}`} className="mt-0.5 tabular-nums text-amber-100/75">{bookingTime(booking.reservedAt)} · {booking.partySize} {detail.guests}</p>)}
+                  </details>}
+                </div>}
               </div>
-              <button type="button" disabled={busyId !== null} onClick={() => void block(table.id, !table.blocked)} aria-label={`${table.blocked ? copy.unlock : copy.lock} ${table.label}`}
+              {staff && <button type="button" disabled={busyId !== null} onClick={() => void block(table.id, !table.blocked)} aria-label={`${table.blocked ? copy.unlock : copy.lock} ${table.label}`}
                 className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 text-white/50 hover:bg-white/10 disabled:opacity-30">
                 {table.blocked ? <UnlockKeyhole className="h-3.5 w-3.5" /> : <LockKeyhole className="h-3.5 w-3.5" />}
-              </button>
+              </button>}
             </div>)}
           </div>
         </motion.div>}

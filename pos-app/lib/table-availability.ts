@@ -13,6 +13,7 @@ export type TableAvailabilitySource = {
 export type LiveTableAvailability = AvailabilityTable & {
   status: LiveTableStatus; estimatedReleaseAt: number | null;
   earliestSeatingAt: number | null; nextReservationAt: number | null;
+  upcomingReservations: { reservedAt: number; partySize: number }[];
   overEstimatedTime: boolean;
 };
 
@@ -37,11 +38,13 @@ export function calculateTableAvailability(source: TableAvailabilitySource, now 
       }
       if (!Number.isFinite(earliest) || earliest > new Date(source.serverNow).getTime() + 48 * 60 * 60_000) earliest = null;
     }
-    const nextReservation = source.reservations.filter((r) => r.status !== "checked_in"
+    const upcomingReservations = source.reservations.filter((r) => ["pending", "confirmed", "late"].includes(r.status)
       && [r.tableLabel, r.secondaryTableLabel, r.tertiaryTableLabel].some((label) => label?.trim().toUpperCase() === table.label))
-      .map((r) => new Date(r.reservedAt).getTime()).filter((time) => time > now).sort((a, b) => a - b)[0] ?? null;
+      .map((r) => ({ reservedAt: new Date(r.reservedAt).getTime(), partySize: r.actualPartySize ?? r.partySize }))
+      .filter((r) => r.reservedAt + duration > now).sort((a, b) => a.reservedAt - b.reservedAt);
+    const nextReservation = upcomingReservations[0]?.reservedAt ?? null;
     return { ...table, occupied, status, estimatedReleaseAt: release, earliestSeatingAt: earliest,
-      nextReservationAt: nextReservation, overEstimatedTime: occupied && release !== null && release <= now };
+      nextReservationAt: nextReservation, upcomingReservations, overEstimatedTime: occupied && release !== null && release <= now };
   });
   const available = tables.filter((t) => t.status === "available");
   const future = tables.filter((t) => t.status !== "available").map((t) => t.earliestSeatingAt)
@@ -52,6 +55,16 @@ export function calculateTableAvailability(source: TableAvailabilitySource, now 
     reserved: tables.filter((t) => t.status === "reserved").length,
     blocked: tables.filter((t) => t.status === "blocked").length,
     nextAvailableAt: future.length ? Math.min(...future) : null };
+}
+
+/** Read-only suggestions; estimated future releases never turn occupied tables into ready tables. */
+export function suggestWalkInTables(tables: LiveTableAvailability[], partySize: number, grill: boolean, now: number) {
+  const compatible = tables.filter((table) => table.capacity >= partySize && (!grill || table.grill) && !table.blocked);
+  const ready = compatible.filter((table) => table.status === "available")
+    .sort((a, b) => a.capacity - b.capacity || a.label.localeCompare(b.label, undefined, { numeric: true }));
+  const upcoming = compatible.filter((table) => table.status !== "available" && table.earliestSeatingAt !== null && table.earliestSeatingAt > now)
+    .sort((a, b) => a.earliestSeatingAt! - b.earliestSeatingAt! || a.capacity - b.capacity);
+  return { ready, upcoming };
 }
 
 export function availabilityOccupancyInputs(source: TableAvailabilitySource) {

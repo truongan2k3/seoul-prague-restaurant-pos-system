@@ -582,7 +582,7 @@ export async function assignReservationTables(
     partySize: reservation.party_size, notes: reservation.notes ?? undefined, tableId: ids[0], excludeReservationId: reservationId });
   if (availabilityError) return { data: null, error: availabilityError };
   return supabase.from("reservations").update({ table_id: ids[0], secondary_table_id: null, tertiary_table_id: null,
-    updated_at: nowIso() }).eq("id", reservationId).select(RESERVATION_SELECT).single();
+    updated_at: nowIso() }).eq("id", reservationId).in("status", ["pending", "confirmed", "late"]).select(RESERVATION_SELECT).single();
 }
 
 export async function assignReservationTable(

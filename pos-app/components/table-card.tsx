@@ -35,8 +35,11 @@ interface TableCardProps {
   slaAlert?: boolean;
   editMode?: boolean;
   compact?: boolean;
-  /** Planned (not yet checked-in) reservation assigned to this table. */
-  plannedReservation?: { displayLabel: string } | null;
+  /** Chronological queue of bookings waiting to be seated at this table. */
+  plannedReservation?: {
+    displayLabel: string;
+    entries?: { id: string; displayLabel: string; timeLabel: string; guestName: string; partySize: number }[];
+  } | null;
   style?: CSSProperties;
   onClick?: () => void;
   onEdit?: () => void;
@@ -122,13 +125,23 @@ export function TableCard({
         </ul>
       )}
 
-      {showPlannedReservation ? (
-        <p
-          className="mt-auto shrink-0 truncate pt-2 text-xs font-semibold leading-snug tabular-nums text-[var(--pos-champagne)]"
-          title={plannedReservation.displayLabel}
+      {plannedReservation ? (
+        <div
+          className={`${table.status === "empty" ? "mt-auto pt-2 text-[11px]" : "mt-1 border-t border-[var(--border)] pt-1 text-[10px]"} w-full shrink-0 font-semibold leading-snug tabular-nums text-[var(--pos-champagne)]`}
+          title={plannedReservation.entries?.map((entry) => entry.displayLabel).join("\n") ?? plannedReservation.displayLabel}
         >
-          {plannedReservation.displayLabel}
-        </p>
+          {plannedReservation.entries?.length ? (
+            <div className="max-h-14 space-y-1 overflow-y-auto overscroll-contain [scrollbar-width:thin]">
+              {plannedReservation.entries.map((entry) => (
+                <div key={entry.id} className="flex items-center gap-1 border-l-2 border-[var(--pos-champagne)]/40 pl-1.5" title={entry.displayLabel}>
+                  <span className="shrink-0">{entry.timeLabel}</span>
+                  <span className="min-w-0 flex-1 truncate text-[var(--foreground)]/80">{entry.guestName}</span>
+                  <span className="shrink-0 text-[9px]">{entry.partySize}p</span>
+                </div>
+              ))}
+            </div>
+          ) : <p className="truncate">{table.status !== "empty" ? "↳ " : ""}{plannedReservation.displayLabel}</p>}
+        </div>
       ) : null}
 
       {table.status === "empty" && !showPlannedReservation && (

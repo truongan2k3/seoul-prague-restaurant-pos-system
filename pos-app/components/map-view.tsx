@@ -1,17 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
+import { X } from "lucide-react";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { MapReservationTicker } from "@/components/map-reservation-ticker";
 import { NotificationBell } from "@/components/notification-bell";
 import { TableCard } from "@/components/table-card";
 import { TableEditModal } from "@/components/table-edit-modal";
 import { useApp } from "@/contexts/app-context";
+import { useSettings } from "@/contexts/settings-context";
+import { useReservationMapAssignment } from "@/hooks/use-reservation-map-assignment";
 import {
   formatFloorTableAssignmentLabel,
   reservationOnVenueDateIso,
 } from "@/lib/reservation-floor-display";
-import { todayIsoDateInVenue, venueDayRangeUtc } from "@/lib/venue-timezone";
+import { formatInVenueTz, todayIsoDateInVenue, venueDayRangeUtc } from "@/lib/venue-timezone";
 import { TABLE_CARD_WIDTH, resolveFloorCardOverlaps } from "@/lib/table-layout";
 import { tableIdsWithSlaBreach } from "@/lib/order-sla";
 import type { MenuItem, OrderItem, ReservationRecord, ReservationStatus, RestaurantTable } from "@/lib/types";
@@ -39,8 +43,11 @@ type DragState = {
 };
 
 type PlannedFloorReservation = {
+  id: string;
   displayLabel: string;
-  reservedAtMs: number;
+  timeLabel: string;
+  guestName: string;
+  partySize: number;
 };
 
 /** Upcoming assigned bookings still waiting to be seated. */
@@ -50,8 +57,8 @@ function buildPlannedByTableId(
   reservations: ReservationRecord[],
   language: string,
   venueDateIso: string,
-): Record<string, PlannedFloorReservation> {
-  const byTable: Record<string, PlannedFloorReservation> = {};
+): Record<string, PlannedFloorReservation[]> {
+  const byTable: Record<string, PlannedFloorReservation[]> = {};
 
   const candidates = reservations
     .filter(
@@ -64,21 +71,23 @@ function buildPlannedByTableId(
 
   for (const row of candidates) {
     const planned: PlannedFloorReservation = {
+      id: row.id,
       displayLabel: formatFloorTableAssignmentLabel({
         reservedAt: row.reservedAt,
         guestName: row.guestName,
         partySize: row.partySize,
         language,
       }),
-      reservedAtMs: row.reservedAt.getTime(),
+      timeLabel: formatInVenueTz(row.reservedAt, language === "cs" ? "cs-CZ" : "en-GB", {
+        hour: "2-digit", minute: "2-digit", hour12: false,
+      }),
+      guestName: row.guestName,
+      partySize: row.partySize,
     };
-    for (const tableId of [row.tableId, row.secondaryTableId, row.tertiaryTableId]) {
+    for (const tableId of new Set([row.tableId, row.secondaryTableId, row.tertiaryTableId])) {
       if (!tableId) continue;
-      const existing = byTable[tableId];
-      // Prefer the soonest upcoming assignment if multiple touch the same table.
-      if (!existing || planned.reservedAtMs < existing.reservedAtMs) {
-        byTable[tableId] = planned;
-      }
+      const queue = byTable[tableId] ?? (byTable[tableId] = []);
+      if (!queue.some((entry) => entry.id === row.id)) queue.push(planned);
     }
   }
 
@@ -95,6 +104,7 @@ export function MapView({
   actionError,
 }: MapViewProps) {
   const { translate, language } = useApp();
+  const { settings } = useSettings();
   const mapRef = useRef<HTMLDivElement>(null);
   const [editMode, setEditMode] = useState(false);
   const [editingTable, setEditingTable] = useState<RestaurantTable | null>(null);
@@ -102,6 +112,12 @@ export function MapView({
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [slaClock, setSlaClock] = useState(() => Date.now());
   const [plannedReservations, setPlannedReservations] = useState<ReservationRecord[]>([]);
+  const onReservationAssigned = useCallback((updated: ReservationRecord) => {
+    setPlannedReservations((current) => current.map((row) => row.id === updated.id ? updated : row));
+  }, []);
+  const assignment = useReservationMapAssignment({ tables, reservations: plannedReservations,
+    disabled: editMode, durationMinutes: settings.reservationDurationMinutes, bufferMinutes: settings.reservationBufferMinutes,
+    now: slaClock, onAssigned: onReservationAssigned, unavailableMessage: translate("mapResAssignUnavailable") });
 
   const venueTodayIso = todayIsoDateInVenue();
 
@@ -213,9 +229,19 @@ export function MapView({
   };
 
   const plannedFor = (tableId: string) => {
-    const row = plannedByTableId[tableId];
-    if (!row) return null;
-    return { displayLabel: row.displayLabel };
+    const entries = plannedByTableId[tableId];
+    if (!entries?.length) return null;
+    return { displayLabel: entries[0].displayLabel, entries };
+  };
+  const activateTable = (table: RestaurantTable) => {
+    if (!editMode && !assignment.activateTable(table)) onTableClick(table);
+  };
+  const dropClass = (tableId: string) => {
+    if (!assignment.selected) return "";
+    if (assignment.targetId === tableId) return assignment.eligibleIds.has(tableId)
+      ? "rounded-2xl ring-2 ring-emerald-300 shadow-[0_0_24px_rgba(110,231,183,0.25)]"
+      : "rounded-2xl ring-2 ring-rose-400";
+    return assignment.eligibleIds.has(tableId) ? "rounded-2xl ring-1 ring-emerald-300/50" : "opacity-45";
   };
 
   return (
@@ -267,6 +293,11 @@ export function MapView({
           {actionError}
         </div>
       )}
+      {assignment.error && <div role="alert" className="border-b border-rose-400/30 bg-rose-500/10 px-4 py-2 text-sm text-rose-600 dark:text-rose-200">{assignment.error}</div>}
+      {assignment.selected && <div className="flex items-center gap-2 border-b border-[#C9A88B]/25 bg-[#C9A88B]/10 px-4 py-2 text-xs text-[var(--foreground)]" role="status">
+        <span className="min-w-0 flex-1 truncate">{translate("mapResAssignTarget").replace("{name}", assignment.selected.guestName)} · {assignment.selected.partySize}</span>
+        <button type="button" onClick={assignment.cancel} disabled={assignment.busyId !== null} aria-label={translate("close")} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg hover:bg-[#C9A88B]/15 disabled:opacity-40"><X className="h-4 w-4" /></button>
+      </div>}
 
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="min-h-0 flex-1 overflow-auto p-2 sm:p-3 md:p-4">
@@ -283,8 +314,8 @@ export function MapView({
               .map((table) => {
                 const tableOrderItems = orderItems.filter((item) => item.tableId === table.id);
                 return (
+                  <div key={table.id} data-reservation-drop-table={table.id} className={`min-w-0 transition-[box-shadow,opacity] motion-reduce:transition-none ${dropClass(table.id)}`}>
                   <TableCard
-                    key={table.id}
                     table={table}
                     menuItems={menuItems}
                     orderItems={tableOrderItems}
@@ -293,8 +324,9 @@ export function MapView({
                     compact
                     editMode={editMode}
                     onEdit={() => setEditingTable(table)}
-                    onClick={() => !editMode && onTableClick(table)}
+                    onClick={() => activateTable(table)}
                   />
+                  </div>
                 );
               })}
           </div>
@@ -316,7 +348,8 @@ export function MapView({
             return (
               <div
                 key={table.id}
-                className={`absolute ${isDragging ? "z-20" : "z-10"}`}
+                data-reservation-drop-table={table.id}
+                className={`absolute transition-[box-shadow,opacity] motion-reduce:transition-none ${isDragging ? "z-20" : "z-10"} ${dropClass(table.id)}`}
                 style={{
                   left: pos.x,
                   top: pos.y,
@@ -341,7 +374,7 @@ export function MapView({
                     orderItems={tableOrderItems}
                     slaAlert={slaAlertTableIds.has(table.id)}
                     plannedReservation={plannedFor(table.id)}
-                    onClick={() => onTableClick(table)}
+                    onClick={() => activateTable(table)}
                   />
                 )}
               </div>
@@ -350,8 +383,14 @@ export function MapView({
         </div>
         </div>
 
-        <MapReservationTicker />
+        <MapReservationTicker reservations={plannedReservations} selectedId={assignment.selectedId} busyId={assignment.busyId}
+          disabled={editMode} onSelect={assignment.select} onPointerDown={assignment.start} />
       </div>
+      {assignment.dragging && <motion.div aria-hidden className="pointer-events-none fixed left-0 top-0 z-[100] w-52 rounded-xl border border-[#C9A88B]/60 bg-[#19191D]/95 px-4 py-3 text-white shadow-2xl backdrop-blur-md"
+        style={{ x: assignment.dragX, y: assignment.dragY }}>
+        <p className="truncate text-sm font-semibold">{assignment.dragging.guestName}</p>
+        <p className="mt-1 text-xs text-white/60">{assignment.dragging.partySize} · {assignment.targetId ? tables.find((table) => table.id === assignment.targetId)?.label : translate("mapResDragHandle")}</p>
+      </motion.div>}
 
       <TableEditModal
         open={editingTable != null}

@@ -579,9 +579,9 @@ export type ServerScreenOrderCard = {
   hasPending: boolean;
   /** Fully done but kept on-screen briefly after the last item was marked done. */
   lingering?: boolean;
-  /** Table session includes grill/BBQ — cards sort to the top of the board. */
+  /** Table session includes grill/BBQ. */
   hasGrill?: boolean;
-  /** Includes a staff table message — sorted above grill cards. */
+  /** Includes a staff table message. */
   hasMessage?: boolean;
 };
 
@@ -966,14 +966,15 @@ export function buildServerScreenOrderCards(
     });
   }
 
-  // Messages first, then grill tables, then by order creation time.
+  // Match the visible preparation timer: oldest outstanding work comes first.
+  // Completed cards retained for their exit period must not lead the queue.
   return cards.sort((a, b) => {
-    const aMsg = a.hasMessage ? 0 : 1;
-    const bMsg = b.hasMessage ? 0 : 1;
-    if (aMsg !== bMsg) return aMsg - bMsg;
-    const aGrill = a.hasGrill ? 0 : 1;
-    const bGrill = b.hasGrill ? 0 : 1;
-    if (aGrill !== bGrill) return aGrill - bGrill;
+    if (a.hasPending !== b.hasPending) return a.hasPending ? -1 : 1;
+    const aStart = Date.parse(a.ageFrom || a.orderedAt);
+    const bStart = Date.parse(b.ageFrom || b.orderedAt);
+    const aTime = Number.isFinite(aStart) ? aStart : Infinity;
+    const bTime = Number.isFinite(bStart) ? bStart : Infinity;
+    if (aTime !== bTime) return aTime - bTime;
     if (a.orderedAt !== b.orderedAt) return a.orderedAt < b.orderedAt ? -1 : 1;
     return a.id.localeCompare(b.id);
   });

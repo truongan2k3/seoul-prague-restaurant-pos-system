@@ -28,7 +28,7 @@ import {
   parseVoucherConfig,
   voucherConfigToDb,
 } from "@/lib/voucher";
-import { clampReservationDurationMinutes } from "@/lib/reservation-capacity-engine";
+import { clampReservationDurationMinutes, clampReservationBufferMinutes } from "@/lib/reservation-capacity-engine";
 import {
   DEFAULT_SERVER_SCREEN_CONFIG,
   parseServerScreenConfig,
@@ -153,6 +153,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   reservationMaxGuestsPerSlot: 20,
   reservationTableHoldingTime: 30,
   reservationDurationMinutes: 90,
+  reservationBufferMinutes: 15,
   reservationOperatingHours: DEFAULT_RESERVATION_OPERATING_HOURS,
   mapReservationTickerSeconds: 6,
   reservationReminderMode: "30",
@@ -253,6 +254,7 @@ type SettingsRow = {
   reservation_max_guests_per_slot?: number | null;
   reservation_table_holding_time?: number | null;
   reservation_duration_minutes?: number | null;
+  reservation_buffer_minutes?: number | null;
   reservation_operating_hours?: ReservationOperatingHours | null;
   map_reservation_ticker_seconds?: number | null;
   reservation_reminder_mode?: string | null;
@@ -508,6 +510,7 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     reservationDurationMinutes: clampReservationDurationMinutes(
       row.reservation_duration_minutes ?? DEFAULT_APP_SETTINGS.reservationDurationMinutes,
     ),
+    reservationBufferMinutes: clampReservationBufferMinutes(row.reservation_buffer_minutes),
     reservationOperatingHours: parseOperatingHours(row.reservation_operating_hours),
     mapReservationTickerSeconds:
       row.map_reservation_ticker_seconds ?? DEFAULT_APP_SETTINGS.mapReservationTickerSeconds,
@@ -663,6 +666,9 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
     payload.reservation_duration_minutes = clampReservationDurationMinutes(
       partial.reservationDurationMinutes,
     );
+  }
+  if (partial.reservationBufferMinutes !== undefined) {
+    payload.reservation_buffer_minutes = clampReservationBufferMinutes(partial.reservationBufferMinutes);
   }
   if (partial.reservationOperatingHours !== undefined) {
     payload.reservation_operating_hours = partial.reservationOperatingHours;
@@ -975,6 +981,7 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "reservationMaxGuestsPerSlot"
     | "reservationTableHoldingTime"
     | "reservationDurationMinutes"
+    | "reservationBufferMinutes"
     | "reservationOperatingHours"
     | "mapReservationTickerSeconds"
     | "reservationReminderMode"
@@ -1048,6 +1055,7 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
     reservationMaxGuestsPerSlot: settings.reservationMaxGuestsPerSlot,
     reservationTableHoldingTime: settings.reservationTableHoldingTime,
     reservationDurationMinutes: settings.reservationDurationMinutes,
+    reservationBufferMinutes: settings.reservationBufferMinutes,
     reservationOperatingHours: settings.reservationOperatingHours,
     mapReservationTickerSeconds: settings.mapReservationTickerSeconds,
     reservationReminderMode: settings.reservationReminderMode,

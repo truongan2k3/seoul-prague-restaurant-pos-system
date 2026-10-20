@@ -1440,22 +1440,28 @@ export function SettingsView({
                 <span className="text-gray-500 dark:text-gray-400">
                   {translate("settingsReservationDuration")}
                 </span>
-                <select
+                <input
+                  type="number"
+                  min={60}
+                  max={240}
+                  step={1}
+                  disabled={!["admin", "manager"].includes(currentStaffUser?.role ?? "")}
                   value={draft.reservationDurationMinutes}
                   onChange={(event) =>
                     updateDraft("reservationDurationMinutes", Number(event.target.value))
                   }
                   className="pos-input mt-1"
-                >
-                  <option value={60}>{translate("settingsDuration60")}</option>
-                  <option value={90}>{translate("settingsDuration90")}</option>
-                  <option value={120}>{translate("settingsDuration120")}</option>
-                  <option value={150}>{translate("settingsDuration150")}</option>
-                  <option value={180}>{translate("settingsDuration180")}</option>
-                </select>
+                />
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   {translate("settingsReservationDurationHint")}
                 </p>
+              </label>
+              <label className="block text-sm">
+                <span className="text-gray-500 dark:text-gray-400">{translate("settingsReservationBuffer")}</span>
+                <input type="number" min={0} max={120} step={1} disabled={!["admin", "manager"].includes(currentStaffUser?.role ?? "")} value={draft.reservationBufferMinutes}
+                  onChange={(event) => updateDraft("reservationBufferMinutes", Number(event.target.value))}
+                  className="pos-input mt-1" />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{translate("settingsReservationBufferHint")}</p>
               </label>
               <label className="block text-sm">
                 <span className="text-gray-500 dark:text-gray-400">

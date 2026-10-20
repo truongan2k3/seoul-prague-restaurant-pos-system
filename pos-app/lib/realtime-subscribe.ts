@@ -20,6 +20,7 @@ function createResilientSubscription(
   filter: RealtimePostgresChangesFilter<"*"> | RealtimePostgresChangesFilter<"UPDATE"> | RealtimePostgresChangesFilter<"INSERT">,
   onRawEvent: (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void,
   debounceMs: number,
+  onStatus?: (connected: boolean) => void,
 ): () => void {
   let disposed = false;
   let channel: RealtimeChannel | null = null;
@@ -61,6 +62,7 @@ function createResilientSubscription(
       .on("postgres_changes", filter, schedule)
       .subscribe((status) => {
         if (disposed) return;
+        onStatus?.(status === "SUBSCRIBED");
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
           teardownChannel();
           if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -84,13 +86,14 @@ export function subscribeToPostgresChanges(
   channelBase: string,
   filter: RealtimePostgresChangesFilter<"*">,
   onChange: () => void,
-  options?: { debounceMs?: number },
+  options?: { debounceMs?: number; onStatus?: (connected: boolean) => void },
 ): () => void {
   return createResilientSubscription(
     channelBase,
     filter,
     () => onChange(),
     options?.debounceMs ?? DEFAULT_DEBOUNCE_MS,
+    options?.onStatus,
   );
 }
 
@@ -102,12 +105,13 @@ export function subscribeToPostgresRowChanges(
     | RealtimePostgresChangesFilter<"UPDATE">
     | RealtimePostgresChangesFilter<"INSERT">,
   onChange: (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void,
-  options?: { debounceMs?: number },
+  options?: { debounceMs?: number; onStatus?: (connected: boolean) => void },
 ): () => void {
   return createResilientSubscription(
     channelBase,
     filter,
     (payload) => onChange(payload),
     options?.debounceMs ?? 0,
+    options?.onStatus,
   );
 }

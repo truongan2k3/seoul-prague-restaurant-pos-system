@@ -1,3 +1,4 @@
+import { ONLINE_SELF_SERVE_MAX_PARTY } from "@/lib/reservation-party-limits";
 import type { GuestReservationLang } from "@/lib/reservation-guest-form";
 
 export type GuestReservationCopy = {
@@ -100,11 +101,11 @@ const en: GuestReservationCopy = {
   spamFolderReminder:
     "Please also check your Spam / Junk folder — the confirmation email may appear there.",
   gdprRequired: "Please agree to data processing before submitting.",
-  largePartyTitle: "Large party (over 12 guests)",
+  largePartyTitle: "Large party",
   largePartyMessage:
-    "Please contact us via Chat with us or by email/phone for more details. We may be able to combine tables or arrange seating for you — please reach out via Chat with us or email/phone.",
+    "For larger groups, contact our team via chat, email or phone to discuss availability.",
   largePartyChatCta: "Chat with us",
-  largePartyOption: "12+",
+  largePartyOption: `${ONLINE_SELF_SERVE_MAX_PARTY}+`,
   errorName: "Please enter your name.",
   errorEmail: "Please enter your email.",
   errorPhone: "Please enter your phone number.",
@@ -159,11 +160,11 @@ const cs: GuestReservationCopy = {
   spamFolderReminder:
     "Zkontrolujte prosím také složku Spam / Nevyžádaná — potvrzovací e-mail se může objevit tam.",
   gdprRequired: "Před odesláním prosím souhlaste se zpracováním údajů.",
-  largePartyTitle: "Větší skupina (více než 12 hostů)",
+  largePartyTitle: "Větší skupina",
   largePartyMessage:
-    "Prosím kontaktujte nás přes Chat with us nebo e-mailem/telefonem pro více informací. Můžeme spojit stoly nebo vám sezení připravit — napište nám přes Chat with us nebo e-mail/telefon.",
+    "Pro větší skupiny kontaktujte náš tým přes chat, e-mail nebo telefon.",
   largePartyChatCta: "Chat with us",
-  largePartyOption: "12+",
+  largePartyOption: `${ONLINE_SELF_SERVE_MAX_PARTY}+`,
   errorName: "Zadejte prosím jméno.",
   errorEmail: "Zadejte prosím e-mail.",
   errorPhone: "Zadejte prosím telefon.",
@@ -218,11 +219,11 @@ const vi: GuestReservationCopy = {
   spamFolderReminder:
     "Vui lòng kiểm tra thêm thư mục Spam / Thư rác — email xác nhận có thể nằm ở đó.",
   gdprRequired: "Vui lòng đồng ý xử lý dữ liệu trước khi gửi.",
-  largePartyTitle: "Đoàn trên 12 khách",
+  largePartyTitle: "Đoàn đông khách",
   largePartyMessage:
-    "Vui lòng liên hệ chúng tôi qua Chat with us hoặc qua email/số điện thoại để biết thêm chi tiết. Chúng tôi có thể sẽ gộp bàn hoặc sắp xếp cho bạn — vui lòng trao đổi qua Chat with us hoặc email/số điện thoại.",
+    "Đoàn đông khách vui lòng liên hệ nhân viên qua chat, email hoặc điện thoại để kiểm tra chỗ.",
   largePartyChatCta: "Chat with us",
-  largePartyOption: "12+",
+  largePartyOption: `${ONLINE_SELF_SERVE_MAX_PARTY}+`,
   errorName: "Vui lòng nhập họ tên.",
   errorEmail: "Vui lòng nhập email.",
   errorPhone: "Vui lòng nhập số điện thoại.",
@@ -277,11 +278,11 @@ const de: GuestReservationCopy = {
   spamFolderReminder:
     "Bitte prüfen Sie auch den Spam- / Junk-Ordner — die Bestätigungs-E-Mail kann dort landen.",
   gdprRequired: "Bitte stimmen Sie der Datenverarbeitung zu, bevor Sie absenden.",
-  largePartyTitle: "Große Gruppe (über 12 Gäste)",
+  largePartyTitle: "Große Gruppe",
   largePartyMessage:
-    "Bitte kontaktieren Sie uns über Chat with us oder per E-Mail/Telefon für weitere Details. Wir können Tische zusammenlegen oder Sitzplätze arrangieren — melden Sie sich bitte über Chat with us oder E-Mail/Telefon.",
+    "Für größere Gruppen kontaktieren Sie unser Team per Chat, E-Mail oder Telefon.",
   largePartyChatCta: "Chat with us",
-  largePartyOption: "12+",
+  largePartyOption: `${ONLINE_SELF_SERVE_MAX_PARTY}+`,
   errorName: "Bitte geben Sie Ihren Namen ein.",
   errorEmail: "Bitte geben Sie Ihre E-Mail ein.",
   errorPhone: "Bitte geben Sie Ihre Telefonnummer ein.",
@@ -336,11 +337,11 @@ const ko: GuestReservationCopy = {
   spamFolderReminder:
     "스팸/정크 메일함도 확인해 주세요 — 확인 메일이 그곳에 있을 수 있습니다.",
   gdprRequired: "제출 전에 데이터 처리에 동의해 주세요.",
-  largePartyTitle: "12명 초과 단체",
+  largePartyTitle: "단체 예약",
   largePartyMessage:
-    "12명보다 많은 인원은 Chat with us 또는 이메일/전화로 문의해 주세요. 테이블을 합치거나 좌석을 준비해 드릴 수 있습니다 — Chat with us 또는 이메일/전화로 연락해 주세요.",
+    "단체 예약은 채팅, 이메일 또는 전화로 직원에게 문의해 주세요.",
   largePartyChatCta: "Chat with us",
-  largePartyOption: "12+",
+  largePartyOption: `${ONLINE_SELF_SERVE_MAX_PARTY}+`,
   errorName: "이름을 입력해 주세요.",
   errorEmail: "이메일을 입력해 주세요.",
   errorPhone: "전화번호를 입력해 주세요.",

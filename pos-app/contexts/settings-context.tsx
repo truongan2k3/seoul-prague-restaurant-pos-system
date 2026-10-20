@@ -77,7 +77,26 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     async (partial: Partial<AppSettings>) => {
       if (!businessId) return false;
       setSaving(true);
-      const { data, error: saveError } = await updateAppSettings(partial, businessId);
+      if ((partial.reservationDurationMinutes !== undefined && partial.reservationDurationMinutes !== settings.reservationDurationMinutes)
+        || (partial.reservationBufferMinutes !== undefined && partial.reservationBufferMinutes !== settings.reservationBufferMinutes)) {
+        try {
+          const response = await fetch("/api/reservations/live-availability", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "settings", durationMinutes: partial.reservationDurationMinutes ?? settings.reservationDurationMinutes,
+              bufferMinutes: partial.reservationBufferMinutes ?? settings.reservationBufferMinutes }) });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error ?? "Could not save dining duration.");
+        } catch (err) {
+          setSaving(false);
+          setError(err instanceof Error ? err.message : "Could not save dining duration.");
+          return false;
+        }
+      }
+      const remaining = { ...partial };
+      delete remaining.reservationDurationMinutes;
+      delete remaining.reservationBufferMinutes;
+      const { data, error: saveError } = Object.keys(remaining).length
+        ? await updateAppSettings(remaining, businessId)
+        : await fetchAppSettings(businessId);
       setSaving(false);
 
       if (saveError) {
@@ -90,7 +109,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       }
       return true;
     },
-    [businessId],
+    [businessId, settings.reservationDurationMinutes, settings.reservationBufferMinutes],
   );
 
   const savePrinterBillSettings = useCallback(

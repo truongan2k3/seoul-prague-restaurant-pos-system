@@ -499,13 +499,11 @@ export async function occupyTable(
   staffName?: string,
   tableLabel?: string,
 ) {
-  const occupiedAt = new Date().toISOString();
-
   const { error: tableError } = await supabase
     .from("tables")
     .update({
       status: "waiting",
-      occupied_at: occupiedAt,
+      occupied_at: null, // Database trigger records the actual seating time.
       orders,
       payment_status: "unpaid",
       fulfillment_status: "in_progress",

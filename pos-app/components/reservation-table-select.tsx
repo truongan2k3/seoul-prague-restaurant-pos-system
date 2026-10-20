@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useApp } from "@/contexts/app-context";
-import { MAX_RESERVATION_TABLES, normalizeReservationTableIds } from "@/lib/reservation-tables";
+import { MAX_NEW_RESERVATION_TABLES, normalizeReservationTableIds } from "@/lib/reservation-tables";
 import type { RestaurantTable, TableStatus } from "@/lib/types";
 
 const TABLE_STATUS_LABEL_KEYS: Record<TableStatus, "empty" | "waiting" | "ready"> = {
@@ -43,7 +43,7 @@ export function ReservationTableSelect({
   const renderOption = (table: RestaurantTable) => {
     const statusKey = TABLE_STATUS_LABEL_KEYS[table.status];
     return (
-      <option key={table.id} value={table.id}>
+      <option key={table.id} value={table.id} disabled={table.status !== "empty" || table.availabilityBlocked === true}>
         {translate("table")} {table.label} · {translate(statusKey)}
       </option>
     );
@@ -95,7 +95,7 @@ export function ReservationDualTableSelect({
     onChange(normalizeReservationTableIds(next));
   };
 
-  const canAdd = slotCount < MAX_RESERVATION_TABLES;
+  const canAdd = slotCount < MAX_NEW_RESERVATION_TABLES;
   const canRemoveLast =
     slotCount > 1 && !(slots[slotCount - 1] ?? "") && slotCount > Math.max(1, ids.length);
 
@@ -122,7 +122,7 @@ export function ReservationDualTableSelect({
         {canAdd ? (
           <button
             type="button"
-            onClick={() => setSlotCount((count) => Math.min(MAX_RESERVATION_TABLES, count + 1))}
+            onClick={() => setSlotCount((count) => Math.min(MAX_NEW_RESERVATION_TABLES, count + 1))}
             className="rounded-lg border border-dashed border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
           >
             + {translate("addAnotherTable")}
@@ -140,7 +140,7 @@ export function ReservationDualTableSelect({
       </div>
 
       <p className="text-xs opacity-60">
-        {translate("selectSecondTableHint").replace("{max}", String(MAX_RESERVATION_TABLES))}
+        {translate("selectSecondTableHint").replace("{max}", String(MAX_NEW_RESERVATION_TABLES))}
       </p>
     </div>
   );

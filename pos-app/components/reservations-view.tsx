@@ -74,6 +74,7 @@ import {
   type ReservationCancelReasonId,
 } from "@/lib/reservation-cancel-reasons";
 import { ReservationCapacityOverview } from "@/components/reservation-capacity-overview";
+import { TableAvailabilityDashboard } from "@/components/table-availability-dashboard";
 
 async function confirmReservationWithEmail(reservationId: string) {
   const response = await fetch("/api/reservations/confirm", {
@@ -247,6 +248,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const [undoEntry, setUndoEntry] = useState<ReservationUndoEntry | null>(null);
   const [undoBusy, setUndoBusy] = useState(false);
   const [capacityRefreshKey, setCapacityRefreshKey] = useState(0);
+  const [reservationsConnected, setReservationsConnected] = useState(false);
   const [showCapacityModal, setShowCapacityModal] = useState(false);
 
   const loadReservations = useCallback(async () => {
@@ -273,8 +275,14 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
   useEffect(() => {
     void loadReservations();
+    let hasConnected = false;
     const unsub = subscribeToReservationChanges({
       onChange: () => void loadReservations(),
+      onConnectionChange: (connected) => {
+        setReservationsConnected(connected);
+        if (connected && hasConnected) void loadReservations();
+        if (connected) hasConnected = true;
+      },
     });
     return unsub;
   }, [loadReservations]);
@@ -543,7 +551,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     const { error: checkInError } = await checkInReservationWithTables(
       checkInTarget.id,
       checkInTableIds,
-      { allowOccupied: checkInOccupied, actualPartySize: actualParty },
+      { allowOccupied: false, actualPartySize: actualParty },
     );
     setBusyId(null);
 
@@ -712,6 +720,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
       <div className="flex-1 overflow-auto p-2.5 sm:p-4 lg:p-6">
         <div className="mx-auto max-w-6xl space-y-3 sm:space-y-4 lg:space-y-6">
+          <TableAvailabilityDashboard tables={tables} reservations={reservations} language={language} staff realtimeConnected={reservationsConnected} refreshKey={capacityRefreshKey} />
           <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 sm:px-5">
             <div className="flex flex-wrap items-center gap-2">
               <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">
@@ -1199,6 +1208,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           <p className="text-xs text-gray-500 dark:text-gray-400">{translate("assignTableHint")}</p>
           <ReservationTableMap
             tables={tables}
+            allowOccupied
             value={assignTableIds}
             onChange={setAssignTableIds}
             language={language}
@@ -1249,7 +1259,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           ) : null}
           <button
             type="button"
-            disabled={checkInTableIds.length === 0 || busyId === checkInTarget?.id}
+            disabled={checkInTableIds.length !== 1 || checkInOccupied || busyId === checkInTarget?.id}
             onClick={() => void handleCheckIn()}
             className="w-full rounded-xl bg-[var(--pos-brand)] py-3 text-sm font-semibold text-white hover:bg-[var(--pos-brand-hover)] disabled:opacity-50"
           >

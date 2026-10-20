@@ -9,13 +9,11 @@ export type FloorTableDef = {
   label: string;
   capacity: number;
   grill: FloorGrillCapability;
-  /** Only A1 may attach an auxiliary 2-top to reach 12. */
-  canExtend?: boolean;
 };
 
 /** Canonical floor plan for Seoul Prague. */
 export const RESERVATION_FLOOR_TABLES: FloorTableDef[] = [
-  { label: "A1", capacity: 10, grill: true, canExtend: true },
+  { label: "A1", capacity: 10, grill: true },
   { label: "A2", capacity: 10, grill: true },
   { label: "A3", capacity: 10, grill: true },
   { label: "D1", capacity: 10, grill: true },
@@ -30,11 +28,6 @@ export const RESERVATION_FLOOR_TABLES: FloorTableDef[] = [
   { label: "D4", capacity: 2, grill: false },
 ];
 
-/** Labels A1 may combine with for max 12 seats. */
-export const A1_AUXILIARY_LABELS = ["B1", "B2", "B3", "D4"] as const;
-
-export const A1_EXTENDED_CAPACITY = 12;
-
 export function normalizeTableLabel(label: string | null | undefined): string {
   return (label ?? "").trim().toUpperCase();
 }
@@ -44,17 +37,12 @@ export function floorTableByLabel(label: string | null | undefined): FloorTableD
   return RESERVATION_FLOOR_TABLES.find((row) => row.label === key) ?? null;
 }
 
-export function isA1AuxiliaryLabel(label: string | null | undefined): boolean {
-  const key = normalizeTableLabel(label);
-  return (A1_AUXILIARY_LABELS as readonly string[]).includes(key);
-}
-
 export type SeatingConfiguration = {
-  /** Display labels, e.g. ["A1"] or ["A1", "B2"]. */
+  /** Exactly one physical table for every new seating configuration. */
   labels: string[];
   capacity: number;
   grill: boolean;
-  /** True when A1 + auxiliary 2-top. */
+  /** Kept for historical callers; new configurations are never combined. */
   extended: boolean;
 };
 
@@ -69,18 +57,6 @@ export function buildAllSeatingConfigurations(): SeatingConfiguration[] {
       grill: table.grill,
       extended: false,
     });
-  }
-
-  const a1 = floorTableByLabel("A1");
-  if (a1?.canExtend) {
-    for (const aux of A1_AUXILIARY_LABELS) {
-      configs.push({
-        labels: ["A1", aux],
-        capacity: A1_EXTENDED_CAPACITY,
-        grill: true,
-        extended: true,
-      });
-    }
   }
 
   return configs;

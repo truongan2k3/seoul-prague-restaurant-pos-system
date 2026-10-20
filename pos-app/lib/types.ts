@@ -250,6 +250,8 @@ export interface AppSettings {
    * Default 90. Used by online availability + staff capacity overview.
    */
   reservationDurationMinutes: number;
+  /** Protection before an upcoming reservation, shared with the booking engine. */
+  reservationBufferMinutes: number;
   reservationOperatingHours: ReservationOperatingHours;
   /** Seconds each today's reservation stays on the floor-map vertical ticker. */
   mapReservationTickerSeconds: number;
@@ -484,6 +486,7 @@ export interface RestaurantTable {
   posX: number;
   posY: number;
   occupiedAt?: Date;
+  availabilityBlocked?: boolean;
   orders?: OrderItem[];
 }
 

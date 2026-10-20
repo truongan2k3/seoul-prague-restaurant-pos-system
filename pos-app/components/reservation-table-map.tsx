@@ -4,12 +4,12 @@ import { useMemo } from "react";
 import { Check, MapPin, Users, X } from "lucide-react";
 import { t } from "@/lib/i18n/translations";
 import { floorTableByLabel } from "@/lib/reservation-floor-plan";
-import { MAX_RESERVATION_TABLES, normalizeReservationTableIds } from "@/lib/reservation-tables";
+import { MAX_NEW_RESERVATION_TABLES, normalizeReservationTableIds } from "@/lib/reservation-tables";
 import { TABLE_CARD_WIDTH, resolveFloorCardOverlaps } from "@/lib/table-layout";
 import type { LanguageCode, RestaurantTable } from "@/lib/types";
 
 /** Selection-only floor plan: shares the POS's saved positions and never writes them. */
-export function ReservationTableMap({tables,value,onChange,language,disabled=false,maxTables=MAX_RESERVATION_TABLES,allowOccupied=true}:{
+export function ReservationTableMap({tables,value,onChange,language,disabled=false,maxTables=MAX_NEW_RESERVATION_TABLES,allowOccupied=false}:{
   tables:RestaurantTable[];value:string[];onChange:(ids:string[])=>void;language:LanguageCode;
   disabled?:boolean;maxTables?:number;allowOccupied?:boolean;
 }) {
@@ -39,7 +39,7 @@ export function ReservationTableMap({tables,value,onChange,language,disabled=fal
           if(!pos)return null;
           const selected=ids.includes(table.id);
           const occupied=table.status!=="empty";
-          const locked=disabled||(!selected&&((maxTables>1&&ids.length>=maxTables)||(!allowOccupied&&occupied)));
+          const locked=disabled||table.availabilityBlocked===true||(!selected&&((maxTables>1&&ids.length>=maxTables)||(!allowOccupied&&occupied)));
           const capacity=floorTableByLabel(table.label)?.capacity;
           return <foreignObject key={table.id} x={pos.x-floor.left} y={pos.y-floor.top} width={TABLE_CARD_WIDTH} height={128}>
             <button type="button" aria-pressed={selected} disabled={locked} onClick={()=>toggle(table.id)}

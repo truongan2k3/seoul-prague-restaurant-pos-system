@@ -1,5 +1,7 @@
 "use client";
 
+import { ONLINE_SELF_SERVE_MAX_PARTY } from "@/lib/reservation-party-limits";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { useApp } from "@/contexts/app-context";
@@ -194,7 +196,7 @@ export function ReservationCapacityOverview({
               onChange={(event) => setPartySize(Number(event.target.value))}
               className="mt-1 block min-w-[5.5rem] rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm font-semibold tabular-nums text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
             >
-              {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((size) => (
+              {Array.from({ length: ONLINE_SELF_SERVE_MAX_PARTY - 1 }, (_, index) => index + 2).map((size) => (
                 <option key={size} value={size}>
                   {size}
                 </option>

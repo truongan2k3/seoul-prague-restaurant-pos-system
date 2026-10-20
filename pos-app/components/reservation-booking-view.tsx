@@ -173,7 +173,7 @@ export function ReservationBookingView({
       }
       return;
     }
-    // Online: only 1–12 or the “12+” sentinel.
+    // Online: individual-table capacities or the larger-party contact option.
     if (guestCount !== ONLINE_LARGE_PARTY_OPTION && guestCount > ONLINE_SELF_SERVE_MAX_PARTY) {
       setGuestCount(ONLINE_SELF_SERVE_MAX_PARTY);
     }

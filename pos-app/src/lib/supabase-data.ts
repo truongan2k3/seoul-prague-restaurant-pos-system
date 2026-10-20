@@ -37,7 +37,7 @@ import type { Station } from "@/lib/types";
 
 /** Floor map / KDS metadata — excludes heavy `orders` JSON (use order_items instead). */
 export const TABLE_SUMMARY_COLUMNS =
-  "id, label, type, shape, status, payment_status, fulfillment_status, grid_column, grid_row, pos_x, pos_y, occupied_at";
+  "id, label, type, shape, status, payment_status, fulfillment_status, grid_column, grid_row, pos_x, pos_y, occupied_at, availability_blocked";
 
 export const TABLE_WITH_ORDERS_COLUMNS = `${TABLE_SUMMARY_COLUMNS}, orders`;
 
@@ -81,6 +81,7 @@ export interface SupabaseTableRow {
   pos_x?: number | null;
   pos_y?: number | null;
   occupied_at: string | null;
+  availability_blocked?: boolean;
   orders?: OrderItem[] | null;
 }
 
@@ -199,6 +200,7 @@ export function mapTableRow(row: SupabaseTableRow): RestaurantTable {
     posX: row.pos_x ?? fallback.x,
     posY: row.pos_y ?? fallback.y,
     occupiedAt: row.occupied_at ? new Date(row.occupied_at) : undefined,
+    availabilityBlocked: row.availability_blocked,
     orders: row.orders ?? undefined,
   };
 }
@@ -288,11 +290,19 @@ export async function fetchTables() {
 }
 
 export async function fetchTableSummaries() {
-  return supabase.from("tables").select(TABLE_SUMMARY_COLUMNS).order("label");
+  const result = await supabase.from("tables").select(TABLE_SUMMARY_COLUMNS).order("label");
+  if (result.error && /availability_blocked/i.test(result.error.message)) {
+    return supabase.from("tables").select(TABLE_SUMMARY_COLUMNS.replace(", availability_blocked", "")).order("label");
+  }
+  return result;
 }
 
 export async function fetchTablesWithOrders() {
-  return supabase.from("tables").select(TABLE_WITH_ORDERS_COLUMNS).order("label");
+  const result = await supabase.from("tables").select(TABLE_WITH_ORDERS_COLUMNS).order("label");
+  if (result.error && /availability_blocked/i.test(result.error.message)) {
+    return supabase.from("tables").select(TABLE_WITH_ORDERS_COLUMNS.replace(", availability_blocked", "")).order("label");
+  }
+  return result;
 }
 
 export async function fetchMenuItems() {

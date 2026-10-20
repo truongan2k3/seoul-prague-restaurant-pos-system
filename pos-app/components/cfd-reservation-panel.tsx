@@ -27,6 +27,9 @@ import {
   subscribeToReservationChanges,
 } from "@/src/lib/reservation-actions";
 import { fetchTableSummaries, mapTablesResponse } from "@/src/lib/supabase-data";
+import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
+import { applyTableRealtimeEvent } from "@/lib/realtime-pos-sync";
+import { TableAvailabilityDashboard } from "@/components/table-availability-dashboard";
 import {
   formatReservationTableLabels,
   reservationTableLabels,
@@ -80,6 +83,9 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
   const [rows, setRows] = useState<ReservationRecord[]>([]);
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [loading, setLoading] = useState(false);
+  const [reservationsConnected, setReservationsConnected] = useState(false);
+  const [tablesConnected, setTablesConnected] = useState(false);
+  const [availabilityRevision, setAvailabilityRevision] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -132,13 +138,27 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
     if (!open) return;
     void load();
     void loadTables();
+    let reservationsWereConnected = false;
+    let tablesWereConnected = false;
     const unsub = subscribeToReservationChanges({
       onChange: () => {
+        setAvailabilityRevision((value) => value + 1);
         void load();
-        void loadTables();
+      },
+      onConnectionChange: (connected) => {
+        setReservationsConnected(connected);
+        if (connected && reservationsWereConnected) void load();
+        if (connected) reservationsWereConnected = true;
       },
     });
-    return unsub;
+    const unsubTables = subscribeToPostgresRowChanges("cfd-reservation-floor", { event: "*", schema: "public", table: "tables" },
+      (payload) => setTables((current) => applyTableRealtimeEvent(current, payload)),
+      { onStatus: (connected) => {
+        setTablesConnected(connected);
+        if (connected && tablesWereConnected) void loadTables();
+        if (connected) tablesWereConnected = true;
+      } });
+    return () => { unsub(); unsubTables(); setReservationsConnected(false); setTablesConnected(false); };
   }, [open, load, loadTables]);
 
   useEffect(() => {
@@ -183,7 +203,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
         });
 
         const result = await checkInReservationWithTables(row.id, tableIds, {
-          allowOccupied: true,
+          allowOccupied: false,
         });
 
         if (result.error) {
@@ -297,6 +317,8 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
       ) : (
         <>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
+            <TableAvailabilityDashboard tables={tables} reservations={rows} language={language}
+              enabled={open && !showCreate} realtimeConnected={reservationsConnected && tablesConnected} refreshKey={availabilityRevision} />
             {loading && rows.length === 0 ? (
               <div className="flex items-center justify-center gap-2 py-16 text-sm text-white/50">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -478,7 +500,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
 
             <button
               type="button"
-              disabled={checkInTableIds.length === 0 || busyId === selected.id}
+              disabled={checkInTableIds.length !== 1 || checkInOccupied || busyId === selected.id}
               onClick={handleConfirmTableCheckIn}
               className="mt-5 flex w-full items-center justify-center gap-2 bg-[#8B1E2D] px-6 py-4 text-base font-semibold uppercase tracking-[0.16em] text-white transition hover:bg-[#A02435] disabled:cursor-not-allowed disabled:opacity-40"
             >

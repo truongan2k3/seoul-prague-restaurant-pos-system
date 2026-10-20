@@ -3,7 +3,7 @@ import { readAuthSession } from "@/src/lib/auth/session";
 import { readStaffSession } from "@/src/lib/auth/staff-session";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 import { loadLiveTableAvailability } from "@/src/lib/table-availability-server";
-import { calculateTableAvailability } from "@/lib/table-availability";
+import { checkInTableIssue } from "@/lib/reservation-check-in";
 import { blockedTableLabels, evaluateReservationCapacity, resolveGrill } from "@/lib/reservation-capacity-engine";
 import { floorTableByLabel } from "@/lib/reservation-floor-plan";
 import { todayIsoDateInVenue } from "@/lib/venue-timezone";
@@ -53,25 +53,31 @@ export async function POST(request: Request) {
       if (typeof body.reservationId !== "string" || typeof body.tableId !== "string") throw new Error("Select one table.");
       const { data: row, error } = await db.from("reservations").select("status,table_id,party_size,notes,wants_grill")
         .eq("id", body.reservationId).maybeSingle();
-      if (error || !row) throw new Error("Reservation not found.");
+      if (error) throw error;
+      if (!row) throw new Error("Reservation not found.");
       if (row.status === "checked_in" && row.table_id === body.tableId) return NextResponse.json({ ok: true });
       if (!["pending", "confirmed", "late"].includes(row.status)) throw new Error("This reservation cannot be checked in.");
       const { source } = await loadLiveTableAvailability(auth.businessId);
-      // Virtual allocations guide availability; they must not lock a staff-selected empty table.
-      const view = calculateTableAvailability({ ...source, reservations: source.reservations.filter((r) =>
-        r.id !== body.reservationId && (r.tableLabel || r.secondaryTableLabel || r.tertiaryTableLabel)) });
-      const table = view.tables.find((t) => t.id === body.tableId);
       const party = Number(body.actualPartySize ?? row.party_size);
       const grill = resolveGrill({ partySize: party, reservedAt: source.serverNow, status: row.status, notes: row.notes, wantsGrill: row.wants_grill });
-      if (!table || table.status !== "available" || !Number.isInteger(party) || party < 1 || party > table.capacity || (grill === "yes" && !table.grill)) {
-        throw new Error("This table is occupied or cannot accommodate this party. Select another available table.");
-      }
+      const issue = checkInTableIssue(source, body.tableId, body.reservationId, party, grill);
+      if (issue) return NextResponse.json({ error: issue.message, code: issue.code }, { status: 409 });
       const result = await db.rpc("check_in_single_reservation", { p_reservation: body.reservationId, p_table: body.tableId,
         p_party: party, p_duration: source.durationMinutes, p_buffer: source.bufferMinutes });
       if (result.error) throw result.error;
       return NextResponse.json({ ok: true });
     } catch (error) {
-      return NextResponse.json({ error: (error as { message?: string })?.message ?? "Could not check in. Refresh availability and retry." }, { status: 400 });
+      const failure = error as { message?: string; code?: string };
+      if (/Server authorization required|permission denied for function/i.test(failure.message ?? "")) {
+        return NextResponse.json({ error: "The server cannot authorize the check-in database function. Check the Supabase service role configuration. This is a server authorization error, not an occupied table.", code: "CHECK_IN_SERVER_AUTH_ERROR" }, { status: 503 });
+      }
+      if (failure.code === "PGRST202" || failure.code === "42883") {
+        return NextResponse.json({ error: "The check-in database function is missing or outdated. Apply patch-live-table-availability.sql in Supabase. This is a database setup error, not an occupied table.", code: "CHECK_IN_SETUP_REQUIRED" }, { status: 503 });
+      }
+      if (failure.code === "42703" || failure.code === "PGRST204") {
+        return NextResponse.json({ error: `Reservation database schema is outdated: ${failure.message}`, code: "CHECK_IN_SCHEMA_ERROR" }, { status: 503 });
+      }
+      return NextResponse.json({ error: failure.message ?? "Could not check in. Refresh availability and retry.", code: failure.code ?? "CHECK_IN_FAILED" }, { status: 400 });
     }
   }
   if (!session || auth.businessId !== session.businessId) return NextResponse.json({ error: "Staff login required." }, { status: 401 });

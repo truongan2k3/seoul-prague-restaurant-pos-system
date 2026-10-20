@@ -30,6 +30,7 @@ import { fetchTableSummaries, mapTablesResponse } from "@/src/lib/supabase-data"
 import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
 import { applyTableRealtimeEvent } from "@/lib/realtime-pos-sync";
 import { TableAvailabilityDashboard } from "@/components/table-availability-dashboard";
+import { useSettings } from "@/contexts/settings-context";
 import {
   formatReservationTableLabels,
   reservationTableLabels,
@@ -80,6 +81,7 @@ function receptionTableBadgeClass(status: ReservationRecord["status"]): string {
 }
 
 export function CfdReservationPanel({ open, onClose, language, onWelcome, website }: Props) {
+  const { settings } = useSettings();
   const [rows, setRows] = useState<ReservationRecord[]>([]);
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [loading, setLoading] = useState(false);
@@ -208,6 +210,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
 
         if (result.error) {
           setError(result.error instanceof Error ? result.error.message : String(result.error));
+          void loadTables();
           return;
         }
 
@@ -483,6 +486,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
             <div className="text-sm text-white">
               <ReservationTableMap
                 tables={tables}
+                checkIn={{reservation:selected,reservations:rows,partySize:selected.partySize,durationMinutes:settings.reservationDurationMinutes,bufferMinutes:settings.reservationBufferMinutes}}
                 value={checkInTableIds}
                 onChange={(ids) => { setCheckInTableIds(ids); setError(null); }}
                 language={language}

@@ -8,7 +8,8 @@ import { calculateTableAvailability, type TableAvailabilitySource } from "@/lib/
 export async function loadLiveTableAvailability(businessId: string | null) {
   const db = createSupabaseAdmin();
   const { data, error } = await db.rpc("live_table_availability_snapshot", { p_business: businessId });
-  if (error || !data) throw new Error("Live availability unavailable. Apply supabase/patch-live-table-availability.sql.");
+  if (error) throw Object.assign(new Error(`Live availability could not be loaded: ${error.message}`), { code: error.code });
+  if (!data) throw new Error("Live availability returned no data. Apply supabase/patch-live-table-availability.sql.");
   const raw = data as {
     serverNow: string; settings: { duration?: number; buffer?: number } | null;
     tables: { id: string; label: string; status: string; occupiedAt: string | null; blocked: boolean }[];

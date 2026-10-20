@@ -557,6 +557,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
     if (checkInError) {
       setError(checkInError instanceof Error ? checkInError.message : String(checkInError));
+      onRefreshTables?.();
       return;
     }
 
@@ -1248,6 +1249,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           <ReservationTableMap
             tables={tables}
             value={checkInTableIds}
+            checkIn={checkInTarget?{reservation:checkInTarget,reservations,partySize:checkInActualParty,durationMinutes:settings.reservationDurationMinutes,bufferMinutes:settings.reservationBufferMinutes}:undefined}
             onChange={(ids) => { setCheckInTableIds(ids); setError(null); }}
             language={language}
             disabled={busyId===checkInTarget?.id}

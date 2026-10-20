@@ -493,7 +493,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   };
 
   const handleAssign = async () => {
-    if (!assignTarget || assignTableIds.length === 0) return;
+    if (!assignTarget || busyId === assignTarget.id) return;
 
     const snapshot = await fetchReservationSnapshot(assignTarget.id);
     if (!snapshot) {
@@ -1210,7 +1210,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             tables={tables}
             allowOccupied
             value={assignTableIds}
-            onChange={setAssignTableIds}
+            onChange={(ids) => { setAssignTableIds(ids); setError(null); }}
             language={language}
             disabled={busyId===assignTarget?.id}
           />
@@ -1219,8 +1219,8 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
               {translate("tableOccupiedWarning")}
             </p>
           ) : null}
-          <button type="button" disabled={assignTableIds.length === 0 || busyId === assignTarget?.id} onClick={() => void handleAssign()} className="w-full rounded-xl bg-[var(--pos-brand)] py-3 text-sm font-semibold text-white hover:bg-[var(--pos-brand-hover)] disabled:opacity-50">
-            {translate("assignTable")}
+          <button type="button" disabled={busyId === assignTarget?.id || (assignTableIds.length === 0 && !assignTarget?.tableId && !assignTarget?.secondaryTableId && !assignTarget?.tertiaryTableId)} onClick={() => void handleAssign()} className="w-full rounded-xl bg-[var(--pos-brand)] py-3 text-sm font-semibold text-white hover:bg-[var(--pos-brand-hover)] disabled:opacity-50">
+            {translate(assignTableIds.length ? "assignTable" : "unassignTable")}
           </button>
         </div>
       </Modal>
@@ -1248,7 +1248,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           <ReservationTableMap
             tables={tables}
             value={checkInTableIds}
-            onChange={setCheckInTableIds}
+            onChange={(ids) => { setCheckInTableIds(ids); setError(null); }}
             language={language}
             disabled={busyId===checkInTarget?.id}
           />

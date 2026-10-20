@@ -19,12 +19,15 @@ async function validateSeating(input: { reservedAt: string; partySize: number; n
   const params = { dateIso: date, time, partySize: input.partySize, grill, reservations: ctx.reservations,
     occupiedTables: ctx.occupiedTables, durationMinutes: ctx.settings.reservationDurationMinutes,
     bufferMinutes: ctx.settings.reservationBufferMinutes, excludeReservationId: input.excludeReservationId };
-  if (evaluateReservationCapacity(params).availability === "full") throw new Error("No available table fits this reservation. Choose another time.");
+  if (!input.tableId && evaluateReservationCapacity(params).availability === "full") throw new Error("No available table fits this reservation. Choose another time.");
   if (input.tableId) {
     const { data: table, error } = await createSupabaseAdmin().from("tables").select("label").eq("id", input.tableId).maybeSingle();
     const config = table && floorTableByLabel(table.label);
     if (error || !config || config.capacity < input.partySize || (grill === "yes" && !config.grill)
-      || blockedTableLabels(params).has(config.label)) throw new Error("This table is occupied, reserved or unavailable for the requested seating period.");
+      || blockedTableLabels({ ...params, reservations: ctx.reservations.filter((r) =>
+        r.tableLabel || r.secondaryTableLabel || r.tertiaryTableLabel) }).has(config.label)) {
+      throw new Error("This table is occupied, reserved or unavailable for the requested seating period.");
+    }
   }
 }
 
@@ -54,7 +57,9 @@ export async function POST(request: Request) {
       if (row.status === "checked_in" && row.table_id === body.tableId) return NextResponse.json({ ok: true });
       if (!["pending", "confirmed", "late"].includes(row.status)) throw new Error("This reservation cannot be checked in.");
       const { source } = await loadLiveTableAvailability(auth.businessId);
-      const view = calculateTableAvailability({ ...source, reservations: source.reservations.filter((r) => r.id !== body.reservationId) });
+      // Virtual allocations guide availability; they must not lock a staff-selected empty table.
+      const view = calculateTableAvailability({ ...source, reservations: source.reservations.filter((r) =>
+        r.id !== body.reservationId && (r.tableLabel || r.secondaryTableLabel || r.tertiaryTableLabel)) });
       const table = view.tables.find((t) => t.id === body.tableId);
       const party = Number(body.actualPartySize ?? row.party_size);
       const grill = resolveGrill({ partySize: party, reservedAt: source.serverNow, status: row.status, notes: row.notes, wantsGrill: row.wants_grill });
@@ -74,7 +79,13 @@ export async function POST(request: Request) {
     .eq("business_id", auth.businessId).eq("active", true).maybeSingle();
   if (!staff || !["admin", "manager", "cashier", "server"].includes(staff.role)) return NextResponse.json({ error: "Not permitted." }, { status: 403 });
   try {
-    if (body.action === "validate") {
+    if (body.action === "unassign" && typeof body.reservationId === "string") {
+      const { data, error } = await db.from("reservations").update({ table_id: null,
+        secondary_table_id: null, tertiary_table_id: null, updated_at: new Date().toISOString() })
+        .eq("id", body.reservationId).in("status", ["pending", "confirmed", "late"]).select("id").maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error("Only reservations waiting to check in can be unassigned.");
+    } else if (body.action === "validate") {
       await validateSeating({ reservedAt: String(body.reservedAt), partySize: Number(body.partySize),
         tableId: body.tableId || undefined, notes: body.notes, excludeReservationId: body.excludeReservationId });
     } else if (body.action === "settings") {

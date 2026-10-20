@@ -484,7 +484,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
               <ReservationTableMap
                 tables={tables}
                 value={checkInTableIds}
-                onChange={setCheckInTableIds}
+                onChange={(ids) => { setCheckInTableIds(ids); setError(null); }}
                 language={language}
                 disabled={busyId===selected.id}
               />

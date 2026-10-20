@@ -34,7 +34,8 @@ export function useReservationMapAssignment({ tables, reservations, disabled, du
       return { label: def.label, occupied: table ? table.status !== "empty" : false,
         occupiedAt: table?.occupiedAt, blocked: !table || table.availabilityBlocked === true };
     });
-    const blocked = blockedTableLabels({ reservations, occupiedTables, dateIso: todayIsoDateInVenue(row.reservedAt),
+    const blocked = blockedTableLabels({ reservations: reservations.filter((r) => r.tableId || r.secondaryTableId || r.tertiaryTableId),
+      occupiedTables, dateIso: todayIsoDateInVenue(row.reservedAt),
       time: timeFromReservedAt(row.reservedAt), durationMinutes, bufferMinutes, excludeReservationId: row.id, nowMs: now });
     const grill = resolveGrill(row);
     return new Set(tables.filter((table) => {

@@ -39,7 +39,7 @@ export function ReservationTableMap({tables,value,onChange,language,disabled=fal
           if(!pos)return null;
           const selected=ids.includes(table.id);
           const occupied=table.status!=="empty";
-          const locked=disabled||table.availabilityBlocked===true||(!selected&&((maxTables>1&&ids.length>=maxTables)||(!allowOccupied&&occupied)));
+          const locked=disabled||(!selected&&(table.availabilityBlocked===true||(maxTables>1&&ids.length>=maxTables)||(!allowOccupied&&occupied)));
           const capacity=floorTableByLabel(table.label)?.capacity;
           return <foreignObject key={table.id} x={pos.x-floor.left} y={pos.y-floor.top} width={TABLE_CARD_WIDTH} height={128}>
             <button type="button" aria-pressed={selected} disabled={locked} onClick={()=>toggle(table.id)}

@@ -612,6 +612,22 @@ export function ClientDisplayView({
     setClientState("checkout");
   }, []);
 
+  const finishThankYou = useCallback(() => {
+    if (clientStateRef.current !== "thankyou") return;
+    const queued = queuedCheckoutRef.current;
+    if (queued) {
+      clientStateRef.current = "checkout";
+      applyCheckout(queued);
+    } else {
+      clientStateRef.current = "idle";
+      thankYouStartedAtRef.current = null;
+      setClientState("idle");
+      setCheckout(null);
+      void releaseCfdThankYouState();
+    }
+    setSecondsLeft(THANK_YOU_SECONDS);
+  }, [applyCheckout]);
+
   const queueOrApplyCheckout = useCallback(
     (payload: CfdCheckoutPayload) => {
       const onThankYou = clientStateRef.current === "thankyou";
@@ -749,39 +765,18 @@ export function ClientDisplayView({
     }
     setSecondsLeft(THANK_YOU_SECONDS);
     const interval = setInterval(() => {
-      setSecondsLeft((prev) => {
-        const started = thankYouStartedAtRef.current ?? Date.now();
-        const elapsedSec = (Date.now() - started) / 1000;
-        const queued = queuedCheckoutRef.current;
-
-        if (queued && elapsedSec >= MIN_THANK_YOU_BEFORE_NEXT_SECONDS) {
-          queuedCheckoutRef.current = null;
-          thankYouStartedAtRef.current = null;
-          setCheckout(queued);
-          setClientState("checkout");
-          return THANK_YOU_SECONDS;
-        }
-
-        if (prev <= 1) {
-          if (queued) {
-            queuedCheckoutRef.current = null;
-            thankYouStartedAtRef.current = null;
-            setCheckout(queued);
-            setClientState("checkout");
-            return THANK_YOU_SECONDS;
-          }
-          thankYouStartedAtRef.current = null;
-          setClientState("idle");
-          setCheckout(null);
-          void releaseCfdThankYouState();
-          return THANK_YOU_SECONDS;
-        }
-        return prev - 1;
-      });
+      if (clientStateRef.current !== "thankyou") return;
+      const elapsedSec = (Date.now() - (thankYouStartedAtRef.current ?? Date.now())) / 1000;
+      if ((queuedCheckoutRef.current && elapsedSec >= MIN_THANK_YOU_BEFORE_NEXT_SECONDS)
+        || elapsedSec >= THANK_YOU_SECONDS) {
+        finishThankYou();
+      } else {
+        setSecondsLeft(Math.max(1, THANK_YOU_SECONDS - Math.floor(elapsedSec)));
+      }
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [clientState]);
+  }, [clientState, finishThankYou]);
 
   // Hidden gesture: swipe from left edge → open panel; swipe left on panel → close.
   // Only while idle (main content / video). No visible Reservation button.
@@ -824,6 +819,12 @@ export function ClientDisplayView({
       className="landing-theme relative flex h-[100dvh] flex-col overflow-hidden bg-[#0B0B0C] text-white"
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
+      onClickCapture={(event) => {
+        if (clientStateRef.current !== "thankyou") return;
+        event.preventDefault();
+        event.stopPropagation();
+        finishThankYou();
+      }}
     >
       <AnnouncementMarquee surface="client" tone="dark" />
       <CfdHeader
@@ -869,7 +870,14 @@ export function ClientDisplayView({
           )}
 
           {clientState === "thankyou" && (
-            <main className="cfd-fade-enter relative flex min-h-0 flex-1 flex-col overflow-hidden">
+            <main role="button" tabIndex={0} aria-label={`${translate("cfdThankYou")} · ${translate("close")}`}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " " || event.key === "Escape") {
+                  event.preventDefault();
+                  finishThankYou();
+                }
+              }}
+              className="cfd-fade-enter relative flex min-h-0 flex-1 cursor-pointer flex-col overflow-hidden focus-visible:outline focus-visible:outline-[#C9A88B]">
               <ThankYouView
                 secondsLeft={secondsLeft}
                 reviewQrImageUrl={reviewQrImageUrl}

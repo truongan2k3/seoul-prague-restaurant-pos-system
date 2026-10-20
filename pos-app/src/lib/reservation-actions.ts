@@ -566,14 +566,24 @@ export async function createOnlineReservation(input: {
   });
 }
 
-/** Assign one planned table; evaluate its full seating window on the server. */
+/** Assign one planned table, or clear its assignment; server checks staff permissions. */
 export async function assignReservationTables(
   reservationId: string,
   tableIds: string[],
   options?: { allowOccupied?: boolean },
 ) {
   const ids = normalizeReservationTableIds(tableIds);
-  if (ids.length !== 1) return { data: null, error: new Error("Select exactly one table.") };
+  if (ids.length > 1) return { data: null, error: new Error("Select exactly one table.") };
+  if (ids.length === 0) {
+    try {
+      const response = await fetch("/api/reservations/live-availability", { method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "unassign", reservationId }) });
+      const result = await response.json();
+      if (!response.ok) return { data: null, error: new Error(result.error ?? "Could not remove table assignment.") };
+      return supabase.from("reservations").select(RESERVATION_SELECT).eq("id", reservationId).single();
+    } catch (error) { return { data: null, error: error instanceof Error ? error : new Error("Could not remove table assignment.") }; }
+  }
   const { data: reservation, error } = await supabase.from("reservations")
     .select("status,reserved_at,party_size,notes").eq("id", reservationId).single();
   if (error || !reservation) return { data: null, error: error ?? new Error("Reservation not found.") };

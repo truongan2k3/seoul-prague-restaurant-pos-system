@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { ElapsedTimer } from "@/components/live-clock";
 import { MapReservationTicker } from "@/components/map-reservation-ticker";
@@ -13,7 +13,9 @@ import { resolveTableOccupiedSince } from "@/lib/order-item-timers";
 import { isDrinkOrderItem } from "@/lib/order-routing";
 import { isTablePaidInProgress } from "@/lib/table-payment";
 import { formatPrice, type TranslationKey } from "@/lib/i18n/translations";
-import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
+import { todayIsoDateInVenue, venueDayRangeUtc } from "@/lib/venue-timezone";
+import { fetchReservations, mapReservationsResponse, subscribeToReservationChanges } from "@/src/lib/reservation-actions";
+import type { MenuItem, OrderItem, ReservationRecord, RestaurantTable } from "@/lib/types";
 
 type TableOrderBundle = {
   table: RestaurantTable;
@@ -200,6 +202,21 @@ export function OrderView({
   checkoutBusy?: boolean;
 }) {
   const { translate, language } = useApp();
+  const [reservations, setReservations] = useState<ReservationRecord[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    let revision = 0;
+    const load = async () => {
+      const request = ++revision;
+      const { startIso } = venueDayRangeUtc(todayIsoDateInVenue());
+      const { data, error } = await fetchReservations(new Date(startIso));
+      if (active && request === revision && !error && data) setReservations(mapReservationsResponse(data));
+    };
+    void load();
+    const unsubscribe = subscribeToReservationChanges(() => { void load(); });
+    return () => { active = false; unsubscribe(); };
+  }, []);
 
   const tableBundles = useMemo(() => {
     const tableIdsWithWork = new Set(orderItems.map((item) => item.tableId).filter(Boolean));
@@ -275,7 +292,7 @@ export function OrderView({
         )}
       </div>
 
-      <MapReservationTicker />
+      <MapReservationTicker reservations={reservations} />
     </div>
   );
 }

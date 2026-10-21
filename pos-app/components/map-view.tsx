@@ -294,6 +294,11 @@ export function MapView({
         </div>
       )}
       {assignment.error && <div role="alert" className="border-b border-rose-400/30 bg-rose-500/10 px-4 py-2 text-sm text-rose-600 dark:text-rose-200">{assignment.error}</div>}
+      {assignment.overrideTarget && <div className="flex flex-wrap items-center gap-3 border-b border-amber-400/25 bg-amber-400/10 px-4 py-3">
+        <p className="min-w-0 flex-1 text-xs text-[var(--foreground)]">{tables.find((table) => table.id === assignment.overrideTarget?.tableId)?.label} · {translate("assignOverrideHint")}</p>
+        <button type="button" disabled={assignment.busyId !== null} onClick={assignment.confirmOverride} className="min-h-10 rounded-lg bg-amber-300 px-4 py-2 text-xs font-semibold text-zinc-950 disabled:opacity-40">{translate("assignOverrideContinue")}</button>
+        <button type="button" disabled={assignment.busyId !== null} onClick={assignment.cancel} className="min-h-10 rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--foreground)]">{translate("close")}</button>
+      </div>}
       {assignment.selected && <div className="flex items-center gap-2 border-b border-[#C9A88B]/25 bg-[#C9A88B]/10 px-4 py-2 text-xs text-[var(--foreground)]" role="status">
         <span className="min-w-0 flex-1 truncate">{translate("mapResAssignTarget").replace("{name}", assignment.selected.guestName)} · {assignment.selected.partySize}</span>
         <button type="button" onClick={assignment.cancel} disabled={assignment.busyId !== null} aria-label={translate("close")} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg hover:bg-[#C9A88B]/15 disabled:opacity-40"><X className="h-4 w-4" /></button>

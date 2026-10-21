@@ -8,8 +8,8 @@ export function checkInTableIssue(source: TableAvailabilitySource, tableId: stri
   const table = source.tables.find((row) => row.id === tableId);
   const issue = (code: string, message: string) => ({ code, message });
   if (!table) return issue("TABLE_NOT_CONFIGURED", "This table is not configured as a dining table. Select a dining table or ask staff to check its configuration.");
-  if (table.blocked) return issue("TABLE_BLOCKED", `${table.label} is blocked in POS. Staff must unblock it before check-in.`);
-  if (table.occupied) return issue("TABLE_OCCUPIED", `${table.label} is currently occupied. Release the table in POS before checking in another party.`);
+  if (table.blocked) return issue("TABLE_BLOCKED", `${table.label} is blocked in POS. Staff can resolve the block or explicitly confirm a check-in exception.`);
+  if (table.occupied) return issue("TABLE_OCCUPIED", `${table.label} is currently occupied. Continuing will join this reservation to the current table visit and bill, preserving existing items and the seating time.`);
   if (!Number.isInteger(partySize) || partySize < 1) return issue("INVALID_PARTY_SIZE", "Enter a valid number of guests.");
   if (partySize > table.capacity) return issue("TABLE_CAPACITY", `${table.label} seats ${table.capacity}, but this check-in has ${partySize} guests. Adjust the actual guest count or select a larger table.`);
   if (grill === "yes" && !table.grill) return issue("TABLE_NO_GRILL", `${table.label} has no BBQ grill, but this reservation requires BBQ. Select a BBQ table or ask staff to update the booking.`);
@@ -20,7 +20,7 @@ export function checkInTableIssue(source: TableAvailabilitySource, tableId: stri
     && [row.tableLabel, row.secondaryTableLabel, row.tertiaryTableLabel]
       .some((label) => normalizeTableLabel(label) === table.label));
   if (assigned.some((row) => row.status === "checked_in")) {
-    return issue("TABLE_ACTIVE_CHECK_IN", `${table.label} is empty on the floor map but still linked to another checked-in reservation. Staff must complete or move that reservation in POS.`);
+    return issue("TABLE_ACTIVE_CHECK_IN", `${table.label} is empty on the floor map but still linked to another checked-in reservation. Staff can resolve that booking in POS or explicitly confirm this check-in exception.`);
   }
   const booking = assigned.filter((row) => ["pending", "confirmed", "late"].includes(row.status))
     .filter((row) => new Date(row.reservedAt).getTime() - buffer < now + duration

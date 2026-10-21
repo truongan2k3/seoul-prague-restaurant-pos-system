@@ -105,7 +105,12 @@ BEGIN
   END IF;
   IF NEW.table_id IS NULL THEN RETURN NEW; END IF;
   SELECT * INTO t FROM public.tables WHERE id = NEW.table_id FOR UPDATE;
-  IF NOT FOUND OR t.availability_blocked THEN RAISE EXCEPTION 'Table is unavailable'; END IF;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Table is unavailable'; END IF;
+  IF auth.role() = 'service_role' AND (
+    (NEW.status <> 'checked_in' AND current_setting('app.reservation_assignment_override', true) = NEW.id::text)
+    OR (NEW.status = 'checked_in' AND current_setting('app.reservation_check_in_override', true) = NEW.id::text)
+  ) THEN RETURN NEW; END IF;
+  IF t.availability_blocked THEN RAISE EXCEPTION 'Table is unavailable'; END IF;
   SELECT make_interval(mins => reservation_duration_minutes), make_interval(mins => reservation_buffer_minutes)
     INTO dining, buffer FROM public.settings ORDER BY id LIMIT 1;
   dining := coalesce(dining, interval '90 minutes'); buffer := coalesce(buffer, interval '15 minutes');

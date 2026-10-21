@@ -244,7 +244,9 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const [formEventType, setFormEventType] = useState("");
   const [formSource, setFormSource] = useState<StaffBookingSource>("reservation");
   const [assignTableIds, setAssignTableIds] = useState<string[]>([]);
+  const [assignConflict, setAssignConflict] = useState<{ reservationId: string; tableId: string; reason: string } | null>(null);
   const [checkInTableIds, setCheckInTableIds] = useState<string[]>([]);
+  const [checkInConflict, setCheckInConflict] = useState<{ reservationId: string; tableId: string; partySize: number; reason: string } | null>(null);
   const [undoEntry, setUndoEntry] = useState<ReservationUndoEntry | null>(null);
   const [undoBusy, setUndoBusy] = useState(false);
   const [capacityRefreshKey, setCapacityRefreshKey] = useState(0);
@@ -492,23 +494,29 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     void loadReservations();
   };
 
-  const handleAssign = async () => {
+  const handleAssign = async (override = false) => {
     if (!assignTarget || busyId === assignTarget.id) return;
+    if (override && (!assignConflict || assignConflict.reservationId !== assignTarget.id || assignConflict.tableId !== assignTableIds[0])) return;
 
+    setBusyId(assignTarget.id);
     const snapshot = await fetchReservationSnapshot(assignTarget.id);
     if (!snapshot) {
+      setBusyId(null);
       setError(translate("resUndoFailed"));
       return;
     }
 
-    setBusyId(assignTarget.id);
     const { error: assignError } = await assignReservationTables(assignTarget.id, assignTableIds, {
       allowOccupied: assignOccupied,
+      override, overrideReason: override ? assignConflict?.reason : undefined,
     });
     setBusyId(null);
 
     if (assignError) {
-      setError(assignError instanceof Error ? assignError.message : String(assignError));
+      const reason = assignError instanceof Error ? assignError.message : String(assignError);
+      setError(reason);
+      setAssignConflict(!override && (assignError as { message?: string; overrideAllowed?: boolean }).overrideAllowed === true
+        ? { reservationId: assignTarget.id, tableId: assignTableIds[0], reason } : null);
       return;
     }
 
@@ -518,12 +526,15 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       reservation: snapshot,
     });
     setAssignTarget(null);
+    setAssignConflict(null);
     setAssignTableIds([]);
     void loadReservations();
   };
 
-  const handleCheckIn = async () => {
-    if (!checkInTarget || checkInTableIds.length === 0) return;
+  const handleCheckIn = async (override = false) => {
+    if (!checkInTarget || checkInTableIds.length !== 1 || busyId === checkInTarget.id) return;
+    if (override && (!checkInConflict || checkInConflict.reservationId !== checkInTarget.id
+      || checkInConflict.tableId !== checkInTableIds[0] || checkInConflict.partySize !== checkInActualParty)) return;
 
     const snapshot = await fetchReservationSnapshot(checkInTarget.id);
     if (!snapshot) {
@@ -551,12 +562,15 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     const { error: checkInError } = await checkInReservationWithTables(
       checkInTarget.id,
       checkInTableIds,
-      { allowOccupied: false, actualPartySize: actualParty },
+      { allowOccupied: false, actualPartySize: actualParty, override, overrideReason: override ? checkInConflict?.reason : undefined },
     );
     setBusyId(null);
 
     if (checkInError) {
-      setError(checkInError instanceof Error ? checkInError.message : String(checkInError));
+      const reason = checkInError instanceof Error ? checkInError.message : String(checkInError);
+      setError(reason);
+      setCheckInConflict(!override && (checkInError as { message?: string; overrideAllowed?: boolean }).overrideAllowed === true
+        ? { reservationId: checkInTarget.id, tableId: checkInTableIds[0], partySize: actualParty, reason } : null);
       onRefreshTables?.();
       return;
     }
@@ -578,6 +592,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       tables: tableSnapshots.filter((row): row is NonNullable<typeof row> => row != null),
     });
     setCheckInTarget(null);
+    setCheckInConflict(null);
     setCheckInTableIds([]);
     setCheckInActualParty(2);
     void loadReservations();
@@ -1001,6 +1016,8 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           disabled={busyId === row.id}
                           onClick={() => {
                             setCheckInTarget(row);
+                            setCheckInConflict(null);
+                            setError(null);
                             setCheckInTableIds(
                               [row.tableId, row.secondaryTableId, row.tertiaryTableId].filter(
                                 Boolean,
@@ -1019,6 +1036,8 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           disabled={busyId === row.id}
                           onClick={() => {
                             setAssignTarget(row);
+                            setAssignConflict(null);
+                            setError(null);
                             setAssignTableIds(
                               [row.tableId, row.secondaryTableId, row.tertiaryTableId].filter(
                                 Boolean,
@@ -1201,7 +1220,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
         ) : null}
       </Modal>
 
-      <Modal open={assignTarget !== null} onClose={() => setAssignTarget(null)} title={translate("assignTable")} size="xl">
+      <Modal open={assignTarget !== null} onClose={() => { if (busyId !== assignTarget?.id) { setAssignTarget(null); setAssignConflict(null); } }} title={translate("assignTable")} size="xl">
         <div className="space-y-3">
           <p className="text-sm text-gray-600 dark:text-gray-300">
             {assignTarget?.guestName} · {assignTarget?.partySize} {translate("partySize").toLowerCase()}
@@ -1210,8 +1229,9 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           <ReservationTableMap
             tables={tables}
             allowOccupied
+            allowBlocked
             value={assignTableIds}
-            onChange={(ids) => { setAssignTableIds(ids); setError(null); }}
+            onChange={(ids) => { setAssignTableIds(ids); setAssignConflict(null); setError(null); }}
             language={language}
             disabled={busyId===assignTarget?.id}
           />
@@ -1220,6 +1240,10 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
               {translate("tableOccupiedWarning")}
             </p>
           ) : null}
+          {assignConflict && assignTarget && assignConflict.reservationId === assignTarget.id && assignConflict.tableId === assignTableIds[0] && <div role="alert" className="space-y-2 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-3 text-sm text-amber-800 dark:text-amber-100">
+            <p>{assignConflict.reason}</p><p className="text-xs opacity-75">{translate("assignOverrideHint")}</p>
+            <button type="button" disabled={busyId === assignTarget?.id} onClick={() => void handleAssign(true)} className="min-h-10 rounded-lg bg-amber-300 px-4 py-2 font-semibold text-zinc-950 disabled:opacity-40">{translate("assignOverrideContinue")}</button>
+          </div>}
           <button type="button" disabled={busyId === assignTarget?.id || (assignTableIds.length === 0 && !assignTarget?.tableId && !assignTarget?.secondaryTableId && !assignTarget?.tertiaryTableId)} onClick={() => void handleAssign()} className="w-full rounded-xl bg-[var(--pos-brand)] py-3 text-sm font-semibold text-white hover:bg-[var(--pos-brand-hover)] disabled:opacity-50">
             {translate(assignTableIds.length ? "assignTable" : "unassignTable")}
           </button>
@@ -1230,6 +1254,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
         open={checkInTarget !== null}
         onClose={() => {
           setCheckInTarget(null);
+          setCheckInConflict(null);
           setCheckInTableIds([]);
           setCheckInActualParty(2);
         }}
@@ -1242,15 +1267,17 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           </p>
           <PartySizeStepper
             value={checkInActualParty}
-            onChange={setCheckInActualParty}
+            onChange={(count) => { setCheckInActualParty(count); setCheckInConflict(null); setError(null); }}
             max={settings.reservationMaxGuestsPerSlot || 50}
             label={translate("resActualPartySize")}
           />
           <ReservationTableMap
             tables={tables}
             value={checkInTableIds}
+            allowOccupied
+            allowBlocked
             checkIn={checkInTarget?{reservation:checkInTarget,reservations,partySize:checkInActualParty,durationMinutes:settings.reservationDurationMinutes,bufferMinutes:settings.reservationBufferMinutes}:undefined}
-            onChange={(ids) => { setCheckInTableIds(ids); setError(null); }}
+            onChange={(ids) => { setCheckInTableIds(ids); setCheckInConflict(null); setError(null); }}
             language={language}
             disabled={busyId===checkInTarget?.id}
           />
@@ -1259,9 +1286,15 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
               {translate("tableOccupiedWarning")}
             </p>
           ) : null}
+          {checkInConflict && checkInTarget && checkInConflict.reservationId === checkInTarget.id
+            && checkInConflict.tableId === checkInTableIds[0] && checkInConflict.partySize === checkInActualParty && <div role="alert" className="space-y-2 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-800 dark:text-amber-100">
+              <p>{checkInConflict.reason}</p><p className="text-xs opacity-75">{translate("checkInOverrideHint")}</p>
+              <button type="button" disabled={busyId === checkInTarget.id} onClick={() => void handleCheckIn(true)} className="min-h-10 rounded-lg bg-amber-300 px-4 py-2 font-semibold text-zinc-950 disabled:opacity-40">{translate("checkInOverrideContinue")}</button>
+            </div>}
+          {error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">{error}</p>}
           <button
             type="button"
-            disabled={checkInTableIds.length !== 1 || checkInOccupied || busyId === checkInTarget?.id}
+            disabled={checkInTableIds.length !== 1 || busyId === checkInTarget?.id}
             onClick={() => void handleCheckIn()}
             className="w-full rounded-xl bg-[var(--pos-brand)] py-3 text-sm font-semibold text-white hover:bg-[var(--pos-brand-hover)] disabled:opacity-50"
           >

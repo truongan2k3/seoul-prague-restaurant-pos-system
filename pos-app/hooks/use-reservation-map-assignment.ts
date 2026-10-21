@@ -22,6 +22,7 @@ export function useReservationMapAssignment({ tables, reservations, disabled, du
   const [targetId, setTargetId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [overrideTarget, setOverrideTarget] = useState<{ reservationId: string; tableId: string; reason: string } | null>(null);
   const pointer = useRef<PointerDrag | null>(null);
   const locked = useRef(false);
   const dragX = useMotionValue(0), dragY = useMotionValue(0);
@@ -46,33 +47,37 @@ export function useReservationMapAssignment({ tables, reservations, disabled, du
   const eligibleIds = useMemo(() => selected ? eligibleFor(selected) : new Set<string>(), [selected, eligibleFor]);
 
   const clearDrag = useCallback(() => { pointer.current = null; setDraggingId(null); setTargetId(null); }, []);
-  const cancel = useCallback(() => { clearDrag(); setSelectedId(null); setError(null); }, [clearDrag]);
+  const cancel = useCallback(() => { clearDrag(); setSelectedId(null); setError(null); setOverrideTarget(null); }, [clearDrag]);
   useEffect(() => {
     if (disabled || (selectedId && !selected)) cancel();
   }, [disabled, selectedId, selected, cancel]);
 
-  const assign = useCallback(async (reservationId: string, tableId: string) => {
+  const assign = useCallback(async (reservationId: string, tableId: string, overrideReason?: string) => {
     if (disabled || locked.current) return;
     const row = reservations.find((r) => r.id === reservationId && ACTIVE.includes(r.status));
-    if (!row || !eligibleFor(row).has(tableId)) { setError(unavailableMessage); return; }
+    if (!row) { setError(unavailableMessage); return; }
     if (row.tableId === tableId && !row.secondaryTableId && !row.tertiaryTableId) { cancel(); return; }
-    locked.current = true; setBusyId(reservationId); setError(null);
+    locked.current = true; setBusyId(reservationId); setError(null); setOverrideTarget(null);
     try {
-      const result = await assignReservationTables(reservationId, [tableId]);
+      const result = await assignReservationTables(reservationId, [tableId], { override: overrideReason !== undefined, overrideReason });
       if (result.error) throw result.error;
       if (!result.data) throw new Error(unavailableMessage);
       const updated = mapReservationsResponse([result.data])[0];
       if (updated) onAssigned(updated);
       setSelectedId(null);
     } catch (err) {
-      setError((err as { code?: string })?.code === "PGRST116" ? unavailableMessage
-        : (err as { message?: string })?.message ?? unavailableMessage);
+      const reason = (err as { code?: string })?.code === "PGRST116" ? unavailableMessage
+        : (err as { message?: string })?.message ?? unavailableMessage;
+      setError(reason);
+      if (overrideReason === undefined && (err as { overrideAllowed?: boolean })?.overrideAllowed === true) {
+        setOverrideTarget({ reservationId, tableId, reason });
+      }
     } finally { locked.current = false; setBusyId(null); }
-  }, [disabled, reservations, eligibleFor, unavailableMessage, onAssigned, cancel]);
+  }, [disabled, reservations, unavailableMessage, onAssigned, cancel]);
 
   const select = useCallback((id: string) => {
     if (disabled || locked.current) return;
-    setError(null); setSelectedId((current) => current === id ? null : id);
+    setError(null); setOverrideTarget(null); setSelectedId((current) => current === id ? null : id);
   }, [disabled]);
   const start = useCallback((id: string, event: ReactPointerEvent<HTMLButtonElement>) => {
     if (disabled || locked.current || !event.isPrimary || event.button !== 0) return;
@@ -80,7 +85,7 @@ export function useReservationMapAssignment({ tables, reservations, disabled, du
     event.currentTarget.setPointerCapture(event.pointerId);
     pointer.current = { reservationId: id, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
       active: false, wasSelected: selectedId === id };
-    setSelectedId(id); setError(null);
+    setSelectedId(id); setError(null); setOverrideTarget(null);
     dragX.set(event.clientX + 14); dragY.set(event.clientY + 14);
   }, [disabled, selectedId, dragX, dragY]);
 
@@ -121,6 +126,11 @@ export function useReservationMapAssignment({ tables, reservations, disabled, du
     void assign(selected.id, table.id);
     return true;
   };
-  return { selected, selectedId, dragging, targetId, busyId, error, eligibleIds, dragX, dragY,
+  const confirmOverride = () => {
+    if (overrideTarget && selectedId === overrideTarget.reservationId) {
+      void assign(overrideTarget.reservationId, overrideTarget.tableId, overrideTarget.reason);
+    }
+  };
+  return { selected, selectedId, dragging, targetId, busyId, error, eligibleIds, dragX, dragY, overrideTarget, confirmOverride,
     select, start, cancel, activateTable };
 }

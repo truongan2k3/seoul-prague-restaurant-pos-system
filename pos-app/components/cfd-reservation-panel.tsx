@@ -94,6 +94,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
   const [showCreate, setShowCreate] = useState(false);
   const [tablePickerOpen, setTablePickerOpen] = useState(false);
   const [checkInTableIds, setCheckInTableIds] = useState<string[]>([]);
+  const [checkInConflict, setCheckInConflict] = useState<{ reservationId: string; tableId: string; reason: string } | null>(null);
   const checkInLockRef = useRef(false);
   const welcomedIdsRef = useRef<Set<string>>(new Set());
 
@@ -170,6 +171,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
       setShowCreate(false);
       setTablePickerOpen(false);
       setCheckInTableIds([]);
+      setCheckInConflict(null);
     }
   }, [open]);
 
@@ -190,7 +192,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
   );
 
   const completeCheckIn = useCallback(
-    async (row: ReservationRecord, tableIds: string[]) => {
+    async (row: ReservationRecord, tableIds: string[], overrideReason?: string) => {
       if (checkInLockRef.current) return;
       checkInLockRef.current = true;
       setBusyId(row.id);
@@ -206,10 +208,14 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
 
         const result = await checkInReservationWithTables(row.id, tableIds, {
           allowOccupied: false,
+          override: overrideReason !== undefined, overrideReason,
         });
 
         if (result.error) {
-          setError(result.error instanceof Error ? result.error.message : String(result.error));
+          const reason = result.error instanceof Error ? result.error.message : String(result.error);
+          setError(reason);
+          setCheckInConflict(overrideReason === undefined && (result.error as { message?: string; overrideAllowed?: boolean }).overrideAllowed === true
+            ? { reservationId: row.id, tableId: tableIds[0], reason } : null);
           void loadTables();
           return;
         }
@@ -228,6 +234,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
           tableLabel,
         };
         setTablePickerOpen(false);
+        setCheckInConflict(null);
         setCheckInTableIds([]);
         onClose();
         onWelcome(payload);
@@ -247,6 +254,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
   const handleCheckInClick = useCallback(() => {
     if (!selected || !canCheckIn(selected.status) || busyId != null) return;
     setError(null);
+    setCheckInConflict(null);
     // Always confirm table at check-in. Assigned table is a staff preview only.
     setCheckInTableIds(
       [selected.tableId, selected.secondaryTableId, selected.tertiaryTableId].filter(
@@ -475,6 +483,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                 aria-label="Close"
                 onClick={() => {
                   setTablePickerOpen(false);
+                  setCheckInConflict(null);
                   setCheckInTableIds([]);
                 }}
                 className="rounded-full border border-white/15 p-2 text-white/70 hover:bg-white/10 hover:text-white"
@@ -488,7 +497,9 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                 tables={tables}
                 checkIn={{reservation:selected,reservations:rows,partySize:selected.partySize,durationMinutes:settings.reservationDurationMinutes,bufferMinutes:settings.reservationBufferMinutes}}
                 value={checkInTableIds}
-                onChange={(ids) => { setCheckInTableIds(ids); setError(null); }}
+                allowOccupied
+                allowBlocked
+                onChange={(ids) => { setCheckInTableIds(ids); setCheckInConflict(null); setError(null); }}
                 language={language}
                 disabled={busyId===selected.id}
               />
@@ -501,10 +512,14 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
             ) : null}
 
             {error ? <p className="mt-3 text-sm text-amber-200/90">{error}</p> : null}
+            {checkInConflict && checkInConflict.reservationId === selected.id && checkInConflict.tableId === checkInTableIds[0] && <div role="alert" className="mt-3 space-y-3 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3">
+              <p className="text-xs leading-relaxed text-amber-100">{translate("checkInOverrideHint")}</p>
+              <button type="button" disabled={busyId !== null} onClick={() => void completeCheckIn(selected, checkInTableIds, checkInConflict.reason)} className="min-h-11 w-full rounded-lg bg-amber-300 px-4 py-3 text-sm font-semibold text-zinc-950 disabled:opacity-40">{translate("checkInOverrideContinue")}</button>
+            </div>}
 
             <button
               type="button"
-              disabled={checkInTableIds.length !== 1 || checkInOccupied || busyId === selected.id}
+              disabled={checkInTableIds.length !== 1 || busyId === selected.id}
               onClick={handleConfirmTableCheckIn}
               className="mt-5 flex w-full items-center justify-center gap-2 bg-[#8B1E2D] px-6 py-4 text-base font-semibold uppercase tracking-[0.16em] text-white transition hover:bg-[#A02435] disabled:cursor-not-allowed disabled:opacity-40"
             >

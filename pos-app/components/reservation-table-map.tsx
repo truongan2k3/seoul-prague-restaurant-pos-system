@@ -12,9 +12,9 @@ import { resolveGrill } from "@/lib/reservation-capacity-engine";
 import type { TableAvailabilitySource } from "@/lib/table-availability";
 
 /** Selection-only floor plan: shares the POS's saved positions and never writes them. */
-export function ReservationTableMap({tables,value,onChange,language,disabled=false,maxTables=MAX_NEW_RESERVATION_TABLES,allowOccupied=false,checkIn}:{
+export function ReservationTableMap({tables,value,onChange,language,disabled=false,maxTables=MAX_NEW_RESERVATION_TABLES,allowOccupied=false,allowBlocked=false,checkIn}:{
   tables:RestaurantTable[];value:string[];onChange:(ids:string[])=>void;language:LanguageCode;
-  disabled?:boolean;maxTables?:number;allowOccupied?:boolean;
+  disabled?:boolean;maxTables?:number;allowOccupied?:boolean;allowBlocked?:boolean;
   checkIn?:{reservation:ReservationRecord;reservations:ReservationRecord[];partySize:number;durationMinutes:number;bufferMinutes:number};
 }) {
   const ids=normalizeReservationTableIds(value);
@@ -52,7 +52,7 @@ export function ReservationTableMap({tables,value,onChange,language,disabled=fal
           const issue=issueFor(table.id);
           const statusKey=issue?issue.code==="TABLE_RESERVED"?"resTableReserved":issue.code==="TABLE_ACTIVE_CHECK_IN"?"resStatusCheckedIn":issue.code==="TABLE_BLOCKED"?"resTableBlocked":issue.code==="TABLE_OCCUPIED"?table.status:"resTableNotSuitable":table.status;
           const occupied=table.status!=="empty";
-          const locked=disabled||(!selected&&(table.availabilityBlocked===true||(maxTables>1&&ids.length>=maxTables)||(!allowOccupied&&occupied)));
+          const locked=disabled||(!selected&&((table.availabilityBlocked===true&&!allowBlocked)||(maxTables>1&&ids.length>=maxTables)||(!allowOccupied&&occupied)));
           const capacity=floorTableByLabel(table.label)?.capacity;
           return <foreignObject key={table.id} x={pos.x-floor.left} y={pos.y-floor.top} width={TABLE_CARD_WIDTH} height={128}>
             <button type="button" aria-pressed={selected} disabled={locked} onClick={()=>toggle(table.id)}

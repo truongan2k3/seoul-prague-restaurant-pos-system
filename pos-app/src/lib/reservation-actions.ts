@@ -87,7 +87,9 @@ async function validateReservationPlacement(input: { reservedAt: Date; partySize
     const response = await fetch("/api/reservations/live-availability", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "validate", ...input, reservedAt: input.reservedAt.toISOString() }) });
     const result = await response.json();
-    return response.ok ? null : new Error(result.error ?? "Table is not available.");
+    return response.ok ? null : Object.assign(new Error(result.error ?? "Table is not available."), {
+      code: result.code, overrideAllowed: result.overrideAllowed === true,
+    });
   } catch (error) { return error instanceof Error ? error : new Error("Could not verify table availability."); }
 }
 
@@ -360,14 +362,17 @@ export async function checkInReservation(
   reservationId: string,
   tableId?: string,
   secondaryTableId?: string | null,
-  options?: { actualPartySize?: number | null; tertiaryTableId?: string | null },
+  options?: { actualPartySize?: number | null; tertiaryTableId?: string | null; override?: boolean; overrideReason?: string },
 ) {
   if (!tableId || secondaryTableId || options?.tertiaryTableId) return { data: null, error: new Error("Select exactly one available table.") };
   try {
     const response = await fetch("/api/reservations/live-availability", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "check-in", reservationId, tableId, actualPartySize: options?.actualPartySize ?? undefined }) });
+      body: JSON.stringify({ action: "check-in", reservationId, tableId, actualPartySize: options?.actualPartySize ?? undefined,
+        override: options?.override === true, reason: options?.overrideReason }) });
     const result = await response.json();
-    if (!response.ok) return { data: null, error: new Error(result.error ?? "Table is not available.") };
+    if (!response.ok) return { data: null, error: Object.assign(new Error(result.error ?? "Table is not available."), {
+      code: result.code, overrideAllowed: result.overrideAllowed === true,
+    }) };
     return supabase.from("reservations").select(RESERVATION_SELECT).eq("id", reservationId).single();
   } catch (error) { return { data: null, error: error instanceof Error ? error : new Error("Check-in failed.") }; }
 }
@@ -447,7 +452,7 @@ export async function restoreTableSnapshot(snapshot: TableSnapshot) {
 export async function checkInReservationWithTables(
   reservationId: string,
   tableIds: string[],
-  options?: { allowOccupied?: boolean; actualPartySize?: number | null },
+  options?: { allowOccupied?: boolean; actualPartySize?: number | null; override?: boolean; overrideReason?: string },
 ) {
   const ids = normalizeReservationTableIds(tableIds);
   if (ids.length !== 1) return { data: null, error: new Error("Select exactly one available table.") };
@@ -455,6 +460,7 @@ export async function checkInReservationWithTables(
   return checkInReservation(reservationId, ids[0], ids[1] ?? null, {
     actualPartySize: options?.actualPartySize,
     tertiaryTableId: ids[2] ?? null,
+    override: options?.override, overrideReason: options?.overrideReason,
   });
 }
 
@@ -570,10 +576,20 @@ export async function createOnlineReservation(input: {
 export async function assignReservationTables(
   reservationId: string,
   tableIds: string[],
-  options?: { allowOccupied?: boolean },
+  options?: { allowOccupied?: boolean; override?: boolean; overrideReason?: string },
 ) {
   const ids = normalizeReservationTableIds(tableIds);
   if (ids.length > 1) return { data: null, error: new Error("Select exactly one table.") };
+  if (ids.length === 1 && options?.override) {
+    try {
+      const response = await fetch("/api/reservations/live-availability", { method: "POST",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "assign-override",
+          reservationId, tableId: ids[0], reason: options.overrideReason }) });
+      const result = await response.json();
+      if (!response.ok) return { data: null, error: new Error(result.error ?? "Could not override table assignment.") };
+      return supabase.from("reservations").select(RESERVATION_SELECT).eq("id", reservationId).single();
+    } catch (error) { return { data: null, error: error instanceof Error ? error : new Error("Could not override table assignment.") }; }
+  }
   if (ids.length === 0) {
     try {
       const response = await fetch("/api/reservations/live-availability", { method: "POST",
@@ -591,8 +607,13 @@ export async function assignReservationTables(
   const availabilityError = await validateReservationPlacement({ reservedAt: new Date(reservation.reserved_at),
     partySize: reservation.party_size, notes: reservation.notes ?? undefined, tableId: ids[0], excludeReservationId: reservationId });
   if (availabilityError) return { data: null, error: availabilityError };
-  return supabase.from("reservations").update({ table_id: ids[0], secondary_table_id: null, tertiary_table_id: null,
+  const assigned = await supabase.from("reservations").update({ table_id: ids[0], secondary_table_id: null, tertiary_table_id: null,
+    staff_override_capacity: false,
     updated_at: nowIso() }).eq("id", reservationId).in("status", ["pending", "confirmed", "late"]).select(RESERVATION_SELECT).single();
+  if (assigned.error?.code === "P0001" && /Table is (occupied|already reserved|unavailable)/i.test(assigned.error.message)) {
+    return { data: null, error: Object.assign(new Error(assigned.error.message), { code: "TABLE_ASSIGNMENT_CONFLICT", overrideAllowed: true }) };
+  }
+  return assigned;
 }
 
 export async function assignReservationTable(
@@ -604,6 +625,8 @@ export async function assignReservationTable(
 }
 
 export async function findActiveReservationForTable(tableId: string) {
+  // An override may add a booking to an occupied visit; keep the original
+  // booking as the bill/referral owner instead of switching to the latest join.
   return supabase
     .from("reservations")
     .select(RESERVATION_SELECT)
@@ -611,36 +634,34 @@ export async function findActiveReservationForTable(tableId: string) {
     .or(
       `table_id.eq.${tableId},secondary_table_id.eq.${tableId},tertiary_table_id.eq.${tableId}`,
     )
-    .order("checked_in_at", { ascending: false })
+    .order("checked_in_at", { ascending: true })
+    .order("id", { ascending: true })
     .limit(1)
     .maybeSingle();
 }
 
 /**
- * When one linked table checks out: unlink it from the reservation.
- * Complete the reservation only when no linked tables remain.
+ * Complete every checked-in booking sharing this table visit, retaining any
+ * historical links to other tables. A future assigned booking is never changed.
  */
 export async function completeReservationForTable(tableId: string, reservationId?: string | null) {
-  const found = reservationId
-    ? await supabase
-        .from("reservations")
-        .select("id, status, table_id, secondary_table_id, tertiary_table_id")
-        .eq("id", reservationId)
-        .maybeSingle()
-    : await findActiveReservationForTable(tableId);
+  const found = await supabase.from("reservations")
+    .select("id, status, table_id, secondary_table_id, tertiary_table_id")
+    .eq("status", "checked_in")
+    .or(`table_id.eq.${tableId},secondary_table_id.eq.${tableId},tertiary_table_id.eq.${tableId}`);
+  if (found.error) return { data: null, error: found.error };
+  const rows = found.data ?? [];
+  if (reservationId && !rows.some((row) => row.id === reservationId)) return { data: null, error: null };
+  for (const row of rows) {
+    const result = await completeReservationTableLink(tableId, row);
+    if (result.error) return { data: null, error: result.error };
+  }
+  return { data: rows, error: null };
+}
 
-  const row = found.data as
-    | {
-        id: string;
-        status: string;
-        table_id: string | null;
-        secondary_table_id: string | null;
-        tertiary_table_id: string | null;
-      }
-    | null
-    | undefined;
-
-  if (!row || row.status !== "checked_in") return { data: null, error: found.error ?? null };
+async function completeReservationTableLink(tableId: string, row: {
+  id: string; table_id: string | null; secondary_table_id: string | null; tertiary_table_id: string | null;
+}) {
 
   const remaining = normalizeReservationTableIds([
     row.table_id,

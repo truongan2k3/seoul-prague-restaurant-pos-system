@@ -23,10 +23,15 @@ async function validateSeating(input: { reservedAt: string; partySize: number; n
   if (input.tableId) {
     const { data: table, error } = await createSupabaseAdmin().from("tables").select("label").eq("id", input.tableId).maybeSingle();
     const config = table && floorTableByLabel(table.label);
-    if (error || !config || config.capacity < input.partySize || (grill === "yes" && !config.grill)
+    if (error) throw error;
+    if (!config) throw new Error("Select a configured dining table.");
+    if (config.capacity < input.partySize || (grill === "yes" && !config.grill)
       || blockedTableLabels({ ...params, reservations: ctx.reservations.filter((r) =>
         r.tableLabel || r.secondaryTableLabel || r.tertiaryTableLabel) }).has(config.label)) {
-      throw new Error("This table is occupied, reserved or unavailable for the requested seating period.");
+      const reason = config.capacity < input.partySize ? `${config.label} seats ${config.capacity}; this reservation has ${input.partySize} guests.`
+        : grill === "yes" && !config.grill ? `${config.label} has no BBQ grill, but this reservation requires BBQ.`
+        : `${config.label} is occupied, blocked or assigned to another reservation during this seating period.`;
+      throw Object.assign(new Error(reason), { code: "TABLE_ASSIGNMENT_CONFLICT", overrideAllowed: true });
     }
   }
 }
@@ -61,7 +66,24 @@ export async function POST(request: Request) {
       const party = Number(body.actualPartySize ?? row.party_size);
       const grill = resolveGrill({ partySize: party, reservedAt: source.serverNow, status: row.status, notes: row.notes, wantsGrill: row.wants_grill });
       const issue = checkInTableIssue(source, body.tableId, body.reservationId, party, grill);
-      if (issue) return NextResponse.json({ error: issue.message, code: issue.code }, { status: 409 });
+      const overrideAllowed = issue !== null && !["TABLE_NOT_CONFIGURED", "INVALID_PARTY_SIZE"].includes(issue.code);
+      if (body.override === true) {
+        if (!session || session.businessId !== auth.businessId) return NextResponse.json({ error: "Staff login required to confirm a check-in override.", code: "STAFF_LOGIN_REQUIRED" }, { status: 401 });
+        const { data: staff } = await db.from("staff").select("role").eq("id", session.staffId)
+          .eq("business_id", auth.businessId).eq("active", true).maybeSingle();
+        if (!staff || !["admin", "manager", "cashier", "server"].includes(staff.role)) return NextResponse.json({ error: "Not permitted." }, { status: 403 });
+        if (!Number.isInteger(party) || party < 1) throw new Error("Enter a valid number of guests.");
+        if (issue && !overrideAllowed) return NextResponse.json({ error: issue.message, code: issue.code }, { status: 409 });
+        const result = await db.rpc("override_reservation_check_in", { p_reservation: body.reservationId, p_table: body.tableId,
+          p_party: party, p_staff: session.staffId, p_business: auth.businessId,
+          p_reason: String(issue?.message ?? body.reason ?? "Staff confirmed check-in despite seating warning.").slice(0, 2000) });
+        if (result.error?.code === "PGRST202" || result.error?.code === "42883") {
+          return NextResponse.json({ error: "Apply supabase/patch-reservation-assignment-override.sql to enable staff check-in overrides.", code: "CHECK_IN_OVERRIDE_SETUP_REQUIRED" }, { status: 503 });
+        }
+        if (result.error) throw result.error;
+        return NextResponse.json({ ok: true });
+      }
+      if (issue) return NextResponse.json({ error: issue.message, code: issue.code, overrideAllowed }, { status: 409 });
       const result = await db.rpc("check_in_single_reservation", { p_reservation: body.reservationId, p_table: body.tableId,
         p_party: party, p_duration: source.durationMinutes, p_buffer: source.bufferMinutes });
       if (result.error) throw result.error;
@@ -77,7 +99,10 @@ export async function POST(request: Request) {
       if (failure.code === "42703" || failure.code === "PGRST204") {
         return NextResponse.json({ error: `Reservation database schema is outdated: ${failure.message}`, code: "CHECK_IN_SCHEMA_ERROR" }, { status: 503 });
       }
-      return NextResponse.json({ error: failure.message ?? "Could not check in. Refresh availability and retry.", code: failure.code ?? "CHECK_IN_FAILED" }, { status: 400 });
+      const overrideAllowed = body.override !== true && failure.code === "P0001"
+        && /Table is (occupied|unavailable|already reserved|reserved for another seating)/i.test(failure.message ?? "");
+      return NextResponse.json({ error: failure.message ?? "Could not check in. Refresh availability and retry.",
+        code: failure.code ?? "CHECK_IN_FAILED", overrideAllowed }, { status: overrideAllowed ? 409 : 400 });
     }
   }
   if (!session || auth.businessId !== session.businessId) return NextResponse.json({ error: "Staff login required." }, { status: 401 });
@@ -85,9 +110,20 @@ export async function POST(request: Request) {
     .eq("business_id", auth.businessId).eq("active", true).maybeSingle();
   if (!staff || !["admin", "manager", "cashier", "server"].includes(staff.role)) return NextResponse.json({ error: "Not permitted." }, { status: 403 });
   try {
-    if (body.action === "unassign" && typeof body.reservationId === "string") {
+    if (body.action === "assign-override" && typeof body.reservationId === "string" && typeof body.tableId === "string") {
+      const { data: table, error: tableError } = await db.from("tables").select("label").eq("id", body.tableId).maybeSingle();
+      if (tableError) throw tableError;
+      if (!table || !floorTableByLabel(table.label)) throw new Error("Select a configured dining table.");
+      const result = await db.rpc("override_reservation_table_assignment", { p_reservation: body.reservationId,
+        p_table: body.tableId, p_staff: session.staffId, p_business: auth.businessId,
+        p_reason: String(body.reason ?? "Staff confirmed assignment despite availability warning.").slice(0, 2000) });
+      if (result.error?.code === "PGRST202" || result.error?.code === "42883") {
+        return NextResponse.json({ error: "Apply supabase/patch-reservation-assignment-override.sql in Supabase to enable staff assignment overrides.", code: "ASSIGNMENT_OVERRIDE_SETUP_REQUIRED" }, { status: 503 });
+      }
+      if (result.error) throw result.error;
+    } else if (body.action === "unassign" && typeof body.reservationId === "string") {
       const { data, error } = await db.from("reservations").update({ table_id: null,
-        secondary_table_id: null, tertiary_table_id: null, updated_at: new Date().toISOString() })
+        secondary_table_id: null, tertiary_table_id: null, staff_override_capacity: false, updated_at: new Date().toISOString() })
         .eq("id", body.reservationId).in("status", ["pending", "confirmed", "late"]).select("id").maybeSingle();
       if (error) throw error;
       if (!data) throw new Error("Only reservations waiting to check in can be unassigned.");
@@ -116,6 +152,9 @@ export async function POST(request: Request) {
     } else return NextResponse.json({ error: "Invalid action." }, { status: 400 });
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return NextResponse.json({ error: (error as { message?: string })?.message ?? "Could not save availability settings. Apply supabase/patch-live-table-availability.sql and retry." }, { status: 400 });
+    const failure = error as { message?: string; code?: string; overrideAllowed?: boolean };
+    const overrideAllowed = body.action === "validate" && failure.overrideAllowed === true;
+    return NextResponse.json({ error: failure.message ?? "Could not save availability settings. Apply supabase/patch-live-table-availability.sql and retry.",
+      code: failure.code, overrideAllowed }, { status: overrideAllowed ? 409 : 400 });
   }
 }

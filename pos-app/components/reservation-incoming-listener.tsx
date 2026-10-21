@@ -96,7 +96,7 @@ export function ReservationIncomingListener({
   const formatDateTime = useCallback(
     (date: Date | string) =>
       new Date(date).toLocaleString(
-        language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB",
+        language === "cs" ? "cs-CZ" : language === "vi" ? "vi-VN" : "en-GB",
         {
           timeZone: "Europe/Prague",
           weekday: "short",

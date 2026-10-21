@@ -234,7 +234,7 @@ export function computeTopSellers(
 }
 
 export function formatSummaryDate(date: Date, language: LanguageCode): string {
-  return date.toLocaleDateString(language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB", {
+  return date.toLocaleDateString(language === "cs" ? "cs-CZ" : language === "vi" ? "vi-VN" : "en-GB", {
     weekday: "short",
     day: "numeric",
     month: "short",

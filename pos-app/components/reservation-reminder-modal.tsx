@@ -24,7 +24,7 @@ export function ReservationReminderModal({
     : 0;
   const hintMinutes = leadMinutes ?? minutesLeft;
 
-  const locale = language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB";
+  const locale = language === "cs" ? "cs-CZ" : language === "vi" ? "vi-VN" : "en-GB";
   const timeLabel = reservation
     ? reservation.reservedAt.toLocaleString(locale, {
         timeZone: "Europe/Prague",

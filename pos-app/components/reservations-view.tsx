@@ -343,7 +343,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     setAnchorDate((prev) => shiftIsoDate(prev, days));
   };
 
-  const dateNavLocale = language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB";
+  const dateNavLocale = language === "cs" ? "cs-CZ" : language === "vi" ? "vi-VN" : "en-GB";
 
   const dayLabel = useMemo(() => {
     const date = new Date(`${anchorDate}T12:00:00`);
@@ -437,7 +437,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     try {
       const bbqTag=draft.wantsBbq?`[BBQ: ${draft.wantsBbq==="yes"?"Yes":draft.wantsBbq==="no"?"No":"Undecided"}]`:"";
       const { data:created,error:createError }=await createReservation({
-        guestName:draft.guestName|| (language==="cs"?"Host":language==="zh"?"客人":"Guest"),
+        guestName:draft.guestName|| (language==="cs"?"Host":language==="vi"?"Khách":"Guest"),
         guestPhone:draft.phone||undefined,guestEmail:draft.email||undefined,
         partySize:Math.max(1,draft.guestCount),reservedAt:venueWallTimeToUtc(draft.date,draft.time),
         notes:[bbqTag,draft.notes].filter(Boolean).join(" ")||undefined,
@@ -670,7 +670,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   };
 
   const formatDateTime = (date: Date) =>
-    date.toLocaleString(language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB", {
+    date.toLocaleString(language === "cs" ? "cs-CZ" : language === "vi" ? "vi-VN" : "en-GB", {
       timeZone: "Europe/Prague",
       weekday: "short",
       day: "numeric",
@@ -931,7 +931,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                                 ko: row.eventType,
                               },
                             },
-                            language==="cs"?"cs":"en",
+                            language==="cs"?"cs":language==="vi"?"vi":"en",
                           )}
                         </p>
                       ) : null}
@@ -1095,7 +1095,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
               [translate("table"),formatReservationTableLabels(detailsTarget)],
               [translate("resReferralCode"),detailsTarget.referralCode],
               [translate("reservationSource"),translate(({reservation:"resSourceReservation",phone_call:"resSourcePhoneCall",online:"resSourceOnline",walk_in:"resSourceWalkIn"} as const)[detailsTarget.source])],
-              [translate("resEventType"),settings.reservationEventTypes.find(option=>option.id===detailsTarget.eventType)?pickEventTypeLabel(settings.reservationEventTypes.find(option=>option.id===detailsTarget.eventType)!,language==="cs"?"cs":"en"):detailsTarget.eventType],
+              [translate("resEventType"),settings.reservationEventTypes.find(option=>option.id===detailsTarget.eventType)?pickEventTypeLabel(settings.reservationEventTypes.find(option=>option.id===detailsTarget.eventType)!,language==="cs"?"cs":language==="vi"?"vi":"en"):detailsTarget.eventType],
               [translate("checkIn"),detailsTarget.checkedInAt?formatDateTime(detailsTarget.checkedInAt):undefined],
               [translate("resStatusCompleted"),detailsTarget.completedAt?formatDateTime(detailsTarget.completedAt):undefined],
               [translate("staff"),detailsTarget.staffName],
@@ -1127,7 +1127,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
         size="xl"
       >
         {showNewModal&&<ReservationBookingView embedded staff={{
-          settings,language:language==="cs"?"cs":"en",submitLabel:translate("saveReservation"),onSubmit:handleCreateReservation,
+          settings,language:language==="cs"?"cs":language==="vi"?"vi":"en",submitLabel:translate("saveReservation"),onSubmit:handleCreateReservation,
           fields:<div className="space-y-4 border-t border-white/10 pt-4">
             <div className="space-y-2 text-sm text-white/70">
               <p>{translate("reservationSource")}</p>
@@ -1198,7 +1198,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                   <option value="">—</option>
                   {settings.reservationEventTypes.map((option) => (
                     <option key={option.id} value={option.id}>
-                      {pickEventTypeLabel(option, language === "cs" ? "cs" : language === "zh" ? "en" : "en")}
+                      {pickEventTypeLabel(option, language === "cs" ? "cs" : language === "vi" ? "vi" : "en")}
                     </option>
                   ))}
                 </select>

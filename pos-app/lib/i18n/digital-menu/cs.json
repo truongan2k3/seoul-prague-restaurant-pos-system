@@ -1,0 +1,514 @@
+{
+  "items": {
+    "a5-wagyu": {
+      "name": "Japonské A5 Wagyu"
+    },
+    "wagyu-short-rib": {
+      "name": "Prémiová australská žebra Wagyu"
+    },
+    "wagyu-ribeye": {
+      "name": "Australský Wagyu ribeye"
+    },
+    "angus-sirloin": {
+      "name": "Americký Angus sirloin"
+    },
+    "wagyu-bone-in": {
+      "name": "Australská žebra Wagyu s kostí"
+    },
+    "beef-tongue": {
+      "name": "Hovězí jazyk Angus"
+    },
+    "marinated-short-rib": {
+      "name": "Marinovaná mramorovaná hovězí žebra"
+    },
+    "smoked-brisket": {
+      "name": "Uzené hovězí hrudí Angus"
+    },
+    "enoki-rolls": {
+      "name": "Hovězí rolky s enoki"
+    },
+    "wagyu-platter": {
+      "name": "Výběrový talíř Wagyu"
+    },
+    "thick-pork-belly": {
+      "name": "Silné plátky vepřového bůčku"
+    },
+    "marinated-pork-belly": {
+      "name": "Marinovaný vepřový bůček"
+    },
+    "mapo-pork-rib": {
+      "name": "Vepřová žebra v marinádě Mapo"
+    },
+    "pork-platter": {
+      "name": "Výběrový vepřový talíř"
+    },
+    "pork-collar": {
+      "name": "Vepřová krkovice"
+    },
+    "chicken-thigh": {
+      "name": "Marinované kuřecí stehno"
+    },
+    "grilled-eel": {
+      "name": "Grilovaný úhoř"
+    },
+    "tiger-prawns": {
+      "name": "Tygří krevety"
+    },
+    "vegetable-platter": {
+      "name": "Zeleninový talíř (4 druhy)"
+    },
+    "busan-set": {
+      "name": "Busan set",
+      "description": "Vyvážené seznámení s naším grilem.",
+      "details": [
+        "Australský Wagyu ribeye 100g",
+        "Marinovaná mramorovaná hovězí žebra 100g",
+        "Vepřový bůček 100g",
+        "Vepřová krkovice 100g",
+        "Marinované kuřecí stehno 100g"
+      ]
+    },
+    "jeju-set": {
+      "name": "Jeju Island set",
+      "description": "Bohatý výběr masa a mořských plodů.",
+      "details": [
+        "Australský Wagyu ribeye 100g",
+        "Vepřová žebra v marinádě Mapo 100g",
+        "Marinované kuřecí stehno 100g",
+        "Tygří krevety 100g",
+        "Úhoř 50g",
+        "Oliheň 50g"
+      ]
+    },
+    "gangwon-set": {
+      "name": "Gangwon-do set",
+      "description": "Bohatší hovězí set s výborným poměrem ceny a kvality.",
+      "details": [
+        "Australský Wagyu ribeye 100g",
+        "Marinovaná mramorovaná hovězí žebra 100g",
+        "Angus chuck roll 100g",
+        "Hovězí jazyk Angus 100g",
+        "Uzené hovězí hrudí 100g"
+      ]
+    },
+    "seoul-set": {
+      "name": "Seoul Signature set",
+      "description": "Náš nejluxusnější grilovací set pro nezapomenutelné stolování.",
+      "details": [
+        "Japonské A5 Wagyu 100g",
+        "Angus sirloin 100g",
+        "Marinovaná mramorovaná hovězí žebra 100g",
+        "Angus ribeye 100g",
+        "Angus chuck roll 100g"
+      ]
+    },
+    "seafood-hotpot": {
+      "name": "Hot pot s mořskými plody",
+      "description": "Vývar z mořských plodů pro jednu osobu se zeleninou a tofu, hřejivý v každé lžíci."
+    },
+    "pork-bone-hotpot": {
+      "name": "Hot pot z vepřových kostí",
+      "description": "Vývar z vepřových kostí pro jednu osobu s hlubokou chutí a křehkým masem."
+    },
+    "kimchi-hotpot": {
+      "name": "Kimchi hot pot",
+      "description": "Kimchi vývar pro jednu osobu s příjemnou kyselostí a vyváženou pikantností."
+    },
+    "nine-grid": {
+      "name": "Devítidílný hot pot set",
+      "description": "Plátky hovězího a jehněčího, pekingské zelí, sezónní listová zelenina, enoki, tofu, plátky brambor, hovězí kuličky a krevety.",
+      "details": [
+        "Kompletní talíř pro spokojené stolování u hot potu.",
+        "Vyberte vývar: Klasický vývar z vepřových kostí · Pikantní vývar ma-la · Rajčatový vývar"
+      ]
+    },
+    "seafood-rice": {
+      "name": "Smažená rýže s mořskými plody",
+      "description": "Rýže restovaná ve woku s mořskými plody, vejcem a jemným kouřovým nádechem."
+    },
+    "wagyu-rice": {
+      "name": "Smažená rýže s Wagyu",
+      "description": "Voňavá rýže z woku s plnou chutí hovězího Wagyu."
+    },
+    "vegetarian-bibimbap": {
+      "name": "Vegetariánský dolsot bibimbap",
+      "description": "Sezónní zelenina na rýži s domácí omáčkou bibimbap."
+    },
+    "kimchi-rice": {
+      "name": "Kimchi smažená rýže",
+      "description": "Kimchi rýže s plnou chutí a vyváženou pikantností."
+    },
+    "beef-rice-bowl": {
+      "name": "Rýžová miska s hovězím",
+      "description": "Křehké hovězí na dušené rýži s výraznou glazurou."
+    },
+    "beef-bibimbap": {
+      "name": "Hovězí dolsot bibimbap",
+      "description": "Syčící rýže v kamenné misce s hovězím, zeleninou a vejcem."
+    },
+    "pork-rice-bowl": {
+      "name": "Rýžová miska s vepřovým bůčkem",
+      "description": "Grilovaný vepřový bůček na rýži s bohatou karamelizovanou chutí."
+    },
+    "chicken-bibimbap": {
+      "name": "Kuřecí dolsot bibimbap",
+      "description": "Rýže v kamenné misce s kuřetem a pestrou zeleninou."
+    },
+    "jajangmyeon": {
+      "name": "Jajangmyeon",
+      "description": "Klasické nudle s omáčkou z černých fazolí a bohatou plnou chutí."
+    },
+    "seafood-ramen": {
+      "name": "Pikantní ramen s mořskými plody",
+      "description": "Mořské plody, zelenina a výrazné chilli v lahodném sytém vývaru."
+    },
+    "kimchi-ramen": {
+      "name": "Kimchi ramen",
+      "description": "Pružné nudle v lehce nakyslém kimchi vývaru s příjemnou pikantností."
+    },
+    "beef-ramen": {
+      "name": "Pikantní hovězí ramen",
+      "description": "Pikantní hovězí a nudle v bohatém hřejivém chilli vývaru."
+    },
+    "fried-shrimp": {
+      "name": "Křupavé smažené krevety",
+      "description": "Lehce křupavé krevety usmažené dozlatova."
+    },
+    "fried-chicken": {
+      "name": "Korejské smažené kuřecí kousky",
+      "description": "Křupavé kuřecí kousky s lesklou, chuťově výraznou úpravou."
+    },
+    "kimchi-pancake": {
+      "name": "Kimchi palačinka",
+      "description": "Palačinka s křupavými okraji, kimchi a vyváženou pikantností."
+    },
+    "seafood-pancake": {
+      "name": "Palačinka s mořskými plody",
+      "description": "Slaná palačinka s krevetami, olihní a zeleninou."
+    },
+    "dumplings": {
+      "name": "Na pánvi smažené knedlíčky",
+      "description": "Knedlíčky s dozlatova opečenou spodní stranou a šťavnatou vepřovou náplní. Ideální ke sdílení."
+    },
+    "kimchi-pork-stir-fry": {
+      "name": "Restovaný vepřový bůček s kimchi",
+      "description": "Výrazný vepřový bůček s kimchi a slaně pikantním zakončením."
+    },
+    "braised-short-ribs": {
+      "name": "Dušená hovězí žebra",
+      "description": "Pomalu dušená žebra s hlubokou chutí a lesklou glazurou."
+    },
+    "cheese-tteokbokki": {
+      "name": "Kuře s tteokbokki a sýrem",
+      "description": "Pikantní kuře s rýžovými válečky a rozpuštěným sýrem."
+    },
+    "stir-fried-rice-cakes": {
+      "name": "Restované rýžové válečky",
+      "description": "Pružné rýžové válečky v živé pikantní omáčce."
+    },
+    "spicy-pork-stir-fry": {
+      "name": "Pikantní restovaný vepřový bůček",
+      "description": "Kouřový vepřový bůček se sladce pikantní, karamelizovanou chutí."
+    },
+    "squid-pork": {
+      "name": "Grilovaná oliheň s vepřovým bůčkem",
+      "description": "Lahodná kombinace masa a mořských plodů dokončená na grilu."
+    },
+    "japchae": {
+      "name": "Skleněné nudle japchae",
+      "description": "Jemné skleněné nudle restované se zeleninou a nasládlou sójovou chutí."
+    },
+    "beef-octopus": {
+      "name": "Restované hovězí s baby chobotnicí",
+      "description": "Křehké hovězí s baby chobotnicí a výrazným korejským kořením."
+    },
+    "yukhoe": {
+      "name": "Yukhoe – kořeněné syrové hovězí",
+      "description": "Jemně ochucené syrové hovězí Wagyu s vytříbenými sezamovými tóny."
+    },
+    "tempura-shrimp-roll": {
+      "name": "Krevetová tempura rolka",
+      "description": "Uvnitř mrkev, okurka a kreveta, navrchu avokádo, úhoří glazura a citrusová majonéza."
+    },
+    "eel-uramaki": {
+      "name": "Uramaki s grilovaným úhořem",
+      "description": "Uvnitř avokádo, krabí tyčinka a okurka, obalené úhořem, se sezamem a úhoří omáčkou."
+    },
+    "aburi-salmon": {
+      "name": "Aburi lososová rolka",
+      "description": "Avokádo, krabí tyčinka a okurka, navrchu opálený losos, zapečená omáčka a tobiko."
+    },
+    "california-roll": {
+      "name": "California tobiko rolka",
+      "description": "Avokádo, krabí tyčinka a losos, doplněné bylinkami tobiko a úhoří glazurou."
+    },
+    "crispy-salmon-roll": {
+      "name": "Křupavá lososová tempura rolka",
+      "description": "Losos a avokádo s úhoří glazurou a bílým sezamem."
+    },
+    "signature-beef-roll": {
+      "name": "Seaoul Signature hovězí rolka",
+      "description": "Hovězí, okurka a mrkev s korejskou pikantní omáčkou a sezamem."
+    },
+    "shrimp-avocado-platter": {
+      "name": "Krevetová tempura rolka + 4 avokádová nigiri",
+      "description": "Vytříbená kombinace pro milovníky kontrastů a svěžesti."
+    },
+    "salmon-eel-platter": {
+      "name": "Aburi lososová rolka + 4 úhoří Hosokami",
+      "description": "Bohatá a vyvážená kombinace opáleného lososa a úhoře."
+    },
+    "california-salmon-platter": {
+      "name": "California tobiko rolka + 4 lososová nigiri",
+      "description": "Příjemný talíř s elegantními lososovými tóny."
+    },
+    "hosomaki-trio": {
+      "name": "Hosomaki Trio set",
+      "description": "Losos, avokádo a úhoř.",
+      "details": [
+        "Celkem 18 kusů."
+      ]
+    },
+    "pork-bone-soup": {
+      "name": "Polévka z vepřových kostí",
+      "description": "Pomalu tažený vývar z vepřových kostí s hlubokou, hřejivou chutí."
+    },
+    "pork-kimchi-soup": {
+      "name": "Vepřová kimchi polévka",
+      "description": "Kimchi a vepřové v hřejivém, lehce nakyslém vývaru."
+    },
+    "beef-rib-soup": {
+      "name": "Polévka z hovězích žeber",
+      "description": "Křehká hovězí žebra v čirém, chuťově výrazném vývaru."
+    },
+    "seafood-soup": {
+      "name": "Pikantní polévka s mořskými plody",
+      "description": "Mořské plody a zelenina ve výrazně pikantním vývaru."
+    },
+    "beef-soup": {
+      "name": "Pikantní hovězí polévka",
+      "description": "Vydatná hovězí polévka s hlubokou hřejivou chutí chilli."
+    },
+    "doenjang-soup": {
+      "name": "Hovězí doenjang polévka",
+      "description": "Zemitý sójový vývar s hovězím a zeleninou."
+    },
+    "soft-tofu-soup": {
+      "name": "Polévka s jemným tofu a mořskými plody",
+      "description": "Jemné tofu a mořské plody v probublávajícím pikantním vývaru."
+    },
+    "raspberry": {
+      "name": "Malina"
+    },
+    "yuzu-lemon": {
+      "name": "Yuzu a citron"
+    },
+    "mango": {
+      "name": "Mango"
+    },
+    "jasmine-iced": {
+      "name": "Jasmínový ledový čaj s citronem"
+    },
+    "lychee-iced": {
+      "name": "Liči červený ledový čaj"
+    },
+    "pilsner": {
+      "name": "Pilsner Urquell 12°"
+    },
+    "kofola": {
+      "name": "Kofola"
+    },
+    "soft-drinks": {
+      "name": "Coca Cola, Cola Zero, Fanta, Sprite"
+    },
+    "romequell": {
+      "name": "Romequell"
+    },
+    "espresso": {
+      "name": "Espresso, Americano, Lungo"
+    },
+    "latte": {
+      "name": "Latte, Cappucino"
+    },
+    "jasmine": {
+      "name": "Jasmínový čaj"
+    },
+    "oolong": {
+      "name": "Oolong"
+    },
+    "red-tea": {
+      "name": "Červený čaj"
+    },
+    "yuzu-highball": {
+      "name": "Yuzu Highball"
+    },
+    "soju-mojito": {
+      "name": "Soju Mojito"
+    },
+    "sakura-fizz": {
+      "name": "Sakura Gin Fizz"
+    },
+    "seoul-sunset": {
+      "name": "Seoul Sunset"
+    },
+    "peach-punch": {
+      "name": "Makgeolli broskvový punč"
+    },
+    "soju": {
+      "name": "Soju",
+      "details": [
+        "alk. 16,9%",
+        "Chamisul, hroznové víno, citron, mango Apple Mango, jahoda, jogurt"
+      ]
+    },
+    "makgeolli": {
+      "name": "Makgeolli",
+      "details": [
+        "~7%"
+      ]
+    },
+    "milkis": {
+      "name": "Milkis",
+      "details": [
+        "Originál, meloun, jahoda"
+      ]
+    },
+    "haitai": {
+      "name": "Haitai",
+      "details": [
+        "Hroznové víno, hruška"
+      ]
+    },
+    "shots": {
+      "name": "Finlandia, Jaggermeister, Gin beefeater, Jamson, Jim Beam, Rum, Martini bianco"
+    },
+    "chardonney": {
+      "name": "Chardonney"
+    },
+    "cabernet": {
+      "name": "Cabernet Sauvignon"
+    }
+  },
+  "categories": {
+    "add-ons": {
+      "title": "Doplňky · Chuga",
+      "subtitle": "Gril na dřevěném uhlí · Hot pot",
+      "notes": [
+        "Pro plnější zážitek zkombinujte prémiové maso se setem ke sdílení."
+      ]
+    },
+    "charcoal-grill": {
+      "title": "Sety na dřevěném uhlí",
+      "subtitle": "Stvořeno ke sdílení",
+      "notes": [
+        "Doplňte zážitek korejskou pálenkou soju."
+      ]
+    },
+    "hot-pot": {
+      "title": "Hot pot · Jeongol",
+      "subtitle": "Pro společné stolování",
+      "notes": [
+        "Přidejte další talíř nebo zkombinujte hot pot se sushi."
+      ]
+    },
+    "rice-dolsot": {
+      "title": "Rýže & Dolsot",
+      "subtitle": "Smažená rýže · Bibimbap · Rýžové misky",
+      "notes": [
+        "Skvěle ladí s korejským rýžovým vínem, prémiovým čajem nebo malou specialitou doporučenou šéfkuchařem."
+      ]
+    },
+    "korean-kitchen-1": {
+      "title": "Korejská kuchyně I",
+      "subtitle": "Nudle · Smažené · Palačinky · Malá potěšení"
+    },
+    "korean-kitchen-2": {
+      "title": "Korejská kuchyně II",
+      "subtitle": "Klasika z pánve"
+    },
+    "sushi-1": {
+      "title": "Sushi I",
+      "subtitle": "Signature rolky"
+    },
+    "sushi-2": {
+      "title": "Sushi II",
+      "subtitle": "Kombinované talíře",
+      "notes": [
+        "Ideální jako předkrm ke sdílení nebo elegantní doplněk grilu a hot potu."
+      ]
+    },
+    "soups": {
+      "title": "Polévky & dušené speciality",
+      "subtitle": "Hřejivé vývary · Domácí speciality",
+      "notes": [
+        "Nejlépe chutná s dušenou rýží."
+      ]
+    },
+    "drinks": {
+      "title": "Nápoje"
+    },
+    "drinks-2": {
+      "title": "Nápoje II",
+      "notes": [
+        "Lahvové víno z denní nabídky."
+      ]
+    }
+  },
+  "groups": {
+    "premium-beef": "Prémiové hovězí",
+    "pork": "Vepřové",
+    "chicken": "Kuře",
+    "seafood": "Mořské plody",
+    "veggies": "Zelenina",
+    "noodles": "Nudle",
+    "fried": "Smažené",
+    "pancakes": "Palačinky a malá potěšení",
+    "soups": "Polévky",
+    "homemade": "Domácí limonády & ledové čaje",
+    "draft": "Čepované",
+    "softdrinks": "Nealkoholické nápoje",
+    "coffee-tea": "Káva & čaj",
+    "cocktails": "Koktejly",
+    "korean-drinks": "Korejské nápoje",
+    "shots": "Panáky",
+    "wine": "Víno"
+  },
+  "tags": {
+    "premium": "Prémiový výběr",
+    "chef": "Volba šéfkuchaře",
+    "favorite": "Oblíbené u hostů",
+    "recommended": "Doporučujeme",
+    "classic-sharing": "Klasika ke sdílení",
+    "best-sharing": "Ideální ke sdílení",
+    "signature": "Naše specialita",
+    "hearty": "Vydatná klasika",
+    "bold-spicy": "Výrazné & pikantní",
+    "bestseller": "Nejprodávanější",
+    "good-sharing": "Vhodné ke sdílení"
+  },
+  "portions": {
+    "fillet": "filet",
+    "platter": "talíř",
+    "4pc": "4 ks",
+    "4 pc": "4 ks"
+  },
+  "ui": {
+    "title": "Naše menu",
+    "subtitle": "Gril na dřevěném uhlí · Korejská kuchyně · Hot pot · Sushi",
+    "digital": "Digitální menu",
+    "pdf": "PDF menu",
+    "home": "Zpět na hlavní stránku",
+    "search": "Vyhledat jídlo nebo surovinu…",
+    "searchLabel": "Hledat v menu",
+    "clear": "Vymazat hledání",
+    "empty": "Nic jsme nenašli.",
+    "emptyHint": "Zkuste jiný název nebo kratší hledání.",
+    "categories": "Kategorie menu",
+    "language": "Jazyk menu",
+    "contents": "Složení setu",
+    "spicy": "Pikantní",
+    "allergens": "Máte alergii? V tomto menu nejsou uvedeny kódy alergenů. Před objednáním se prosím obraťte na obsluhu.",
+    "portionClarification": "PDF označuje hot poty jako porci pro jednu osobu, zároveň je sekce určena ke společnému stolování. Velikost porce si prosím ověřte u obsluhy.",
+    "results": "nalezených položek"
+  }
+}

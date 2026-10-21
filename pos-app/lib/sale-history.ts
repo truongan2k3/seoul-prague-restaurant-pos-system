@@ -15,7 +15,7 @@ export function resolveGuestSeatedAt(sale: SaleRecord): Date | undefined {
 
 export function formatHistoryDateTime(date: Date | undefined, language: LanguageCode): string {
   if (!date) return "—";
-  const locale = language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB";
+  const locale = language === "cs" ? "cs-CZ" : language === "vi" ? "vi-VN" : "en-GB";
   return date.toLocaleString(locale, {
     day: "2-digit",
     month: "short",

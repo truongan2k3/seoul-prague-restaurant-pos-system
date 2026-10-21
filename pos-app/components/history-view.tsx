@@ -167,7 +167,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
 
   const stats = useMemo(() => computeRevenueStats(filteredSales), [filteredSales]);
 
-  const dateNavLocale = language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB";
+  const dateNavLocale = language === "cs" ? "cs-CZ" : language === "vi" ? "vi-VN" : "en-GB";
 
   const dayLabel = useMemo(() => {
     const date = new Date(`${anchorDate}T12:00:00`);

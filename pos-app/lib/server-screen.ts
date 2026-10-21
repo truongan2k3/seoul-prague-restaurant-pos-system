@@ -53,9 +53,10 @@ export const DEFAULT_SERVER_SCREEN_CONFIG: ServerScreenConfig = {
   forceChineseMenuItemIds: [],
 };
 
-const LANG_SET = new Set<LanguageCode>(["en", "cs", "zh"]);
+const LANG_SET = new Set<LanguageCode>(["en", "cs", "vi"]);
 
 function asLanguage(value: unknown): LanguageCode | null {
+  if (value === "zh") return "vi";
   return typeof value === "string" && LANG_SET.has(value as LanguageCode)
     ? (value as LanguageCode)
     : null;
@@ -78,7 +79,8 @@ export function normalizeServerScreenLanguages(
   languages: LanguageCode[],
 ): LanguageCode[] {
   const unique: LanguageCode[] = [];
-  for (const lang of languages) {
+  for (const stored of languages) {
+    const lang = stored === "zh" ? "vi" : stored;
     if (!LANG_SET.has(lang) || unique.includes(lang)) continue;
     unique.push(lang);
   }
@@ -226,23 +228,23 @@ export const GRILL_FIRST_ORDER_COMPANIONS: Array<{
 }> = [
   {
     id: "banchan",
-    names: { en: "Banchan", cs: "Banchan", zh: "小菜" },
+    names: { vi: "Banchan", en: "Banchan", cs: "Banchan", zh: "小菜" },
   },
   {
     id: "lettuce",
-    names: { en: "Lettuce", cs: "Salát", zh: "生菜" },
+    names: { vi: "Rau xà lách", en: "Lettuce", cs: "Salát", zh: "生菜" },
   },
   {
     id: "garlic",
-    names: { en: "Garlic", cs: "Česnek", zh: "大蒜" },
+    names: { vi: "Tỏi", en: "Garlic", cs: "Česnek", zh: "大蒜" },
   },
   {
     id: "leek",
-    names: { en: "Leek salad", cs: "Pórkový salát", zh: "葱沙拉" },
+    names: { vi: "Salad tỏi tây", en: "Leek salad", cs: "Pórkový salát", zh: "葱沙拉" },
   },
   {
     id: "charcoal",
-    names: { en: "Charcoal", cs: "Dřevěné uhlí", zh: "木炭" },
+    names: { vi: "Than nướng", en: "Charcoal", cs: "Dřevěné uhlí", zh: "木炭" },
   },
 ];
 
@@ -460,7 +462,7 @@ export function formatReadyClock(
   if (!readyAt) return "";
   const date = typeof readyAt === "string" ? new Date(readyAt) : readyAt;
   if (Number.isNaN(date.getTime())) return "";
-  const locale = language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB";
+  const locale = language === "cs" ? "cs-CZ" : language === "vi" ? "vi-VN" : "en-GB";
   return date.toLocaleTimeString(locale, {
     hour: "2-digit",
     minute: "2-digit",
@@ -469,7 +471,7 @@ export function formatReadyClock(
 }
 
 export function formatServerScreenFooterDate(now: Date, language: LanguageCode): string {
-  const locale = language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-US";
+  const locale = language === "cs" ? "cs-CZ" : language === "vi" ? "vi-VN" : "en-US";
   return now.toLocaleDateString(locale, {
     weekday: "long",
     month: "long",
@@ -479,7 +481,7 @@ export function formatServerScreenFooterDate(now: Date, language: LanguageCode):
 }
 
 export function formatServerScreenFooterTime(now: Date, language: LanguageCode): string {
-  const locale = language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB";
+  const locale = language === "cs" ? "cs-CZ" : language === "vi" ? "vi-VN" : "en-GB";
   return now.toLocaleTimeString(locale, {
     hour: "2-digit",
     minute: "2-digit",

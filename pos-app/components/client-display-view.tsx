@@ -47,14 +47,16 @@ function useCfdLanguage() {
 
   useEffect(() => {
     const stored = localStorage.getItem(CFD_LANGUAGE_KEY);
-    if (stored === "en" || stored === "cs" || stored === "zh") {
-      setLanguageState(stored);
+    if (stored === "en" || stored === "cs" || stored === "vi" || stored === "zh") {
+      setLanguageState(stored === "zh" ? "vi" : stored);
+      if (stored === "zh") localStorage.setItem(CFD_LANGUAGE_KEY, "vi");
     }
   }, []);
 
   const setLanguage = useCallback((code: LanguageCode) => {
-    setLanguageState(code);
-    localStorage.setItem(CFD_LANGUAGE_KEY, code);
+    const next = code === "zh" ? "vi" : code;
+    setLanguageState(next);
+    localStorage.setItem(CFD_LANGUAGE_KEY, next);
   }, []);
 
   const translate = useCallback(
@@ -67,7 +69,7 @@ function useCfdLanguage() {
 
 function CfdClock({ language }: { language: LanguageCode }) {
   const [now, setNow] = useState<Date | null>(null);
-  const locale = language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-US";
+  const locale = language === "cs" ? "cs-CZ" : language === "vi" ? "vi-VN" : "en-US";
 
   useEffect(() => {
     setNow(new Date());

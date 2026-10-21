@@ -59,7 +59,11 @@ function readStoredTheme(): ThemeMode {
 function readStoredLanguage(): LanguageCode {
   if (typeof window === "undefined") return "en";
   const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
-  if (stored === "en" || stored === "cs" || stored === "zh") return stored;
+  if (stored === "zh") {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, "vi");
+    return "vi";
+  }
+  if (stored === "en" || stored === "cs" || stored === "vi") return stored;
   return "en";
 }
 
@@ -208,8 +212,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setLanguage = useCallback((lang: LanguageCode) => {
-    setLanguageState(lang);
-    localStorage.setItem(LANGUAGE_STORAGE_KEY, lang);
+    const next = lang === "zh" ? "vi" : lang;
+    setLanguageState(next);
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, next);
   }, []);
 
   const applyThemeToDocument = useCallback(

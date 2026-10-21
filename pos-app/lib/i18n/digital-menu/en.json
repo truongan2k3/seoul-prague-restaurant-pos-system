@@ -1,0 +1,38 @@
+{
+  "ui": {
+    "title": "Our menu",
+    "subtitle": "Charcoal grill · Korean cuisine · Hotpot · Sushi",
+    "digital": "Digital Menu",
+    "pdf": "PDF Menu",
+    "home": "Back to home",
+    "search": "Search dishes or descriptions…",
+    "searchLabel": "Search the menu",
+    "clear": "Clear search",
+    "empty": "No dishes found.",
+    "emptyHint": "Try another name or a shorter search.",
+    "categories": "Menu categories",
+    "language": "Menu language",
+    "contents": "Set contents",
+    "spicy": "Spicy",
+    "allergens": "Allergies? Allergen codes are not listed in this menu. Please ask our staff before ordering.",
+    "portionClarification": "The PDF describes these hotpots as single-serve while the section is labelled for the table. Please confirm the serving size with our staff.",
+    "results": "matching items"
+  },
+  "items": {},
+  "categories": {},
+  "groups": {},
+  "portions": {},
+  "tags": {
+    "premium": "Premium selection",
+    "chef": "Chef’s choice",
+    "favorite": "Guest favorite",
+    "recommended": "Recommended",
+    "classic-sharing": "Classic sharing",
+    "best-sharing": "Best for sharing",
+    "signature": "Signature",
+    "hearty": "Hearty classic",
+    "bold-spicy": "Bold & spicy",
+    "bestseller": "Best seller",
+    "good-sharing": "Good for sharing"
+  }
+}

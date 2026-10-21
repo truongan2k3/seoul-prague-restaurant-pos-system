@@ -17,17 +17,17 @@ const COPY = {
     occupied: "Obsazeno", reserved: "Rezervováno", unavailable: "Rezervované / nedostupné", blocked: "Blokováno", next: "Další stůl přibližně za", ask: "Zeptejte se obsluhy",
     ready: "Volný nyní", over: "Překročena odhadovaná doba", remaining: "zbývá", live: "Živě", offline: "Obnovování spojení",
     updated: "Aktualizace", details: "Přehled stolů", estimate: "Odhad · závisí na skutečném odchodu hostů", lock: "Blokovat", unlock: "Odblokovat" },
-  zh: { title: "实时餐桌空位", available: "可用餐桌", large: "大桌", small: "小桌",
-    occupied: "使用中", reserved: "已预订", unavailable: "预订 / 暂不可用", blocked: "暂不可用", next: "预计下一桌等待", ask: "请咨询员工",
-    ready: "可立即入座", over: "已超出预计时间", remaining: "剩余", live: "实时", offline: "正在重新连接",
-    updated: "更新", details: "餐桌概览", estimate: "仅为预计 · 以客人实际离席为准", lock: "暂停使用", unlock: "恢复使用" },
+  vi: { title: "Tình trạng bàn trực tiếp", available: "Bàn trống", large: "Bàn lớn", small: "Bàn nhỏ",
+    occupied: "Có khách", reserved: "Đã đặt", unavailable: "Đã đặt / chưa sẵn sàng", blocked: "Tạm khóa", next: "Dự kiến có bàn tiếp theo", ask: "Hỏi nhân viên",
+    ready: "Sẵn sàng đón khách", over: "Đã quá thời gian dự kiến", remaining: "còn lại", live: "Trực tiếp", offline: "Đang kết nối lại",
+    updated: "Cập nhật", details: "Chi tiết từng bàn", estimate: "Ước tính · tùy thời điểm khách rời bàn", lock: "Khóa bàn", unlock: "Mở khóa" },
 } as const;
 
 const TONE = { available: "text-emerald-300", occupied: "text-rose-300", reserved: "text-amber-200", blocked: "text-zinc-400" };
 const DETAIL_COPY = {
   en: { guests: "guests", suggest: "Available now", bookings: "Upcoming bookings", seating: "Next seating", noReady: "No tables ready now", seats: "seats" },
   cs: { guests: "hostů", suggest: "Volné nyní", bookings: "Následující rezervace", seating: "Další usazení", noReady: "Žádný stůl nyní není volný", seats: "míst" },
-  zh: { guests: "位客人", suggest: "当前空桌", bookings: "接下来的预订", seating: "下次可入座", noReady: "暂无空桌", seats: "位" },
+  vi: { guests: "khách", suggest: "Bàn đang trống", bookings: "Lượt đặt bàn tiếp theo", seating: "Lượt đón khách tiếp theo", noReady: "Chưa có bàn trống", seats: "chỗ" },
 } as const;
 
 export function TableAvailabilityDashboard({ tables, reservations, language, staff = false, enabled = true, realtimeConnected, refreshKey = 0 }: {
@@ -35,8 +35,8 @@ export function TableAvailabilityDashboard({ tables, reservations, language, sta
   staff?: boolean; enabled?: boolean; realtimeConnected: boolean;
   refreshKey?: number;
 }) {
-  const copy = COPY[language];
-  const detail = DETAIL_COPY[language];
+  const copy = COPY[language === "zh" ? "vi" : language];
+  const detail = DETAIL_COPY[language === "zh" ? "vi" : language];
   const { settings } = useSettings();
   const { status: connectionStatus } = useConnectionStatus();
   const reduced = useReducedMotion();

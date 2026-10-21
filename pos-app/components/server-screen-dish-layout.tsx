@@ -83,8 +83,8 @@ export function ServerScreenDishLayout({entries,selections,externalSelected,nowM
   const reduceMotion=useReducedMotion();
   const quantityLabels=language==="cs"
     ? {choose:"Vybrat počet",less:"Snížit počet",more:"Zvýšit počet"}
-    : language==="zh"
-      ? {choose:"选择数量",less:"减少数量",more:"增加数量"}
+    : language==="vi"
+      ? {choose:"Chọn số lượng",less:"Giảm số lượng",more:"Tăng số lượng"}
       : {choose:"Choose quantity",less:"Decrease quantity",more:"Increase quantity"};
   const dishes=useMemo(()=>{
     const grouped=new Map<string,{name:string;nameZh:string|null;outstanding:number;first:string;tables:Map<string,TableEntry>}>();

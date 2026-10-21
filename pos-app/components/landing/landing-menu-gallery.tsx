@@ -11,7 +11,8 @@ import { resolveSocialLinks, socialPlatformLabel } from "@/lib/website/social-li
 import type { WebsiteContent, WebsiteSocialLink } from "@/lib/website/types";
 
 export function LandingMenuPreview({ content }: { content: WebsiteContent }) {
-  const hasPdfs = content.menuPdfs.length > 0;
+  const pdfs = content.menuPdfs.filter((pdf) => pdf.language !== "zh");
+  const hasPdfs = pdfs.length > 0;
 
   return (
     <section id="menu" className="bg-[#0B0B0C] py-24 lg:py-32">
@@ -24,7 +25,7 @@ export function LandingMenuPreview({ content }: { content: WebsiteContent }) {
             </h2>
             {hasPdfs ? (
               <p className="mt-3 text-sm text-white/55">
-                Flip through Czech, English, and Chinese menu books.
+                Flip through our Czech and English menu books.
               </p>
             ) : null}
           </div>
@@ -38,7 +39,7 @@ export function LandingMenuPreview({ content }: { content: WebsiteContent }) {
 
         {hasPdfs ? (
           <div className="min-h-[480px] rounded-2xl border border-white/10 bg-[#121214] p-4 sm:p-6 lg:min-h-[640px] lg:p-10">
-            <MenuPdfFlipbook pdfs={content.menuPdfs} initialLanguage="en" />
+            <MenuPdfFlipbook pdfs={pdfs} initialLanguage="en" />
           </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-white/15 bg-[#121214] px-6 py-16 text-center">

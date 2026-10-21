@@ -1,0 +1,514 @@
+{
+  "items": {
+    "a5-wagyu": {
+      "name": "Wagyu Nhật A5"
+    },
+    "wagyu-short-rib": {
+      "name": "Sườn bò Wagyu Úc cao cấp"
+    },
+    "wagyu-ribeye": {
+      "name": "Thăn lưng Wagyu Úc"
+    },
+    "angus-sirloin": {
+      "name": "Thăn ngoại Angus Mỹ"
+    },
+    "wagyu-bone-in": {
+      "name": "Sườn bò Wagyu Úc có xương"
+    },
+    "beef-tongue": {
+      "name": "Lưỡi bò Angus"
+    },
+    "marinated-short-rib": {
+      "name": "Sườn bò vân mỡ ướp"
+    },
+    "smoked-brisket": {
+      "name": "Ức bò Angus hun khói"
+    },
+    "enoki-rolls": {
+      "name": "Bò cuộn nấm kim châm"
+    },
+    "wagyu-platter": {
+      "name": "Đĩa Wagyu tổng hợp"
+    },
+    "thick-pork-belly": {
+      "name": "Ba chỉ heo cắt dày"
+    },
+    "marinated-pork-belly": {
+      "name": "Ba chỉ heo ướp"
+    },
+    "mapo-pork-rib": {
+      "name": "Sườn heo ướp Mapo"
+    },
+    "pork-platter": {
+      "name": "Đĩa thịt heo tổng hợp"
+    },
+    "pork-collar": {
+      "name": "Nạc vai heo"
+    },
+    "chicken-thigh": {
+      "name": "Đùi gà ướp"
+    },
+    "grilled-eel": {
+      "name": "Lươn nướng"
+    },
+    "tiger-prawns": {
+      "name": "Tôm sú"
+    },
+    "vegetable-platter": {
+      "name": "Đĩa rau củ (4 loại)"
+    },
+    "busan-set": {
+      "name": "Set Busan",
+      "description": "Khởi đầu cân bằng để khám phá món nướng.",
+      "details": [
+        "Thăn lưng Wagyu Úc 100g",
+        "Sườn bò vân mỡ ướp 100g",
+        "Ba chỉ heo 100g",
+        "Nạc cổ heo 100g",
+        "Đùi gà ướp 100g"
+      ]
+    },
+    "jeju-set": {
+      "name": "Set đảo Jeju",
+      "description": "Trải nghiệm đa dạng kết hợp thịt và hải sản.",
+      "details": [
+        "Thăn lưng Wagyu Úc 100g",
+        "Sườn heo ướp Mapo 100g",
+        "Đùi gà ướp 100g",
+        "Tôm sú 100g",
+        "Lươn 50g",
+        "Mực 50g"
+      ]
+    },
+    "gangwon-set": {
+      "name": "Set Gangwon-do",
+      "description": "Set đậm vị thịt bò với mức giá hấp dẫn.",
+      "details": [
+        "Thăn lưng Wagyu Úc 100g",
+        "Sườn bò vân mỡ ướp 100g",
+        "Lõi vai Angus 100g",
+        "Lưỡi bò Angus 100g",
+        "Ức bò hun khói 100g"
+      ]
+    },
+    "seoul-set": {
+      "name": "Set Seoul Signature",
+      "description": "Set nướng sang trọng nhất, dành cho những bữa ăn đáng nhớ.",
+      "details": [
+        "Wagyu Nhật A5 100g",
+        "Thăn ngoại Angus 100g",
+        "Sườn bò vân mỡ ướp 100g",
+        "Thăn lưng Angus 100g",
+        "Lõi vai Angus 100g"
+      ]
+    },
+    "seafood-hotpot": {
+      "name": "Lẩu hải sản",
+      "description": "Nước dùng hải sản một phần ăn với rau củ, đậu phụ và vị ấm áp trong từng thìa."
+    },
+    "pork-bone-hotpot": {
+      "name": "Lẩu xương heo",
+      "description": "Nước dùng xương heo một phần ăn, đậm đà ấm áp cùng thịt mềm."
+    },
+    "kimchi-hotpot": {
+      "name": "Lẩu kimchi",
+      "description": "Nước dùng kimchi một phần ăn, chua dịu ấm nồng và cay cân bằng."
+    },
+    "nine-grid": {
+      "name": "Set lẩu chín ngăn",
+      "description": "Bò thái lát, cừu thái lát, cải thảo, rau xanh theo mùa, nấm kim châm, đậu phụ, khoai tây lát, bò viên và tôm.",
+      "details": [
+        "Đĩa đầy đủ cho một bàn lẩu trọn vẹn.",
+        "Chọn nước dùng: Xương heo truyền thống · Ma-la cay · Cà chua"
+      ]
+    },
+    "seafood-rice": {
+      "name": "Cơm rang hải sản",
+      "description": "Cơm rang trên chảo wok với hải sản, trứng và hương khói nhẹ."
+    },
+    "wagyu-rice": {
+      "name": "Cơm rang Wagyu",
+      "description": "Cơm rang wok thơm lừng, đậm vị bò Wagyu."
+    },
+    "vegetarian-bibimbap": {
+      "name": "Cơm trộn thố đá chay",
+      "description": "Rau củ theo mùa trên cơm, dùng cùng sốt bibimbap của nhà hàng."
+    },
+    "kimchi-rice": {
+      "name": "Cơm rang kimchi",
+      "description": "Cơm kimchi đậm đà, cay cân bằng và sâu vị."
+    },
+    "beef-rice-bowl": {
+      "name": "Cơm tô thịt bò",
+      "description": "Thịt bò mềm trên cơm trắng, phủ sốt đậm đà."
+    },
+    "beef-bibimbap": {
+      "name": "Cơm trộn thố đá thịt bò",
+      "description": "Cơm thố đá nóng xèo cùng thịt bò, rau củ và trứng."
+    },
+    "pork-rice-bowl": {
+      "name": "Cơm tô ba chỉ heo",
+      "description": "Ba chỉ heo nướng trên cơm, thơm vị caramel đậm đà."
+    },
+    "chicken-bibimbap": {
+      "name": "Cơm trộn thố đá thịt gà",
+      "description": "Cơm thố đá cùng thịt gà và rau củ tươi sắc."
+    },
+    "jajangmyeon": {
+      "name": "Mì tương đen Jajangmyeon",
+      "description": "Mì tương đen truyền thống với hậu vị đậm đà."
+    },
+    "seafood-ramen": {
+      "name": "Mì ramen hải sản cay",
+      "description": "Hải sản, rau củ và vị ớt nồng trong nước dùng đầy đặn."
+    },
+    "kimchi-ramen": {
+      "name": "Mì ramen kimchi",
+      "description": "Mì dai trong nước dùng kimchi chua nhẹ, cay ấm dễ chịu."
+    },
+    "beef-ramen": {
+      "name": "Mì ramen thịt bò cay",
+      "description": "Bò cay và mì trong nước dùng ớt đậm đà, ấm nồng."
+    },
+    "fried-shrimp": {
+      "name": "Tôm chiên giòn",
+      "description": "Tôm chiên vàng, giòn nhẹ tinh tế."
+    },
+    "fried-chicken": {
+      "name": "Gà chiên miếng kiểu Hàn",
+      "description": "Miếng gà giòn rụm với lớp sốt bóng đậm vị."
+    },
+    "kimchi-pancake": {
+      "name": "Bánh kimchi chiên",
+      "description": "Bánh kimchi viền giòn, vị cay hài hòa."
+    },
+    "seafood-pancake": {
+      "name": "Bánh hải sản chiên",
+      "description": "Bánh mặn với tôm, mực và rau củ."
+    },
+    "dumplings": {
+      "name": "Mandu áp chảo",
+      "description": "Mandu áp chảo vàng đáy, nhân thịt heo mọng nước. Thích hợp để chia sẻ."
+    },
+    "kimchi-pork-stir-fry": {
+      "name": "Ba chỉ heo xào kimchi",
+      "description": "Ba chỉ heo và kimchi đậm đà, cay mặn hấp dẫn."
+    },
+    "braised-short-ribs": {
+      "name": "Sườn bò hầm",
+      "description": "Sườn bò hầm chậm với lớp sốt bóng, sâu vị."
+    },
+    "cheese-tteokbokki": {
+      "name": "Gà tteokbokki phô mai",
+      "description": "Gà cay và bánh gạo, phủ phô mai nóng chảy."
+    },
+    "stir-fried-rice-cakes": {
+      "name": "Bánh gạo xào",
+      "description": "Bánh gạo dai trong sốt cay đậm vị."
+    },
+    "spicy-pork-stir-fry": {
+      "name": "Ba chỉ heo xào cay",
+      "description": "Ba chỉ heo thơm khói, vị ngọt cay cùng lớp sốt caramel hóa."
+    },
+    "squid-pork": {
+      "name": "Mực nướng cùng ba chỉ heo",
+      "description": "Kết hợp thịt và hải sản đậm đà, hoàn thiện trên bếp nướng."
+    },
+    "japchae": {
+      "name": "Miến xào Japchae",
+      "description": "Miến mềm mượt xào rau củ, ngọt dịu vị đậu nành."
+    },
+    "beef-octopus": {
+      "name": "Bò xào bạch tuộc baby",
+      "description": "Bò mềm và bạch tuộc baby, đậm vị gia vị Hàn Quốc."
+    },
+    "yukhoe": {
+      "name": "Yukhoe – bò sống tẩm vị",
+      "description": "Bò Wagyu sống tẩm vị nhẹ nhàng, điểm hương mè tinh tế."
+    },
+    "tempura-shrimp-roll": {
+      "name": "Cuộn tôm tempura",
+      "description": "Nhân cà rốt, dưa chuột và tôm; phủ bơ, sốt lươn và mayonnaise cam chanh."
+    },
+    "eel-uramaki": {
+      "name": "Uramaki lươn nướng",
+      "description": "Nhân bơ, thanh cua và dưa chuột; bọc lươn, hoàn thiện với mè và sốt lươn."
+    },
+    "aburi-salmon": {
+      "name": "Cuộn cá hồi Aburi",
+      "description": "Bơ, thanh cua và dưa chuột; phủ cá hồi khò, sốt nướng và trứng cá tobiko."
+    },
+    "california-roll": {
+      "name": "Cuộn California tobiko",
+      "description": "Bơ, thanh cua và cá hồi; hoàn thiện với thảo mộc tobiko và sốt lươn."
+    },
+    "crispy-salmon-roll": {
+      "name": "Cuộn cá hồi tempura giòn",
+      "description": "Cá hồi và bơ cùng sốt lươn và mè trắng."
+    },
+    "signature-beef-roll": {
+      "name": "Cuộn bò Seaoul Signature",
+      "description": "Bò, dưa chuột và cà rốt; hoàn thiện với sốt cay Hàn Quốc và mè."
+    },
+    "shrimp-avocado-platter": {
+      "name": "Cuộn tôm tempura + 4 nigiri bơ",
+      "description": "Kết hợp tinh tế dành cho khách yêu sự tương phản và tươi mát."
+    },
+    "salmon-eel-platter": {
+      "name": "Cuộn cá hồi Aburi + 4 Hosokami lươn",
+      "description": "Kết hợp đậm đà, cân bằng giữa cá hồi khò và lươn."
+    },
+    "california-salmon-platter": {
+      "name": "Cuộn California tobiko + 4 nigiri cá hồi",
+      "description": "Đĩa sushi dễ thưởng thức với vị cá hồi thanh nhã."
+    },
+    "hosomaki-trio": {
+      "name": "Set Hosomaki Trio",
+      "description": "Cá hồi, bơ và lươn.",
+      "details": [
+        "Tổng cộng 18 miếng."
+      ]
+    },
+    "pork-bone-soup": {
+      "name": "Canh xương heo",
+      "description": "Nước dùng xương heo ninh chậm, đậm đà và ấm áp."
+    },
+    "pork-kimchi-soup": {
+      "name": "Canh kimchi thịt heo",
+      "description": "Kimchi và thịt heo trong nước dùng chua dịu, ấm nồng."
+    },
+    "beef-rib-soup": {
+      "name": "Canh sườn bò",
+      "description": "Sườn bò mềm trong nước dùng trong, đậm vị."
+    },
+    "seafood-soup": {
+      "name": "Canh hải sản cay",
+      "description": "Hải sản và rau củ trong nước dùng cay đậm đà."
+    },
+    "beef-soup": {
+      "name": "Canh thịt bò cay",
+      "description": "Canh bò đậm đà với vị ớt ấm nồng, sâu vị."
+    },
+    "doenjang-soup": {
+      "name": "Canh tương đậu Doenjang thịt bò",
+      "description": "Nước dùng tương đậu mộc mạc cùng thịt bò và rau củ."
+    },
+    "soft-tofu-soup": {
+      "name": "Canh đậu phụ non hải sản",
+      "description": "Đậu phụ mềm mượt và hải sản trong nước dùng cay sôi nóng."
+    },
+    "raspberry": {
+      "name": "Mâm xôi"
+    },
+    "yuzu-lemon": {
+      "name": "Yuzu và chanh vàng"
+    },
+    "mango": {
+      "name": "Xoài"
+    },
+    "jasmine-iced": {
+      "name": "Trà nhài chanh đá"
+    },
+    "lychee-iced": {
+      "name": "Hồng trà vải đá"
+    },
+    "pilsner": {
+      "name": "Pilsner Urquell 12°"
+    },
+    "kofola": {
+      "name": "Kofola"
+    },
+    "soft-drinks": {
+      "name": "Coca Cola, Cola Zero, Fanta, Sprite"
+    },
+    "romequell": {
+      "name": "Romequell"
+    },
+    "espresso": {
+      "name": "Espresso, Americano, Lungo"
+    },
+    "latte": {
+      "name": "Latte, Cappucino"
+    },
+    "jasmine": {
+      "name": "Trà nhài"
+    },
+    "oolong": {
+      "name": "Trà ô long"
+    },
+    "red-tea": {
+      "name": "Hồng trà"
+    },
+    "yuzu-highball": {
+      "name": "Yuzu Highball"
+    },
+    "soju-mojito": {
+      "name": "Soju Mojito"
+    },
+    "sakura-fizz": {
+      "name": "Sakura Gin Fizz"
+    },
+    "seoul-sunset": {
+      "name": "Seoul Sunset"
+    },
+    "peach-punch": {
+      "name": "Punch đào Makgeolli"
+    },
+    "soju": {
+      "name": "Soju",
+      "details": [
+        "độ cồn 16,9%",
+        "Chamisul, nho, chanh vàng, xoài táo, dâu tây, sữa chua"
+      ]
+    },
+    "makgeolli": {
+      "name": "Makgeolli",
+      "details": [
+        "~7%"
+      ]
+    },
+    "milkis": {
+      "name": "Milkis",
+      "details": [
+        "Nguyên bản, dưa lưới, dâu tây"
+      ]
+    },
+    "haitai": {
+      "name": "Haitai",
+      "details": [
+        "Nho, lê"
+      ]
+    },
+    "shots": {
+      "name": "Finlandia, Jaggermeister, Gin beefeater, Jamson, Jim Beam, Rum, Martini bianco"
+    },
+    "chardonney": {
+      "name": "Chardonney"
+    },
+    "cabernet": {
+      "name": "Cabernet Sauvignon"
+    }
+  },
+  "categories": {
+    "add-ons": {
+      "title": "Gọi thêm · Chuga",
+      "subtitle": "Nướng than hoa · Lẩu",
+      "notes": [
+        "Để bàn ăn thêm trọn vẹn, kết hợp thịt cao cấp với set chia sẻ."
+      ]
+    },
+    "charcoal-grill": {
+      "title": "Set nướng than hoa",
+      "subtitle": "Dành để cùng thưởng thức",
+      "notes": [
+        "Hoàn thiện trải nghiệm với rượu Soju Hàn Quốc."
+      ]
+    },
+    "hot-pot": {
+      "title": "Lẩu · Jeongol",
+      "subtitle": "Dành cho cả bàn",
+      "notes": [
+        "Gọi thêm một đĩa hoặc kết hợp lẩu với sushi để trải nghiệm trọn vẹn."
+      ]
+    },
+    "rice-dolsot": {
+      "title": "Cơm & Dolsot",
+      "subtitle": "Cơm rang · Bibimbap · Cơm tô",
+      "notes": [
+        "Thưởng thức cùng rượu gạo Hàn, trà cao cấp hoặc món nhỏ do bếp trưởng gợi ý."
+      ]
+    },
+    "korean-kitchen-1": {
+      "title": "Bếp Hàn I",
+      "subtitle": "Mì · Món chiên · Bánh áp chảo · Món nhỏ"
+    },
+    "korean-kitchen-2": {
+      "title": "Bếp Hàn II",
+      "subtitle": "Những món xào kinh điển"
+    },
+    "sushi-1": {
+      "title": "Sushi I",
+      "subtitle": "Những cuộn sushi đặc trưng"
+    },
+    "sushi-2": {
+      "title": "Sushi II",
+      "subtitle": "Đĩa sushi kết hợp",
+      "notes": [
+        "Lý tưởng làm món khai vị chia sẻ hoặc điểm nhấn tinh tế bên món nướng và lẩu."
+      ]
+    },
+    "soups": {
+      "title": "Canh & món hầm",
+      "subtitle": "Nước dùng ấm lòng · Đặc sản nhà hàng",
+      "notes": [
+        "Ngon nhất khi dùng cùng cơm trắng."
+      ]
+    },
+    "drinks": {
+      "title": "Đồ uống"
+    },
+    "drinks-2": {
+      "title": "Đồ uống II",
+      "notes": [
+        "Vang chai theo lựa chọn trong ngày."
+      ]
+    }
+  },
+  "groups": {
+    "premium-beef": "Bò cao cấp",
+    "pork": "Thịt heo",
+    "chicken": "Thịt gà",
+    "seafood": "Hải sản",
+    "veggies": "Rau củ",
+    "noodles": "Mì",
+    "fried": "Món chiên",
+    "pancakes": "Bánh áp chảo & món nhỏ",
+    "soups": "Canh",
+    "homemade": "Nước trái cây & trà đá nhà làm",
+    "draft": "Đồ uống tươi từ vòi",
+    "softdrinks": "Nước giải khát",
+    "coffee-tea": "Cà phê & trà",
+    "cocktails": "Cocktail",
+    "korean-drinks": "Đồ uống Hàn Quốc",
+    "shots": "Rượu shot",
+    "wine": "Rượu vang"
+  },
+  "tags": {
+    "premium": "Lựa chọn cao cấp",
+    "chef": "Bếp trưởng chọn",
+    "favorite": "Khách yêu thích",
+    "recommended": "Đề xuất",
+    "classic-sharing": "Set chia sẻ kinh điển",
+    "best-sharing": "Lý tưởng để chia sẻ",
+    "signature": "Đặc trưng",
+    "hearty": "Kinh điển đậm đà",
+    "bold-spicy": "Đậm đà & cay",
+    "bestseller": "Bán chạy",
+    "good-sharing": "Thích hợp chia sẻ"
+  },
+  "portions": {
+    "fillet": "phi lê",
+    "platter": "đĩa",
+    "4pc": "4 miếng",
+    "4 pc": "4 con"
+  },
+  "ui": {
+    "title": "Thực đơn",
+    "subtitle": "Nướng than hoa · Ẩm thực Hàn · Lẩu · Sushi",
+    "digital": "Thực đơn điện tử",
+    "pdf": "Thực đơn PDF",
+    "home": "Về trang chủ",
+    "search": "Tìm tên món hoặc mô tả…",
+    "searchLabel": "Tìm trong thực đơn",
+    "clear": "Xóa tìm kiếm",
+    "empty": "Không tìm thấy món phù hợp.",
+    "emptyHint": "Thử tên khác hoặc từ khóa ngắn hơn.",
+    "categories": "Danh mục thực đơn",
+    "language": "Ngôn ngữ thực đơn",
+    "contents": "Set bao gồm",
+    "spicy": "Cay",
+    "allergens": "Bạn có dị ứng? Thực đơn này không ghi mã chất gây dị ứng. Vui lòng hỏi nhân viên trước khi gọi món.",
+    "portionClarification": "PDF ghi các món lẩu là một phần ăn, đồng thời đề mục ghi dành cho cả bàn. Vui lòng xác nhận khẩu phần với nhân viên.",
+    "results": "món phù hợp"
+  }
+}

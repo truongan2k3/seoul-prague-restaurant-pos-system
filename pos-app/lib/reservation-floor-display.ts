@@ -8,7 +8,7 @@ export function formatFloorTableAssignmentLabel(input: {
   language?: string;
 }): string {
   const lang = input.language ?? "en";
-  const time = new Intl.DateTimeFormat(lang === "zh" ? "zh-CN" : lang === "cs" ? "cs-CZ" : "en-GB", {
+  const time = new Intl.DateTimeFormat(lang === "vi" ? "vi-VN" : lang === "cs" ? "cs-CZ" : "en-GB", {
     timeZone: "Europe/Prague",
     hour: "2-digit",
     minute: "2-digit",

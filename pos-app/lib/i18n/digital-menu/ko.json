@@ -1,0 +1,514 @@
+{
+  "items": {
+    "a5-wagyu": {
+      "name": "일본산 A5 와규"
+    },
+    "wagyu-short-rib": {
+      "name": "프리미엄 호주산 와규 갈비"
+    },
+    "wagyu-ribeye": {
+      "name": "호주산 와규 립아이"
+    },
+    "angus-sirloin": {
+      "name": "미국산 앵거스 채끝"
+    },
+    "wagyu-bone-in": {
+      "name": "호주산 와규 뼈갈비"
+    },
+    "beef-tongue": {
+      "name": "앵거스 우설"
+    },
+    "marinated-short-rib": {
+      "name": "양념 마블링 소갈비"
+    },
+    "smoked-brisket": {
+      "name": "훈제 앵거스 양지"
+    },
+    "enoki-rolls": {
+      "name": "소고기 팽이버섯말이"
+    },
+    "wagyu-platter": {
+      "name": "와규 모둠"
+    },
+    "thick-pork-belly": {
+      "name": "두툼한 삼겹살"
+    },
+    "marinated-pork-belly": {
+      "name": "양념 삼겹살"
+    },
+    "mapo-pork-rib": {
+      "name": "마포 양념 돼지갈비"
+    },
+    "pork-platter": {
+      "name": "돼지고기 모둠"
+    },
+    "pork-collar": {
+      "name": "돼지 목살"
+    },
+    "chicken-thigh": {
+      "name": "양념 닭다리살"
+    },
+    "grilled-eel": {
+      "name": "장어구이"
+    },
+    "tiger-prawns": {
+      "name": "타이거 새우"
+    },
+    "vegetable-platter": {
+      "name": "채소 모둠 (4종)"
+    },
+    "busan-set": {
+      "name": "부산 세트",
+      "description": "균형 있게 즐기는 그릴 입문 세트.",
+      "details": [
+        "호주산 와규 립아이 100g",
+        "양념 마블링 소갈비 100g",
+        "삼겹살 100g",
+        "돼지 목살 100g",
+        "양념 닭다리살 100g"
+      ]
+    },
+    "jeju-set": {
+      "name": "제주 아일랜드 세트",
+      "description": "육류와 해산물을 다양하게 즐기는 푸짐한 세트.",
+      "details": [
+        "호주산 와규 립아이 100g",
+        "마포 양념 돼지갈비 100g",
+        "양념 닭다리살 100g",
+        "타이거 새우 100g",
+        "장어 50g",
+        "오징어 50g"
+      ]
+    },
+    "gangwon-set": {
+      "name": "강원도 세트",
+      "description": "풍성한 소고기 구성과 뛰어난 가치를 담은 세트.",
+      "details": [
+        "호주산 와규 립아이 100g",
+        "양념 마블링 소갈비 100g",
+        "앵거스 척롤 100g",
+        "앵거스 우설 100g",
+        "훈제 양지 100g"
+      ]
+    },
+    "seoul-set": {
+      "name": "서울 시그니처 세트",
+      "description": "기억에 남는 식사를 위한 가장 고급스러운 그릴 세트.",
+      "details": [
+        "일본산 A5 와규 100g",
+        "앵거스 채끝 100g",
+        "양념 마블링 소갈비 100g",
+        "앵거스 립아이 100g",
+        "앵거스 척롤 100g"
+      ]
+    },
+    "seafood-hotpot": {
+      "name": "해물전골",
+      "description": "채소와 두부가 어우러져 한 숟갈마다 편안함을 전하는 1인분 해물 육수."
+    },
+    "pork-bone-hotpot": {
+      "name": "돼지뼈 전골",
+      "description": "깊고 구수한 육수와 부드러운 고기를 담은 1인분 돼지뼈 육수."
+    },
+    "kimchi-hotpot": {
+      "name": "김치전골",
+      "description": "산뜻한 감칠맛과 균형 잡힌 매운맛의 1인분 김치 육수."
+    },
+    "nine-grid": {
+      "name": "9칸 모둠 세트",
+      "description": "소고기와 양고기 슬라이스, 배추, 제철 잎채소, 팽이버섯, 두부, 감자 슬라이스, 소고기 완자, 새우.",
+      "details": [
+        "만족스러운 전골 식사를 위한 완성된 모둠.",
+        "육수 선택: 정통 돼지뼈 육수 · 매운 마라 육수 · 토마토 육수"
+      ]
+    },
+    "seafood-rice": {
+      "name": "해물볶음밥",
+      "description": "해산물과 달걀을 넣어 은은한 불향을 살린 웍 볶음밥."
+    },
+    "wagyu-rice": {
+      "name": "와규 볶음밥",
+      "description": "향긋한 웍 볶음밥에 담긴 진한 와규의 풍미."
+    },
+    "vegetarian-bibimbap": {
+      "name": "채소 돌솥비빔밥",
+      "description": "밥 위에 제철 채소와 매장 특제 비빔밥 소스를 곁들였습니다."
+    },
+    "kimchi-rice": {
+      "name": "김치볶음밥",
+      "description": "균형 잡힌 매운맛과 깊은 감칠맛의 김치볶음밥."
+    },
+    "beef-rice-bowl": {
+      "name": "소고기 덮밥",
+      "description": "따뜻한 밥 위에 부드러운 소고기와 감칠맛 나는 글레이즈."
+    },
+    "beef-bibimbap": {
+      "name": "소고기 돌솥비빔밥",
+      "description": "뜨겁게 지글거리는 돌솥밥에 소고기, 채소, 달걀을 곁들였습니다."
+    },
+    "pork-rice-bowl": {
+      "name": "삼겹살 덮밥",
+      "description": "진하게 캐러멜화한 풍미의 구운 삼겹살 덮밥."
+    },
+    "chicken-bibimbap": {
+      "name": "닭고기 돌솥비빔밥",
+      "description": "닭고기와 다채로운 채소를 곁들인 돌솥밥."
+    },
+    "jajangmyeon": {
+      "name": "짜장면",
+      "description": "진하고 깊은 감칠맛의 정통 짜장면."
+    },
+    "seafood-ramen": {
+      "name": "매운 해물라면",
+      "description": "해산물과 채소에 진한 고추의 매운맛을 더한 깊은 육수."
+    },
+    "kimchi-ramen": {
+      "name": "김치라면",
+      "description": "탱글한 면과 산뜻한 김치 육수, 편안하게 즐기는 매운맛."
+    },
+    "beef-ramen": {
+      "name": "매운 소고기라면",
+      "description": "매콤한 소고기와 면을 진하고 따뜻한 고추 육수에 담았습니다."
+    },
+    "fried-shrimp": {
+      "name": "바삭한 새우튀김",
+      "description": "가볍고 섬세하게 바삭한 황금빛 새우튀김."
+    },
+    "fried-chicken": {
+      "name": "한입 순살치킨",
+      "description": "바삭한 닭고기에 윤기 나는 감칠맛을 입혔습니다."
+    },
+    "kimchi-pancake": {
+      "name": "김치전",
+      "description": "가장자리는 바삭하고 김치의 매운맛은 균형 있게 살린 전."
+    },
+    "seafood-pancake": {
+      "name": "해물전",
+      "description": "새우, 오징어, 채소가 어우러진 해물전."
+    },
+    "dumplings": {
+      "name": "군만두",
+      "description": "바닥은 노릇하고 돼지고기 소는 촉촉한 만두. 함께 나누기 좋습니다."
+    },
+    "kimchi-pork-stir-fry": {
+      "name": "김치 삼겹살볶음",
+      "description": "삼겹살과 김치의 진한 감칠맛에 매콤함을 더했습니다."
+    },
+    "braised-short-ribs": {
+      "name": "소갈비찜",
+      "description": "천천히 조려 깊고 윤기 있는 맛을 낸 소갈비."
+    },
+    "cheese-tteokbokki": {
+      "name": "치즈 떡볶이 치킨",
+      "description": "매콤한 닭고기와 떡에 녹인 치즈를 곁들였습니다."
+    },
+    "stir-fried-rice-cakes": {
+      "name": "떡볶음",
+      "description": "쫄깃한 떡을 생기 있는 매운 소스에 볶았습니다."
+    },
+    "spicy-pork-stir-fry": {
+      "name": "매운 삼겹살볶음",
+      "description": "불향 나는 삼겹살을 달콤하고 매콤하게 볶아 캐러멜화한 풍미를 더했습니다."
+    },
+    "squid-pork": {
+      "name": "오징어 삼겹살구이",
+      "description": "육류와 해산물의 조합을 그릴 위에서 풍미 있게 완성했습니다."
+    },
+    "japchae": {
+      "name": "잡채",
+      "description": "부드러운 당면에 채소와 달콤한 간장 풍미를 더해 볶았습니다."
+    },
+    "beef-octopus": {
+      "name": "소고기 주꾸미볶음",
+      "description": "부드러운 소고기와 주꾸미에 진한 한국식 양념을 더했습니다."
+    },
+    "yukhoe": {
+      "name": "와규 육회",
+      "description": "생 와규를 섬세하게 양념해 고소한 참깨 향을 살렸습니다."
+    },
+    "tempura-shrimp-roll": {
+      "name": "새우튀김 롤",
+      "description": "당근, 오이, 새우를 넣고 아보카도, 장어 글레이즈, 시트러스 마요로 마무리했습니다."
+    },
+    "eel-uramaki": {
+      "name": "장어 우라마키",
+      "description": "아보카도, 게맛살, 오이를 넣고 장어로 감싼 뒤 참깨와 장어 소스를 곁들였습니다."
+    },
+    "aburi-salmon": {
+      "name": "아부리 연어 롤",
+      "description": "아보카도, 게맛살, 오이에 겉을 구운 연어, 구운 소스, 토비코를 올렸습니다."
+    },
+    "california-roll": {
+      "name": "캘리포니아 토비코 롤",
+      "description": "아보카도, 게맛살, 연어에 토비코 허브와 장어 글레이즈를 곁들였습니다."
+    },
+    "crispy-salmon-roll": {
+      "name": "바삭한 연어튀김 롤",
+      "description": "연어와 아보카도에 장어 글레이즈와 흰 참깨를 곁들였습니다."
+    },
+    "signature-beef-roll": {
+      "name": "Seaoul 시그니처 소고기 롤",
+      "description": "소고기, 오이, 당근에 한국식 매운 소스와 참깨를 곁들였습니다."
+    },
+    "shrimp-avocado-platter": {
+      "name": "새우튀김 롤 + 아보카도 니기리 4개",
+      "description": "대비되는 맛과 신선함을 즐기는 분들을 위한 세련된 조합."
+    },
+    "salmon-eel-platter": {
+      "name": "아부리 연어 롤 + 장어 Hosokami 4개",
+      "description": "겉을 구운 연어와 장어의 풍성하고 균형 잡힌 조합."
+    },
+    "california-salmon-platter": {
+      "name": "캘리포니아 토비코 롤 + 연어 니기리 4개",
+      "description": "누구나 편안하게 즐기는 은은한 연어 풍미의 모둠."
+    },
+    "hosomaki-trio": {
+      "name": "호소마키 트리오 세트",
+      "description": "연어, 아보카도, 장어.",
+      "details": [
+        "총 18개."
+      ]
+    },
+    "pork-bone-soup": {
+      "name": "돼지뼈탕",
+      "description": "오래 끓여 깊고 편안한 풍미를 낸 돼지뼈 육수."
+    },
+    "pork-kimchi-soup": {
+      "name": "돼지고기 김치찌개",
+      "description": "김치와 돼지고기를 산뜻하고 따뜻한 국물에 담았습니다."
+    },
+    "beef-rib-soup": {
+      "name": "갈비탕",
+      "description": "맑고 감칠맛 나는 육수에 부드러운 소갈비."
+    },
+    "seafood-soup": {
+      "name": "매운 해물탕",
+      "description": "해산물과 채소를 선명하게 매운 국물에 담았습니다."
+    },
+    "beef-soup": {
+      "name": "매운 소고기탕",
+      "description": "진한 소고기 국물에 따뜻하고 깊은 고추의 매운맛."
+    },
+    "doenjang-soup": {
+      "name": "소고기 된장찌개",
+      "description": "소고기와 채소를 넣은 구수한 된장 국물."
+    },
+    "soft-tofu-soup": {
+      "name": "해물 순두부찌개",
+      "description": "보글보글 끓는 매콤한 육수에 부드러운 두부와 해산물."
+    },
+    "raspberry": {
+      "name": "라즈베리"
+    },
+    "yuzu-lemon": {
+      "name": "유자 & 레몬"
+    },
+    "mango": {
+      "name": "망고"
+    },
+    "jasmine-iced": {
+      "name": "재스민 레몬 아이스티"
+    },
+    "lychee-iced": {
+      "name": "리치 레드 아이스티"
+    },
+    "pilsner": {
+      "name": "Pilsner Urquell 12°"
+    },
+    "kofola": {
+      "name": "Kofola"
+    },
+    "soft-drinks": {
+      "name": "Coca Cola, Cola Zero, Fanta, Sprite"
+    },
+    "romequell": {
+      "name": "Romequell"
+    },
+    "espresso": {
+      "name": "에스프레소, 아메리카노, 룽고"
+    },
+    "latte": {
+      "name": "라테, 카푸치노"
+    },
+    "jasmine": {
+      "name": "재스민차"
+    },
+    "oolong": {
+      "name": "우롱차"
+    },
+    "red-tea": {
+      "name": "홍차"
+    },
+    "yuzu-highball": {
+      "name": "Yuzu Highball"
+    },
+    "soju-mojito": {
+      "name": "Soju Mojito"
+    },
+    "sakura-fizz": {
+      "name": "Sakura Gin Fizz"
+    },
+    "seoul-sunset": {
+      "name": "Seoul Sunset"
+    },
+    "peach-punch": {
+      "name": "막걸리 피치 펀치"
+    },
+    "soju": {
+      "name": "소주",
+      "details": [
+        "알코올 16,9%",
+        "참이슬, 포도, 레몬, 애플망고, 딸기, 요구르트"
+      ]
+    },
+    "makgeolli": {
+      "name": "막걸리",
+      "details": [
+        "~7%"
+      ]
+    },
+    "milkis": {
+      "name": "Milkis",
+      "details": [
+        "오리지널, 멜론, 딸기"
+      ]
+    },
+    "haitai": {
+      "name": "Haitai",
+      "details": [
+        "포도, 배"
+      ]
+    },
+    "shots": {
+      "name": "Finlandia, Jaggermeister, Gin beefeater, Jamson, Jim Beam, Rum, Martini bianco"
+    },
+    "chardonney": {
+      "name": "Chardonney"
+    },
+    "cabernet": {
+      "name": "Cabernet Sauvignon"
+    }
+  },
+  "categories": {
+    "add-ons": {
+      "title": "추가 메뉴",
+      "subtitle": "숯불구이 · 전골",
+      "notes": [
+        "더 풍성한 식사를 위해 프리미엄 부위와 나눔 세트를 함께 즐겨 보세요."
+      ]
+    },
+    "charcoal-grill": {
+      "title": "숯불구이 세트",
+      "subtitle": "함께 나누는 즐거움",
+      "notes": [
+        "한국 소주를 곁들여 즐거움을 완성해 보세요."
+      ]
+    },
+    "hot-pot": {
+      "title": "전골",
+      "subtitle": "함께 둘러앉는 식탁",
+      "notes": [
+        "추가 모둠을 주문하거나 전골에 스시를 곁들여 더욱 풍성하게 즐겨 보세요."
+      ]
+    },
+    "rice-dolsot": {
+      "title": "밥 & 돌솥",
+      "subtitle": "볶음밥 · 비빔밥 · 덮밥",
+      "notes": [
+        "한국 쌀술, 프리미엄 차 또는 셰프가 추천하는 작은 별미와 잘 어울립니다."
+      ]
+    },
+    "korean-kitchen-1": {
+      "title": "한식 I",
+      "subtitle": "면 · 튀김 · 전 · 작은 별미"
+    },
+    "korean-kitchen-2": {
+      "title": "한식 II",
+      "subtitle": "볶음 요리의 정석"
+    },
+    "sushi-1": {
+      "title": "스시 I",
+      "subtitle": "시그니처 롤"
+    },
+    "sushi-2": {
+      "title": "스시 II",
+      "subtitle": "페어링 모둠",
+      "notes": [
+        "함께 나누는 전채 요리나 숯불구이와 전골에 곁들이는 메뉴로 좋습니다."
+      ]
+    },
+    "soups": {
+      "title": "국 & 찌개",
+      "subtitle": "편안한 육수 · 매장 특선",
+      "notes": [
+        "따뜻한 쌀밥과 함께 즐기면 더욱 좋습니다."
+      ]
+    },
+    "drinks": {
+      "title": "음료"
+    },
+    "drinks-2": {
+      "title": "음료 II",
+      "notes": [
+        "병 와인은 당일 셀렉션으로 준비됩니다."
+      ]
+    }
+  },
+  "groups": {
+    "premium-beef": "프리미엄 소고기",
+    "pork": "돼지고기",
+    "chicken": "닭고기",
+    "seafood": "해산물",
+    "veggies": "채소",
+    "noodles": "면",
+    "fried": "튀김",
+    "pancakes": "전 & 작은 별미",
+    "soups": "국",
+    "homemade": "수제 레모네이드 & 아이스티",
+    "draft": "생맥주 & 탭 음료",
+    "softdrinks": "청량음료",
+    "coffee-tea": "커피 & 차",
+    "cocktails": "칵테일",
+    "korean-drinks": "한국 음료",
+    "shots": "샷",
+    "wine": "와인"
+  },
+  "tags": {
+    "premium": "프리미엄 셀렉션",
+    "chef": "셰프 추천",
+    "favorite": "고객 인기",
+    "recommended": "추천",
+    "classic-sharing": "클래식 나눔 세트",
+    "best-sharing": "함께 즐기기 좋은 세트",
+    "signature": "시그니처",
+    "hearty": "든든한 클래식",
+    "bold-spicy": "진하고 매콤하게",
+    "bestseller": "베스트셀러",
+    "good-sharing": "나누기 좋은 메뉴"
+  },
+  "portions": {
+    "fillet": "필레",
+    "platter": "모둠",
+    "4pc": "4개",
+    "4 pc": "4마리"
+  },
+  "ui": {
+    "title": "메뉴",
+    "subtitle": "숯불구이 · 한식 · 전골 · 스시",
+    "digital": "디지털 메뉴",
+    "pdf": "PDF 메뉴",
+    "home": "홈으로",
+    "search": "메뉴명 또는 설명 검색…",
+    "searchLabel": "메뉴 검색",
+    "clear": "검색 지우기",
+    "empty": "일치하는 메뉴가 없습니다.",
+    "emptyHint": "다른 메뉴명이나 짧은 검색어로 다시 찾아보세요.",
+    "categories": "메뉴 카테고리",
+    "language": "메뉴 언어",
+    "contents": "세트 구성",
+    "spicy": "매운맛",
+    "allergens": "알레르기가 있으신가요? 이 메뉴에는 알레르기 코드가 표시되어 있지 않습니다. 주문 전 직원에게 문의해 주세요.",
+    "portionClarification": "PDF에는 전골을 1인분으로 설명하면서 해당 섹션은 함께 나누는 메뉴로 표기되어 있습니다. 제공 인원은 직원에게 확인해 주세요.",
+    "results": "개 메뉴"
+  }
+}

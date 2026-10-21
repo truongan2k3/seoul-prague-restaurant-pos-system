@@ -7,7 +7,7 @@ export const LANGUAGE_OPTIONS: {
 }[] = [
   { code: "en", flag: "🇬🇧", label: "English" },
   { code: "cs", flag: "🇨🇿", label: "Czech" },
-  { code: "zh", flag: "🇨🇳", label: "Chinese" },
+  { code: "vi", flag: "🇻🇳", label: "Tiếng Việt" },
 ];
 
 export function languageLabel(code: LanguageCode): string {

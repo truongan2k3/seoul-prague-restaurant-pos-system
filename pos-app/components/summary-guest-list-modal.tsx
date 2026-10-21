@@ -497,7 +497,7 @@ export function SummaryGuestListModal({
 function formatReservedShort(value: Date, language: string): string {
   try {
     return new Intl.DateTimeFormat(
-      language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB",
+      language === "cs" ? "cs-CZ" : language === "vi" ? "vi-VN" : "en-GB",
       {
         month: "2-digit",
         day: "2-digit",

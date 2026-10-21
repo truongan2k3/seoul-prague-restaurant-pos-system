@@ -1,0 +1,1350 @@
+{
+  "source": "Menu-ENGLISH.pdf",
+  "currency": "CZK",
+  "categories": [
+    {
+      "id": "add-ons",
+      "title": "Add-ons · Chuga",
+      "page": 2,
+      "subtitle": "Charcoal grill · Hot pot",
+      "groups": [
+        {
+          "id": "premium-beef",
+          "title": "Premium beef",
+          "items": [
+            {
+              "id": "a5-wagyu",
+              "name": "Japanese A5 Wagyu",
+              "prices": [
+                {
+                  "czk": 998,
+                  "portion": "100g"
+                }
+              ],
+              "tags": [
+                "premium"
+              ]
+            },
+            {
+              "id": "wagyu-short-rib",
+              "name": "Premium Australian Wagyu Short Rib",
+              "prices": [
+                {
+                  "czk": 698,
+                  "portion": "150g"
+                }
+              ]
+            },
+            {
+              "id": "wagyu-ribeye",
+              "name": "Australian Wagyu Ribeye",
+              "prices": [
+                {
+                  "czk": 680,
+                  "portion": "150g"
+                }
+              ],
+              "tags": [
+                "chef"
+              ]
+            },
+            {
+              "id": "angus-sirloin",
+              "name": "U.S. Angus Sirloin",
+              "prices": [
+                {
+                  "czk": 658,
+                  "portion": "150g"
+                }
+              ]
+            },
+            {
+              "id": "wagyu-bone-in",
+              "name": "Australian Wagyu Bone-In Short Rib",
+              "prices": [
+                {
+                  "czk": 598,
+                  "portion": "150g"
+                }
+              ]
+            },
+            {
+              "id": "beef-tongue",
+              "name": "Angus Beef Tongue",
+              "prices": [
+                {
+                  "czk": 298,
+                  "portion": "100g"
+                }
+              ]
+            },
+            {
+              "id": "marinated-short-rib",
+              "name": "Marinated Marbled Beef Short Rib",
+              "prices": [
+                {
+                  "czk": 580,
+                  "portion": "200g"
+                }
+              ]
+            },
+            {
+              "id": "smoked-brisket",
+              "name": "Smoked Angus Beef Brisket",
+              "prices": [
+                {
+                  "czk": 450,
+                  "portion": "150g"
+                }
+              ]
+            },
+            {
+              "id": "enoki-rolls",
+              "name": "Beef Enoki Rolls",
+              "prices": [
+                {
+                  "czk": 380,
+                  "portion": "4pc"
+                }
+              ]
+            },
+            {
+              "id": "wagyu-platter",
+              "name": "Wagyu Assorted Platter",
+              "prices": [
+                {
+                  "czk": 1398,
+                  "portion": "300g"
+                }
+              ],
+              "tags": [
+                "favorite"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "pork",
+          "title": "Pork",
+          "items": [
+            {
+              "id": "thick-pork-belly",
+              "name": "Thick-Cut Pork Belly",
+              "prices": [
+                {
+                  "czk": 458,
+                  "portion": "200g"
+                }
+              ]
+            },
+            {
+              "id": "marinated-pork-belly",
+              "name": "Marinated Pork Belly",
+              "prices": [
+                {
+                  "czk": 498,
+                  "portion": "300g"
+                }
+              ],
+              "tags": [
+                "chef"
+              ]
+            },
+            {
+              "id": "mapo-pork-rib",
+              "name": "Mapo Marinated Pork Rib",
+              "prices": [
+                {
+                  "czk": 498,
+                  "portion": "300g"
+                }
+              ],
+              "spicy": true
+            },
+            {
+              "id": "pork-platter",
+              "name": "Pork Assorted Platter",
+              "prices": [
+                {
+                  "czk": 598,
+                  "portion": "300g"
+                }
+              ],
+              "tags": [
+                "favorite"
+              ]
+            },
+            {
+              "id": "pork-collar",
+              "name": "Pork Collar",
+              "prices": [
+                {
+                  "czk": 458,
+                  "portion": "200g"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "chicken",
+          "title": "Chicken",
+          "items": [
+            {
+              "id": "chicken-thigh",
+              "name": "Marinated Chicken Thigh",
+              "prices": [
+                {
+                  "czk": 328,
+                  "portion": "200g"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "seafood",
+          "title": "Seafood",
+          "items": [
+            {
+              "id": "grilled-eel",
+              "name": "Grilled Eel",
+              "prices": [
+                {
+                  "czk": 698,
+                  "portion": "fillet"
+                }
+              ]
+            },
+            {
+              "id": "tiger-prawns",
+              "name": "Tiger Prawns",
+              "prices": [
+                {
+                  "czk": 498,
+                  "portion": "4 pc"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "veggies",
+          "title": "Veggies",
+          "items": [
+            {
+              "id": "vegetable-platter",
+              "name": "Vegetable Platter (4 variety)",
+              "prices": [
+                {
+                  "czk": 198,
+                  "portion": "platter"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": [
+        "For a fuller table experience, combine premium cuts with a sharing set."
+      ]
+    },
+    {
+      "id": "charcoal-grill",
+      "title": "Charcoal grill set",
+      "page": 3,
+      "subtitle": "Designed for sharing",
+      "groups": [
+        {
+          "id": "grill-sets",
+          "title": "",
+          "items": [
+            {
+              "id": "busan-set",
+              "name": "Busan Set",
+              "prices": [
+                {
+                  "czk": 1498
+                }
+              ],
+              "description": "A balanced introduction to the grill.",
+              "details": [
+                "Australian Wagyu Ribeye 100g",
+                "Marinated Marbled Beef Short Rib 100g",
+                "Pork Belly 100g",
+                "Pork Neck 100g",
+                "Marinated Chicken Thigh 100g"
+              ],
+              "tags": [
+                "recommended",
+                "classic-sharing"
+              ]
+            },
+            {
+              "id": "jeju-set",
+              "name": "Jeju Island Set",
+              "prices": [
+                {
+                  "czk": 1799
+                }
+              ],
+              "description": "A generous land-and-sea experience with variety.",
+              "details": [
+                "Australian Wagyu Ribeye 100g",
+                "Mapo Marinated Pork Rib 100g",
+                "Marinated Chicken Thigh 100g",
+                "Tiger Prawns 100g",
+                "Eel 50g",
+                "Squid 50g"
+              ],
+              "tags": [
+                "best-sharing"
+              ]
+            },
+            {
+              "id": "gangwon-set",
+              "name": "Gangwon-do Set",
+              "prices": [
+                {
+                  "czk": 2199
+                }
+              ],
+              "description": "A richer beef-forward set with outstanding value.",
+              "details": [
+                "Australian Wagyu Ribeye 100g",
+                "Marinated Marbled Beef Short Rib 100g",
+                "Angus Chuck Roll 100g",
+                "Angus Beef Tongue 100g",
+                "Smoked Beef Brisket 100g"
+              ],
+              "tags": [
+                "recommended",
+                "chef"
+              ]
+            },
+            {
+              "id": "seoul-set",
+              "name": "Seoul Signature Set",
+              "prices": [
+                {
+                  "czk": 2399
+                }
+              ],
+              "description": "Our most luxurious grill set, crafted for memorable tables.",
+              "details": [
+                "A5 Japanese Wagyu 100g",
+                "Angus Sirloin 100g",
+                "Marinated Marbled Beef Short Rib 100g",
+                "Angus Ribeye 100g",
+                "Angus Chuck Roll 100g"
+              ],
+              "tags": [
+                "premium"
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": [
+        "Complete experience with Korean liquer Soju."
+      ]
+    },
+    {
+      "id": "hot-pot",
+      "title": "Hot pot · Jeongol",
+      "page": 4,
+      "subtitle": "Designed for the table",
+      "groups": [
+        {
+          "id": "hot-pots",
+          "title": "",
+          "items": [
+            {
+              "id": "seafood-hotpot",
+              "name": "Seafood Hot Pot",
+              "prices": [
+                {
+                  "czk": 980
+                }
+              ],
+              "description": "Single-serve seafood broth with vegetables, tofu, and comfort in every spoon."
+            },
+            {
+              "id": "pork-bone-hotpot",
+              "name": "Pork Bone Hotpot",
+              "prices": [
+                {
+                  "czk": 680
+                }
+              ],
+              "description": "Single-serve pork bone broth with deep savory warmth and tender meat.",
+              "tags": [
+                "hearty"
+              ]
+            },
+            {
+              "id": "kimchi-hotpot",
+              "name": "Kimchi Hotpot",
+              "prices": [
+                {
+                  "czk": 680
+                }
+              ],
+              "description": "Single-serve kimchi broth with a tangy warming character and balanced heat.",
+              "tags": [
+                "bold-spicy"
+              ],
+              "spicy": true
+            },
+            {
+              "id": "nine-grid",
+              "name": "Nine-grid platter set",
+              "prices": [
+                {
+                  "czk": 699,
+                  "portion": "500g"
+                }
+              ],
+              "description": "Sliced beef, sliced lamb, napa cabbage, seasonal greens, enoki mushrooms, tofu, sliced potatoes, beef meatballs, and shrimp.",
+              "details": [
+                "A complete platter for a satisfying hotpot table.",
+                "Choose your broth: Classic pork bone broth · Ma-la spicy broth · Tomato broth"
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": [
+        "Add an extra platter or combine hotpot with sushi for the full experience."
+      ]
+    },
+    {
+      "id": "rice-dolsot",
+      "title": "Rice & Dolsot",
+      "page": 5,
+      "subtitle": "Fried rice · Bibimbap · Rice bowls",
+      "groups": [
+        {
+          "id": "rice-dishes",
+          "title": "",
+          "items": [
+            {
+              "id": "seafood-rice",
+              "name": "Seafood Fried Rice",
+              "prices": [
+                {
+                  "czk": 258
+                }
+              ],
+              "description": "Wok-fried rice with seafood, egg, and gentle smokiness."
+            },
+            {
+              "id": "wagyu-rice",
+              "name": "Wagyu fried Rice",
+              "prices": [
+                {
+                  "czk": 358
+                }
+              ],
+              "description": "Rich wagyu flavor through fragrant wok-seared rice.",
+              "tags": [
+                "chef"
+              ]
+            },
+            {
+              "id": "vegetarian-bibimbap",
+              "name": "Vegetarian Dolsot Bibimbap",
+              "prices": [
+                {
+                  "czk": 228
+                }
+              ],
+              "description": "Seasonal vegetables over rice with house bibimbap sauce."
+            },
+            {
+              "id": "kimchi-rice",
+              "name": "Kimchi Fried Rice",
+              "prices": [
+                {
+                  "czk": 198
+                }
+              ],
+              "description": "Savory kimchi rice with balanced heat and depth.",
+              "spicy": true
+            },
+            {
+              "id": "beef-rice-bowl",
+              "name": "Beef Rice Bowl",
+              "prices": [
+                {
+                  "czk": 278
+                }
+              ],
+              "description": "Tender beef over steamed rice with savory glaze."
+            },
+            {
+              "id": "beef-bibimbap",
+              "name": "Beef Dolsot Bibimbap",
+              "prices": [
+                {
+                  "czk": 268
+                }
+              ],
+              "description": "Sizzling stone pot rice with beef, vegetables, and egg.",
+              "tags": [
+                "favorite"
+              ]
+            },
+            {
+              "id": "pork-rice-bowl",
+              "name": "Pork Belly Rice Bowl",
+              "prices": [
+                {
+                  "czk": 278
+                }
+              ],
+              "description": "Grilled pork belly over rice with rich caramelized flavor."
+            },
+            {
+              "id": "chicken-bibimbap",
+              "name": "Chicken Dolsot Bibimbap",
+              "prices": [
+                {
+                  "czk": 278
+                }
+              ],
+              "description": "Stone pot rice with chicken and vibrant vegetables."
+            }
+          ]
+        }
+      ],
+      "notes": [
+        "Best pair with Korean rice wine, premium tea, or a chef-recommended small comforts dish."
+      ]
+    },
+    {
+      "id": "korean-kitchen-1",
+      "title": "Korean kitchen I",
+      "page": 6,
+      "subtitle": "Noodles · Fried · Pancakes · Small comforts",
+      "groups": [
+        {
+          "id": "noodles",
+          "title": "Noodles",
+          "items": [
+            {
+              "id": "jajangmyeon",
+              "name": "Jajangmyeon",
+              "prices": [
+                {
+                  "czk": 268
+                }
+              ],
+              "description": "Classic black bean noodles with a rich savory finish.",
+              "tags": [
+                "signature"
+              ]
+            },
+            {
+              "id": "seafood-ramen",
+              "name": "Spicy Seafood Ramen",
+              "prices": [
+                {
+                  "czk": 360
+                }
+              ],
+              "description": "Seafood, vegetables, and bold chili warmth in a deeply satisfying broth.",
+              "spicy": true
+            },
+            {
+              "id": "kimchi-ramen",
+              "name": "Kimchi Ramen",
+              "prices": [
+                {
+                  "czk": 260
+                }
+              ],
+              "description": "Springy noodles in a tangy kimchi broth with comforting spice.",
+              "spicy": true
+            },
+            {
+              "id": "beef-ramen",
+              "name": "Spicy Beef Ramen",
+              "prices": [
+                {
+                  "czk": 358
+                }
+              ],
+              "description": "Spicy beef and noodles in a rich warming chili broth.",
+              "spicy": true
+            }
+          ]
+        },
+        {
+          "id": "fried",
+          "title": "Fried",
+          "items": [
+            {
+              "id": "fried-shrimp",
+              "name": "Crispy Fried Shrimp",
+              "prices": [
+                {
+                  "czk": 360
+                }
+              ],
+              "description": "Lightly crisp, golden shrimp with a delicate crunch."
+            },
+            {
+              "id": "fried-chicken",
+              "name": "Korean Fried Chicken Bites",
+              "prices": [
+                {
+                  "czk": 268
+                }
+              ],
+              "description": "Crunchy chicken bites with a glossy savory finish."
+            }
+          ],
+          "tags": [
+            "favorite"
+          ]
+        },
+        {
+          "id": "pancakes",
+          "title": "Pancakes & small comforts",
+          "items": [
+            {
+              "id": "kimchi-pancake",
+              "name": "Kimchi Pancake",
+              "prices": [
+                {
+                  "czk": 198
+                }
+              ],
+              "description": "Crisp-edged pancake layered with kimchi and balanced heat.",
+              "spicy": true
+            },
+            {
+              "id": "seafood-pancake",
+              "name": "Seafood Pancake",
+              "prices": [
+                {
+                  "czk": 268
+                }
+              ],
+              "description": "A savory pancake with shrimp, squid, and vegetables."
+            },
+            {
+              "id": "dumplings",
+              "name": "Pan-Fried Dumplings",
+              "prices": [
+                {
+                  "czk": 178
+                }
+              ],
+              "description": "Golden-bottom dumplings with juicy pork filling. Ideal for sharing."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "korean-kitchen-2",
+      "title": "Korean kitchen II",
+      "page": 7,
+      "subtitle": "Stir-fried classics",
+      "groups": [
+        {
+          "id": "stir-fried",
+          "title": "",
+          "items": [
+            {
+              "id": "kimchi-pork-stir-fry",
+              "name": "Kimchi Pork Belly Stir-Fry",
+              "prices": [
+                {
+                  "czk": 298
+                }
+              ],
+              "description": "Bold pork belly and kimchi with a savory, spicy edge.",
+              "spicy": true
+            },
+            {
+              "id": "braised-short-ribs",
+              "name": "Braised Beef Short Ribs",
+              "prices": [
+                {
+                  "czk": 680
+                }
+              ],
+              "description": "Slow-braised short ribs with a deep glossy glaze.",
+              "tags": [
+                "signature"
+              ]
+            },
+            {
+              "id": "cheese-tteokbokki",
+              "name": "Cheese Tteokbokki Chicken",
+              "prices": [
+                {
+                  "czk": 680
+                }
+              ],
+              "description": "Spicy chicken and rice cakes finished with melted cheese.",
+              "tags": [
+                "favorite"
+              ],
+              "spicy": true
+            },
+            {
+              "id": "stir-fried-rice-cakes",
+              "name": "Stir-Fried Race Cakes",
+              "prices": [
+                {
+                  "czk": 260
+                }
+              ],
+              "description": "Chewy rice cakes in a lively, spicy sauce."
+            },
+            {
+              "id": "spicy-pork-stir-fry",
+              "name": "Spicy Stir-Fried Pork Belly",
+              "prices": [
+                {
+                  "czk": 450
+                }
+              ],
+              "description": "Smoky pork belly tossed in sweet heat with a caramelized finish.",
+              "spicy": true
+            },
+            {
+              "id": "squid-pork",
+              "name": "Grilled Squid with Pork Belly",
+              "prices": [
+                {
+                  "czk": 680
+                }
+              ],
+              "description": "A savory land-and-sea pairing finished over the grill."
+            },
+            {
+              "id": "japchae",
+              "name": "Japchae Glass Noodles",
+              "prices": [
+                {
+                  "czk": 298
+                }
+              ],
+              "description": "Silky glass noodles stir-fried with vegetables and soy sweetness."
+            },
+            {
+              "id": "beef-octopus",
+              "name": "Stir-Fried Beef & Baby Octopus",
+              "prices": [
+                {
+                  "czk": 728
+                }
+              ],
+              "description": "Tender beef and baby octopus with bold Korean spice."
+            },
+            {
+              "id": "yukhoe",
+              "name": "Yukhoe Seasoned Raw Beef",
+              "prices": [
+                {
+                  "czk": 580
+                }
+              ],
+              "description": "Delicately seasoned raw wagyu beef with refined sesame notes.",
+              "tags": [
+                "premium"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sushi-1",
+      "title": "Sushi I",
+      "page": 8,
+      "subtitle": "Signature rolls",
+      "groups": [
+        {
+          "id": "signature-rolls",
+          "title": "",
+          "items": [
+            {
+              "id": "tempura-shrimp-roll",
+              "name": "Tempura Shrimp Roll",
+              "prices": [
+                {
+                  "czk": 298
+                }
+              ],
+              "description": "Carrot, cucumber, and shrimp inside, topped with avocado and finished with eel glaze and citrus mayo.",
+              "tags": [
+                "favorite"
+              ]
+            },
+            {
+              "id": "eel-uramaki",
+              "name": "Grilled Eel Uramaki",
+              "prices": [
+                {
+                  "czk": 318
+                }
+              ],
+              "description": "Avocado, crab stick, and cucumber inside, wrapped with eel and finished with sesame and eel sauce.",
+              "tags": [
+                "chef"
+              ]
+            },
+            {
+              "id": "aburi-salmon",
+              "name": "Aburi Salmon Roll",
+              "prices": [
+                {
+                  "czk": 328
+                }
+              ],
+              "description": "Avocado, crab stick, and cucumber, topped with seared salmon, baked sauce, and tobiko.",
+              "tags": [
+                "signature"
+              ]
+            },
+            {
+              "id": "california-roll",
+              "name": "California Tobiko Roll",
+              "prices": [
+                {
+                  "czk": 268
+                }
+              ],
+              "description": "Avocado, crab stick, and salmon, finished with tobiko herbs and eel glaze."
+            },
+            {
+              "id": "crispy-salmon-roll",
+              "name": "Crispy Tempura Salmon Roll",
+              "prices": [
+                {
+                  "czk": 298
+                }
+              ],
+              "description": "Salmon and avocado with eel glaze and white sesame."
+            },
+            {
+              "id": "signature-beef-roll",
+              "name": "Seaoul Signature Beef Roll",
+              "prices": [
+                {
+                  "czk": 318
+                }
+              ],
+              "description": "Beef, cucumber, and carrot, finished with Korean spicy sauce and sesame.",
+              "tags": [
+                "premium"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sushi-2",
+      "title": "Sushi II",
+      "page": 9,
+      "subtitle": "Pairing platters",
+      "groups": [
+        {
+          "id": "sushi-platters",
+          "title": "",
+          "items": [
+            {
+              "id": "shrimp-avocado-platter",
+              "name": "Tempura Shrimp Roll + 4 avocado nigiri",
+              "prices": [
+                {
+                  "czk": 398
+                }
+              ],
+              "description": "A refined pairing for guests who enjoy contrast and freshness."
+            },
+            {
+              "id": "salmon-eel-platter",
+              "name": "Aburi Salmon Roll + 4 Eel Hosokami",
+              "prices": [
+                {
+                  "czk": 428
+                }
+              ],
+              "description": "A rich and balanced combination of seared salmon and eel."
+            },
+            {
+              "id": "california-salmon-platter",
+              "name": "California Tobiko Roll + 4 Salmon Nigiri",
+              "prices": [
+                {
+                  "czk": 428
+                }
+              ],
+              "description": "A guest-friendly platter with elegant salmon notes.",
+              "tags": [
+                "bestseller"
+              ]
+            },
+            {
+              "id": "hosomaki-trio",
+              "name": "Hosomaki Trio Set",
+              "prices": [
+                {
+                  "czk": 399
+                }
+              ],
+              "description": "Salmon, Avocado, and Eel.",
+              "details": [
+                "18 pieces total."
+              ],
+              "tags": [
+                "good-sharing"
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": [
+        "Ideal as a shared starter or as an elegant addition to charcoal grill and hotpot."
+      ]
+    },
+    {
+      "id": "soups",
+      "title": "Soups & Stews",
+      "page": 10,
+      "subtitle": "Comforting broths · House specialties",
+      "groups": [
+        {
+          "id": "soups",
+          "title": "Soups",
+          "items": [
+            {
+              "id": "pork-bone-soup",
+              "name": "Pork Bone Soup",
+              "prices": [
+                {
+                  "czk": 268
+                }
+              ],
+              "description": "Slow-simmered pork bone broth with deep comforting richness.",
+              "tags": [
+                "signature"
+              ]
+            },
+            {
+              "id": "pork-kimchi-soup",
+              "name": "Pork Kimchi Soup",
+              "prices": [
+                {
+                  "czk": 280
+                }
+              ],
+              "description": "Kimchi and pork in a warming tangy broth.",
+              "spicy": true
+            },
+            {
+              "id": "beef-rib-soup",
+              "name": "Beef Rib Soup",
+              "prices": [
+                {
+                  "czk": 360
+                }
+              ],
+              "description": "Tender beef rib in a clear, savory broth."
+            },
+            {
+              "id": "seafood-soup",
+              "name": "Spicy Seafood Soup",
+              "prices": [
+                {
+                  "czk": 280
+                }
+              ],
+              "description": "Seafood and vegetables in a vivid spicy broth.",
+              "spicy": true
+            },
+            {
+              "id": "beef-soup",
+              "name": "Spicy Beef Soup",
+              "prices": [
+                {
+                  "czk": 328
+                }
+              ],
+              "description": "A robust beef soup with warming chili depth.",
+              "spicy": true
+            },
+            {
+              "id": "doenjang-soup",
+              "name": "Beef Doenjang Soup",
+              "prices": [
+                {
+                  "czk": 280
+                }
+              ],
+              "description": "Earthy soybean broth with beef and vegetables."
+            },
+            {
+              "id": "soft-tofu-soup",
+              "name": "Seafood Soft tofu Soup",
+              "prices": [
+                {
+                  "czk": 229
+                }
+              ],
+              "description": "Silky tofu and seafood in a bubbling spicy broth.",
+              "tags": [
+                "chef"
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": [
+        "Best enjoyed with steamed rice."
+      ]
+    },
+    {
+      "id": "drinks",
+      "title": "Drinks",
+      "page": 11,
+      "subtitle": "",
+      "groups": [
+        {
+          "id": "homemade",
+          "title": "Homemade Lemonade & Iced Tea",
+          "items": [
+            {
+              "id": "raspberry",
+              "name": "Raspberry",
+              "prices": [
+                {
+                  "czk": 109
+                }
+              ]
+            },
+            {
+              "id": "yuzu-lemon",
+              "name": "Yuzu & Lemon",
+              "prices": [
+                {
+                  "czk": 109
+                }
+              ]
+            },
+            {
+              "id": "mango",
+              "name": "Mango",
+              "prices": [
+                {
+                  "czk": 109
+                }
+              ]
+            },
+            {
+              "id": "jasmine-iced",
+              "name": "Jasmin & Lemon Iced Tea",
+              "prices": [
+                {
+                  "czk": 109
+                }
+              ]
+            },
+            {
+              "id": "lychee-iced",
+              "name": "Lychee Red Iced Tea",
+              "prices": [
+                {
+                  "czk": 109
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "draft",
+          "title": "Draft",
+          "items": [
+            {
+              "id": "pilsner",
+              "name": "Pilsner Urquell 12°",
+              "prices": [
+                {
+                  "czk": 59,
+                  "portion": "0,3l"
+                },
+                {
+                  "czk": 79,
+                  "portion": "0,5l"
+                }
+              ]
+            },
+            {
+              "id": "kofola",
+              "name": "Kofola",
+              "prices": [
+                {
+                  "czk": 50,
+                  "portion": "0,3l"
+                },
+                {
+                  "czk": 65,
+                  "portion": "0,5l"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "softdrinks",
+          "title": "Softdrinks",
+          "items": [
+            {
+              "id": "soft-drinks",
+              "name": "Coca Cola, Cola Zero, Fanta, Sprite",
+              "prices": [
+                {
+                  "czk": 75
+                }
+              ]
+            },
+            {
+              "id": "romequell",
+              "name": "Romequell",
+              "prices": [
+                {
+                  "czk": 119,
+                  "portion": "0,75l"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "coffee-tea",
+          "title": "Coffee & Tea",
+          "items": [
+            {
+              "id": "espresso",
+              "name": "Espresso, Americano, Lungo",
+              "prices": [
+                {
+                  "czk": 69
+                }
+              ]
+            },
+            {
+              "id": "latte",
+              "name": "Latte, Cappucino",
+              "prices": [
+                {
+                  "czk": 89
+                }
+              ]
+            },
+            {
+              "id": "jasmine",
+              "name": "Jasmin",
+              "prices": [
+                {
+                  "czk": 95
+                }
+              ]
+            },
+            {
+              "id": "oolong",
+              "name": "Oolong",
+              "prices": [
+                {
+                  "czk": 95
+                }
+              ]
+            },
+            {
+              "id": "red-tea",
+              "name": "Red Tea",
+              "prices": [
+                {
+                  "czk": 109
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "drinks-2",
+      "title": "Drinks II",
+      "page": 12,
+      "subtitle": "",
+      "groups": [
+        {
+          "id": "cocktails",
+          "title": "Cocktails",
+          "items": [
+            {
+              "id": "yuzu-highball",
+              "name": "Yuzu Highball",
+              "prices": [
+                {
+                  "czk": 219
+                }
+              ]
+            },
+            {
+              "id": "soju-mojito",
+              "name": "Soju Mojito",
+              "prices": [
+                {
+                  "czk": 199
+                }
+              ]
+            },
+            {
+              "id": "sakura-fizz",
+              "name": "Sakura Gin Fizz",
+              "prices": [
+                {
+                  "czk": 199
+                }
+              ]
+            },
+            {
+              "id": "seoul-sunset",
+              "name": "Seoul Sunset",
+              "prices": [
+                {
+                  "czk": 219
+                }
+              ]
+            },
+            {
+              "id": "peach-punch",
+              "name": "Makgeolli Peach Punch",
+              "prices": [
+                {
+                  "czk": 219
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "korean-drinks",
+          "title": "Korean Beverage",
+          "items": [
+            {
+              "id": "soju",
+              "name": "Soju",
+              "prices": [
+                {
+                  "czk": 398,
+                  "portion": "0,33l"
+                }
+              ],
+              "details": [
+                "alc. 16,9%",
+                "Chamisul, Grape, Lemon, Apple Mango, Strawberry, Yogurt"
+              ]
+            },
+            {
+              "id": "makgeolli",
+              "name": "Makgeolli",
+              "prices": [
+                {
+                  "czk": 498,
+                  "portion": "0,75l"
+                }
+              ],
+              "details": [
+                "~7%"
+              ]
+            },
+            {
+              "id": "milkis",
+              "name": "Milkis",
+              "prices": [
+                {
+                  "czk": 89
+                }
+              ],
+              "details": [
+                "OG, Melon, Strawberry"
+              ]
+            },
+            {
+              "id": "haitai",
+              "name": "Haitai",
+              "prices": [
+                {
+                  "czk": 99
+                }
+              ],
+              "details": [
+                "Grape, Pear"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "shots",
+          "title": "Shots",
+          "items": [
+            {
+              "id": "shots",
+              "name": "Finlandia, Jaggermeister, Gin beefeater, Jamson, Jim Beam, Rum, Martini bianco",
+              "prices": [
+                {
+                  "czk": 70
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "wine",
+          "title": "Wine",
+          "items": [
+            {
+              "id": "chardonney",
+              "name": "Chardonney",
+              "prices": [
+                {
+                  "czk": 120,
+                  "portion": "2dl"
+                }
+              ]
+            },
+            {
+              "id": "cabernet",
+              "name": "Cabernet Sauvignon",
+              "prices": [
+                {
+                  "czk": 120,
+                  "portion": "2dl"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": [
+        "Bottled Wine from the daily selection."
+      ]
+    }
+  ],
+  "sourceIssues": [
+    "No allergen codes or allergen list are printed in the supplied PDF.",
+    "Page 4 describes hotpots as single-serve beneath a section labelled Designed for the table. Serving size needs restaurant confirmation.",
+    "Original printed spellings are retained, including Race Cakes, Seaoul, Hosokami, Romequell, Chardonney and spirit names."
+  ]
+}

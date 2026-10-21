@@ -233,7 +233,7 @@ export function shiftVenueDateIso(dateIso: string, deltaDays: number): string {
 }
 
 export function formatVenueDateLabel(dateIso: string, language: LanguageCode): string {
-  const locale = language === "zh" ? "zh-CN" : language === "cs" ? "cs-CZ" : "en-US";
+  const locale = language === "vi" ? "vi-VN" : language === "cs" ? "cs-CZ" : "en-US";
   const { startIso } = venueDayRangeUtc(dateIso);
   return new Intl.DateTimeFormat(locale, {
     timeZone: "Europe/Prague",

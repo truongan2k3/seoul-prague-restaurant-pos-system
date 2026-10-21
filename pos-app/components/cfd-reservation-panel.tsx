@@ -276,15 +276,15 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
         open ? "translate-x-0 opacity-100" : "-translate-x-full opacity-0 pointer-events-none"
       }`}
       aria-hidden={!open}
-      aria-label="Today's reservations"
+      aria-label={translate("mapResTickerTitle")}
     >
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#C9A88B]">
-            Reception
+            {language === "vi" ? "Lễ tân" : "Reception"}
           </p>
           <h2 className="landing-serif mt-1 text-2xl text-[#F5EDE4]">
-            {showCreate ? translate("newReservation") : "Today"}
+            {showCreate ? translate("newReservation") : translate("summaryToday")}
           </h2>
         </div>
         <div className="flex items-center gap-2">
@@ -308,7 +308,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
               }
               onClose();
             }}
-            aria-label={showCreate ? "Back to list" : "Close reservations"}
+            aria-label={showCreate ? translate("backToOrder") : translate("close")}
             className="rounded-full border border-white/15 p-2.5 text-white/70 transition hover:bg-white/10 hover:text-white"
           >
             <X className="h-5 w-5" />
@@ -333,13 +333,13 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
             {loading && rows.length === 0 ? (
               <div className="flex items-center justify-center gap-2 py-16 text-sm text-white/50">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Loading…
+                {translate("loading")}
               </div>
             ) : error && rows.length === 0 ? (
               <p className="px-2 py-10 text-center text-sm text-[#E8D5C4]/80">{error}</p>
             ) : rows.length === 0 ? (
               <div className="px-2 py-10 text-center">
-                <p className="text-sm text-white/45">No reservations today.</p>
+                <p className="text-sm text-white/45">{translate("prepStatsReservationsEmpty")}</p>
                 <button
                   type="button"
                   onClick={() => setShowCreate(true)}
@@ -353,7 +353,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
               <ul className="space-y-2.5">
                 {rows.map((row) => {
                   const active = row.id === selectedId;
-                  const time = formatInVenueTz(row.reservedAt, language === "cs" ? "cs-CZ" : "en-GB", {
+                  const time = formatInVenueTz(row.reservedAt, language === "cs" ? "cs-CZ" : language === "vi" ? "vi-VN" : "en-GB", {
                     hour: "2-digit",
                     minute: "2-digit",
                     hour12: language === "en",
@@ -362,9 +362,9 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                   const hasTable = labels.length > 0;
                   const tableTitle = hasTable
                     ? row.status === "checked_in"
-                      ? `Table ${labels.join(" · ")}`
+                      ? `${translate("table")} ${labels.join(" · ")}`
                       : `${translate("resTablePlanned")}: ${labels.join(" · ")}`
-                    : "Table: Unassigned";
+                    : `${translate("table")}: ${translate("mapResTickerNoTable")}`;
                   return (
                     <li key={row.id} className="cfd-fade-enter">
                       <button
@@ -418,7 +418,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                                   className={`flex min-w-[3.75rem] flex-col items-center justify-center rounded-xl border px-2 py-2 sm:min-w-[4.5rem] sm:px-2.5 sm:py-2.5 ${receptionTableBadgeClass(row.status)}`}
                                 >
                                   <span className="text-[8px] font-semibold uppercase tracking-[0.2em] text-current/50 sm:text-[9px]">
-                                    Table
+                                    {translate("table")}
                                   </span>
                                   <span className="mt-0.5 text-[1.55rem] font-bold leading-none tracking-wide tabular-nums sm:text-[1.85rem]">
                                     {label}

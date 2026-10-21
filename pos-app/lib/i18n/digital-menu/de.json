@@ -1,0 +1,514 @@
+{
+  "items": {
+    "a5-wagyu": {
+      "name": "Japanisches A5 Wagyu"
+    },
+    "wagyu-short-rib": {
+      "name": "Australische Premium-Wagyu-Short-Ribs"
+    },
+    "wagyu-ribeye": {
+      "name": "Australisches Wagyu-Ribeye"
+    },
+    "angus-sirloin": {
+      "name": "US-Angus-Sirloin"
+    },
+    "wagyu-bone-in": {
+      "name": "Australische Wagyu-Short-Ribs mit Knochen"
+    },
+    "beef-tongue": {
+      "name": "Angus-Rinderzunge"
+    },
+    "marinated-short-rib": {
+      "name": "Marinierte marmorierte Rinderrippen"
+    },
+    "smoked-brisket": {
+      "name": "Geräucherte Angus-Rinderbrust"
+    },
+    "enoki-rolls": {
+      "name": "Rindfleisch-Enoki-Röllchen"
+    },
+    "wagyu-platter": {
+      "name": "Gemischte Wagyu-Platte"
+    },
+    "thick-pork-belly": {
+      "name": "Dick geschnittener Schweinebauch"
+    },
+    "marinated-pork-belly": {
+      "name": "Marinierter Schweinebauch"
+    },
+    "mapo-pork-rib": {
+      "name": "Schweinerippchen in Mapo-Marinade"
+    },
+    "pork-platter": {
+      "name": "Gemischte Schweinefleischplatte"
+    },
+    "pork-collar": {
+      "name": "Schweinenacken"
+    },
+    "chicken-thigh": {
+      "name": "Marinierte Hähnchenkeule"
+    },
+    "grilled-eel": {
+      "name": "Gegrillter Aal"
+    },
+    "tiger-prawns": {
+      "name": "Tigergarnelen"
+    },
+    "vegetable-platter": {
+      "name": "Gemüseplatte (4 Sorten)"
+    },
+    "busan-set": {
+      "name": "Busan-Set",
+      "description": "Ein ausgewogener Einstieg in unser Grillangebot.",
+      "details": [
+        "Australisches Wagyu-Ribeye 100g",
+        "Marinierte marmorierte Rinderrippen 100g",
+        "Schweinebauch 100g",
+        "Schweinenacken 100g",
+        "Marinierte Hähnchenkeule 100g"
+      ]
+    },
+    "jeju-set": {
+      "name": "Jeju-Island-Set",
+      "description": "Ein vielfältiges Erlebnis mit Fleisch und Meeresfrüchten.",
+      "details": [
+        "Australisches Wagyu-Ribeye 100g",
+        "Schweinerippchen in Mapo-Marinade 100g",
+        "Marinierte Hähnchenkeule 100g",
+        "Tigergarnelen 100g",
+        "Aal 50g",
+        "Tintenfisch 50g"
+      ]
+    },
+    "gangwon-set": {
+      "name": "Gangwon-do-Set",
+      "description": "Ein gehaltvolles Rindfleisch-Set mit ausgezeichnetem Preis-Leistungs-Verhältnis.",
+      "details": [
+        "Australisches Wagyu-Ribeye 100g",
+        "Marinierte marmorierte Rinderrippen 100g",
+        "Angus Chuck Roll 100g",
+        "Angus-Rinderzunge 100g",
+        "Geräucherte Rinderbrust 100g"
+      ]
+    },
+    "seoul-set": {
+      "name": "Seoul-Signature-Set",
+      "description": "Unser luxuriösestes Grillset für unvergessliche gemeinsame Abende.",
+      "details": [
+        "Japanisches A5 Wagyu 100g",
+        "Angus-Sirloin 100g",
+        "Marinierte marmorierte Rinderrippen 100g",
+        "Angus-Ribeye 100g",
+        "Angus Chuck Roll 100g"
+      ]
+    },
+    "seafood-hotpot": {
+      "name": "Meeresfrüchte-Hotpot",
+      "description": "Meeresfrüchtebrühe für eine Person mit Gemüse, Tofu und wohligem Geschmack in jedem Löffel."
+    },
+    "pork-bone-hotpot": {
+      "name": "Schweineknochen-Hotpot",
+      "description": "Herzhafte Schweineknochenbrühe für eine Person mit zartem Fleisch."
+    },
+    "kimchi-hotpot": {
+      "name": "Kimchi-Hotpot",
+      "description": "Kimchi-Brühe für eine Person mit angenehm säuerlicher Note und ausgewogener Schärfe."
+    },
+    "nine-grid": {
+      "name": "Neun-Fächer-Hotpot-Set",
+      "description": "Rind- und Lammfleischscheiben, Chinakohl, saisonales Blattgemüse, Enoki, Tofu, Kartoffelscheiben, Rindfleischbällchen und Garnelen.",
+      "details": [
+        "Eine vollständige Platte für eine genussvolle Hotpot-Runde.",
+        "Brühe nach Wahl: Klassische Schweineknochenbrühe · Scharfe Ma-la-Brühe · Tomatenbrühe"
+      ]
+    },
+    "seafood-rice": {
+      "name": "Gebratener Reis mit Meeresfrüchten",
+      "description": "Im Wok gebratener Reis mit Meeresfrüchten, Ei und einer dezenten Rauchnote."
+    },
+    "wagyu-rice": {
+      "name": "Gebratener Reis mit Wagyu",
+      "description": "Duftender Wokreis mit dem vollen Geschmack von Wagyu."
+    },
+    "vegetarian-bibimbap": {
+      "name": "Vegetarischer Dolsot-Bibimbap",
+      "description": "Saisonales Gemüse auf Reis mit hauseigener Bibimbap-Sauce."
+    },
+    "kimchi-rice": {
+      "name": "Kimchi-Bratreis",
+      "description": "Herzhafter Kimchi-Reis mit ausgewogener Schärfe und Tiefe."
+    },
+    "beef-rice-bowl": {
+      "name": "Reisschale mit Rindfleisch",
+      "description": "Zartes Rindfleisch auf gedämpftem Reis mit herzhafter Glasur."
+    },
+    "beef-bibimbap": {
+      "name": "Dolsot-Bibimbap mit Rindfleisch",
+      "description": "Brutzelnder Steintopfreis mit Rindfleisch, Gemüse und Ei."
+    },
+    "pork-rice-bowl": {
+      "name": "Reisschale mit Schweinebauch",
+      "description": "Gegrillter Schweinebauch auf Reis mit kräftigen Karamellnoten."
+    },
+    "chicken-bibimbap": {
+      "name": "Dolsot-Bibimbap mit Hähnchen",
+      "description": "Steintopfreis mit Hähnchen und buntem Gemüse."
+    },
+    "jajangmyeon": {
+      "name": "Jajangmyeon",
+      "description": "Klassische Nudeln mit schwarzer Bohnensauce und vollmundigem Geschmack."
+    },
+    "seafood-ramen": {
+      "name": "Scharfer Meeresfrüchte-Ramen",
+      "description": "Meeresfrüchte, Gemüse und kräftige Chiliwärme in einer gehaltvollen Brühe."
+    },
+    "kimchi-ramen": {
+      "name": "Kimchi-Ramen",
+      "description": "Elastische Nudeln in säuerlicher Kimchi-Brühe mit wohliger Schärfe."
+    },
+    "beef-ramen": {
+      "name": "Scharfer Rindfleisch-Ramen",
+      "description": "Scharfes Rindfleisch und Nudeln in einer kräftigen, wärmenden Chili-Brühe."
+    },
+    "fried-shrimp": {
+      "name": "Knusprig frittierte Garnelen",
+      "description": "Goldene Garnelen mit feiner, leichter Knusprigkeit."
+    },
+    "fried-chicken": {
+      "name": "Koreanische frittierte Hähnchenstücke",
+      "description": "Knusprige Hähnchenstücke mit glänzender, herzhafter Glasur."
+    },
+    "kimchi-pancake": {
+      "name": "Kimchi-Pfannkuchen",
+      "description": "Pfannkuchen mit knusprigen Rändern, Kimchi und ausgewogener Schärfe."
+    },
+    "seafood-pancake": {
+      "name": "Meeresfrüchte-Pfannkuchen",
+      "description": "Herzhafter Pfannkuchen mit Garnelen, Tintenfisch und Gemüse."
+    },
+    "dumplings": {
+      "name": "Gebratene Teigtaschen",
+      "description": "Teigtaschen mit goldbraunem Boden und saftiger Schweinefleischfüllung. Ideal zum Teilen."
+    },
+    "kimchi-pork-stir-fry": {
+      "name": "Gebratener Schweinebauch mit Kimchi",
+      "description": "Kräftiger Schweinebauch und Kimchi mit würzig-scharfer Note."
+    },
+    "braised-short-ribs": {
+      "name": "Geschmorte Rinderrippen",
+      "description": "Langsam geschmorte Rippchen mit intensiver, glänzender Glasur."
+    },
+    "cheese-tteokbokki": {
+      "name": "Hähnchen mit Käse-Tteokbokki",
+      "description": "Scharfes Hähnchen mit Reiskuchen und geschmolzenem Käse."
+    },
+    "stir-fried-rice-cakes": {
+      "name": "Gebratene Reiskuchen",
+      "description": "Bissfeste Reiskuchen in einer lebhaften, scharfen Sauce."
+    },
+    "spicy-pork-stir-fry": {
+      "name": "Scharf gebratener Schweinebauch",
+      "description": "Rauchiger Schweinebauch mit süßer Schärfe und karamellisiertem Finish."
+    },
+    "squid-pork": {
+      "name": "Gegrillter Tintenfisch mit Schweinebauch",
+      "description": "Eine herzhafte Kombination aus Fleisch und Meeresfrüchten, auf dem Grill vollendet."
+    },
+    "japchae": {
+      "name": "Japchae-Glasnudeln",
+      "description": "Seidige Glasnudeln, mit Gemüse und süßlichen Sojanoten gebraten."
+    },
+    "beef-octopus": {
+      "name": "Gebratenes Rindfleisch mit Baby-Oktopus",
+      "description": "Zartes Rindfleisch und Baby-Oktopus mit kräftiger koreanischer Würze."
+    },
+    "yukhoe": {
+      "name": "Yukhoe – gewürztes rohes Rindfleisch",
+      "description": "Fein gewürztes rohes Wagyu-Rindfleisch mit eleganten Sesamnoten."
+    },
+    "tempura-shrimp-roll": {
+      "name": "Garnelen-Tempura-Rolle",
+      "description": "Innen Karotte, Gurke und Garnele, darüber Avocado, Aalglasur und Zitrusmayonnaise."
+    },
+    "eel-uramaki": {
+      "name": "Uramaki mit gegrilltem Aal",
+      "description": "Innen Avocado, Surimi und Gurke, mit Aal umhüllt und mit Sesam und Aalsauce vollendet."
+    },
+    "aburi-salmon": {
+      "name": "Aburi-Lachsrolle",
+      "description": "Avocado, Surimi und Gurke, belegt mit abgeflämmtem Lachs, gebackener Sauce und Tobiko."
+    },
+    "california-roll": {
+      "name": "California-Tobiko-Rolle",
+      "description": "Avocado, Surimi und Lachs, vollendet mit Tobiko-Kräutern und Aalglasur."
+    },
+    "crispy-salmon-roll": {
+      "name": "Knusprige Lachs-Tempura-Rolle",
+      "description": "Lachs und Avocado mit Aalglasur und weißem Sesam."
+    },
+    "signature-beef-roll": {
+      "name": "Seaoul-Signature-Rindfleischrolle",
+      "description": "Rindfleisch, Gurke und Karotte mit koreanischer scharfer Sauce und Sesam."
+    },
+    "shrimp-avocado-platter": {
+      "name": "Garnelen-Tempura-Rolle + 4 Avocado-Nigiri",
+      "description": "Eine feine Kombination für alle, die Kontraste und Frische schätzen."
+    },
+    "salmon-eel-platter": {
+      "name": "Aburi-Lachsrolle + 4 Aal-Hosokami",
+      "description": "Eine reichhaltige, ausgewogene Kombination aus abgeflämmtem Lachs und Aal."
+    },
+    "california-salmon-platter": {
+      "name": "California-Tobiko-Rolle + 4 Lachs-Nigiri",
+      "description": "Eine zugängliche Platte mit eleganten Lachsnoten."
+    },
+    "hosomaki-trio": {
+      "name": "Hosomaki-Trio-Set",
+      "description": "Lachs, Avocado und Aal.",
+      "details": [
+        "Insgesamt 18 Stück."
+      ]
+    },
+    "pork-bone-soup": {
+      "name": "Schweineknochensuppe",
+      "description": "Langsam geköchelte Schweineknochenbrühe mit tiefer, wohliger Fülle."
+    },
+    "pork-kimchi-soup": {
+      "name": "Kimchi-Suppe mit Schweinefleisch",
+      "description": "Kimchi und Schweinefleisch in einer wärmenden, säuerlichen Brühe."
+    },
+    "beef-rib-soup": {
+      "name": "Rinderrippensuppe",
+      "description": "Zarte Rinderrippen in einer klaren, herzhaften Brühe."
+    },
+    "seafood-soup": {
+      "name": "Scharfe Meeresfrüchtesuppe",
+      "description": "Meeresfrüchte und Gemüse in einer lebhaft scharfen Brühe."
+    },
+    "beef-soup": {
+      "name": "Scharfe Rindfleischsuppe",
+      "description": "Eine kräftige Rindfleischsuppe mit wärmender Chili-Tiefe."
+    },
+    "doenjang-soup": {
+      "name": "Doenjang-Suppe mit Rindfleisch",
+      "description": "Erdige Sojabohnenbrühe mit Rindfleisch und Gemüse."
+    },
+    "soft-tofu-soup": {
+      "name": "Meeresfrüchtesuppe mit Seidentofu",
+      "description": "Seidentofu und Meeresfrüchte in einer sprudelnden, scharfen Brühe."
+    },
+    "raspberry": {
+      "name": "Himbeere"
+    },
+    "yuzu-lemon": {
+      "name": "Yuzu und Zitrone"
+    },
+    "mango": {
+      "name": "Mango"
+    },
+    "jasmine-iced": {
+      "name": "Jasmin-Zitronen-Eistee"
+    },
+    "lychee-iced": {
+      "name": "Litschi-Rottee-Eistee"
+    },
+    "pilsner": {
+      "name": "Pilsner Urquell 12°"
+    },
+    "kofola": {
+      "name": "Kofola"
+    },
+    "soft-drinks": {
+      "name": "Coca Cola, Cola Zero, Fanta, Sprite"
+    },
+    "romequell": {
+      "name": "Romequell"
+    },
+    "espresso": {
+      "name": "Espresso, Americano, Lungo"
+    },
+    "latte": {
+      "name": "Latte, Cappucino"
+    },
+    "jasmine": {
+      "name": "Jasmintee"
+    },
+    "oolong": {
+      "name": "Oolong"
+    },
+    "red-tea": {
+      "name": "Roter Tee"
+    },
+    "yuzu-highball": {
+      "name": "Yuzu Highball"
+    },
+    "soju-mojito": {
+      "name": "Soju Mojito"
+    },
+    "sakura-fizz": {
+      "name": "Sakura Gin Fizz"
+    },
+    "seoul-sunset": {
+      "name": "Seoul Sunset"
+    },
+    "peach-punch": {
+      "name": "Makgeolli-Pfirsich-Punsch"
+    },
+    "soju": {
+      "name": "Soju",
+      "details": [
+        "Alk. 16,9%",
+        "Chamisul, Traube, Zitrone, Apfelmango, Erdbeere, Joghurt"
+      ]
+    },
+    "makgeolli": {
+      "name": "Makgeolli",
+      "details": [
+        "~7%"
+      ]
+    },
+    "milkis": {
+      "name": "Milkis",
+      "details": [
+        "Original, Melone, Erdbeere"
+      ]
+    },
+    "haitai": {
+      "name": "Haitai",
+      "details": [
+        "Traube, Birne"
+      ]
+    },
+    "shots": {
+      "name": "Finlandia, Jaggermeister, Gin beefeater, Jamson, Jim Beam, Rum, Martini bianco"
+    },
+    "chardonney": {
+      "name": "Chardonney"
+    },
+    "cabernet": {
+      "name": "Cabernet Sauvignon"
+    }
+  },
+  "categories": {
+    "add-ons": {
+      "title": "Extras · Chuga",
+      "subtitle": "Holzkohlegrill · Hotpot",
+      "notes": [
+        "Kombinieren Sie Premium-Fleisch mit einem Set zum Teilen für ein rundes Erlebnis."
+      ]
+    },
+    "charcoal-grill": {
+      "title": "Holzkohlegrill-Sets",
+      "subtitle": "Zum gemeinsamen Genießen",
+      "notes": [
+        "Vervollständigen Sie das Erlebnis mit koreanischem Soju."
+      ]
+    },
+    "hot-pot": {
+      "title": "Hotpot · Jeongol",
+      "subtitle": "Für die gemeinsame Runde",
+      "notes": [
+        "Ergänzen Sie eine weitere Platte oder kombinieren Sie Hotpot mit Sushi."
+      ]
+    },
+    "rice-dolsot": {
+      "title": "Reis & Dolsot",
+      "subtitle": "Bratreis · Bibimbap · Reisschalen",
+      "notes": [
+        "Dazu passen koreanischer Reiswein, Premium-Tee oder eine kleine Empfehlung des Küchenchefs."
+      ]
+    },
+    "korean-kitchen-1": {
+      "title": "Koreanische Küche I",
+      "subtitle": "Nudeln · Frittiertes · Pfannkuchen · Kleine Köstlichkeiten"
+    },
+    "korean-kitchen-2": {
+      "title": "Koreanische Küche II",
+      "subtitle": "Gebratene Klassiker"
+    },
+    "sushi-1": {
+      "title": "Sushi I",
+      "subtitle": "Signature-Rollen"
+    },
+    "sushi-2": {
+      "title": "Sushi II",
+      "subtitle": "Kombinierte Platten",
+      "notes": [
+        "Ideal als Vorspeise zum Teilen oder als elegante Ergänzung zu Holzkohlegrill und Hotpot."
+      ]
+    },
+    "soups": {
+      "title": "Suppen & Eintöpfe",
+      "subtitle": "Wohltuende Brühen · Hausspezialitäten",
+      "notes": [
+        "Am besten mit gedämpftem Reis genießen."
+      ]
+    },
+    "drinks": {
+      "title": "Getränke"
+    },
+    "drinks-2": {
+      "title": "Getränke II",
+      "notes": [
+        "Flaschenwein aus der Tagesauswahl."
+      ]
+    }
+  },
+  "groups": {
+    "premium-beef": "Premium-Rindfleisch",
+    "pork": "Schweinefleisch",
+    "chicken": "Hähnchen",
+    "seafood": "Meeresfrüchte",
+    "veggies": "Gemüse",
+    "noodles": "Nudeln",
+    "fried": "Frittiertes",
+    "pancakes": "Pfannkuchen & kleine Köstlichkeiten",
+    "soups": "Suppen",
+    "homemade": "Hausgemachte Limonade & Eistee",
+    "draft": "Vom Fass",
+    "softdrinks": "Erfrischungsgetränke",
+    "coffee-tea": "Kaffee & Tee",
+    "cocktails": "Cocktails",
+    "korean-drinks": "Koreanische Getränke",
+    "shots": "Shots",
+    "wine": "Wein"
+  },
+  "tags": {
+    "premium": "Premium-Auswahl",
+    "chef": "Empfehlung des Küchenchefs",
+    "favorite": "Gästeliebling",
+    "recommended": "Empfohlen",
+    "classic-sharing": "Klassiker zum Teilen",
+    "best-sharing": "Bestens zum Teilen",
+    "signature": "Signature",
+    "hearty": "Herzhafter Klassiker",
+    "bold-spicy": "Kräftig & scharf",
+    "bestseller": "Bestseller",
+    "good-sharing": "Gut zum Teilen"
+  },
+  "portions": {
+    "fillet": "Filet",
+    "platter": "Platte",
+    "4pc": "4 Stk.",
+    "4 pc": "4 Stk."
+  },
+  "ui": {
+    "title": "Unsere Speisekarte",
+    "subtitle": "Holzkohlegrill · Koreanische Küche · Hotpot · Sushi",
+    "digital": "Digitale Speisekarte",
+    "pdf": "PDF-Speisekarte",
+    "home": "Zurück zur Startseite",
+    "search": "Gericht oder Beschreibung suchen…",
+    "searchLabel": "Speisekarte durchsuchen",
+    "clear": "Suche löschen",
+    "empty": "Keine passenden Gerichte gefunden.",
+    "emptyHint": "Versuchen Sie einen anderen Namen oder einen kürzeren Suchbegriff.",
+    "categories": "Menükategorien",
+    "language": "Menüsprache",
+    "contents": "Im Set enthalten",
+    "spicy": "Scharf",
+    "allergens": "Haben Sie Allergien? Diese Speisekarte enthält keine Allergencodes. Bitte fragen Sie vor der Bestellung unser Team.",
+    "portionClarification": "Die PDF bezeichnet die Hotpots als Einzelportionen, während der Abschnitt für die gemeinsame Runde vorgesehen ist. Bitte bestätigen Sie die Portionsgröße mit unserem Team.",
+    "results": "Treffer"
+  }
+}

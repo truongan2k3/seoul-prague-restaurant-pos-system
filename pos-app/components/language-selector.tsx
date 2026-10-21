@@ -6,27 +6,35 @@ import { LANGUAGE_OPTIONS } from "@/lib/i18n/languages";
 import { filterButtonClass } from "@/lib/theme-classes";
 import type { LanguageCode } from "@/lib/types";
 
-interface LanguageSelectorProps {
+interface LanguageSelectorProps<T extends string = LanguageCode> {
   variant?: "sidebar" | "segmented" | "dropdown" | "compact" | "flag-menu";
   className?: string;
-  language?: LanguageCode;
-  onLanguageChange?: (language: LanguageCode) => void;
+  language?: T;
+  onLanguageChange?: (language: T) => void;
+  languageOptions?: readonly { code: T; flag: string; label: string }[];
+  ariaLabel?: string;
   compact?: boolean;
   /** Visual style for flag-menu on dark backgrounds */
   tone?: "light" | "dark";
 }
 
-export function LanguageSelector({
+export function LanguageSelector<T extends string = LanguageCode>({
   variant = "segmented",
   className = "",
   language: languageProp,
   onLanguageChange,
   compact = false,
   tone = "light",
-}: LanguageSelectorProps) {
+  languageOptions,
+  ariaLabel = "Select language",
+}: LanguageSelectorProps<T>) {
   const app = useApp();
   const language = languageProp ?? app.language;
-  const setLanguage = onLanguageChange ?? app.setLanguage;
+  const options = languageOptions ?? LANGUAGE_OPTIONS;
+  const setLanguage = (code: string) => {
+    if (onLanguageChange) onLanguageChange(code as T);
+    else if (code === "en" || code === "cs" || code === "vi") app.setLanguage(code);
+  };
 
   if (variant === "flag-menu") {
     return (
@@ -35,6 +43,8 @@ export function LanguageSelector({
         onLanguageChange={setLanguage}
         className={className}
         tone={tone}
+        options={options}
+        ariaLabel={ariaLabel}
       />
     );
   }
@@ -43,11 +53,11 @@ export function LanguageSelector({
     return (
       <select
         value={language}
-        onChange={(e) => setLanguage(e.target.value as LanguageCode)}
+        onChange={(e) => setLanguage(e.target.value)}
         className={`w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-900 shadow-sm outline-none focus:ring-2 focus:ring-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 ${className}`}
-        aria-label="Select language"
+        aria-label={ariaLabel}
       >
-        {LANGUAGE_OPTIONS.map(({ code, flag, label }) => (
+        {options.map(({ code, flag, label }) => (
           <option key={code} value={code}>
             {flag} {label}
           </option>
@@ -62,9 +72,9 @@ export function LanguageSelector({
       <div
         className={`flex flex-row gap-1 rounded-lg border border-gray-200 bg-gray-100 p-1 dark:border-zinc-700 dark:bg-zinc-800 ${className}`}
         role="group"
-        aria-label="Select language"
+        aria-label={ariaLabel}
       >
-        {LANGUAGE_OPTIONS.map(({ code, flag, label }) => {
+        {options.map(({ code, flag, label }) => {
           const active = language === code;
           return (
             <button
@@ -97,7 +107,7 @@ export function LanguageSelector({
 
   return (
     <div className={`flex flex-nowrap gap-2 overflow-x-auto ${className}`}>
-      {LANGUAGE_OPTIONS.map(({ code, flag, label }) => {
+      {options.map(({ code, flag, label }) => {
         const active = language === code;
         return (
           <button
@@ -121,15 +131,19 @@ function FlagLanguageMenu({
   onLanguageChange,
   className,
   tone,
+  options,
+  ariaLabel,
 }: {
-  language: LanguageCode;
-  onLanguageChange: (language: LanguageCode) => void;
+  language: string;
+  onLanguageChange: (language: string) => void;
+  options: readonly { code: string; flag: string; label: string }[];
+  ariaLabel: string;
   className?: string;
   tone: "light" | "dark";
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const current = LANGUAGE_OPTIONS.find((option) => option.code === language) ?? LANGUAGE_OPTIONS[0];
+  const current = options.find((option) => option.code === language) ?? options[0] ?? LANGUAGE_OPTIONS[0];
 
   useEffect(() => {
     if (!open) return;
@@ -183,10 +197,10 @@ function FlagLanguageMenu({
       {open && (
         <ul
           role="listbox"
-          aria-label="Select language"
+          aria-label={ariaLabel}
           className={`absolute right-0 top-full z-50 mt-1 flex flex-col gap-0.5 overflow-hidden rounded-lg border p-1 ${menuClass}`}
         >
-          {LANGUAGE_OPTIONS.map(({ code, flag, label }) => {
+          {options.map(({ code, flag, label }) => {
             const active = code === language;
             return (
               <li key={code} role="option" aria-selected={active}>

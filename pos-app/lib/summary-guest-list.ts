@@ -278,7 +278,7 @@ function bbqOrderLabel(status: GuestBbqOrderStatus, labels: GuestListExportLabel
 function formatReservedAt(value: Date, language: LanguageCode): string {
   try {
     return new Intl.DateTimeFormat(
-      language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB",
+      language === "cs" ? "cs-CZ" : language === "vi" ? "vi-VN" : "en-GB",
       {
         year: "numeric",
         month: "2-digit",

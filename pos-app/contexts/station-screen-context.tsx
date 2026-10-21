@@ -21,7 +21,11 @@ function storageKey(station: Station, field: "language" | "staffName") {
 function readStoredLanguage(station: Station): LanguageCode {
   if (typeof window === "undefined") return "en";
   const stored = localStorage.getItem(storageKey(station, "language"));
-  if (stored === "en" || stored === "cs" || stored === "zh") return stored;
+  if (stored === "zh") {
+    localStorage.setItem(storageKey(station, "language"), "vi");
+    return "vi";
+  }
+  if (stored === "en" || stored === "cs" || stored === "vi") return stored;
   return "en";
 }
 
@@ -58,8 +62,9 @@ export function StationScreenProvider({
 
   const setLanguage = useCallback(
     (lang: LanguageCode) => {
-      setLanguageState(lang);
-      localStorage.setItem(storageKey(station, "language"), lang);
+      const next = lang === "zh" ? "vi" : lang;
+      setLanguageState(next);
+      localStorage.setItem(storageKey(station, "language"), next);
     },
     [station],
   );

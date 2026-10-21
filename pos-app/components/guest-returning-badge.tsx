@@ -63,7 +63,7 @@ export function GuestReturningBadge({
 
   if (!profile?.isReturning) return null;
 
-  const locale = language === "cs" ? "cs-CZ" : language === "zh" ? "zh-CN" : "en-GB";
+  const locale = language === "cs" ? "cs-CZ" : language === "vi" ? "vi-VN" : "en-GB";
   const badgeLabel = `${translate("guestReturningBadge")} · ${visitOrdinalLabel(profile.currentVisitNumber, translate)}`;
 
   return (

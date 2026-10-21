@@ -26,7 +26,8 @@ export type Station = "kitchen" | "bar";
 export type PaymentMethod = "cash" | "card";
 export type DiscountType = "percent" | "fixed";
 export type SplitMode = "total" | "equal" | "items";
-export type LanguageCode = "en" | "cs" | "zh";
+/** Chinese is retained for legacy content/printing; UI selectors use en/cs/vi. */
+export type LanguageCode = "en" | "cs" | "vi" | "zh";
 export type ThemeMode = "light" | "dark" | "halloween";
 export type ServerScreenLanguageMode = "single" | "bilingual" | "multilingual";
 

@@ -144,7 +144,7 @@ export function OrderItemChecklist({
             onChange={onToggleAll}
             className="h-4 w-4 rounded border-gray-300"
           />
-          Select all
+          {translate("selectAll")}
         </label>
       )}
 
@@ -152,9 +152,10 @@ export function OrderItemChecklist({
         {items.map((item, index) => {
           const status = normalizeOrderItemStatus(item.status);
           const kitchenStatus = resolveKitchenStatus(item);
-          const { primary, secondary } = orderItemDualDisplay(item, menuItems, language, {
+          const { primary, secondary: kitchenSecondary } = orderItemDualDisplay(item, menuItems, language, {
             englishOnly: variant === "bar",
           });
+          const secondary = variant === "floor" ? null : kitchenSecondary;
           const isCancelled = kitchenStatus === "cancelled" || Boolean(item.isCancelled);
           const isReady = !isCancelled && (kitchenStatus === "ready" || status === "ready");
           const isServed = !isCancelled && (kitchenStatus === "served" || status === "served");

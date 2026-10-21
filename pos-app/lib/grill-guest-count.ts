@@ -134,12 +134,13 @@ export function formatGrillGuestPrepNameZh(guestCount: number): string {
 
 export function grillGuestPrepDisplayName(
   order: OrderItem,
-  language: "en" | "cs" | "zh",
+  language: "en" | "cs" | "vi" | "zh",
 ): string {
   const count = grillGuestCountFromPrepOrder(order);
   if (language === "zh") {
     return count ? formatGrillGuestPrepNameZh(count) : GRILL_GUEST_PREP_NOTE_ZH_PREFIX;
   }
+  if (language === "vi") return count ? `Nước chấm BBQ · ${count}` : "Nước chấm BBQ";
   return count ? formatGrillGuestPrepNameEn(count) : "BBQ Sauces";
 }
 

@@ -13,9 +13,9 @@ export type FloorTableDef = {
 
 /** Canonical floor plan for Seoul Prague. */
 export const RESERVATION_FLOOR_TABLES: FloorTableDef[] = [
-  { label: "A1", capacity: 10, grill: true },
-  { label: "A2", capacity: 10, grill: true },
-  { label: "A3", capacity: 10, grill: true },
+  { label: "A1", capacity: 12, grill: true },
+  { label: "A2", capacity: 12, grill: true },
+  { label: "A3", capacity: 12, grill: true },
   { label: "D1", capacity: 10, grill: true },
   { label: "C1", capacity: 4, grill: true },
   { label: "C2", capacity: 4, grill: true },

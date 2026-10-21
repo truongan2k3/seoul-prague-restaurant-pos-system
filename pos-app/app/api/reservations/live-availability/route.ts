@@ -68,18 +68,20 @@ export async function POST(request: Request) {
       const issue = checkInTableIssue(source, body.tableId, body.reservationId, party, grill);
       const overrideAllowed = issue !== null && !["TABLE_NOT_CONFIGURED", "INVALID_PARTY_SIZE"].includes(issue.code);
       if (body.override === true) {
-        if (!session || session.businessId !== auth.businessId) return NextResponse.json({ error: "Staff login required to confirm a check-in override.", code: "STAFF_LOGIN_REQUIRED" }, { status: 401 });
-        const { data: staff } = await db.from("staff").select("role").eq("id", session.staffId)
-          .eq("business_id", auth.businessId).eq("active", true).maybeSingle();
-        if (!staff || !["admin", "manager", "cashier", "server"].includes(staff.role)) return NextResponse.json({ error: "Not permitted." }, { status: 403 });
+        // Reception devices can confirm seating warnings without a staff login.
+        // A matching staff session is optional audit metadata, not a permission gate.
         if (!Number.isInteger(party) || party < 1) throw new Error("Enter a valid number of guests.");
         if (issue && !overrideAllowed) return NextResponse.json({ error: issue.message, code: issue.code }, { status: 409 });
         const result = await db.rpc("override_reservation_check_in", { p_reservation: body.reservationId, p_table: body.tableId,
-          p_party: party, p_staff: session.staffId, p_business: auth.businessId,
-          p_reason: String(issue?.message ?? body.reason ?? "Staff confirmed check-in despite seating warning.").slice(0, 2000) });
+          p_party: party, p_staff: session?.businessId === auth.businessId ? session.staffId : null, p_business: auth.businessId,
+          p_reason: String(issue?.message ?? body.reason ?? "Reception confirmed check-in despite seating warning.").slice(0, 2000) });
         if (result.error?.code === "PGRST202" || result.error?.code === "42883") {
-          return NextResponse.json({ error: "Apply supabase/patch-reservation-assignment-override.sql to enable staff check-in overrides.", code: "CHECK_IN_OVERRIDE_SETUP_REQUIRED" }, { status: 503 });
+          return NextResponse.json({ error: "Apply the latest supabase/patch-reservation-assignment-override.sql to enable reception check-in confirmations.", code: "CHECK_IN_OVERRIDE_SETUP_REQUIRED" }, { status: 503 });
         }
+        if (result.error && /Unauthorized staff/i.test(result.error.message)) return NextResponse.json({
+          error: "Apply the latest supabase/patch-reservation-assignment-override.sql to remove the old staff-login requirement for check-in.",
+          code: "CHECK_IN_OVERRIDE_SETUP_REQUIRED",
+        }, { status: 503 });
         if (result.error) throw result.error;
         return NextResponse.json({ ok: true });
       }

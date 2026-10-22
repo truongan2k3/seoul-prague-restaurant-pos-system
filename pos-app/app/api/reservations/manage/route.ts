@@ -22,6 +22,7 @@ function publicReservation(data: NonNullable<
     guestEmail: data.guestEmail,
     guestPhone: data.guestPhone,
     partySize: data.partySize,
+    diningDurationMinutes: data.diningDurationMinutes,
     reservedAt: data.reservedAt,
     status: data.status,
     notes: data.notes,
@@ -62,6 +63,7 @@ export async function PATCH(request: Request) {
     date?: string;
     time?: string;
     guestCount?: number;
+    diningDurationMinutes?: number;
     notes?: string;
   };
   try {
@@ -77,6 +79,7 @@ export async function PATCH(request: Request) {
     date: body.date ?? "",
     time: body.time ?? "",
     guestCount: Number(body.guestCount) || 1,
+    diningDurationMinutes: body.diningDurationMinutes,
     notes: body.notes,
   });
 

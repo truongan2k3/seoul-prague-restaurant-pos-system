@@ -10,7 +10,7 @@ import { TableCard } from "@/components/table-card";
 import { TableEditModal } from "@/components/table-edit-modal";
 import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
-import { useReservationMapAssignment } from "@/hooks/use-reservation-map-assignment";
+import { UNASSIGN_DROP_TARGET, useReservationMapAssignment } from "@/hooks/use-reservation-map-assignment";
 import {
   formatFloorTableAssignmentLabel,
   reservationOnVenueDateIso,
@@ -389,12 +389,13 @@ export function MapView({
         </div>
 
         <MapReservationTicker reservations={plannedReservations} selectedId={assignment.selectedId} busyId={assignment.busyId}
-          disabled={editMode} onSelect={assignment.select} onPointerDown={assignment.start} onCollapse={assignment.cancel} />
+          disabled={editMode} onSelect={assignment.select} onPointerDown={assignment.start} onCollapse={assignment.cancel}
+          onUnassign={assignment.unassign} unassignTargeted={assignment.targetId === UNASSIGN_DROP_TARGET} />
       </div>
       {assignment.dragging && <motion.div aria-hidden className="pointer-events-none fixed left-0 top-0 z-[100] w-52 rounded-xl border border-[#C9A88B]/60 bg-[#19191D]/95 px-4 py-3 text-white shadow-2xl backdrop-blur-md"
         style={{ x: assignment.dragX, y: assignment.dragY }}>
         <p className="truncate text-sm font-semibold">{assignment.dragging.guestName}</p>
-        <p className="mt-1 text-xs text-white/60">{assignment.dragging.partySize} · {assignment.targetId ? tables.find((table) => table.id === assignment.targetId)?.label : translate("mapResDragHandle")}</p>
+        <p className="mt-1 text-xs text-white/60">{assignment.dragging.partySize} · {assignment.targetId === UNASSIGN_DROP_TARGET ? translate("unassignTable") : assignment.targetId ? tables.find((table) => table.id === assignment.targetId)?.label : translate("mapResDragHandle")}</p>
       </motion.div>}
 
       <TableEditModal

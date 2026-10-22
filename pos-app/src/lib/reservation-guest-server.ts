@@ -1,3 +1,4 @@
+import { isDiningTime, reservationDiningMinutes } from "@/lib/reservation-dining";
 import { loadLiveTableAvailability } from "@/src/lib/table-availability-server";
 import { availabilityOccupancyInputs } from "@/lib/table-availability";
 import { readAuthSession } from "@/src/lib/auth/session";
@@ -39,6 +40,7 @@ import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 import { sumActiveHoldsForSlot } from "@/src/lib/reservation-holds";
 
 export interface OnlineBookInput {
+  diningDurationMinutes?: number;
   referralCode?: string;
   guestName: string;
   email: string;
@@ -62,6 +64,7 @@ export interface OnlineBookInput {
 }
 
 export interface GuestReservationPublic {
+  diningDurationMinutes: number | null;
   id: string;
   bookingCode: string;
   manageToken: string;
@@ -176,6 +179,7 @@ function mapPublicRow(row: {
   guest_email: string | null;
   guest_phone: string | null;
   party_size: number;
+  dining_duration_minutes?: number | null;
   reserved_at: string;
   status: ReservationStatus;
   notes: string | null;
@@ -190,6 +194,7 @@ function mapPublicRow(row: {
     guestEmail: row.guest_email,
     guestPhone: row.guest_phone,
     partySize: row.party_size,
+    diningDurationMinutes: row.dining_duration_minutes ?? null,
     reservedAt: row.reserved_at,
     status: row.status,
     notes: row.notes,
@@ -265,7 +270,7 @@ export async function loadDayCapacityContext(dateIso: string): Promise<DayCapaci
     const { data: existingRows, error: reservationsError } = await admin
       .from("reservations")
       .select(
-        "id, party_size, actual_party_size, reserved_at, checked_in_at, status, notes, wants_grill, tables!table_id(label), secondary_table:tables!secondary_table_id(label), tertiary_table:tables!tertiary_table_id(label)",
+        "id, party_size, dining_duration_minutes, actual_party_size, reserved_at, checked_in_at, status, notes, wants_grill, tables!table_id(label), secondary_table:tables!secondary_table_id(label), tertiary_table:tables!tertiary_table_id(label)",
       )
       .gte("reserved_at", startIso)
       .lt("reserved_at", endExclusiveIso);
@@ -275,6 +280,7 @@ export async function loadDayCapacityContext(dateIso: string): Promise<DayCapaci
       id: string;
       party_size: number;
       actual_party_size?: number | null;
+      dining_duration_minutes?: number | null;
       checked_in_at?: string | null;
       reserved_at: string;
       status: string;
@@ -299,6 +305,7 @@ export async function loadDayCapacityContext(dateIso: string): Promise<DayCapaci
       return {
         id: row.id,
         partySize: row.party_size,
+        diningDurationMinutes: row.dining_duration_minutes ?? null,
         actualPartySize: row.actual_party_size,
         checkedInAt: row.checked_in_at,
         reservedAt: row.reserved_at,
@@ -316,13 +323,14 @@ export async function loadDayCapacityContext(dateIso: string): Promise<DayCapaci
   } catch {
     const { data: legacyRows, error: legacyError } = await admin
       .from("reservations")
-      .select("id, party_size, reserved_at, status, notes")
+      .select("id, party_size, dining_duration_minutes, reserved_at, status, notes")
       .gte("reserved_at", startIso)
       .lt("reserved_at", endExclusiveIso);
     if (legacyError) throw legacyError;
     reservations = (legacyRows ?? []).map((row) => ({
       id: row.id,
       partySize: row.party_size,
+      diningDurationMinutes: row.dining_duration_minutes ?? null,
       reservedAt: row.reserved_at,
       status: row.status,
       notes: row.notes,
@@ -359,7 +367,9 @@ export async function evaluateGuestSlotAvailability(input: {
   date: string;
   partySize: number;
   grill?: GrillNeed;
+  diningDurationMinutes?: number;
   times?: string[];
+  excludeReservationId?: string;
 }): Promise<{
   slots: Array<{
     time: string;
@@ -395,9 +405,11 @@ export async function evaluateGuestSlotAvailability(input: {
     reservations: ctx.reservations,
     occupiedTables: ctx.occupiedTables,
     maxGuestsPerSlot: ctx.settings.reservationMaxGuestsPerSlot,
+    diningDurationMinutes: input.diningDurationMinutes,
     durationMinutes: ctx.settings.reservationDurationMinutes,
     bufferMinutes: ctx.settings.reservationBufferMinutes,
     heldGuestsByTime,
+    excludeReservationId: input.excludeReservationId,
   });
 
   return {
@@ -577,6 +589,7 @@ async function validateSlotCapacity(params: {
   time: string;
   guestCount: number;
   excludeReservationId?: string;
+  diningDurationMinutes?: number;
   grill?: GrillNeed;
 }): Promise<{ ok: true; guestCount: number } | { ok: false; error: string }> {
   const { settings, date, time, excludeReservationId } = params;
@@ -601,7 +614,7 @@ async function validateSlotCapacity(params: {
   const ctx = await loadDayCapacityContext(date);
   const result = evaluateReservationCapacity({ dateIso: date, time, partySize: guestCount, grill: params.grill ?? null,
     reservations: ctx.reservations, occupiedTables: ctx.occupiedTables,
-    durationMinutes: ctx.settings.reservationDurationMinutes, bufferMinutes: ctx.settings.reservationBufferMinutes,
+    durationMinutes: ctx.settings.reservationDurationMinutes, diningDurationMinutes: params.diningDurationMinutes, bufferMinutes: ctx.settings.reservationBufferMinutes,
     excludeReservationId });
   if (result.availability === "full") return { ok: false, error: "No available table fits this reservation. Please choose another time." };
 
@@ -612,6 +625,7 @@ function validateGuestInput(
   input: OnlineBookInput,
   settings: ReservationGuestSettings,
 ): string | null {
+  if (input.diningDurationMinutes !== undefined && !isDiningTime(input.diningDurationMinutes)) return "Dining time must be 30–240 minutes, in 30-minute steps.";
   const lang = parseGuestReservationLang(input.lang);
   const copy = guestReservationCopy(lang);
   const required = settings.reservationRequiredFields;
@@ -679,6 +693,7 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
     reservations: ctx.reservations,
     occupiedTables: ctx.occupiedTables,
     maxGuestsPerSlot: ctx.settings.reservationMaxGuestsPerSlot,
+    diningDurationMinutes: input.diningDurationMinutes,
     durationMinutes: ctx.settings.reservationDurationMinutes,
     bufferMinutes: ctx.settings.reservationBufferMinutes,
     heldGuests,
@@ -728,6 +743,7 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
     guest_phone: phone || null,
     guest_email: email || null,
     party_size: guestCount,
+    ...(input.diningDurationMinutes !== undefined ? { dining_duration_minutes: input.diningDurationMinutes } : {}),
     reserved_at: reservedAt.toISOString(),
     notes: input.notes?.trim() || null,
     event_type: eventType,
@@ -750,7 +766,7 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
     .from("reservations")
     .insert(insertPayload)
     .select(
-      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, dining_duration_minutes, reserved_at, status, notes, event_type",
     )
     .single();
 
@@ -774,7 +790,7 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
         updated_at: nowIso,
       })
       .select(
-        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, dining_duration_minutes, reserved_at, status, notes, event_type",
       )
       .single();
     data = legacy.data;
@@ -798,7 +814,7 @@ export async function fetchReservationByManageToken(
   const { data, error } = await admin
     .from("reservations")
     .select(
-      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, dining_duration_minutes, reserved_at, status, notes, event_type",
     )
     .eq("manage_token", manageToken)
     .maybeSingle();
@@ -814,6 +830,7 @@ export async function fetchReservationByManageToken(
 }
 
 export async function updateReservationByManageToken(input: {
+  diningDurationMinutes?: number;
   token: string;
   date: string;
   time: string;
@@ -830,8 +847,10 @@ export async function updateReservationByManageToken(input: {
     };
   }
 
+  if (input.diningDurationMinutes !== undefined && !isDiningTime(input.diningDurationMinutes)) return { data: null, error: "Dining time must be 30–240 minutes, in 30-minute steps." };
   const settings = await fetchReservationGuestSettings();
   const capacity = await validateSlotCapacity({
+    diningDurationMinutes: input.diningDurationMinutes ?? reservationDiningMinutes(existing, settings.reservationDurationMinutes),
     settings,
     date: input.date,
     time: input.time,
@@ -848,6 +867,7 @@ export async function updateReservationByManageToken(input: {
     .from("reservations")
     .update({
       party_size: capacity.guestCount,
+      ...(input.diningDurationMinutes !== undefined ? { dining_duration_minutes: input.diningDurationMinutes } : {}),
       reserved_at: reservedAt.toISOString(),
       notes: input.notes?.trim() || null,
       status: existing.status === "late" ? "confirmed" : existing.status,
@@ -856,7 +876,7 @@ export async function updateReservationByManageToken(input: {
     })
     .eq("id", existing.id)
     .select(
-      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, dining_duration_minutes, reserved_at, status, notes, event_type",
     )
     .single();
 
@@ -865,6 +885,7 @@ export async function updateReservationByManageToken(input: {
       .from("reservations")
       .update({
         party_size: capacity.guestCount,
+        ...(input.diningDurationMinutes !== undefined ? { dining_duration_minutes: input.diningDurationMinutes } : {}),
         reserved_at: reservedAt.toISOString(),
         notes: input.notes?.trim() || null,
         status: existing.status === "late" ? "confirmed" : existing.status,
@@ -872,7 +893,7 @@ export async function updateReservationByManageToken(input: {
       })
       .eq("id", existing.id)
       .select(
-        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, dining_duration_minutes, reserved_at, status, notes, event_type",
       )
       .single();
     data = legacy.data;
@@ -913,7 +934,7 @@ export async function cancelReservationByManageToken(
     })
     .eq("id", existing.id)
     .select(
-      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, dining_duration_minutes, reserved_at, status, notes, event_type",
     )
     .single();
 
@@ -926,7 +947,7 @@ export async function cancelReservationByManageToken(
       })
       .eq("id", existing.id)
       .select(
-        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, dining_duration_minutes, reserved_at, status, notes, event_type",
       )
       .single();
     data = legacy.data;
@@ -972,7 +993,7 @@ export async function confirmReservationServer(reservationId: string): Promise<{
     })
     .eq("id", reservationId)
     .select(
-      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, dining_duration_minutes, reserved_at, status, notes, event_type",
     )
     .single();
 
@@ -994,7 +1015,7 @@ export async function fetchReservationEmailContext(reservationId: string): Promi
   let { data, error } = await admin
     .from("reservations")
     .select(
-      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type, cancellation_reason",
+      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, dining_duration_minutes, reserved_at, status, notes, event_type, cancellation_reason",
     )
     .eq("id", reservationId)
     .single();
@@ -1003,7 +1024,7 @@ export async function fetchReservationEmailContext(reservationId: string): Promi
     const legacy = await admin
       .from("reservations")
       .select(
-        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, dining_duration_minutes, reserved_at, status, notes, event_type",
       )
       .eq("id", reservationId)
       .single();

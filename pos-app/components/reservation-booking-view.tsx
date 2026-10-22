@@ -1,5 +1,8 @@
 "use client";
 
+import { ReservationTimePicker } from "@/components/reservation-time-picker";
+import { ReservationDiningTimeField } from "@/components/reservation-dining-time-field";
+
 import { ReferralCodeField } from "@/components/referral-code-field";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -42,7 +45,7 @@ type AvailabilitySlot = {
 
 export type ReservationStaffDraft = {
   guestName:string;email:string;phone:string;guestCount:number;date:string;time:string;
-  notes:string;eventType:string;referralCode:string;wantsBbq:"yes"|"no"|"undecided"|null;
+  diningDurationMinutes:number;notes:string;eventType:string;referralCode:string;wantsBbq:"yes"|"no"|"undecided"|null;
 };
 
 type StaffBookingOptions = {
@@ -102,6 +105,7 @@ export function ReservationBookingView({
   const [guestCount, setGuestCount] = useState(2);
   const [date, setDate] = useState(todayIsoDate());
   const [time, setTime] = useState("18:00");
+  const [diningDurationMinutes, setDiningDurationMinutes] = useState(90);
   const [referralCode, setReferralCode] = useState("");
   const [notes, setNotes] = useState("");
   const [eventType, setEventType] = useState("");
@@ -207,6 +211,7 @@ export function ReservationBookingView({
     const params = new URLSearchParams({
       date,
       partySize: String(guestCount),
+      diningDurationMinutes: String(diningDurationMinutes),
     });
     if (wantsBbq) params.set("grill", wantsBbq);
 
@@ -246,6 +251,7 @@ export function ReservationBookingView({
     appSettings.reservationTimeStep,
     date,
     guestCount,
+    diningDurationMinutes,
     wantsBbq,
     requiresLargePartyContact,
     isStaff,
@@ -331,7 +337,7 @@ export function ReservationBookingView({
     setSubmitting(true);
     if(staff){
       try {
-        const failure=await staff.onSubmit({guestName:guestName.trim(),email:email.trim(),phone:phone.trim(),guestCount,date,time,notes:notes.trim(),eventType,referralCode:referralCode.trim(),wantsBbq});
+        const failure=await staff.onSubmit({guestName:guestName.trim(),email:email.trim(),phone:phone.trim(),guestCount,date,time,diningDurationMinutes,notes:notes.trim(),eventType,referralCode:referralCode.trim(),wantsBbq});
         if(failure)setError(failure);
       } catch {setError(copy.errorSubmitRetry);}
       finally {setSubmitting(false);}
@@ -367,6 +373,7 @@ export function ReservationBookingView({
           email: email.trim(),
           phone: phone.trim(),
           guestCount,
+          diningDurationMinutes,
           date,
           time,
           notes: (() => {
@@ -676,35 +683,20 @@ export function ReservationBookingView({
               className="mt-2 w-full rounded-none border border-white/15 bg-[#0B0B0C] px-4 py-3 text-white outline-none transition focus:border-[#C9A88B] focus:ring-2 focus:ring-[#C9A88B]/30"
             />
           </label>
-          <label className="block text-sm text-white/80">
+          <div className="block text-sm text-white/80">
             {copy.selectTime}
             <RequiredMark show={required.time} />
-            {isStaff?<input type="time" value={time} onChange={event=>setTime(event.target.value)}
-              className="mt-2 w-full border border-white/15 bg-[#0B0B0C] px-4 py-3 text-white outline-none transition focus:border-[#C9A88B]"/>:(
-            <select
-              value={time}
-              onChange={(event) => setTime(event.target.value)}
-              disabled={settingsLoading || slotsLoading}
-              className="mt-2 w-full rounded-none border border-white/15 bg-[#0B0B0C] px-4 py-3 text-white outline-none transition focus:border-[#C9A88B] focus:ring-2 focus:ring-[#C9A88B]/30 disabled:opacity-60"
-            >
-              {settingsLoading || slotsLoading ? (
-                <option value={time}>{copy.loadingTimes}</option>
-              ) : availableTimeSlots.length === 0 ? (
-                <option value="">{copy.noTimesAvailable}</option>
-              ) : (
-                availableTimeSlots.map((slot) => (
-                  <option key={slot.time} value={slot.time}>
-                    {slot.time}{isStaff?"":` — ${slotStatusLabel(slot.status, copy)}`}
-                  </option>
-                ))
-              )}
-            </select>
-            )}
+            <ReservationTimePicker value={time} onChange={setTime} label={copy.selectTime} dark
+              disabled={settingsLoading || (!isStaff && slotsLoading)}
+              placeholder={slotsLoading ? copy.loadingTimes : copy.noTimesAvailable}
+              options={isStaff ? undefined : availableTimeSlots.map((slot) => ({ time: slot.time, label: slotStatusLabel(slot.status, copy) }))} />
             {selectedSlotStatus === "limited" ? (
               <p className="mt-1 text-xs text-amber-300/90">{copy.slotLimited}</p>
             ) : null}
-          </label>
+          </div>
         </div>
+
+        <ReservationDiningTimeField value={diningDurationMinutes} onChange={setDiningDurationMinutes} language={lang} dark disabled={submitting} />
 
         <ReferralCodeField value={referralCode} onChange={setReferralCode} />
 

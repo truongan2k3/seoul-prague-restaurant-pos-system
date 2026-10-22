@@ -23,7 +23,7 @@ export function ReservationTableMap({tables,value,onChange,language,disabled=fal
     tables:tables.flatMap(table=>{const config=floorTableByLabel(table.label);return config?[{...config,id:table.id,occupied:table.status!=="empty",occupiedAt:table.occupiedAt?.toISOString()??null,blocked:table.availabilityBlocked===true}]:[];}),
     reservations:checkIn.reservations,
   }:null;
-  const issueFor=(id:string)=>seatingSource&&checkIn?checkInTableIssue(seatingSource,id,checkIn.reservation.id,checkIn.partySize,resolveGrill(checkIn.reservation)):null;
+  const issueFor=(id:string)=>seatingSource&&checkIn?checkInTableIssue(seatingSource,id,checkIn.reservation.id,checkIn.partySize,resolveGrill(checkIn.reservation),checkIn.reservation.diningDurationMinutes):null;
   const selectedIssue=ids.map(issueFor).find(Boolean);
   const floor=useMemo(()=>{
     const positions=resolveFloorCardOverlaps(tables.map(table=>({id:table.id,x:table.posX,y:table.posY})));

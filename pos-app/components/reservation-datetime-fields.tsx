@@ -1,8 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { ReservationTimePicker } from "@/components/reservation-time-picker";
 import { CalendarDays, Clock } from "lucide-react";
-import { buildTimeSlotsForDate } from "@/lib/reservation-slots";
 import type { AppSettings } from "@/lib/types";
 
 function splitDateTimeLocal(value: string): { date: string; time: string } {
@@ -23,7 +22,6 @@ function joinDateTimeLocal(date: string, time: string): string {
 export function ReservationDateTimeFields({
   value,
   onChange,
-  settings,
   dateLabel,
   timeLabel,
 }: {
@@ -34,33 +32,7 @@ export function ReservationDateTimeFields({
   timeLabel: string;
 }) {
   const { date, time } = splitDateTimeLocal(value);
-  const slots = useMemo(() => {
-    if (!date) return [] as string[];
-    return buildTimeSlotsForDate(
-      date,
-      settings.reservationOperatingHours,
-      settings.reservationTimeStep,
-    );
-  }, [date, settings.reservationOperatingHours, settings.reservationTimeStep]);
-
-  const times =
-    slots.length > 0
-      ? slots
-      : [
-          "12:00",
-          "12:30",
-          "13:00",
-          "17:00",
-          "17:30",
-          "18:00",
-          "18:30",
-          "19:00",
-          "19:30",
-          "20:00",
-          "20:30",
-          "21:00",
-        ];
-  const selectedTime = times.includes(time) ? time : times[0] ?? "18:00";
+  const selectedTime = time || "18:00";
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -76,23 +48,13 @@ export function ReservationDateTimeFields({
           className="pos-input mt-1"
         />
       </label>
-      <label className="block text-sm">
+      <div className="block text-sm">
         <span className="inline-flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
           <Clock className="h-3.5 w-3.5" aria-hidden />
           {timeLabel}
         </span>
-        <select
-          value={selectedTime}
-          onChange={(e) => onChange(joinDateTimeLocal(date, e.target.value))}
-          className="pos-input mt-1"
-        >
-          {times.map((slot) => (
-            <option key={slot} value={slot}>
-              {slot}
-            </option>
-          ))}
-        </select>
-      </label>
+        <ReservationTimePicker value={selectedTime} onChange={(next) => onChange(joinDateTimeLocal(date, next))} label={timeLabel} />
+      </div>
     </div>
   );
 }

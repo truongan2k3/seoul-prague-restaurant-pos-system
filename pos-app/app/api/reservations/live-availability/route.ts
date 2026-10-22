@@ -1,3 +1,4 @@
+import { isDiningTime, reservationDiningMinutes } from "@/lib/reservation-dining";
 import { NextResponse } from "next/server";
 import { readAuthSession } from "@/src/lib/auth/session";
 import { readStaffSession } from "@/src/lib/auth/staff-session";
@@ -9,14 +10,16 @@ import { floorTableByLabel } from "@/lib/reservation-floor-plan";
 import { todayIsoDateInVenue } from "@/lib/venue-timezone";
 import { loadDayCapacityContext } from "@/src/lib/reservation-guest-server";
 
-async function validateSeating(input: { reservedAt: string; partySize: number; notes?: string; tableId?: string; excludeReservationId?: string }) {
+async function validateSeating(input: { diningDurationMinutes?: number; reservedAt: string; partySize: number; notes?: string; tableId?: string; excludeReservationId?: string }) {
+  if (input.diningDurationMinutes !== undefined && !isDiningTime(input.diningDurationMinutes)) throw new Error("Invalid dining time.");
   const at = new Date(input.reservedAt);
   if (!Number.isFinite(at.getTime()) || !Number.isInteger(input.partySize) || input.partySize < 1) throw new Error("Invalid reservation time or party size.");
   const date = todayIsoDateInVenue(at);
   const time = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Prague", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at);
   const ctx = await loadDayCapacityContext(date);
   const grill = resolveGrill({ partySize: input.partySize, reservedAt: at, status: "pending", notes: input.notes });
-  const params = { dateIso: date, time, partySize: input.partySize, grill, reservations: ctx.reservations,
+  const diningDurationMinutes = input.diningDurationMinutes ?? reservationDiningMinutes(ctx.reservations.find((row) => row.id === input.excludeReservationId) ?? {}, ctx.settings.reservationDurationMinutes);
+  const params = { diningDurationMinutes, dateIso: date, time, partySize: input.partySize, grill, reservations: ctx.reservations,
     occupiedTables: ctx.occupiedTables, durationMinutes: ctx.settings.reservationDurationMinutes,
     bufferMinutes: ctx.settings.reservationBufferMinutes, excludeReservationId: input.excludeReservationId };
   if (!input.tableId && evaluateReservationCapacity(params).availability === "full") throw new Error("No available table fits this reservation. Choose another time.");
@@ -56,7 +59,7 @@ export async function POST(request: Request) {
   if (body.action === "check-in") {
     try {
       if (typeof body.reservationId !== "string" || typeof body.tableId !== "string") throw new Error("Select one table.");
-      const { data: row, error } = await db.from("reservations").select("status,table_id,party_size,notes,wants_grill")
+      const { data: row, error } = await db.from("reservations").select("status,table_id,party_size,notes,wants_grill,dining_duration_minutes")
         .eq("id", body.reservationId).maybeSingle();
       if (error) throw error;
       if (!row) throw new Error("Reservation not found.");
@@ -65,7 +68,7 @@ export async function POST(request: Request) {
       const { source } = await loadLiveTableAvailability(auth.businessId);
       const party = Number(body.actualPartySize ?? row.party_size);
       const grill = resolveGrill({ partySize: party, reservedAt: source.serverNow, status: row.status, notes: row.notes, wantsGrill: row.wants_grill });
-      const issue = checkInTableIssue(source, body.tableId, body.reservationId, party, grill);
+      const issue = checkInTableIssue(source, body.tableId, body.reservationId, party, grill, row.dining_duration_minutes ?? undefined);
       const overrideAllowed = issue !== null && !["TABLE_NOT_CONFIGURED", "INVALID_PARTY_SIZE"].includes(issue.code);
       if (body.override === true) {
         // Reception devices can confirm seating warnings without a staff login.
@@ -130,7 +133,7 @@ export async function POST(request: Request) {
       if (error) throw error;
       if (!data) throw new Error("Only reservations waiting to check in can be unassigned.");
     } else if (body.action === "validate") {
-      await validateSeating({ reservedAt: String(body.reservedAt), partySize: Number(body.partySize),
+      await validateSeating({ diningDurationMinutes: body.diningDurationMinutes, reservedAt: String(body.reservedAt), partySize: Number(body.partySize),
         tableId: body.tableId || undefined, notes: body.notes, excludeReservationId: body.excludeReservationId });
     } else if (body.action === "settings") {
       if (!["admin", "manager"].includes(staff.role)) return NextResponse.json({ error: "Manager permission required." }, { status: 403 });

@@ -1,6 +1,8 @@
+import { resolveGrill } from "@/lib/reservation-capacity-engine";
+import { isDiningTime } from "@/lib/reservation-dining";
 import { NextResponse } from "next/server";
 import { filterPastTimeSlots } from "@/lib/reservation-slots";
-import { evaluateGuestSlotAvailability } from "@/src/lib/reservation-guest-server";
+import { evaluateGuestSlotAvailability, fetchReservationByManageToken } from "@/src/lib/reservation-guest-server";
 
 /**
  * Guest-facing slot availability. Returns Available / Limited / Full only —
@@ -10,8 +12,11 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const date = url.searchParams.get("date")?.trim() ?? "";
   const partySize = Math.max(1, Number(url.searchParams.get("partySize") || 2) || 2);
+  const rawDuration = url.searchParams.get("diningDurationMinutes");
+  const diningDurationMinutes = rawDuration === null ? undefined : Number(rawDuration);
+  if (diningDurationMinutes !== undefined && !isDiningTime(diningDurationMinutes)) return NextResponse.json({ error: "Invalid dining time." }, { status: 400 });
   const grillRaw = url.searchParams.get("grill");
-  const grill =
+  let grill =
     grillRaw === "yes" || grillRaw === "no" || grillRaw === "undecided" ? grillRaw : undefined;
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -19,10 +24,20 @@ export async function GET(request: Request) {
   }
 
   try {
+    const manageToken = url.searchParams.get("manageToken");
+    let excludeReservationId: string | undefined;
+    if (manageToken) {
+      const booking = await fetchReservationByManageToken(manageToken);
+      if (!booking.data) return NextResponse.json({ error: "Reservation not found." }, { status: 404 });
+      excludeReservationId = booking.data.id;
+      grill = resolveGrill({ partySize, reservedAt: booking.data.reservedAt, status: booking.data.status, notes: booking.data.notes }) ?? undefined;
+    }
     const { slots, settings } = await evaluateGuestSlotAvailability({
+      excludeReservationId,
       date,
       partySize,
       grill: grill ?? null,
+      diningDurationMinutes,
     });
 
     const futureTimes = new Set(filterPastTimeSlots(slots.map((row) => row.time), date));

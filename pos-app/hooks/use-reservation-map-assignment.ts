@@ -7,6 +7,9 @@ import { RESERVATION_FLOOR_TABLES, floorTableByLabel } from "@/lib/reservation-f
 import { todayIsoDateInVenue } from "@/lib/venue-timezone";
 import { assignReservationTables, mapReservationsResponse } from "@/src/lib/reservation-actions";
 import type { ReservationRecord, RestaurantTable } from "@/lib/types";
+import { reservationDiningMinutes } from "@/lib/reservation-dining";
+
+export const UNASSIGN_DROP_TARGET = "reservation-unassign";
 
 const ACTIVE = ["pending", "confirmed", "late"];
 type PointerDrag = { reservationId: string; pointerId: number; startX: number; startY: number; active: boolean; wasSelected: boolean };
@@ -37,7 +40,7 @@ export function useReservationMapAssignment({ tables, reservations, disabled, du
     });
     const blocked = blockedTableLabels({ reservations: reservations.filter((r) => r.tableId || r.secondaryTableId || r.tertiaryTableId),
       occupiedTables, dateIso: todayIsoDateInVenue(row.reservedAt),
-      time: timeFromReservedAt(row.reservedAt), durationMinutes, bufferMinutes, excludeReservationId: row.id, nowMs: now });
+      time: timeFromReservedAt(row.reservedAt), durationMinutes, diningDurationMinutes: reservationDiningMinutes(row, durationMinutes), bufferMinutes, excludeReservationId: row.id, nowMs: now });
     const grill = resolveGrill(row);
     return new Set(tables.filter((table) => {
       const def = floorTableByLabel(table.label);
@@ -56,10 +59,11 @@ export function useReservationMapAssignment({ tables, reservations, disabled, du
     if (disabled || locked.current) return;
     const row = reservations.find((r) => r.id === reservationId && ACTIVE.includes(r.status));
     if (!row) { setError(unavailableMessage); return; }
+    if (!tableId && !row.tableId && !row.secondaryTableId && !row.tertiaryTableId) { cancel(); return; }
     if (row.tableId === tableId && !row.secondaryTableId && !row.tertiaryTableId) { cancel(); return; }
     locked.current = true; setBusyId(reservationId); setError(null); setOverrideTarget(null);
     try {
-      const result = await assignReservationTables(reservationId, [tableId], { override: overrideReason !== undefined, overrideReason });
+      const result = await assignReservationTables(reservationId, tableId ? [tableId] : [], { override: overrideReason !== undefined, overrideReason });
       if (result.error) throw result.error;
       if (!result.data) throw new Error(unavailableMessage);
       const updated = mapReservationsResponse([result.data])[0];
@@ -106,7 +110,7 @@ export function useReservationMapAssignment({ tables, reservations, disabled, du
       if (!current || event.pointerId !== current.pointerId) return;
       const target = current.active ? hit(event) : null;
       clearDrag();
-      if (target) void assign(current.reservationId, target);
+      if (target) void assign(current.reservationId, target === UNASSIGN_DROP_TARGET ? "" : target);
       else if (!current.active) setSelectedId(current.wasSelected ? null : current.reservationId);
     };
     const stop = (event: PointerEvent) => { if (pointer.current?.pointerId === event.pointerId) clearDrag(); };
@@ -131,6 +135,7 @@ export function useReservationMapAssignment({ tables, reservations, disabled, du
       void assign(overrideTarget.reservationId, overrideTarget.tableId, overrideTarget.reason);
     }
   };
+  const unassign = () => { if (selected) void assign(selected.id, ""); };
   return { selected, selectedId, dragging, targetId, busyId, error, eligibleIds, dragX, dragY, overrideTarget, confirmOverride,
-    select, start, cancel, activateTable };
+    select, start, cancel, activateTable, unassign };
 }

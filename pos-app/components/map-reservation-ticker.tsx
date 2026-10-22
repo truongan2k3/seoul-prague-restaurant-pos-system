@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState, type PointerEvent, type ReactNode } from "react";
-import { CalendarClock, ChevronDown, ChevronUp, GripVertical, Loader2, MapPin, Users } from "lucide-react";
+import { CalendarClock, ChevronDown, ChevronUp, GripVertical, Loader2, MapPin, Users, Unlink } from "lucide-react";
+import { UNASSIGN_DROP_TARGET } from "@/hooks/use-reservation-map-assignment";
+import { diningTimeCopy, formatDiningTime } from "@/lib/reservation-dining";
 import { CompactReservationTicker } from "@/components/compact-reservation-ticker";
 import { useApp } from "@/contexts/app-context";
 import { reservationStatusLabelKey, reservationStatusTone } from "@/lib/reservation-analytics";
@@ -15,6 +17,8 @@ type MapReservationTickerProps = {
   onSelect?: (id: string) => void;
   onPointerDown?: (id: string, event: PointerEvent<HTMLButtonElement>) => void;
   onCollapse?: () => void;
+  onUnassign?: () => void;
+  unassignTargeted?: boolean;
 };
 
 /** Uses parent data; assignment controls are available only on the floor map. */
@@ -38,7 +42,7 @@ export function MapReservationTicker(props: MapReservationTickerProps) {
     : <CompactReservationTicker reservations={props.reservations} action={action} />;
 }
 
-function ReservationAssignmentCards({ reservations, selectedId = null, busyId = null, disabled = false, onSelect, onPointerDown, headerAction }: MapReservationTickerProps & { headerAction?: ReactNode }) {
+function ReservationAssignmentCards({ reservations, selectedId = null, busyId = null, disabled = false, onSelect, onPointerDown, onUnassign, unassignTargeted, headerAction }: MapReservationTickerProps & { headerAction?: ReactNode }) {
   const { translate, language } = useApp();
   const today = todayIsoDateInVenue();
   const rows = useMemo(() => reservations.filter((row) => row.source !== "walk_in"
@@ -55,6 +59,13 @@ function ReservationAssignmentCards({ reservations, selectedId = null, busyId = 
         <div className="ml-auto shrink-0">{headerAction}</div>
       </div>
       <div className="flex gap-2 overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:thin]">
+        {onUnassign && <button type="button" data-reservation-drop-table={UNASSIGN_DROP_TARGET}
+          disabled={disabled || busyId !== null} onClick={onUnassign}
+          style={{ backgroundColor: "var(--card)" }}
+          className={`sticky left-0 z-10 flex w-44 shrink-0 flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-3 py-3 text-center transition-colors disabled:opacity-40 ${unassignTargeted ? "border-rose-400 bg-rose-400/20 text-rose-400" : "border-[#C9A88B]/35 bg-[#C9A88B]/5 text-[var(--muted)] hover:border-rose-400/60 hover:text-rose-400"}`}>
+          <Unlink aria-hidden className="h-5 w-5" /><span className="text-xs font-semibold">{diningTimeCopy(language).unassign}</span>
+          <span className="text-[10px] leading-relaxed opacity-65">{diningTimeCopy(language).unassignHint}</span>
+        </button>}
         {rows.map((row) => {
           const selected = row.id === selectedId;
           const bbq = row.wantsGrill ?? parseReservationBbqNotes(row.notes).bbq;
@@ -65,6 +76,7 @@ function ReservationAssignmentCards({ reservations, selectedId = null, busyId = 
             <span className="mt-0.5 block truncate text-xs font-semibold text-[var(--foreground)]">{row.guestName}</span>
             <span className="mt-1 flex items-center gap-1.5"><span className={`rounded px-1 py-0.5 text-[8px] font-semibold uppercase ${reservationStatusTone(row.status)}`}>{translate(reservationStatusLabelKey(row.status))}</span>{bbq === "yes" && <span className="text-[9px] text-orange-400">BBQ</span>}</span>
             <span className="mt-1 flex items-center gap-1 truncate text-[10px] text-[var(--muted)]"><MapPin className="h-2.5 w-2.5 shrink-0" />{row.tableLabel || translate("mapResTickerNoTable")}</span>
+            {row.diningDurationMinutes && <span className="mt-1 block text-[10px] text-[#C9A88B]">{formatDiningTime(row.diningDurationMinutes, language)}</span>}
           </>;
           return <div key={row.id} className={`flex w-52 shrink-0 overflow-hidden rounded-xl border transition-colors motion-reduce:transition-none ${selected ? "border-[#C9A88B] bg-[#C9A88B]/15 shadow-[0_0_12px_rgba(201,168,139,0.1)]" : "border-[var(--border)] bg-[var(--card)]"}`}>
             {onPointerDown && <button type="button" tabIndex={-1} disabled={disabled || busyId !== null}

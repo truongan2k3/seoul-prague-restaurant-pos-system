@@ -546,6 +546,8 @@ export type ReservationStatus =
   | "late";
 
 export interface ReservationRecord {
+  /** Guest estimate; absent on historical bookings uses the venue default. */
+  diningDurationMinutes?: number;
   referralCodeId?: string;
   referralCode?: string;
   id: string;

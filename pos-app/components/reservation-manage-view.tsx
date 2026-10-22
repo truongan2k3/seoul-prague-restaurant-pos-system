@@ -1,23 +1,21 @@
 "use client";
 
+import { ReservationTimePicker } from "@/components/reservation-time-picker";
+import { ReservationDiningTimeField } from "@/components/reservation-dining-time-field";
+import { formatDiningTime } from "@/lib/reservation-dining";
+
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CalendarClock, Loader2, UtensilsCrossed } from "lucide-react";
-import {
-  buildTimeSlotsForDate,
-  filterPastTimeSlots,
-  filterSlotsByCapacity,
-  todayIsoDate,
-  type SlotCapacityRow,
-} from "@/lib/reservation-slots";
+import { todayIsoDate } from "@/lib/reservation-slots";
 import type { AppSettings, ReservationStatus } from "@/lib/types";
 import { LandingImage } from "@/lib/website/landing-image";
 import type { WebsiteContent } from "@/lib/website/types";
 import { formatInVenueTz, splitVenueWallTime } from "@/lib/venue-timezone";
 import { DEFAULT_APP_SETTINGS, fetchAppSettings } from "@/src/lib/settings-actions";
-import { fetchReservationsForDate } from "@/src/lib/reservation-actions";
 
 interface ManagedReservation {
+  diningDurationMinutes?: number | null;
   bookingCode: string;
   guestName: string;
   guestEmail: string | null;
@@ -51,7 +49,8 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
   const token = searchParams.get("token")?.trim() ?? "";
 
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
-  const [reservationsForDate, setReservationsForDate] = useState<SlotCapacityRow[]>([]);
+  const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
   const [reservation, setReservation] = useState<ManagedReservation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +61,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
   const [guestCount, setGuestCount] = useState(2);
   const [date, setDate] = useState(todayIsoDate());
   const [time, setTime] = useState("18:00");
+  const [diningDurationMinutes, setDiningDurationMinutes] = useState(90);
   const [notes, setNotes] = useState("");
 
   const minDate = useMemo(() => todayIsoDate(), []);
@@ -98,6 +98,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
         setDate(parts.date);
         setTime(parts.time);
         setGuestCount(row.partySize);
+        setDiningDurationMinutes(row.diningDurationMinutes ?? 90);
         setNotes(row.notes ?? "");
         setError(null);
       })
@@ -114,59 +115,28 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
   }, [token]);
 
   useEffect(() => {
-    void fetchReservationsForDate(date).then(({ data, error: fetchError }) => {
-      if (fetchError || !data) {
-        setReservationsForDate([]);
-        return;
-      }
-      setReservationsForDate(
-        data.map((row) => ({
-          partySize: row.party_size,
-          reservedAt: row.reserved_at,
-          status: row.status,
-        })),
-      );
-    });
-  }, [date]);
+    if (!token || !reservation || !MANAGEABLE.includes(reservation.status)) return;
+    const controller = new AbortController();
+    setSlotsLoading(true);
+    const params = new URLSearchParams({ date, partySize: String(guestCount), diningDurationMinutes: String(diningDurationMinutes), manageToken: token });
+    const timer = window.setTimeout(() => {
+      void fetch(`/api/reservations/availability?${params}`, { signal: controller.signal })
+        .then(async (response) => {
+          const payload = await response.json();
+          if (controller.signal.aborted) return;
+          if (!response.ok) throw new Error(payload.error || "Could not load availability.");
+          setAvailableTimeSlots((payload.slots as { time: string; status: string }[]).filter((slot) => slot.status !== "full").map((slot) => slot.time));
+        }).catch(() => { if (!controller.signal.aborted) setAvailableTimeSlots([]); })
+        .finally(() => { if (!controller.signal.aborted) setSlotsLoading(false); });
+    }, 200);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [date, guestCount, diningDurationMinutes, token, reservation]);
 
   const guestOptions = useMemo(
     () =>
       Array.from({ length: appSettings.reservationMaxGuestsPerSlot }, (_, index) => index + 1),
     [appSettings.reservationMaxGuestsPerSlot],
   );
-
-  const availableTimeSlots = useMemo(() => {
-    const baseSlots = buildTimeSlotsForDate(
-      date,
-      appSettings.reservationOperatingHours,
-      appSettings.reservationTimeStep,
-    );
-    const futureSlots = filterPastTimeSlots(baseSlots, date);
-    // Capacity filter does not know exclude-self; API enforces exclude. Keep current time visible.
-    const capacityFiltered = filterSlotsByCapacity(
-      futureSlots,
-      reservationsForDate,
-      date,
-      appSettings.reservationTimeStep,
-      appSettings.reservationMaxGuestsPerSlot,
-      guestCount,
-    );
-    if (reservation) {
-      const current = splitReservedAt(reservation.reservedAt);
-      if (current.date === date && !capacityFiltered.includes(current.time) && futureSlots.includes(current.time)) {
-        return [...capacityFiltered, current.time].sort();
-      }
-    }
-    return capacityFiltered;
-  }, [
-    appSettings.reservationMaxGuestsPerSlot,
-    appSettings.reservationOperatingHours,
-    appSettings.reservationTimeStep,
-    date,
-    guestCount,
-    reservation,
-    reservationsForDate,
-  ]);
 
   useEffect(() => {
     if (availableTimeSlots.length === 0) return;
@@ -178,6 +148,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!token || !canEdit) return;
+    if (slotsLoading || !availableTimeSlots.includes(time)) { setError("Choose an available time for this dining duration."); return; }
     setSaving(true);
     setError(null);
     setMessage(null);
@@ -190,6 +161,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
           date,
           time,
           guestCount,
+          diningDurationMinutes,
           notes: notes.trim() || undefined,
         }),
       });
@@ -296,7 +268,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
                 <p className="mt-1 text-white/70">
                   {reservation.guestName} · {reservation.partySize} guests
                 </p>
-                <p className="mt-1 text-white/55">{formatWhen(reservation.reservedAt)}</p>
+                <p className="mt-1 text-white/55">{formatWhen(reservation.reservedAt)}{reservation.diningDurationMinutes ? ` · ${formatDiningTime(reservation.diningDurationMinutes)}` : ""}</p>
               </div>
             </div>
 
@@ -311,6 +283,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
 
             {canEdit ? (
               <form onSubmit={(event) => void handleSave(event)} className="space-y-4">
+                <ReservationDiningTimeField value={diningDurationMinutes} onChange={setDiningDurationMinutes} disabled={saving} dark />
                 <div className="grid gap-4 sm:grid-cols-3">
                   <label className="block text-sm sm:col-span-1">
                     <span className="font-medium text-white/90">Guests</span>
@@ -337,25 +310,10 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
                       required
                     />
                   </label>
-                  <label className="block text-sm sm:col-span-1">
+                  <div className="block text-sm sm:col-span-1">
                     <span className="font-medium text-white/90">Time</span>
-                    <select
-                      value={time}
-                      onChange={(event) => setTime(event.target.value)}
-                      className="mt-2 w-full rounded-none border border-white/15 bg-[#0B0B0C] px-3 py-3 text-white"
-                      required
-                    >
-                      {availableTimeSlots.length === 0 ? (
-                        <option value="">No times</option>
-                      ) : (
-                        availableTimeSlots.map((slot) => (
-                          <option key={slot} value={slot}>
-                            {slot}
-                          </option>
-                        ))
-                      )}
-                    </select>
-                  </label>
+                    <ReservationTimePicker value={time} onChange={setTime} label="Time" options={availableTimeSlots} disabled={slotsLoading} dark />
+                  </div>
                 </div>
 
                 <label className="block text-sm">

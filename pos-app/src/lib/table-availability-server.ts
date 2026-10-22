@@ -31,7 +31,7 @@ export async function loadLiveTableAvailability(businessId: string | null) {
     }),
     // Strip free-text notes, contacts and all guest identifiers before serializing.
     reservations: raw.reservations.map((row) => ({ id: row.id, partySize: row.partySize,
-      actualPartySize: row.actualPartySize, reservedAt: row.reservedAt, checkedInAt: row.checkedInAt,
+      actualPartySize: row.actualPartySize, diningDurationMinutes: row.diningDurationMinutes, reservedAt: row.reservedAt, checkedInAt: row.checkedInAt,
       status: row.status, wantsGrill: resolveGrill(row), tableLabel: row.tableLabel,
       secondaryTableLabel: row.secondaryTableLabel, tertiaryTableLabel: row.tertiaryTableLabel })),
   };

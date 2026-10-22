@@ -1,4 +1,5 @@
-import { planReservationAllocations, type CapacityReservationInput } from "@/lib/reservation-capacity-engine";
+import { occupiedTableRelease, planReservationAllocations, type CapacityReservationInput } from "@/lib/reservation-capacity-engine";
+import { reservationDiningMinutes } from "@/lib/reservation-dining";
 import { RESERVATION_FLOOR_TABLES } from "@/lib/reservation-floor-plan";
 
 export type LiveTableStatus = "available" | "occupied" | "reserved" | "blocked";
@@ -26,8 +27,7 @@ export function calculateTableAvailability(source: TableAvailabilitySource, now 
   const tables: LiveTableAvailability[] = source.tables.map((table) => {
     const occupied = table.occupied || source.reservations.some((r) => r.status === "checked_in"
       && [r.tableLabel, r.secondaryTableLabel, r.tertiaryTableLabel].some((label) => label?.trim().toUpperCase() === table.label));
-    const since = table.occupiedAt ? new Date(table.occupiedAt).getTime() : NaN;
-    const release = occupied && Number.isFinite(since) && since <= now ? since + duration : null;
+    const release = occupied ? occupiedTableRelease({ ...table, occupiedAt: table.occupiedAt }, source.reservations, source.durationMinutes) : null;
     const spans = allocations.filter((a) => a.labels.includes(table.label)).sort((a, b) => a.startMs - b.startMs);
     const protectedNow = spans.some((a) => a.startMs < now + duration && a.endMs > now);
     const status: LiveTableStatus = occupied ? "occupied" : table.blocked ? "blocked" : protectedNow ? "reserved" : "available";
@@ -40,8 +40,8 @@ export function calculateTableAvailability(source: TableAvailabilitySource, now 
     }
     const upcomingReservations = source.reservations.filter((r) => ["pending", "confirmed", "late"].includes(r.status)
       && [r.tableLabel, r.secondaryTableLabel, r.tertiaryTableLabel].some((label) => label?.trim().toUpperCase() === table.label))
-      .map((r) => ({ reservedAt: new Date(r.reservedAt).getTime(), partySize: r.actualPartySize ?? r.partySize }))
-      .filter((r) => r.reservedAt + duration > now).sort((a, b) => a.reservedAt - b.reservedAt);
+      .map((r) => ({ reservedAt: new Date(r.reservedAt).getTime(), partySize: r.actualPartySize ?? r.partySize, durationMinutes: reservationDiningMinutes(r, source.durationMinutes) }))
+      .filter((r) => r.reservedAt + r.durationMinutes * 60_000 > now).sort((a, b) => a.reservedAt - b.reservedAt);
     const nextReservation = upcomingReservations[0]?.reservedAt ?? null;
     return { ...table, occupied, status, estimatedReleaseAt: release, earliestSeatingAt: earliest,
       nextReservationAt: nextReservation, upcomingReservations, overEstimatedTime: occupied && release !== null && release <= now };

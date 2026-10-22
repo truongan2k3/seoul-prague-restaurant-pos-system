@@ -1,3 +1,4 @@
+import { isDiningTime } from "@/lib/reservation-dining";
 import type {
   ReservationRecord,
   ReservationStatus,
@@ -29,6 +30,7 @@ const RESERVATION_SELECT =
   "*, tables!table_id(label), secondary_table:tables!secondary_table_id(label), tertiary_table:tables!tertiary_table_id(label)";
 
 export interface CreateReservationInput {
+  diningDurationMinutes?: number;
   guestName: string;
   guestPhone?: string;
   guestEmail?: string;
@@ -45,6 +47,7 @@ export interface CreateReservationInput {
 }
 
 export interface UpdateReservationInput {
+  diningDurationMinutes?: number;
   guestName: string;
   guestPhone?: string;
   guestEmail?: string;
@@ -82,7 +85,7 @@ export async function fetchReservations(since?: Date) {
   return query;
 }
 
-async function validateReservationPlacement(input: { reservedAt: Date; partySize: number; tableId?: string | null; notes?: string; excludeReservationId?: string }) {
+async function validateReservationPlacement(input: { diningDurationMinutes?: number; reservedAt: Date; partySize: number; tableId?: string | null; notes?: string; excludeReservationId?: string }) {
   try {
     const response = await fetch("/api/reservations/live-availability", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "validate", ...input, reservedAt: input.reservedAt.toISOString() }) });
@@ -94,6 +97,7 @@ async function validateReservationPlacement(input: { reservedAt: Date; partySize
 }
 
 export async function createReservation(input: CreateReservationInput) {
+  if (input.diningDurationMinutes !== undefined && !isDiningTime(input.diningDurationMinutes)) return { data: null, error: new Error("Dining time must be 30–240 minutes, in 30-minute steps.") };
   const status = input.status ?? (input.source === "walk_in" ? "checked_in" : "pending");
   const source = input.source ?? "reservation";
   const withGuestCodes = source === "reservation" || source === "online" || source === "phone_call";
@@ -107,6 +111,7 @@ export async function createReservation(input: CreateReservationInput) {
       guest_name: input.guestName,
       guest_phone: input.guestPhone ?? null,
       guest_email: input.guestEmail ?? null,
+      ...(input.diningDurationMinutes !== undefined ? { dining_duration_minutes: input.diningDurationMinutes } : {}),
       party_size: input.partySize,
       reserved_at: input.reservedAt.toISOString(),
       notes: input.notes ?? null,
@@ -282,6 +287,7 @@ export async function updateReservationDetails(
   reservationId: string,
   input: UpdateReservationInput,
 ) {
+  if (input.diningDurationMinutes !== undefined && !isDiningTime(input.diningDurationMinutes)) return { data: null, error: new Error("Invalid dining time.") };
   const { data: existing, error: fetchError } = await supabase
     .from("reservations")
     .select("id, status, table_id")
@@ -317,6 +323,7 @@ export async function updateReservationDetails(
     guest_name: guestName,
     guest_phone: input.guestPhone?.trim() || null,
     guest_email: input.guestEmail?.trim() || null,
+    ...(input.diningDurationMinutes !== undefined ? { dining_duration_minutes: input.diningDurationMinutes } : {}),
     party_size: Math.max(1, input.partySize),
     reserved_at: input.reservedAt.toISOString(),
     notes: input.notes?.trim() || null,
@@ -601,11 +608,11 @@ export async function assignReservationTables(
     } catch (error) { return { data: null, error: error instanceof Error ? error : new Error("Could not remove table assignment.") }; }
   }
   const { data: reservation, error } = await supabase.from("reservations")
-    .select("status,reserved_at,party_size,notes").eq("id", reservationId).single();
+    .select("status,reserved_at,party_size,notes,dining_duration_minutes").eq("id", reservationId).single();
   if (error || !reservation) return { data: null, error: error ?? new Error("Reservation not found.") };
   if (reservation.status === "checked_in") return { data: null, error: new Error("Use the floor map to move an occupied table.") };
   const availabilityError = await validateReservationPlacement({ reservedAt: new Date(reservation.reserved_at),
-    partySize: reservation.party_size, notes: reservation.notes ?? undefined, tableId: ids[0], excludeReservationId: reservationId });
+    diningDurationMinutes: reservation.dining_duration_minutes ?? undefined, partySize: reservation.party_size, notes: reservation.notes ?? undefined, tableId: ids[0], excludeReservationId: reservationId });
   if (availabilityError) return { data: null, error: availabilityError };
   const assigned = await supabase.from("reservations").update({ table_id: ids[0], secondary_table_id: null, tertiary_table_id: null,
     staff_override_capacity: false,
@@ -784,6 +791,7 @@ export function mapReservationRow(
     guest_email: string | null;
     party_size: number;
     actual_party_size?: number | null;
+    dining_duration_minutes?: number | null;
     reserved_at: string;
     status: ReservationStatus;
     source: VisitSource;
@@ -853,6 +861,7 @@ export function mapReservationRow(
     referralCode: row.referral_code ?? undefined,
     partySize: row.party_size,
     actualPartySize: row.actual_party_size ?? undefined,
+    diningDurationMinutes: row.dining_duration_minutes ?? undefined,
     reservedAt: new Date(row.reserved_at),
     status: row.status,
     source: row.source,

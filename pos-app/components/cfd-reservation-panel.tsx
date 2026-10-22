@@ -29,6 +29,7 @@ import {
 import { fetchTableSummaries, mapTablesResponse } from "@/src/lib/supabase-data";
 import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
 import { applyTableRealtimeEvent } from "@/lib/realtime-pos-sync";
+import { formatDiningTime } from "@/lib/reservation-dining";
 import { TableAvailabilityDashboard } from "@/components/table-availability-dashboard";
 import { useSettings } from "@/contexts/settings-context";
 import {
@@ -398,6 +399,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                                 <span className="tabular-nums">{row.partySize}</span>
                               </span>
                             </p>
+                            {row.diningDurationMinutes && <p className="mt-1 text-xs text-[#C9A88B]">{formatDiningTime(row.diningDurationMinutes, language)}</p>}
                             {row.notes?.trim() && (
                               <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-white/70">
                                 <span className="font-semibold text-[#C9A88B]">{translate("resNotes")}: </span>{row.notes}

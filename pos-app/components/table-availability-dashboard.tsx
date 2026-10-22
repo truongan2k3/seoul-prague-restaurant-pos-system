@@ -52,7 +52,7 @@ export function TableAvailabilityDashboard({ tables, reservations, language, sta
   const tableVersion = useMemo(() => JSON.stringify(tables.map((table) => [table.id, table.label,
     table.status === "empty", table.occupiedAt?.getTime(), table.availabilityBlocked])), [tables]);
   const reservationVersion = useMemo(() => JSON.stringify(reservations.map((row) => [row.id, row.status,
-    row.reservedAt.getTime(), row.checkedInAt?.getTime(), row.partySize, row.actualPartySize, row.wantsGrill,
+    row.reservedAt.getTime(), row.checkedInAt?.getTime(), row.partySize, row.actualPartySize, row.diningDurationMinutes, row.wantsGrill,
     row.tableId, row.secondaryTableId, row.tertiaryTableId, row.notes])), [reservations]);
 
   // Parent screens already subscribe to reservations, floor tables and settings.

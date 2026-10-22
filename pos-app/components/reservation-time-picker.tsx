@@ -17,7 +17,7 @@ export function ReservationTimePicker({ value, onChange, label, options, disable
   const hours = rows ? [...new Set(rows.map((row) => row.time.slice(0, 2)))] : Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0"));
   const activeHour = hours.includes(hour) ? hour : hours[0] ?? "18";
   const minutes = rows ? rows.filter((row) => row.time.startsWith(`${activeHour}:`))
-    : Array.from({ length: 60 }, (_, index) => ({ time: `${activeHour}:${String(index).padStart(2, "0")}`, label: undefined }));
+    : [0, 15, 30, 45].map((minute) => ({ time: `${activeHour}:${String(minute).padStart(2, "0")}`, label: undefined }));
   useEffect(() => {
     if (!open) return;
     const outside = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setOpen(false); };
@@ -40,7 +40,7 @@ export function ReservationTimePicker({ value, onChange, label, options, disable
           className={`min-h-11 rounded-lg border font-mono text-sm tabular-nums ${entry === activeHour ? "border-[#C9A88B] bg-[#C9A88B]/20 text-[#C9A88B]" : "border-[#C9A88B]/15 hover:bg-[#C9A88B]/10"}`}>{entry}</button>)}
       </div>
       <p className="mt-3 border-t border-[#C9A88B]/20 pt-2 text-xs font-mono text-[#C9A88B]">{activeHour}:MM</p>
-      <div className="mt-2 grid max-h-44 grid-cols-6 gap-1.5 overflow-y-auto overscroll-contain">
+      <div className="mt-2 grid max-h-44 grid-cols-4 gap-1.5 overflow-y-auto overscroll-contain">
         {minutes.map((row) => <button key={row.time} type="button" title={row.label} aria-label={`${row.time}${row.label ? ` · ${row.label}` : ""}`} aria-pressed={value === row.time}
           onClick={() => { onChange(row.time); setOpen(false); trigger.current?.focus(); }}
           className={`min-h-11 rounded-lg border font-mono text-sm tabular-nums ${value === row.time ? "border-[#C9A88B] bg-[#C9A88B]/20 text-[#C9A88B]" : "border-[#C9A88B]/15 hover:bg-[#C9A88B]/10"}`}>{row.time.slice(3)}</button>)}

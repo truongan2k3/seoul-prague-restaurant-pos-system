@@ -857,10 +857,11 @@ export async function checkoutTable(
           grandTotal: Number(payment.grandTotal.toFixed(2)),
         };
 
-  const [{ data: activeReservationRow }, { data: tableRow }] = await Promise.all([
+  const [{ data: activeReservationRow, error: reservationError }, { data: tableRow, error: tableError }] = await Promise.all([
     findActiveReservationForTable(tableId),
     supabase.from("tables").select("occupied_at").eq("id", tableId).maybeSingle(),
   ]);
+  if (reservationError || tableError) return { data: null, error: reservationError ?? tableError };
   const activeReservation = activeReservationRow ? mapReservationRow(activeReservationRow) : null;
 
   let seatedAt = tableRow?.occupied_at ?? null;

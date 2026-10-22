@@ -634,7 +634,7 @@ export async function findActiveReservationForTable(tableId: string) {
     .or(
       `table_id.eq.${tableId},secondary_table_id.eq.${tableId},tertiary_table_id.eq.${tableId}`,
     )
-    .order("checked_in_at", { ascending: true })
+    .order("checked_in_at", { ascending: true, nullsFirst: false })
     .order("id", { ascending: true })
     .limit(1)
     .maybeSingle();

@@ -20,6 +20,8 @@ export type ReferralQuote = {
   version: string; reservationId: string; visitSubtotal: number; lastInstallment: number;
 };
 export type ReferralPayment = {
+  /** Bill owner captured when the quote was displayed; optional for older POS clients. */
+  reservationId?: string;
   paymentKey: string; installment: number; codeId: string; version: string; discountPercent: number;
   discountAmount: number; overrideReason?: string;
 };

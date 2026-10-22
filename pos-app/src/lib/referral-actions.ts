@@ -45,10 +45,13 @@ export async function getReferralQuoteAction(tableId: string): Promise<{data:Ref
 
 async function loadReferralQuote(tableId: string, context?: Awaited<ReturnType<typeof actor>>): Promise<{data:ReferralQuote|null;error:string|null}> {
   try {
+    // Use the same original bill owner as findActiveReservationForTable.
+    // A later check-in sharing the table must not replace its referral, including with no code.
     // Ordinary checkouts keep working without any referral service-role operation.
     const {data:reservation,error}=await (context?.db ?? supabase).from("reservations").select("id,referral_code_id,checked_in_at")
       .eq("status","checked_in").or(`table_id.eq.${tableId},secondary_table_id.eq.${tableId},tertiary_table_id.eq.${tableId}`)
-      .order("checked_in_at",{ascending:false}).limit(1).maybeSingle();
+      .order("checked_in_at",{ascending:true,nullsFirst:false})
+      .order("id",{ascending:true}).limit(1).maybeSingle();
     if(error){
       if(error.code==="42703" || (/referral_code_id/i.test(error.message)&&/column|schema cache/i.test(error.message)))return {data:null,error:null};
       throw new Error(migrationError(error.message));
@@ -174,6 +177,7 @@ export async function commitReferralSaleAction(sale:Record<string,unknown>,refer
     }
     const quoteResult=await loadReferralQuote(String(sale.table_id),context);
     const quote=quoteResult.data;if(quoteResult.error||!quote)throw new Error(quoteResult.error??"Reservation referral changed. Reopen checkout.");
+    if(sale.reservation_id!==quote.reservationId || (referral?.reservationId && referral.reservationId!==quote.reservationId))throw new Error("The bill reservation changed. Reopen checkout before paying.");
     if(!referral||referral.codeId!==quote.codeId||referral.version!==quote.version)throw new Error("Refresh checkout before applying this referral.");
     const {data:allTableLines,error:le}=await db.from("order_items").select("id,name,price,quantity,menu_item_id,kitchen_status,status,is_cancelled,modifiers,selected_addons").eq("table_id",String(sale.table_id));
     if(le)throw new Error(le.message);

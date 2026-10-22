@@ -150,6 +150,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   showEurOnClient: false,
   eurExchangeRate: 25,
   reservationTimeStep: 30,
+  reservationCapacityLimitsEnabled: true,
   reservationMaxGuestsPerSlot: 20,
   reservationTableHoldingTime: 30,
   reservationDurationMinutes: 90,
@@ -251,6 +252,7 @@ type SettingsRow = {
   show_eur_on_client?: boolean | null;
   eur_exchange_rate?: number | string | null;
   reservation_time_step?: number | null;
+  reservation_capacity_limits_enabled?: boolean | null;
   reservation_max_guests_per_slot?: number | null;
   reservation_table_holding_time?: number | null;
   reservation_duration_minutes?: number | null;
@@ -503,6 +505,7 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     showEurOnClient: row.show_eur_on_client ?? DEFAULT_APP_SETTINGS.showEurOnClient,
     eurExchangeRate: parseNumericSetting(row.eur_exchange_rate, DEFAULT_APP_SETTINGS.eurExchangeRate),
     reservationTimeStep: row.reservation_time_step ?? DEFAULT_APP_SETTINGS.reservationTimeStep,
+    reservationCapacityLimitsEnabled: row.reservation_capacity_limits_enabled ?? true,
     reservationMaxGuestsPerSlot:
       row.reservation_max_guests_per_slot ?? DEFAULT_APP_SETTINGS.reservationMaxGuestsPerSlot,
     reservationTableHoldingTime:

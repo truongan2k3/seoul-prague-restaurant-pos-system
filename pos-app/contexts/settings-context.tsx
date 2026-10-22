@@ -77,6 +77,20 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     async (partial: Partial<AppSettings>) => {
       if (!businessId) return false;
       setSaving(true);
+      if (partial.reservationCapacityLimitsEnabled !== undefined) {
+        try {
+          const response = await fetch("/api/reservations/live-availability", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "booking-limits", enabled: partial.reservationCapacityLimitsEnabled }),
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error ?? "Could not save booking limits.");
+        } catch (err) {
+          setSaving(false);
+          setError(err instanceof Error ? err.message : "Could not save booking limits.");
+          return false;
+        }
+      }
       if ((partial.reservationDurationMinutes !== undefined && partial.reservationDurationMinutes !== settings.reservationDurationMinutes)
         || (partial.reservationBufferMinutes !== undefined && partial.reservationBufferMinutes !== settings.reservationBufferMinutes)) {
         try {
@@ -92,6 +106,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         }
       }
       const remaining = { ...partial };
+      delete remaining.reservationCapacityLimitsEnabled;
       delete remaining.reservationDurationMinutes;
       delete remaining.reservationBufferMinutes;
       const { data, error: saveError } = Object.keys(remaining).length

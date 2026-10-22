@@ -244,6 +244,8 @@ export interface AppSettings {
   showEurOnClient: boolean;
   eurExchangeRate: number;
   reservationTimeStep: number;
+  /** Allow capacity checks to be disabled for accepting reservations; never changes live table occupancy. */
+  reservationCapacityLimitsEnabled: boolean;
   reservationMaxGuestsPerSlot: number;
   reservationTableHoldingTime: number;
   /**

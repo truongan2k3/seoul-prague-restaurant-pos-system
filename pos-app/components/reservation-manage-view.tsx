@@ -11,6 +11,7 @@ import { LandingImage } from "@/lib/website/landing-image";
 import type { WebsiteContent } from "@/lib/website/types";
 import { formatInVenueTz, splitVenueWallTime } from "@/lib/venue-timezone";
 import { DEFAULT_APP_SETTINGS, fetchAppSettings } from "@/src/lib/settings-actions";
+import { useSettings } from "@/contexts/settings-context";
 
 interface ManagedReservation {
   bookingCode: string;
@@ -42,6 +43,7 @@ function formatWhen(iso: string): string {
 }
 
 export function ReservationManageView({ website }: { website?: WebsiteContent }) {
+  const { settings: sharedSettings } = useSettings();
   const searchParams = useSearchParams();
   const token = searchParams.get("token")?.trim() ?? "";
 
@@ -125,7 +127,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
         .finally(() => { if (!controller.signal.aborted) setSlotsLoading(false); });
     }, 200);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [date, guestCount, token, reservation]);
+  }, [date, guestCount, token, reservation, sharedSettings.reservationCapacityLimitsEnabled]);
 
   const guestOptions = useMemo(
     () =>

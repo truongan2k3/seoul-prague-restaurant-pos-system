@@ -34,6 +34,7 @@ import {
   ONLINE_SELF_SERVE_MAX_PARTY,
 } from "@/lib/reservation-party-limits";
 import { DEFAULT_APP_SETTINGS, fetchAppSettings } from "@/src/lib/settings-actions";
+import { useSettings } from "@/contexts/settings-context";
 
 type SlotStatus = "available" | "limited" | "full";
 
@@ -92,6 +93,7 @@ export function ReservationBookingView({
   onBooked?: (info: { id: string; bookingCode: string }) => void;
 }) {
   const isStaff=Boolean(staff);
+  const { settings: sharedSettings } = useSettings();
   const staffSettings=staff?.settings;
   const [appSettings, setAppSettings] = useState<AppSettings>(staffSettings??DEFAULT_APP_SETTINGS);
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
@@ -246,6 +248,7 @@ export function ReservationBookingView({
   }, [
     appSettings.reservationOperatingHours,
     appSettings.reservationTimeStep,
+    sharedSettings.reservationCapacityLimitsEnabled,
     date,
     guestCount,
     wantsBbq,

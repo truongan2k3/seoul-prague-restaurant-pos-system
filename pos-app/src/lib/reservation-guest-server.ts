@@ -80,6 +80,7 @@ const MANAGEABLE_STATUSES: ReservationStatus[] = ["pending", "confirmed", "late"
 type ReservationGuestSettings = Pick<
   AppSettings,
   | "reservationTimeStep"
+  | "reservationCapacityLimitsEnabled"
   | "reservationMaxGuestsPerSlot"
   | "reservationDurationMinutes"
   | "reservationBufferMinutes"
@@ -90,6 +91,7 @@ type ReservationGuestSettings = Pick<
 
 const DEFAULT_RESERVATION_SETTINGS: ReservationGuestSettings = {
   reservationTimeStep: 30,
+  reservationCapacityLimitsEnabled: true,
   reservationMaxGuestsPerSlot: 20,
   reservationDurationMinutes: DEFAULT_RESERVATION_DURATION_MINUTES,
   reservationBufferMinutes: 15,
@@ -112,14 +114,12 @@ async function fetchReservationGuestSettings(): Promise<ReservationGuestSettings
     const auth = await readAuthSession();
     const { data, error } = await admin
       .from("settings")
-      .select(
-        "reservation_time_step, reservation_max_guests_per_slot, reservation_duration_minutes, reservation_buffer_minutes, reservation_operating_hours, reservation_required_fields, reservation_event_types",
-      )
+      .select("reservation_time_step, reservation_capacity_limits_enabled, reservation_max_guests_per_slot, reservation_duration_minutes, reservation_buffer_minutes, reservation_operating_hours, reservation_required_fields, reservation_event_types")
       .eq(auth ? "business_id" : "id", auth ? auth.businessId : 1)
       .maybeSingle();
 
-    // Preserve the saved dining duration while the additive buffer migration is pending.
-    if (error && /reservation_duration_minutes|reservation_buffer_minutes/i.test(error.message)) {
+    // Preserve saved settings while additive reservation migrations are pending.
+    if (error && /reservation_duration_minutes|reservation_buffer_minutes|reservation_capacity_limits_enabled/i.test(error.message)) {
       const legacy = await admin
         .from("settings")
         .select("*")
@@ -127,13 +127,14 @@ async function fetchReservationGuestSettings(): Promise<ReservationGuestSettings
         .maybeSingle();
       if (!legacy.data) return DEFAULT_RESERVATION_SETTINGS;
       return {
+        reservationCapacityLimitsEnabled: legacy.data.reservation_capacity_limits_enabled !== false,
         reservationTimeStep:
           legacy.data.reservation_time_step ?? DEFAULT_RESERVATION_SETTINGS.reservationTimeStep,
         reservationMaxGuestsPerSlot:
           legacy.data.reservation_max_guests_per_slot ??
           DEFAULT_RESERVATION_SETTINGS.reservationMaxGuestsPerSlot,
         reservationDurationMinutes: clampReservationDurationMinutes(legacy.data.reservation_duration_minutes ?? DEFAULT_RESERVATION_SETTINGS.reservationDurationMinutes),
-        reservationBufferMinutes: DEFAULT_RESERVATION_SETTINGS.reservationBufferMinutes,
+        reservationBufferMinutes: clampReservationBufferMinutes(legacy.data.reservation_buffer_minutes),
         reservationOperatingHours: parseOperatingHours(legacy.data.reservation_operating_hours),
         reservationRequiredFields: parseReservationRequiredFields(
           legacy.data.reservation_required_fields,
@@ -145,6 +146,7 @@ async function fetchReservationGuestSettings(): Promise<ReservationGuestSettings
     if (!data) return DEFAULT_RESERVATION_SETTINGS;
 
     return {
+      reservationCapacityLimitsEnabled: data.reservation_capacity_limits_enabled !== false,
       reservationTimeStep:
         data.reservation_time_step ?? DEFAULT_RESERVATION_SETTINGS.reservationTimeStep,
       reservationMaxGuestsPerSlot:
@@ -245,8 +247,8 @@ type DayCapacityContext = {
   occupiedTables: OccupiedTableInput[];
 };
 
-export async function loadDayCapacityContext(dateIso: string): Promise<DayCapacityContext> {
-  const settings = await fetchReservationGuestSettings();
+export async function loadDayCapacityContext(dateIso: string, savedSettings?: ReservationGuestSettings): Promise<DayCapacityContext> {
+  const settings = savedSettings ?? await fetchReservationGuestSettings();
   const admin = createSupabaseAdmin();
   const { startIso, endExclusiveIso } = venueDayRangeUtc(dateIso);
   const today = todayIsoDateInVenue();
@@ -369,14 +371,19 @@ export async function evaluateGuestSlotAvailability(input: {
   }>;
   settings: ReservationGuestSettings;
 }> {
-  const ctx = await loadDayCapacityContext(input.date);
+  const settings = await fetchReservationGuestSettings();
   const times =
     input.times ??
     buildTimeSlotsForDate(
       input.date,
-      ctx.settings.reservationOperatingHours,
-      ctx.settings.reservationTimeStep,
+      settings.reservationOperatingHours,
+      settings.reservationTimeStep,
     );
+
+  if (!settings.reservationCapacityLimitsEnabled) {
+    return { settings, slots: times.map((time) => ({ time, availability: "available", guestStatus: "available" })) };
+  }
+  const ctx = await loadDayCapacityContext(input.date, settings);
 
   const heldGuestsByTime: Record<string, number> = {};
   await Promise.all(
@@ -600,7 +607,8 @@ async function validateSlotCapacity(params: {
   }
 
   const guestCount = Math.max(1, Math.floor(params.guestCount));
-  const ctx = await loadDayCapacityContext(date);
+  if (!settings.reservationCapacityLimitsEnabled) return { ok: true, guestCount };
+  const ctx = await loadDayCapacityContext(date, settings);
   const result = evaluateReservationCapacity({ dateIso: date, time, partySize: guestCount, grill: params.grill ?? null,
     reservations: ctx.reservations, occupiedTables: ctx.occupiedTables,
     durationMinutes: ctx.settings.reservationDurationMinutes, bufferMinutes: ctx.settings.reservationBufferMinutes,
@@ -666,12 +674,14 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
 
   const guestCount = Math.max(1, Math.floor(input.guestCount));
 
-  const ctx = await loadDayCapacityContext(input.date);
-  const heldGuests = await sumActiveHoldsForSlot({
+  const ctx = settings.reservationCapacityLimitsEnabled
+    ? await loadDayCapacityContext(input.date, settings)
+    : { settings, reservations: [], occupiedTables: [] };
+  const heldGuests = settings.reservationCapacityLimitsEnabled ? await sumActiveHoldsForSlot({
     dateIso: input.date,
     time: input.time,
     excludeToken: input.holdToken,
-  });
+  }) : 0;
 
   const evaluation = evaluateReservationCapacity({
     dateIso: input.date,
@@ -686,7 +696,7 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
     heldGuests,
   });
 
-  if (evaluation.availability === "full") {
+  if (settings.reservationCapacityLimitsEnabled && evaluation.availability === "full") {
     return {
       data: null,
       error: "This time slot is fully booked. Please choose another time.",
@@ -741,10 +751,10 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
     updated_at: nowIso,
     guest_submitted_at: nowIso,
     wants_grill: input.wantsGrill ?? null,
-    suggested_seating: evaluation.recommendationLabel,
-    suggested_capacity: evaluation.capacity,
-    capacity_status: evaluation.availability,
-    capacity_warnings: evaluation.warnings.join(" · ") || null,
+    suggested_seating: settings.reservationCapacityLimitsEnabled ? evaluation.recommendationLabel : null,
+    suggested_capacity: settings.reservationCapacityLimitsEnabled ? evaluation.capacity : null,
+    capacity_status: settings.reservationCapacityLimitsEnabled ? evaluation.availability : "available",
+    capacity_warnings: settings.reservationCapacityLimitsEnabled ? evaluation.warnings.join(" · ") || null : null,
     staff_override_capacity: false,
   };
 

@@ -209,7 +209,7 @@ interface ReservationsViewProps {
 
 export function ReservationsView({ tables, onRefreshTables }: ReservationsViewProps) {
   const { translate, language, currentStaffUser } = useApp();
-  const { settings } = useSettings();
+  const { settings, saveSettings, saving: savingSettings, loading: loadingSettings, error: settingsError } = useSettings();
   const { pushNotification } = useNotifications();
   const [reservations, setReservations] = useState<ReservationRecord[]>([]);
   const [period, setPeriod] = useState<ReservationPeriod>("day");
@@ -735,6 +735,31 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
       <div className="flex-1 overflow-auto p-2.5 sm:p-4 lg:p-6">
         <div className="mx-auto max-w-6xl space-y-3 sm:space-y-4 lg:space-y-6">
+          <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#C9A88B]/25 bg-[var(--card)] px-4 py-3 sm:px-5">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-semibold">{translate("resBookingLimits")}</h2>
+              <p id="booking-limits-hint" className="mt-1 text-xs leading-relaxed text-[var(--muted-foreground)]">
+                {translate(settings.reservationCapacityLimitsEnabled ? "resBookingLimitsEnabledHint" : "resBookingLimitsDisabledHint")}
+              </p>
+              {settingsError && <p role="alert" className="mt-1 text-xs text-red-500">{settingsError}</p>}
+            </div>
+            <button type="button" role="switch" aria-checked={settings.reservationCapacityLimitsEnabled}
+              aria-label={translate("resBookingLimits")} aria-describedby="booking-limits-hint"
+              disabled={savingSettings || loadingSettings}
+              onClick={async () => {
+                if (await saveSettings({ reservationCapacityLimitsEnabled: !settings.reservationCapacityLimitsEnabled })) {
+                  setCapacityRefreshKey((key) => key + 1);
+                }
+              }}
+              className="inline-flex min-h-11 shrink-0 items-center gap-3 rounded-xl border border-[#C9A88B]/25 px-3 py-2 text-xs font-semibold transition-colors hover:bg-[#C9A88B]/10 disabled:cursor-wait disabled:opacity-50">
+              <span className={settings.reservationCapacityLimitsEnabled ? "text-emerald-500" : "text-amber-500"}>
+                {translate(settings.reservationCapacityLimitsEnabled ? "resBookingLimitsEnabled" : "resBookingLimitsDisabled")}
+              </span>
+              <span aria-hidden className={`relative h-6 w-11 rounded-full transition-colors ${settings.reservationCapacityLimitsEnabled ? "bg-emerald-600" : "bg-stone-500/60"}`}>
+                <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform motion-reduce:transition-none ${settings.reservationCapacityLimitsEnabled ? "translate-x-5" : "translate-x-0"}`} />
+              </span>
+            </button>
+          </section>
           <TableAvailabilityDashboard tables={tables} reservations={reservations} language={language} staff realtimeConnected={reservationsConnected} refreshKey={capacityRefreshKey} />
           <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 sm:px-5">
             <div className="flex flex-wrap items-center gap-2">

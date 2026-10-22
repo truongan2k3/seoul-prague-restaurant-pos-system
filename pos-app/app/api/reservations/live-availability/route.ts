@@ -19,7 +19,7 @@ async function validateSeating(input: { reservedAt: string; partySize: number; n
   const params = { dateIso: date, time, partySize: input.partySize, grill, reservations: ctx.reservations,
     occupiedTables: ctx.occupiedTables, durationMinutes: ctx.settings.reservationDurationMinutes,
     bufferMinutes: ctx.settings.reservationBufferMinutes, excludeReservationId: input.excludeReservationId };
-  if (!input.tableId && evaluateReservationCapacity(params).availability === "full") throw new Error("No available table fits this reservation. Choose another time.");
+  if (!input.tableId && ctx.settings.reservationCapacityLimitsEnabled && evaluateReservationCapacity(params).availability === "full") throw new Error("No available table fits this reservation. Choose another time.");
   if (input.tableId) {
     const { data: table, error } = await createSupabaseAdmin().from("tables").select("label").eq("id", input.tableId).maybeSingle();
     const config = table && floorTableByLabel(table.label);
@@ -132,6 +132,16 @@ export async function POST(request: Request) {
     } else if (body.action === "validate") {
       await validateSeating({ reservedAt: String(body.reservedAt), partySize: Number(body.partySize),
         tableId: body.tableId || undefined, notes: body.notes, excludeReservationId: body.excludeReservationId });
+    } else if (body.action === "booking-limits") {
+      if (typeof body.enabled !== "boolean") return NextResponse.json({ error: "Select whether booking limits are enabled." }, { status: 400 });
+      const { data, error } = await db.from("settings")
+        .update({ reservation_capacity_limits_enabled: body.enabled })
+        .eq("business_id", auth.businessId).select("id").maybeSingle();
+      if (error) {
+        if (/reservation_capacity_limits_enabled/i.test(error.message)) throw new Error("Run supabase/patch-reservation-booking-limits.sql in Supabase to enable this setting.");
+        throw error;
+      }
+      if (!data) throw new Error("Save POS settings once before changing booking limits.");
     } else if (body.action === "settings") {
       if (!["admin", "manager"].includes(staff.role)) return NextResponse.json({ error: "Manager permission required." }, { status: 403 });
       const duration = Number(body.durationMinutes), buffer = Number(body.bufferMinutes);

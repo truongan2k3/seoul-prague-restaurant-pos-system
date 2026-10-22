@@ -100,13 +100,15 @@ BEGIN
   IF r.status NOT IN ('pending', 'confirmed', 'late') THEN RAISE EXCEPTION 'Reservation cannot be checked in'; END IF;
   SELECT * INTO t FROM public.tables WHERE id = p_table FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Table not found'; END IF;
+  IF t.status <> 'empty' THEN RAISE EXCEPTION 'Table is occupied. Complete the current visit before checking in another party.'; END IF;
+  IF EXISTS (SELECT 1 FROM public.reservations b WHERE b.id <> r.id AND b.status = 'checked_in'
+    AND p_table IN (b.table_id, b.secondary_table_id, b.tertiary_table_id)) THEN
+    RAISE EXCEPTION 'Table already has a checked-in reservation. Complete the current visit first.';
+  END IF;
   previous_scope := current_setting('app.reservation_check_in_override', true);
   PERFORM set_config('app.reservation_check_in_override', p_reservation::text, true);
-  -- Keep an occupied visit, its bill, orders and occupancy timestamp intact.
-  IF t.status NOT IN ('waiting', 'ready', 'occupied') THEN
-    UPDATE public.tables SET status = 'waiting', occupied_at = seated,
-      payment_status = 'unpaid', fulfillment_status = 'in_progress' WHERE id = p_table;
-  END IF;
+  UPDATE public.tables SET status = 'waiting', occupied_at = seated,
+    payment_status = 'unpaid', fulfillment_status = 'in_progress' WHERE id = p_table;
   UPDATE public.reservations SET status = 'checked_in', table_id = p_table, secondary_table_id = NULL,
     tertiary_table_id = NULL, actual_party_size = p_party, checked_in_at = seated,
     staff_override_capacity = true,

@@ -3,7 +3,7 @@ import { readAuthSession } from "@/src/lib/auth/session";
 import { readStaffSession } from "@/src/lib/auth/staff-session";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 import { loadLiveTableAvailability } from "@/src/lib/table-availability-server";
-import { checkInTableIssue } from "@/lib/reservation-check-in";
+import { checkInTableIssue, isExclusiveCheckInConflict } from "@/lib/reservation-check-in";
 import { blockedTableLabels, evaluateReservationCapacity, resolveGrill } from "@/lib/reservation-capacity-engine";
 import { floorTableByLabel } from "@/lib/reservation-floor-plan";
 import { todayIsoDateInVenue } from "@/lib/venue-timezone";
@@ -66,6 +66,9 @@ export async function POST(request: Request) {
       const party = Number(body.actualPartySize ?? row.party_size);
       const grill = resolveGrill({ partySize: party, reservedAt: source.serverNow, status: row.status, notes: row.notes, wantsGrill: row.wants_grill });
       const issue = checkInTableIssue(source, body.tableId, body.reservationId, party, grill);
+      if (issue && isExclusiveCheckInConflict(issue.code)) {
+        return NextResponse.json({ error: issue.message, code: issue.code, overrideAllowed: false }, { status: 409 });
+      }
       const overrideAllowed = issue !== null && !["TABLE_NOT_CONFIGURED", "INVALID_PARTY_SIZE"].includes(issue.code);
       if (body.override === true) {
         // Reception devices can confirm seating warnings without a staff login.
@@ -101,8 +104,12 @@ export async function POST(request: Request) {
       if (failure.code === "42703" || failure.code === "PGRST204") {
         return NextResponse.json({ error: `Reservation database schema is outdated: ${failure.message}`, code: "CHECK_IN_SCHEMA_ERROR" }, { status: 503 });
       }
+      if (failure.code === "P0001" && /Table is occupied|Table already has a checked-in reservation/i.test(failure.message ?? "")) {
+        return NextResponse.json({ error: "This table is occupied or already checked in. Complete the current visit or select another empty table.",
+          code: "TABLE_OCCUPIED", overrideAllowed: false }, { status: 409 });
+      }
       const overrideAllowed = body.override !== true && failure.code === "P0001"
-        && /Table is (occupied|unavailable|already reserved|reserved for another seating)/i.test(failure.message ?? "");
+        && /Table is (unavailable|already reserved|reserved for another seating)/i.test(failure.message ?? "");
       return NextResponse.json({ error: failure.message ?? "Could not check in. Refresh availability and retry.",
         code: failure.code ?? "CHECK_IN_FAILED", overrideAllowed }, { status: overrideAllowed ? 409 : 400 });
     }

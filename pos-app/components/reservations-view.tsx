@@ -1298,7 +1298,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           <ReservationTableMap
             tables={tables}
             value={checkInTableIds}
-            allowOccupied
+            allowOccupied={false}
             allowBlocked
             checkIn={checkInTarget?{reservation:checkInTarget,reservations,partySize:checkInActualParty,durationMinutes:settings.reservationDurationMinutes,bufferMinutes:settings.reservationBufferMinutes}:undefined}
             onChange={(ids) => { setCheckInTableIds(ids); setCheckInConflict(null); setError(null); }}
@@ -1318,7 +1318,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           {error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">{error}</p>}
           <button
             type="button"
-            disabled={checkInTableIds.length !== 1 || busyId === checkInTarget?.id}
+            disabled={checkInTableIds.length !== 1 || checkInOccupied || busyId === checkInTarget?.id}
             onClick={() => void handleCheckIn()}
             className="w-full rounded-xl bg-[var(--pos-brand)] py-3 text-sm font-semibold text-white hover:bg-[var(--pos-brand-hover)] disabled:opacity-50"
           >

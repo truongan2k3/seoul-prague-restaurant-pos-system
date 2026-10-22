@@ -7,7 +7,7 @@ import { floorTableByLabel } from "@/lib/reservation-floor-plan";
 import { MAX_NEW_RESERVATION_TABLES, normalizeReservationTableIds } from "@/lib/reservation-tables";
 import { TABLE_CARD_WIDTH, resolveFloorCardOverlaps } from "@/lib/table-layout";
 import type { LanguageCode, ReservationRecord, RestaurantTable } from "@/lib/types";
-import { checkInTableIssue } from "@/lib/reservation-check-in";
+import { checkInTableIssue, isExclusiveCheckInConflict } from "@/lib/reservation-check-in";
 import { resolveGrill } from "@/lib/reservation-capacity-engine";
 import type { TableAvailabilitySource } from "@/lib/table-availability";
 
@@ -52,7 +52,7 @@ export function ReservationTableMap({tables,value,onChange,language,disabled=fal
           const issue=issueFor(table.id);
           const statusKey=issue?issue.code==="TABLE_RESERVED"?"resTableReserved":issue.code==="TABLE_ACTIVE_CHECK_IN"?"resStatusCheckedIn":issue.code==="TABLE_BLOCKED"?"resTableBlocked":issue.code==="TABLE_OCCUPIED"?table.status:"resTableNotSuitable":table.status;
           const occupied=table.status!=="empty";
-          const locked=disabled||(!selected&&((table.availabilityBlocked===true&&!allowBlocked)||(maxTables>1&&ids.length>=maxTables)||(!allowOccupied&&occupied)));
+          const locked=disabled||(!selected&&((issue&&isExclusiveCheckInConflict(issue.code))||(table.availabilityBlocked===true&&!allowBlocked)||(maxTables>1&&ids.length>=maxTables)||(!allowOccupied&&occupied)));
           const capacity=floorTableByLabel(table.label)?.capacity;
           return <foreignObject key={table.id} x={pos.x-floor.left} y={pos.y-floor.top} width={TABLE_CARD_WIDTH} height={128}>
             <button type="button" aria-pressed={selected} disabled={locked} onClick={()=>toggle(table.id)}

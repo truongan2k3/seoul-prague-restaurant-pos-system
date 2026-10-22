@@ -14,7 +14,6 @@ export async function POST(request: Request) {
     email?: string;
     phone?: string;
     guestCount?: number;
-    diningDurationMinutes?: number;
     date?: string;
     time?: string;
     notes?: string;
@@ -40,7 +39,6 @@ export async function POST(request: Request) {
     email: body.email ?? "",
     phone: body.phone ?? "",
     guestCount: Number(body.guestCount) || 1,
-    diningDurationMinutes: body.diningDurationMinutes,
     date: body.date ?? "",
     time: body.time ?? "",
     notes: body.notes,
@@ -99,7 +97,6 @@ export async function POST(request: Request) {
       id: data.id,
       bookingCode: data.bookingCode,
       manageToken: data.manageToken,
-      diningDurationMinutes: data.diningDurationMinutes,
       manageUrl: (await import("@/src/lib/reservation-email")).buildManageUrl(data.manageToken),
       guestName: data.guestName,
       partySize: data.partySize,

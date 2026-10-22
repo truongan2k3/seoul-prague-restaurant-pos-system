@@ -5,7 +5,7 @@ import { ChevronDown, ChevronUp, Star } from "lucide-react";
 import { useApp } from "@/contexts/app-context";
 import type { TranslationKey } from "@/lib/i18n/translations";
 import type { GuestVisitProfile } from "@/src/lib/guest-history-actions";
-import { fetchGuestVisitProfile } from "@/src/lib/guest-history-actions";
+import { fetchGuestVisitProfile, guestVisitProfileKey } from "@/src/lib/guest-history-actions";
 
 type GuestReturningBadgeProps = {
   email?: string | null;
@@ -40,26 +40,21 @@ export function GuestReturningBadge({
   profile: externalProfile,
 }: GuestReturningBadgeProps) {
   const { translate, language } = useApp();
-  const [profile, setProfile] = useState<GuestVisitProfile | null>(externalProfile ?? null);
+  const lookupKey = guestVisitProfileKey({ email, phone, excludeReservationId, beforeAt });
+  const [loaded, setLoaded] = useState<{ key: string; profile: GuestVisitProfile | null } | null>(null);
+  const profile = externalProfile !== undefined ? externalProfile : loaded?.key === lookupKey ? loaded.profile : null;
   const [open, setOpen] = useState(defaultOpen);
 
   useEffect(() => {
-    if (externalProfile !== undefined) {
-      setProfile(externalProfile);
-      return;
-    }
-    if (!email && !phone) {
-      setProfile(null);
-      return;
-    }
+    setOpen(defaultOpen);
+    if (externalProfile !== undefined) return;
+    if (!email && !phone) { setLoaded(null); return; }
     let cancelled = false;
     void fetchGuestVisitProfile({ email, phone, excludeReservationId, beforeAt }).then(({ data }) => {
-      if (!cancelled) setProfile(data.isReturning ? data : null);
+      if (!cancelled) setLoaded({ key: lookupKey, profile: data.isReturning ? data : null });
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [email, phone, excludeReservationId, beforeAt, externalProfile]);
+    return () => { cancelled = true; };
+  }, [lookupKey, externalProfile, defaultOpen]);
 
   if (!profile?.isReturning) return null;
 
@@ -93,6 +88,8 @@ export function GuestReturningBadge({
             <li key={`${visit.kind}-${visit.id}`} className="flex flex-wrap gap-x-2 text-amber-900/90 dark:text-amber-100/90">
               <span>
                 {new Date(visit.at).toLocaleString(locale, {
+                  timeZone: "Europe/Prague",
+                  hour12: false,
                   day: "numeric",
                   month: "short",
                   year: "numeric",

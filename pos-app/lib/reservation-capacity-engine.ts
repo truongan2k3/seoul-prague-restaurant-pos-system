@@ -1,10 +1,8 @@
 /**
  * Reservation capacity + seating recommendation engine.
  * Guests never see table labels — only Available / Limited / Full.
- * Staff and guests use the same estimates; explicit seating exceptions stay in the existing API.
+ * Staff and guests use the same availability rules; occupied/full tables cannot be overridden.
  */
-
-import { reservationDiningMinutes } from "@/lib/reservation-dining";
 
 import {
   buildAllSeatingConfigurations,
@@ -42,7 +40,6 @@ export type SlotAvailability = "available" | "limited" | "full";
 export type GrillNeed = ReservationBbqPreference | null; // "yes" | "no" | "undecided" | null
 
 export type CapacityReservationInput = {
-  diningDurationMinutes?: number | null;
   id?: string;
   partySize: number;
   /** Actual arrived party size when known (check-in). */
@@ -69,7 +66,6 @@ export type OccupiedTableInput = {
 };
 
 export type CapacityEvaluateInput = {
-  diningDurationMinutes?: number;
   dateIso: string;
   time: string;
   partySize: number;
@@ -162,17 +158,6 @@ function assignedLabels(row: CapacityReservationInput): string[] {
 
 export type ReservationAllocation = { labels: string[]; startMs: number; endMs: number };
 
-export function occupiedTableRelease(table: OccupiedTableInput, reservations: CapacityReservationInput[], fallback: number): number | null {
-  const matching = reservations.filter((row) => row.status === "checked_in" && assignedLabels(row).includes(normalizeTableLabel(table.label)));
-  const floor = table.occupiedAt ? new Date(table.occupiedAt).getTime() : NaN;
-  const estimates = matching.map((row) => {
-    const start = Number.isFinite(floor) ? floor : row.checkedInAt ? new Date(row.checkedInAt).getTime() : NaN;
-    return start + reservationDiningMinutes(row, fallback) * 60_000;
-  }).filter(Number.isFinite);
-  if (estimates.length) return Math.max(...estimates);
-  return Number.isFinite(floor) ? floor + fallback * 60_000 : null;
-}
-
 /** Plan unassigned bookings using individual table capacity and BBQ eligibility. */
 export function planReservationAllocations(input: {
   reservations: CapacityReservationInput[];
@@ -183,12 +168,12 @@ export function planReservationAllocations(input: {
   nowMs?: number;
 }): ReservationAllocation[] {
   const now = input.nowMs ?? Date.now();
+  const duration = input.durationMinutes * 60_000;
   const buffer = (input.bufferMinutes ?? 0) * 60_000;
   const active = input.reservations.filter((r) => ACTIVE_STATUSES.has(r.status)
     && (!input.excludeReservationId || r.id !== input.excludeReservationId));
   const allocations: ReservationAllocation[] = [];
   const window = (r: CapacityReservationInput) => {
-    const duration = reservationDiningMinutes(r, input.durationMinutes) * 60_000;
     const start = new Date(r.reservedAt).getTime();
     if (r.status !== "checked_in") return { startMs: start - buffer, endMs: start + duration };
     const seated = r.checkedInAt ? new Date(r.checkedInAt).getTime() : NaN;
@@ -209,8 +194,8 @@ export function planReservationAllocations(input: {
     if (!Number.isFinite(span.startMs) || span.endMs <= now) continue;
     const blocked = new Set(allocations.filter((a) => a.startMs < span.endMs && a.endMs > span.startMs).flatMap((a) => a.labels));
     for (const table of input.occupiedTables ?? []) {
-      const release = occupiedTableRelease(table, input.reservations, input.durationMinutes);
-      const end = release !== null && release > now ? release : Infinity;
+      const start = table.occupiedAt ? new Date(table.occupiedAt).getTime() : NaN;
+      const end = Number.isFinite(start) && start + duration > now ? start + duration : Infinity;
       if (table.blocked || (table.occupied && end > Math.max(now, span.startMs))) blocked.add(normalizeTableLabel(table.label));
     }
     const config = recommendSeating(effectivePartySize(row), resolveGrill(row), blocked);
@@ -233,7 +218,6 @@ export function blockedTableLabels(input: {
   occupiedTables?: OccupiedTableInput[];
   dateIso: string;
   time: string;
-  diningDurationMinutes?: number;
   durationMinutes: number;
   bufferMinutes?: number;
   excludeReservationId?: string;
@@ -241,8 +225,9 @@ export function blockedTableLabels(input: {
   nowMs?: number;
 }): Set<string> {
   const blocked = new Set<string>();
-  const { startMs, endMs } = windowFor(input.dateIso, input.time, input.diningDurationMinutes ?? input.durationMinutes);
+  const { startMs, endMs } = windowFor(input.dateIso, input.time, input.durationMinutes);
   const nowMs = input.nowMs ?? Date.now();
+  const durationMs = input.durationMinutes * 60 * 1000;
 
   for (const table of input.occupiedTables ?? []) {
     if (table.blocked) { blocked.add(normalizeTableLabel(table.label)); continue; }
@@ -250,8 +235,8 @@ export function blockedTableLabels(input: {
     const occupiedStartRaw = table.occupiedAt ? new Date(table.occupiedAt).getTime() : NaN;
     // If still occupied past the original expected end, keep blocking from "now".
     const occupiedStart = Number.isFinite(occupiedStartRaw) ? Math.min(occupiedStartRaw, nowMs) : nowMs;
-    const release = occupiedTableRelease(table, input.reservations, input.durationMinutes);
-    const occupiedEnd = release !== null && release > nowMs ? release : Infinity;
+    const occupiedEnd = Number.isFinite(occupiedStartRaw) && occupiedStartRaw + durationMs > nowMs
+      ? occupiedStartRaw + durationMs : Infinity;
     if (occupiedStart < endMs && occupiedEnd > startMs) {
       blocked.add(normalizeTableLabel(table.label));
     }
@@ -297,13 +282,13 @@ export function evaluateReservationCapacity(
   const partySize = Math.max(1, input.partySize);
   const grill = input.grill ?? null;
   const held = Math.max(0, input.heldGuests ?? 0);
-  const { startMs, endMs } = windowFor(input.dateIso, input.time, input.diningDurationMinutes ?? duration);
+  const { startMs, endMs } = windowFor(input.dateIso, input.time, duration);
 
   let overlappingGuestCount = held;
   for (const row of input.reservations) {
     if (input.excludeReservationId && row.id === input.excludeReservationId) continue;
     if (!ACTIVE_STATUSES.has(row.status)) continue;
-    if (!overlaps(row.reservedAt, reservationDiningMinutes(row, duration), startMs, endMs)) continue;
+    if (!overlaps(row.reservedAt, duration, startMs, endMs)) continue;
     overlappingGuestCount += effectivePartySize(row);
   }
 
@@ -313,7 +298,6 @@ export function evaluateReservationCapacity(
     dateIso: input.dateIso,
     time: input.time,
     durationMinutes: duration,
-    diningDurationMinutes: input.diningDurationMinutes,
     bufferMinutes: input.bufferMinutes,
     excludeReservationId: input.excludeReservationId,
     nowMs: input.nowMs,
@@ -373,7 +357,6 @@ export function evaluateSlotsForGuest(params: {
   reservations: CapacityReservationInput[];
   occupiedTables?: OccupiedTableInput[];
   durationMinutes?: number;
-  diningDurationMinutes?: number;
   bufferMinutes?: number;
   maxGuestsPerSlot?: number;
   heldGuestsByTime?: Record<string, number>;
@@ -389,7 +372,6 @@ export function evaluateSlotsForGuest(params: {
       reservations: params.reservations,
       occupiedTables: params.occupiedTables,
       durationMinutes: params.durationMinutes,
-      diningDurationMinutes: params.diningDurationMinutes,
       bufferMinutes: params.bufferMinutes,
       maxGuestsPerSlot: params.maxGuestsPerSlot,
       heldGuests: params.heldGuestsByTime?.[time] ?? 0,

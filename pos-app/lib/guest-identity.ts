@@ -6,7 +6,7 @@ export function normalizeEmail(email?: string | null): string | null {
 
 /** Digits-only phone; null if too short to be useful. */
 export function normalizePhoneDigits(phone?: string | null): string | null {
-  const digits = (phone ?? "").replace(/\D/g, "");
+  const digits = (phone ?? "").replace(/\D/g, "").replace(/^00/, "");
   return digits.length >= 6 ? digits : null;
 }
 
@@ -16,6 +16,8 @@ export function phonesMatch(a?: string | null, b?: string | null): boolean {
   const right = normalizePhoneDigits(b);
   if (!left || !right) return false;
   if (left === right) return true;
+  // Two explicit international prefixes must agree; shared trailing digits alone are insufficient.
+  if (left.length > 9 && right.length > 9) return false;
   const tail = (value: string) => (value.length > 9 ? value.slice(-9) : value);
   const leftTail = tail(left);
   const rightTail = tail(right);

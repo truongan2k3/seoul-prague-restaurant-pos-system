@@ -1,7 +1,6 @@
 "use client";
 
 import { ReservationTimePicker } from "@/components/reservation-time-picker";
-import { ReservationDiningTimeField } from "@/components/reservation-dining-time-field";
 
 import { ReferralCodeField } from "@/components/referral-code-field";
 
@@ -45,7 +44,7 @@ type AvailabilitySlot = {
 
 export type ReservationStaffDraft = {
   guestName:string;email:string;phone:string;guestCount:number;date:string;time:string;
-  diningDurationMinutes:number;notes:string;eventType:string;referralCode:string;wantsBbq:"yes"|"no"|"undecided"|null;
+  notes:string;eventType:string;referralCode:string;wantsBbq:"yes"|"no"|"undecided"|null;
 };
 
 type StaffBookingOptions = {
@@ -105,7 +104,6 @@ export function ReservationBookingView({
   const [guestCount, setGuestCount] = useState(2);
   const [date, setDate] = useState(todayIsoDate());
   const [time, setTime] = useState("18:00");
-  const [diningDurationMinutes, setDiningDurationMinutes] = useState(90);
   const [referralCode, setReferralCode] = useState("");
   const [notes, setNotes] = useState("");
   const [eventType, setEventType] = useState("");
@@ -211,7 +209,6 @@ export function ReservationBookingView({
     const params = new URLSearchParams({
       date,
       partySize: String(guestCount),
-      diningDurationMinutes: String(diningDurationMinutes),
     });
     if (wantsBbq) params.set("grill", wantsBbq);
 
@@ -251,7 +248,6 @@ export function ReservationBookingView({
     appSettings.reservationTimeStep,
     date,
     guestCount,
-    diningDurationMinutes,
     wantsBbq,
     requiresLargePartyContact,
     isStaff,
@@ -337,7 +333,7 @@ export function ReservationBookingView({
     setSubmitting(true);
     if(staff){
       try {
-        const failure=await staff.onSubmit({guestName:guestName.trim(),email:email.trim(),phone:phone.trim(),guestCount,date,time,diningDurationMinutes,notes:notes.trim(),eventType,referralCode:referralCode.trim(),wantsBbq});
+        const failure=await staff.onSubmit({guestName:guestName.trim(),email:email.trim(),phone:phone.trim(),guestCount,date,time,notes:notes.trim(),eventType,referralCode:referralCode.trim(),wantsBbq});
         if(failure)setError(failure);
       } catch {setError(copy.errorSubmitRetry);}
       finally {setSubmitting(false);}
@@ -373,7 +369,6 @@ export function ReservationBookingView({
           email: email.trim(),
           phone: phone.trim(),
           guestCount,
-          diningDurationMinutes,
           date,
           time,
           notes: (() => {
@@ -696,7 +691,6 @@ export function ReservationBookingView({
           </div>
         </div>
 
-        <ReservationDiningTimeField value={diningDurationMinutes} onChange={setDiningDurationMinutes} language={lang} dark disabled={submitting} />
 
         <ReferralCodeField value={referralCode} onChange={setReferralCode} />
 

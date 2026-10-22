@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useReducedMotion } from "framer-motion";
 import { CalendarClock } from "lucide-react";
-import { formatDiningTime } from "@/lib/reservation-dining";
 import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
 import {
@@ -145,7 +144,7 @@ export function CompactReservationTicker({ reservations, action }: { reservation
               {current.guestName}
               <span className="font-normal text-gray-500 dark:text-gray-400">
                 {" "}
-                · {current.partySize}{current.diningDurationMinutes ? ` · ${formatDiningTime(current.diningDurationMinutes, language)}` : ""}
+                · {current.partySize}
               </span>
             </span>
           </div>

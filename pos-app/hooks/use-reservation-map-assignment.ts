@@ -7,7 +7,6 @@ import { RESERVATION_FLOOR_TABLES, floorTableByLabel } from "@/lib/reservation-f
 import { todayIsoDateInVenue } from "@/lib/venue-timezone";
 import { assignReservationTables, mapReservationsResponse } from "@/src/lib/reservation-actions";
 import type { ReservationRecord, RestaurantTable } from "@/lib/types";
-import { reservationDiningMinutes } from "@/lib/reservation-dining";
 
 export const UNASSIGN_DROP_TARGET = "reservation-unassign";
 
@@ -40,7 +39,7 @@ export function useReservationMapAssignment({ tables, reservations, disabled, du
     });
     const blocked = blockedTableLabels({ reservations: reservations.filter((r) => r.tableId || r.secondaryTableId || r.tertiaryTableId),
       occupiedTables, dateIso: todayIsoDateInVenue(row.reservedAt),
-      time: timeFromReservedAt(row.reservedAt), durationMinutes, diningDurationMinutes: reservationDiningMinutes(row, durationMinutes), bufferMinutes, excludeReservationId: row.id, nowMs: now });
+      time: timeFromReservedAt(row.reservedAt), durationMinutes, bufferMinutes, excludeReservationId: row.id, nowMs: now });
     const grill = resolveGrill(row);
     return new Set(tables.filter((table) => {
       const def = floorTableByLabel(table.label);

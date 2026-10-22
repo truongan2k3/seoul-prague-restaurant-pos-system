@@ -30,7 +30,7 @@ import {
 } from "@/lib/reservation-guest-alert";
 import type { ReservationRecord } from "@/lib/types";
 import type { GuestVisitProfile } from "@/src/lib/guest-history-actions";
-import { fetchGuestVisitProfile } from "@/src/lib/guest-history-actions";
+import { fetchGuestVisitProfile, guestVisitProfileKey } from "@/src/lib/guest-history-actions";
 import {
   fetchReservations,
   mapReservationsResponse,
@@ -81,7 +81,10 @@ export function ReservationIncomingListener({
   const { settings } = useSettings();
   const { pushNotification } = useNotifications();
   const [alert, setAlert] = useState<ScreenAlert | null>(null);
-  const [visitProfile, setVisitProfile] = useState<GuestVisitProfile | null>(null);
+  const [visitProfileResult, setVisitProfile] = useState<{ key: string; profile: GuestVisitProfile } | null>(null);
+  const visitProfileKey = alert ? guestVisitProfileKey({ email: alert.reservation.guestEmail,
+    phone: alert.reservation.guestPhone, excludeReservationId: alert.reservation.id, beforeAt: alert.reservation.reservedAt }) : "";
+  const visitProfile = visitProfileResult?.key === visitProfileKey ? visitProfileResult.profile : null;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cacheRef = useRef<Map<string, ReservationRecord>>(new Map());
@@ -477,6 +480,7 @@ export function ReservationIncomingListener({
       return;
     }
     const incoming = alert.reservation;
+    setVisitProfile(null);
     let cancelled = false;
     void fetchGuestVisitProfile({
       email: incoming.guestEmail,
@@ -484,12 +488,12 @@ export function ReservationIncomingListener({
       excludeReservationId: incoming.id,
       beforeAt: incoming.reservedAt,
     }).then(({ data }) => {
-      if (!cancelled) setVisitProfile(data.isReturning ? data : null);
+      if (!cancelled) setVisitProfile(data.isReturning ? { key: visitProfileKey, profile: data } : null);
     });
     return () => {
       cancelled = true;
     };
-  }, [alert]);
+  }, [alert, visitProfileKey]);
 
   // Stop looping sound on unmount so reconnect/remount cannot leave orphan audio.
   useEffect(() => {

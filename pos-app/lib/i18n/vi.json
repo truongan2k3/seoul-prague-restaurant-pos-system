@@ -1385,5 +1385,7 @@
   "noSearchResults": "Không có món phù hợp tìm kiếm",
   "manageOrder": "Quản lý",
   "tapLineToEdit": "Chạm món để hiện công cụ sửa",
-  "deleteItem": "Xóa"
+  "deleteItem": "Xóa",
+  "mapResUnassignDrop": "Thả vào đây để gỡ xếp bàn",
+  "mapResUnassignHint": "Hoặc chọn đặt bàn rồi chạm vào đây"
 }

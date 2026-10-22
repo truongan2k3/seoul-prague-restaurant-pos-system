@@ -1,8 +1,6 @@
 "use client";
 
 import { ReservationTimePicker } from "@/components/reservation-time-picker";
-import { ReservationDiningTimeField } from "@/components/reservation-dining-time-field";
-import { formatDiningTime } from "@/lib/reservation-dining";
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -15,7 +13,6 @@ import { formatInVenueTz, splitVenueWallTime } from "@/lib/venue-timezone";
 import { DEFAULT_APP_SETTINGS, fetchAppSettings } from "@/src/lib/settings-actions";
 
 interface ManagedReservation {
-  diningDurationMinutes?: number | null;
   bookingCode: string;
   guestName: string;
   guestEmail: string | null;
@@ -61,7 +58,6 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
   const [guestCount, setGuestCount] = useState(2);
   const [date, setDate] = useState(todayIsoDate());
   const [time, setTime] = useState("18:00");
-  const [diningDurationMinutes, setDiningDurationMinutes] = useState(90);
   const [notes, setNotes] = useState("");
 
   const minDate = useMemo(() => todayIsoDate(), []);
@@ -98,7 +94,6 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
         setDate(parts.date);
         setTime(parts.time);
         setGuestCount(row.partySize);
-        setDiningDurationMinutes(row.diningDurationMinutes ?? 90);
         setNotes(row.notes ?? "");
         setError(null);
       })
@@ -118,7 +113,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
     if (!token || !reservation || !MANAGEABLE.includes(reservation.status)) return;
     const controller = new AbortController();
     setSlotsLoading(true);
-    const params = new URLSearchParams({ date, partySize: String(guestCount), diningDurationMinutes: String(diningDurationMinutes), manageToken: token });
+    const params = new URLSearchParams({ date, partySize: String(guestCount), manageToken: token });
     const timer = window.setTimeout(() => {
       void fetch(`/api/reservations/availability?${params}`, { signal: controller.signal })
         .then(async (response) => {
@@ -130,7 +125,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
         .finally(() => { if (!controller.signal.aborted) setSlotsLoading(false); });
     }, 200);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [date, guestCount, diningDurationMinutes, token, reservation]);
+  }, [date, guestCount, token, reservation]);
 
   const guestOptions = useMemo(
     () =>
@@ -148,7 +143,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!token || !canEdit) return;
-    if (slotsLoading || !availableTimeSlots.includes(time)) { setError("Choose an available time for this dining duration."); return; }
+    if (slotsLoading || !availableTimeSlots.includes(time)) { setError("Choose an available time."); return; }
     setSaving(true);
     setError(null);
     setMessage(null);
@@ -161,7 +156,6 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
           date,
           time,
           guestCount,
-          diningDurationMinutes,
           notes: notes.trim() || undefined,
         }),
       });
@@ -268,7 +262,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
                 <p className="mt-1 text-white/70">
                   {reservation.guestName} · {reservation.partySize} guests
                 </p>
-                <p className="mt-1 text-white/55">{formatWhen(reservation.reservedAt)}{reservation.diningDurationMinutes ? ` · ${formatDiningTime(reservation.diningDurationMinutes)}` : ""}</p>
+                <p className="mt-1 text-white/55">{formatWhen(reservation.reservedAt)}</p>
               </div>
             </div>
 
@@ -283,7 +277,6 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
 
             {canEdit ? (
               <form onSubmit={(event) => void handleSave(event)} className="space-y-4">
-                <ReservationDiningTimeField value={diningDurationMinutes} onChange={setDiningDurationMinutes} disabled={saving} dark />
                 <div className="grid gap-4 sm:grid-cols-3">
                   <label className="block text-sm sm:col-span-1">
                     <span className="font-medium text-white/90">Guests</span>

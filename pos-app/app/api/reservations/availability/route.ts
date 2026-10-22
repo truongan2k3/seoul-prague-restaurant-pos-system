@@ -1,5 +1,4 @@
 import { resolveGrill } from "@/lib/reservation-capacity-engine";
-import { isDiningTime } from "@/lib/reservation-dining";
 import { NextResponse } from "next/server";
 import { filterPastTimeSlots } from "@/lib/reservation-slots";
 import { evaluateGuestSlotAvailability, fetchReservationByManageToken } from "@/src/lib/reservation-guest-server";
@@ -12,9 +11,6 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const date = url.searchParams.get("date")?.trim() ?? "";
   const partySize = Math.max(1, Number(url.searchParams.get("partySize") || 2) || 2);
-  const rawDuration = url.searchParams.get("diningDurationMinutes");
-  const diningDurationMinutes = rawDuration === null ? undefined : Number(rawDuration);
-  if (diningDurationMinutes !== undefined && !isDiningTime(diningDurationMinutes)) return NextResponse.json({ error: "Invalid dining time." }, { status: 400 });
   const grillRaw = url.searchParams.get("grill");
   let grill =
     grillRaw === "yes" || grillRaw === "no" || grillRaw === "undecided" ? grillRaw : undefined;
@@ -37,7 +33,6 @@ export async function GET(request: Request) {
       date,
       partySize,
       grill: grill ?? null,
-      diningDurationMinutes,
     });
 
     const futureTimes = new Set(filterPastTimeSlots(slots.map((row) => row.time), date));

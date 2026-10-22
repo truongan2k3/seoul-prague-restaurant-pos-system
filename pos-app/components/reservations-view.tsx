@@ -1,8 +1,5 @@
 "use client";
 
-import { ReservationDiningTimeField } from "@/components/reservation-dining-time-field";
-import { diningTimeCopy, formatDiningTime, reservationDiningMinutes } from "@/lib/reservation-dining";
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, Eye, MapPin, ChevronLeft, ChevronRight, Pencil, Plus } from "lucide-react";
 import { GuestReturningBadge } from "@/components/guest-returning-badge";
@@ -143,7 +140,7 @@ function isStaffNotesOnlyChange(
 ): boolean {
   const nextNotes = input.notes?.trim() || "";
   const prevNotes = previous.notes?.trim() || "";
-  if (nextNotes === prevNotes || (input.diningDurationMinutes !== undefined && input.diningDurationMinutes !== previous.diningDurationMinutes)) return false;
+  if (nextNotes === prevNotes) return false;
 
   const sameName = previous.guestName.trim() === input.guestName.trim();
   const samePhone = (previous.guestPhone ?? "").trim() === (input.guestPhone?.trim() || "");
@@ -240,7 +237,6 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const [formPhone, setFormPhone] = useState("");
   const [formEmail, setFormEmail] = useState("");
   const [formPartySize, setFormPartySize] = useState(2);
-  const [formDiningDuration, setFormDiningDuration] = useState(90);
   const [formDateTime, setFormDateTime] = useState("");
   const [formNotes, setFormNotes] = useState("");
   const [formTableId, setFormTableId] = useState("");
@@ -442,7 +438,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       const { data:created,error:createError }=await createReservation({
         guestName:draft.guestName|| (language==="cs"?"Host":language==="vi"?"Khách":"Guest"),
         guestPhone:draft.phone||undefined,guestEmail:draft.email||undefined,
-        diningDurationMinutes:draft.diningDurationMinutes,partySize:Math.max(1,draft.guestCount),reservedAt:venueWallTimeToUtc(draft.date,draft.time),
+        partySize:Math.max(1,draft.guestCount),reservedAt:venueWallTimeToUtc(draft.date,draft.time),
         notes:[bbqTag,draft.notes].filter(Boolean).join(" ")||undefined,
         eventType:draft.eventType||undefined,referralCode:draft.referralCode||undefined,
         tableId:formTableId||undefined,staffId:currentStaffUser?.id,staffName:currentStaffUser?.name,source:formSource,
@@ -464,7 +460,6 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     setFormPhone(row.guestPhone ?? "");
     setFormEmail(row.guestEmail ?? "");
     setFormPartySize(row.partySize);
-    setFormDiningDuration(reservationDiningMinutes(row, settings.reservationDurationMinutes));
     setFormDateTime(toDateTimeLocalValue(row.reservedAt));
     setFormNotes(row.notes ?? "");
     setFormTableId(row.tableId ?? "");
@@ -482,7 +477,6 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
         guestPhone: formPhone.trim() || undefined,
         guestEmail: formEmail.trim() || undefined,
         partySize: Math.max(1, formPartySize),
-        diningDurationMinutes: formDiningDuration === reservationDiningMinutes(editTarget, settings.reservationDurationMinutes) ? undefined : formDiningDuration,
         reservedAt: venueWallTimeToUtc(formDateTime.slice(0,10),formDateTime.slice(11,16)),
         notes: formNotes.trim() || undefined,
         tableId: editTarget.status === "checked_in" ? undefined : formTableId || null,
@@ -555,14 +549,14 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       }
     }
 
+    setBusyId(checkInTarget.id);
     const { data: visitProfile } = await fetchGuestVisitProfile({
       email: checkInTarget.guestEmail,
       phone: checkInTarget.guestPhone,
       excludeReservationId: checkInTarget.id,
-      beforeAt: checkInTarget.reservedAt,
+      beforeAt: new Date(),
     });
 
-    setBusyId(checkInTarget.id);
     const actualParty = Math.max(1, checkInActualParty || checkInTarget.partySize);
     const { error: checkInError } = await checkInReservationWithTables(
       checkInTarget.id,
@@ -923,7 +917,6 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           {row.cancelEmailStatus ? ` · ${row.cancelEmailStatus}` : ""}
                         </p>
                       ) : null}
-                      {row.diningDurationMinutes && <p className="mt-1 text-xs text-[#C9A88B]">{diningTimeCopy(language).title}: {formatDiningTime(row.diningDurationMinutes, language)}</p>}
                       {row.eventType ? (
                         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                           {pickEventTypeLabel(
@@ -977,7 +970,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                         email={row.guestEmail}
                         phone={row.guestPhone}
                         excludeReservationId={row.id}
-                        beforeAt={row.reservedAt}
+                        beforeAt={row.checkedInAt ?? row.reservedAt}
                       />
                     </div>
 
@@ -1098,7 +1091,6 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
               [translate("bookingCode"),detailsTarget.bookingCode],
               [translate("partySize"),String(detailsTarget.partySize)],
               [translate("resActualPartySize"),detailsTarget.actualPartySize?.toString()],
-              [diningTimeCopy(language).title,formatDiningTime(reservationDiningMinutes(detailsTarget, settings.reservationDurationMinutes),language)],
               [translate("table"),formatReservationTableLabels(detailsTarget)],
               [translate("resReferralCode"),detailsTarget.referralCode],
               [translate("reservationSource"),translate(({reservation:"resSourceReservation",phone_call:"resSourcePhoneCall",online:"resSourceOnline",walk_in:"resSourceWalkIn"} as const)[detailsTarget.source])],
@@ -1183,7 +1175,6 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
               dateLabel={translate("reservedDate")}
               timeLabel={translate("reservedTime")}
             />
-            <ReservationDiningTimeField value={formDiningDuration} onChange={setFormDiningDuration} language={language} />
             {editTarget.status !== "checked_in" ? (
               <label className="block text-sm">
                 <span className="text-gray-500">{translate("selectTable")}</span>

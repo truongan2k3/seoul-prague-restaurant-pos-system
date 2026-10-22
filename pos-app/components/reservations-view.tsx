@@ -531,7 +531,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   };
 
   const handleCheckIn = async (override = false) => {
-    if (!checkInTarget || checkInTableIds.length !== 1 || busyId === checkInTarget.id) return;
+    if (!checkInTarget || !checkInTableIds.length || busyId === checkInTarget.id) return;
     if (override && (!checkInConflict || checkInConflict.reservationId !== checkInTarget.id
       || checkInConflict.tableId !== checkInTableIds[0] || checkInConflict.partySize !== checkInActualParty)) return;
 
@@ -1298,6 +1298,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           <ReservationTableMap
             tables={tables}
             value={checkInTableIds}
+            maxTables={3}
             allowOccupied={false}
             allowBlocked
             checkIn={checkInTarget?{reservation:checkInTarget,reservations,partySize:checkInActualParty,durationMinutes:settings.reservationDurationMinutes,bufferMinutes:settings.reservationBufferMinutes}:undefined}
@@ -1318,7 +1319,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           {error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">{error}</p>}
           <button
             type="button"
-            disabled={checkInTableIds.length !== 1 || checkInOccupied || busyId === checkInTarget?.id}
+            disabled={!checkInTableIds.length || checkInOccupied || busyId === checkInTarget?.id}
             onClick={() => void handleCheckIn()}
             className="w-full rounded-xl bg-[var(--pos-brand)] py-3 text-sm font-semibold text-white hover:bg-[var(--pos-brand-hover)] disabled:opacity-50"
           >

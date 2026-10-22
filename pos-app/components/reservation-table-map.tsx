@@ -23,7 +23,7 @@ export function ReservationTableMap({tables,value,onChange,language,disabled=fal
     tables:tables.flatMap(table=>{const config=floorTableByLabel(table.label);return config?[{...config,id:table.id,occupied:table.status!=="empty",occupiedAt:table.occupiedAt?.toISOString()??null,blocked:table.availabilityBlocked===true}]:[];}),
     reservations:checkIn.reservations,
   }:null;
-  const issueFor=(id:string)=>seatingSource&&checkIn?checkInTableIssue(seatingSource,id,checkIn.reservation.id,checkIn.partySize,resolveGrill(checkIn.reservation)):null;
+  const issueFor=(id:string)=>seatingSource&&checkIn?checkInTableIssue(seatingSource,id,checkIn.reservation.id,checkIn.partySize,resolveGrill(checkIn.reservation),ids):null;
   const selectedIssue=ids.map(issueFor).find(Boolean);
   const floor=useMemo(()=>{
     const positions=resolveFloorCardOverlaps(tables.map(table=>({id:table.id,x:table.posX,y:table.posY})));
@@ -75,5 +75,6 @@ export function ReservationTableMap({tables,value,onChange,language,disabled=fal
       </button>)}
     </div>
     {maxTables>1&&<p className="text-xs text-[var(--muted)]">{t(language,"selectSecondTableHint").replace("{max}",String(maxTables))}</p>}
+    {checkIn?.reservation.referralCodeId&&ids.length>1&&<p className="rounded-xl border border-[#C9A88B]/25 bg-[#C9A88B]/10 px-3 py-2 text-xs leading-relaxed text-[var(--foreground)]">{t(language,"checkInReferralPrimaryOnly").replace("{table}",tables.find(table=>table.id===ids[0])?.label??"—")}</p>}
   </div>;
 }

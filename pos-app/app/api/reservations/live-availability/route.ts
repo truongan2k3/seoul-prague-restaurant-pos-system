@@ -55,21 +55,37 @@ export async function POST(request: Request) {
   // The authenticated reception display already supports customer check-in.
   if (body.action === "check-in") {
     try {
-      if (typeof body.reservationId !== "string" || typeof body.tableId !== "string") throw new Error("Select one table.");
-      const { data: row, error } = await db.from("reservations").select("status,table_id,party_size,notes,wants_grill")
+      const tableIds: string[] = Array.isArray(body.tableIds) ? body.tableIds : [body.tableId];
+      if (typeof body.reservationId !== "string" || !tableIds.length || tableIds.length > 3
+        || tableIds.some((id) => typeof id !== "string" || !id) || new Set(tableIds).size !== tableIds.length) throw new Error("Select one to three available tables.");
+      const { data: row, error } = await db.from("reservations").select("status,table_id,secondary_table_id,tertiary_table_id,party_size,notes,wants_grill")
         .eq("id", body.reservationId).maybeSingle();
       if (error) throw error;
       if (!row) throw new Error("Reservation not found.");
-      if (row.status === "checked_in" && row.table_id === body.tableId) return NextResponse.json({ ok: true });
+      const linkedIds = [row.table_id, row.secondary_table_id, row.tertiary_table_id].filter(Boolean);
+      if (row.status === "checked_in" && tableIds.length === linkedIds.length && tableIds.every((id, index) => id === linkedIds[index])) return NextResponse.json({ ok: true });
       if (!["pending", "confirmed", "late"].includes(row.status)) throw new Error("This reservation cannot be checked in.");
       const { source } = await loadLiveTableAvailability(auth.businessId);
       const party = Number(body.actualPartySize ?? row.party_size);
       const grill = resolveGrill({ partySize: party, reservedAt: source.serverNow, status: row.status, notes: row.notes, wantsGrill: row.wants_grill });
-      const issue = checkInTableIssue(source, body.tableId, body.reservationId, party, grill);
+      const issues = tableIds.map((id) => checkInTableIssue(source, id, body.reservationId, party, grill, tableIds));
+      const issue = issues.find((item) => item && (isExclusiveCheckInConflict(item.code) || ["TABLE_NOT_CONFIGURED", "INVALID_PARTY_SIZE"].includes(item.code)))
+        ?? issues.find(Boolean) ?? null;
       if (issue && isExclusiveCheckInConflict(issue.code)) {
         return NextResponse.json({ error: issue.message, code: issue.code, overrideAllowed: false }, { status: 409 });
       }
       const overrideAllowed = issue !== null && !["TABLE_NOT_CONFIGURED", "INVALID_PARTY_SIZE"].includes(issue.code);
+      if (issue && (body.override !== true || !overrideAllowed)) return NextResponse.json({ error: issue.message, code: issue.code, overrideAllowed }, { status: 409 });
+      if (tableIds.length > 1) {
+        const result = await db.rpc("check_in_reservation_tables", { p_reservation: body.reservationId, p_tables: tableIds,
+          p_party: party, p_business: auth.businessId, p_staff: session?.businessId === auth.businessId ? session.staffId : null,
+          p_override: body.override === true, p_reason: String(issue?.message ?? body.reason ?? "Reception check-in").slice(0, 2000) });
+        if (result.error?.code === "PGRST202" || result.error?.code === "42883") return NextResponse.json({
+          error: "Run supabase/patch-reservation-table-referral-scope.sql to enable separate-table check-in.", code: "CHECK_IN_SETUP_REQUIRED" }, { status: 503 });
+        if (result.error) throw result.error;
+        return NextResponse.json({ ok: true });
+      }
+      body.tableId = tableIds[0];
       if (body.override === true) {
         // Reception devices can confirm seating warnings without a staff login.
         // A matching staff session is optional audit metadata, not a permission gate.

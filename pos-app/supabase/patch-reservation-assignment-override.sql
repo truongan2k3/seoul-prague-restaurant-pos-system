@@ -6,42 +6,42 @@ ALTER TABLE public.reservations
 
 CREATE OR REPLACE FUNCTION public.single_reservation_table_guard()
 RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
-DECLARE t public.tables; dining interval; buffer interval; starts timestamptz; ends timestamptz;
+DECLARE t public.tables; ids uuid[]; dining interval; buffer interval; starts timestamptz; ends timestamptz;
 BEGIN
-  IF NEW.status NOT IN ('pending', 'confirmed', 'late', 'checked_in') THEN RETURN NEW; END IF;
-  IF TG_OP = 'UPDATE' AND NEW.table_id IS NOT DISTINCT FROM OLD.table_id
-    AND NEW.secondary_table_id IS NOT DISTINCT FROM OLD.secondary_table_id
-    AND NEW.tertiary_table_id IS NOT DISTINCT FROM OLD.tertiary_table_id
-    AND NEW.reserved_at IS NOT DISTINCT FROM OLD.reserved_at
-    AND NEW.party_size IS NOT DISTINCT FROM OLD.party_size
-    AND OLD.status IN ('pending', 'confirmed', 'late', 'checked_in') THEN RETURN NEW; END IF;
-  IF NEW.secondary_table_id IS NOT NULL OR NEW.tertiary_table_id IS NOT NULL THEN
-    RAISE EXCEPTION 'Combined tables are no longer supported. Select one table.';
+  IF NEW.status NOT IN ('pending','confirmed','late','checked_in') THEN RETURN NEW; END IF;
+  ids := array_remove(ARRAY[NEW.table_id,NEW.secondary_table_id,NEW.tertiary_table_id],NULL);
+  IF cardinality(ids)=0 THEN RETURN NEW; END IF;
+  IF cardinality(ids)<>(SELECT count(DISTINCT id) FROM unnest(ids) id) THEN RAISE EXCEPTION 'Select distinct tables'; END IF;
+  IF TG_OP='UPDATE' AND OLD.status IN ('pending','confirmed','late','checked_in') AND (NEW.status=OLD.status OR NEW.status<>'checked_in') AND NEW.reserved_at IS NOT DISTINCT FROM OLD.reserved_at
+    AND NEW.party_size IS NOT DISTINCT FROM OLD.party_size AND (
+      (NEW.table_id IS NOT DISTINCT FROM OLD.table_id AND NEW.secondary_table_id IS NOT DISTINCT FROM OLD.secondary_table_id AND NEW.tertiary_table_id IS NOT DISTINCT FROM OLD.tertiary_table_id)
+      OR (OLD.status='checked_in' AND ids <@ array_remove(ARRAY[OLD.table_id,OLD.secondary_table_id,OLD.tertiary_table_id],NULL))) THEN RETURN NEW; END IF;
+  PERFORM 1 FROM public.tables WHERE id=ANY(ids) ORDER BY id FOR UPDATE;
+  IF (SELECT count(*) FROM public.tables WHERE id=ANY(ids))<>cardinality(ids) THEN RAISE EXCEPTION 'Table not found'; END IF;
+  IF NEW.status='checked_in' AND EXISTS(SELECT 1 FROM public.reservations r WHERE r.id<>NEW.id AND r.status='checked_in'
+    AND ids && ARRAY[r.table_id,r.secondary_table_id,r.tertiary_table_id]) THEN
+    RAISE EXCEPTION 'Table already has a checked-in reservation. Complete the current visit first.';
   END IF;
-  IF NEW.table_id IS NULL THEN RETURN NEW; END IF;
-  SELECT * INTO t FROM public.tables WHERE id = NEW.table_id FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'Table is unavailable'; END IF;
-  IF auth.role() = 'service_role' AND (
-    (NEW.status <> 'checked_in' AND current_setting('app.reservation_assignment_override', true) = NEW.id::text)
-    OR (NEW.status = 'checked_in' AND current_setting('app.reservation_check_in_override', true) = NEW.id::text)
-  ) THEN RETURN NEW; END IF;
-  IF t.availability_blocked THEN RAISE EXCEPTION 'Table is unavailable'; END IF;
-  SELECT make_interval(mins => reservation_duration_minutes), make_interval(mins => reservation_buffer_minutes)
-    INTO dining, buffer FROM public.settings ORDER BY id LIMIT 1;
-  dining := coalesce(dining, interval '90 minutes'); buffer := coalesce(buffer, interval '15 minutes');
-  starts := CASE WHEN NEW.status = 'checked_in' THEN clock_timestamp() ELSE NEW.reserved_at END;
-  ends := starts + dining;
-  IF NEW.status <> 'checked_in' AND t.status <> 'empty' AND ends > now()
-     AND (t.occupied_at IS NULL OR t.occupied_at + dining <= now() OR t.occupied_at + dining > starts) THEN
-    RAISE EXCEPTION 'Table is occupied during the requested seating period';
-  END IF;
-  IF EXISTS (SELECT 1 FROM public.reservations r WHERE r.id <> NEW.id
-    AND r.status IN ('pending', 'confirmed', 'late', 'checked_in')
-    AND NEW.table_id IN (r.table_id, r.secondary_table_id, r.tertiary_table_id)
-    AND ((r.status = 'checked_in' AND (r.checked_in_at IS NULL OR r.checked_in_at + dining <= now() OR r.checked_in_at + dining > starts))
-      OR (r.status <> 'checked_in' AND r.reserved_at - buffer < ends AND r.reserved_at + dining > starts))) THEN
-    RAISE EXCEPTION 'Table is already reserved for this seating period';
-  END IF;
+  IF auth.role()='service_role' AND (
+    (NEW.status<>'checked_in' AND current_setting('app.reservation_assignment_override',true)=NEW.id::text)
+    OR (NEW.status='checked_in' AND current_setting('app.reservation_check_in_override',true)=NEW.id::text)) THEN RETURN NEW; END IF;
+  SELECT make_interval(mins=>reservation_duration_minutes),make_interval(mins=>reservation_buffer_minutes)
+    INTO dining,buffer FROM public.settings ORDER BY id LIMIT 1;
+  dining:=coalesce(dining,interval '90 minutes'); buffer:=coalesce(buffer,interval '15 minutes');
+  starts:=CASE WHEN NEW.status='checked_in' THEN clock_timestamp() ELSE NEW.reserved_at END; ends:=starts+dining;
+  FOR t IN SELECT * FROM public.tables WHERE id=ANY(ids) ORDER BY id LOOP
+    IF t.availability_blocked THEN RAISE EXCEPTION 'Table is unavailable'; END IF;
+    IF NEW.status<>'checked_in' AND t.status<>'empty' AND ends>now()
+      AND (t.occupied_at IS NULL OR t.occupied_at+dining<=now() OR t.occupied_at+dining>starts) THEN
+      RAISE EXCEPTION 'Table is occupied during the requested seating period';
+    END IF;
+    IF EXISTS(SELECT 1 FROM public.reservations r WHERE r.id<>NEW.id
+      AND r.status IN ('pending','confirmed','late','checked_in') AND t.id IN(r.table_id,r.secondary_table_id,r.tertiary_table_id)
+      AND ((r.status='checked_in' AND (r.checked_in_at IS NULL OR r.checked_in_at+dining<=now() OR r.checked_in_at+dining>starts))
+        OR (r.status<>'checked_in' AND r.reserved_at-buffer<ends AND r.reserved_at+dining>starts))) THEN
+      RAISE EXCEPTION 'Table is already reserved for this seating period';
+    END IF;
+  END LOOP;
   RETURN NEW;
 END;
 $$;

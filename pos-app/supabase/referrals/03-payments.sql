@@ -1,7 +1,7 @@
 BEGIN;
 CREATE OR REPLACE FUNCTION public.referral_sale_guard() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
-DECLARE a referral_attributions; c referral_codes; eligible boolean; used boolean; visit timestamptz; next_installment integer;
+DECLARE a referral_attributions; c referral_codes; eligible boolean; used boolean; visit timestamptz; next_installment integer; scope_table uuid;
 BEGIN
  IF TG_OP='UPDATE' THEN
   IF OLD.referral_code_id IS NULL THEN
@@ -20,12 +20,17 @@ BEGIN
   RETURN NEW;
  END IF;
  IF NEW.reservation_id IS NULL THEN
-  SELECT r.id INTO NEW.reservation_id FROM reservations r WHERE r.status='checked_in' AND r.referral_code_id IS NOT NULL AND NEW.table_id IN (r.table_id,r.secondary_table_id,r.tertiary_table_id) ORDER BY r.checked_in_at DESC LIMIT 1;
+  SELECT r.id INTO NEW.reservation_id FROM reservations r WHERE r.status='checked_in' AND NEW.table_id IN (r.table_id,r.secondary_table_id,r.tertiary_table_id) ORDER BY r.checked_in_at ASC NULLS LAST,r.id ASC LIMIT 1;
  END IF;
  SELECT * INTO a FROM referral_attributions WHERE reservation_id=NEW.reservation_id;
  IF NOT FOUND THEN
   IF NEW.referral_code_id IS NOT NULL OR NEW.referral_snapshot IS NOT NULL THEN RAISE EXCEPTION 'Unknown referral attribution.'; END IF;
   RETURN NEW;
+ END IF;
+ SELECT coalesce((SELECT coalesce(nullif(s.referral_snapshot->>'discount_table_id','')::uuid,s.table_id) FROM sales s WHERE s.reservation_id=NEW.reservation_id AND s.referral_code_id IS NOT NULL ORDER BY s.closed_at,s.id LIMIT 1),
+   (SELECT r.table_id FROM reservations r WHERE r.id=NEW.reservation_id)) INTO scope_table;
+ IF NEW.table_id IS DISTINCT FROM scope_table AND (coalesce(NEW.referral_discount_amount,0)>0 OR coalesce(NEW.referral_discount_percent,0)>0) THEN
+  RAISE EXCEPTION 'Referral discount applies to one table only. Merge tables before payment for a combined bill.';
  END IF;
  IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Referral payments require the secure checkout action.'; END IF;
  IF NEW.referral_payment_key IS NULL THEN RAISE EXCEPTION 'Referral payment idempotency key is required.'; END IF;
@@ -43,7 +48,7 @@ BEGIN
   AND coalesce(NEW.referral_visit_subtotal,0)>=(a.rules->>'min_spend')::numeric;
  IF NOT eligible AND coalesce(NEW.referral_discount_percent,0)>0 AND nullif(NEW.referral_override_reason,'') IS NULL THEN RAISE EXCEPTION 'Referral eligibility changed. Refresh checkout.'; END IF;
  NEW.referral_code_id:=a.code_id;
- NEW.referral_snapshot:=jsonb_build_object('eligible',eligible,'business_id',a.business_id,'code',a.rules->>'code','partner_name',a.rules->>'partner_name');
+ NEW.referral_snapshot:=jsonb_build_object('eligible',eligible,'business_id',a.business_id,'code',a.rules->>'code','partner_name',a.rules->>'partner_name','discount_table_id',scope_table);
  IF eligible AND NOT used THEN
   INSERT INTO referral_redemptions(reservation_id,code_id,visit_subtotal) VALUES(NEW.reservation_id,c.id,NEW.referral_visit_subtotal);
   UPDATE referral_codes SET usage_count=usage_count+1 WHERE id=c.id;

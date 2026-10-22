@@ -364,10 +364,11 @@ export async function checkInReservation(
   secondaryTableId?: string | null,
   options?: { actualPartySize?: number | null; tertiaryTableId?: string | null; override?: boolean; overrideReason?: string },
 ) {
-  if (!tableId || secondaryTableId || options?.tertiaryTableId) return { data: null, error: new Error("Select exactly one available table.") };
+  const tableIds = normalizeReservationTableIds([tableId, secondaryTableId, options?.tertiaryTableId]);
+  if (!tableIds.length) return { data: null, error: new Error("Select available tables for check-in.") };
   try {
     const response = await fetch("/api/reservations/live-availability", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "check-in", reservationId, tableId, actualPartySize: options?.actualPartySize ?? undefined,
+      body: JSON.stringify({ action: "check-in", reservationId, tableId, tableIds, actualPartySize: options?.actualPartySize ?? undefined,
         override: options?.override === true, reason: options?.overrideReason }) });
     const result = await response.json();
     if (!response.ok) return { data: null, error: Object.assign(new Error(result.error ?? "Table is not available."), {
@@ -448,14 +449,14 @@ export async function restoreTableSnapshot(snapshot: TableSnapshot) {
   return supabase.from("tables").update(payload).eq("id", snapshot.id);
 }
 
-/** Check in atomically onto one available table. */
+/** Check in atomically onto up to three separate available tables. First selected table owns the referral. */
 export async function checkInReservationWithTables(
   reservationId: string,
   tableIds: string[],
   options?: { allowOccupied?: boolean; actualPartySize?: number | null; override?: boolean; overrideReason?: string },
 ) {
   const ids = normalizeReservationTableIds(tableIds);
-  if (ids.length !== 1) return { data: null, error: new Error("Select exactly one available table.") };
+  if (!ids.length || new Set(tableIds).size > 3) return { data: null, error: new Error("Select one to three available tables.") };
 
   return checkInReservation(reservationId, ids[0], ids[1] ?? null, {
     actualPartySize: options?.actualPartySize,

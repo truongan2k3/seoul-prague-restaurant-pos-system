@@ -497,6 +497,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
                 tables={tables}
                 checkIn={{reservation:selected,reservations:rows,partySize:selected.partySize,durationMinutes:settings.reservationDurationMinutes,bufferMinutes:settings.reservationBufferMinutes}}
                 value={checkInTableIds}
+                maxTables={3}
                 allowOccupied={false}
                 allowBlocked
                 onChange={(ids) => { setCheckInTableIds(ids); setCheckInConflict(null); setError(null); }}
@@ -519,7 +520,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
 
             <button
               type="button"
-              disabled={checkInTableIds.length !== 1 || checkInOccupied || busyId === selected.id}
+              disabled={!checkInTableIds.length || checkInOccupied || busyId === selected.id}
               onClick={handleConfirmTableCheckIn}
               className="mt-5 flex w-full items-center justify-center gap-2 bg-[#8B1E2D] px-6 py-4 text-base font-semibold uppercase tracking-[0.16em] text-white transition hover:bg-[#A02435] disabled:cursor-not-allowed disabled:opacity-40"
             >

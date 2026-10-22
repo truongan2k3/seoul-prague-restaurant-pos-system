@@ -464,6 +464,7 @@
   "resCapacityOverviewTitle": "Sức chứa & bàn trống",
   "resCapacityOpenButton": "Sức chứa",
   "resBookingLimits": "Giới hạn đặt chỗ",
+  "checkInReferralPrimaryOnly": "Mã giảm giá chỉ áp dụng tại {table} (bàn chọn đầu tiên). Các bàn khác có bill riêng. Muốn áp dụng cho bill chung, hãy merge bàn trước khi thanh toán.",
   "resBookingLimitsEnabled": "Đang bật",
   "resBookingLimitsDisabled": "Không giới hạn",
   "resBookingLimitsEnabledHint": "Kiểm tra bàn trống trước khi nhận đặt chỗ.",

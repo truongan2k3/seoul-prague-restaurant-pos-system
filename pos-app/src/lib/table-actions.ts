@@ -956,13 +956,14 @@ async function reassignCheckedInGuestData(fromTableId: string, toTableId: string
 
   const now = new Date().toISOString();
 
-  const { data: linked } = await supabase
+  const { data: linked, error: linksError } = await supabase
     .from("reservations")
     .select("id, table_id, secondary_table_id, tertiary_table_id")
     .eq("status", "checked_in")
     .or(
       `table_id.eq.${fromTableId},secondary_table_id.eq.${fromTableId},tertiary_table_id.eq.${fromTableId}`,
     );
+  if (linksError) return { error: linksError };
 
   for (const row of linked ?? []) {
     const cols = reservationTableIdColumns(
@@ -973,7 +974,7 @@ async function reassignCheckedInGuestData(fromTableId: string, toTableId: string
       ]),
     );
 
-    await supabase
+    const { error: reservationError } = await supabase
       .from("reservations")
       .update({
         table_id: cols.tableId,
@@ -982,6 +983,7 @@ async function reassignCheckedInGuestData(fromTableId: string, toTableId: string
         updated_at: now,
       })
       .eq("id", row.id);
+    if (reservationError) return { error: reservationError };
   }
 
   await supabase
@@ -994,6 +996,7 @@ async function reassignCheckedInGuestData(fromTableId: string, toTableId: string
     .from("table_activity_logs")
     .update({ table_id: toTableId })
     .eq("table_id", fromTableId);
+  return { error: null };
 }
 
 export async function transferTable(fromId: string, toId: string) {
@@ -1005,8 +1008,9 @@ export async function transferTable(fromId: string, toId: string) {
   if (fetchError) return { error: fetchError };
   if (!fromTable) return { error: new Error("Source table not found") };
 
+  const guestMove = await reassignCheckedInGuestData(fromId, toId);
+  if (guestMove?.error) return { error: guestMove.error };
   await supabase.from("order_items").update({ table_id: toId }).eq("table_id", fromId);
-  await reassignCheckedInGuestData(fromId, toId);
 
   const { error: updateError } = await supabase
     .from("tables")
@@ -1034,15 +1038,16 @@ export async function mergeTables(sourceIds: string[], targetId: string) {
 
     // Always move linked reservation / voucher / activity onto the surviving table,
     // even when the source has no items yet (common for dual-table large parties).
-    await reassignCheckedInGuestData(sourceId, targetId);
+    const guestMove = await reassignCheckedInGuestData(sourceId, targetId);
+    if (guestMove?.error) return { error: guestMove.error };
 
     if (!hasOrders && !sourceOccupied) continue;
 
-    if (hasOrders) {
+    if (hasOrders || sourceOccupied) {
       const { data: target } = await supabase.from("tables").select("*").eq("id", targetId).single();
       const mergedOrders = [...(target?.orders ?? []), ...sourceOrders];
 
-      await supabase.from("order_items").update({ table_id: targetId }).eq("table_id", sourceId);
+      if (hasOrders) await supabase.from("order_items").update({ table_id: targetId }).eq("table_id", sourceId);
       await supabase
         .from("tables")
         .update({

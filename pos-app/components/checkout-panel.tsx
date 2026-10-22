@@ -167,7 +167,7 @@ export function CheckoutPanel({
   const cashGivenRef = useRef<NumericInputFieldHandle>(null);
 
   const referralContext = `${tableId ?? ""}:${sessionResetKey}`;
-  const [referralState, setReferralState] = useState<{context:string;data:ReferralQuote|null;error:string|null}>({context:"",data:null,error:null});
+  const [referralState, setReferralState] = useState<{context:string;data:ReferralQuote|null;error:string|null;scopeNotice?:string}>({context:"",data:null,error:null});
   const [referralRetry, setReferralRetry] = useState(0);
   const [referralOverride, setReferralOverride] = useState<{context:string;percent:number;reason:string}|null>(null);
   const [overridePercent, setOverridePercent] = useState("");
@@ -178,7 +178,7 @@ export function CheckoutPanel({
   const referralLoading = Boolean(tableId && referralState.context !== referralContext);
   const referralError = referralState.context === referralContext ? referralState.error : null;
   const referralIsAvailable = referralQuote ? referralAvailable(referralQuote, referralBillSubtotal(lines)) : false;
-  const effectiveOverride = referralOverride?.context === referralContext ? referralOverride : null;
+  const effectiveOverride = referralOverride?.context === referralContext && referralQuote?.discountAllowed !== false ? referralOverride : null;
   const referralPercent = effectiveOverride?.percent ?? (referralIsAvailable ? referralQuote?.discountPercent ?? 0 : 0);
   const canOverrideReferral = currentStaffUser?.role === "admin" || currentStaffUser?.role === "manager";
   useEffect(() => {
@@ -1384,6 +1384,7 @@ export function CheckoutPanel({
           setReferralRetry(value=>value+1);
         }}>Retry</button>
       </div>}
+      {referralState.context === referralContext && referralState.scopeNotice && <p role="status" className="rounded-xl border border-amber-400/25 bg-amber-400/10 p-3 text-sm text-amber-800 dark:text-amber-100">{referralState.scopeNotice}</p>}
       {referralQuote && (
         <section className="rounded-2xl border border-[#C9A88B]/40 bg-[#C9A88B]/10 p-4 text-sm dark:text-[#F5EDE4]">
           <p className="font-semibold">Referral · {referralQuote.code} · {referralQuote.partner}</p>
@@ -1391,7 +1392,7 @@ export function CheckoutPanel({
           <p className="mt-1 text-xs opacity-70">Applied before any additional staff discount. Partner commission is calculated separately after successful payment.</p>
           {!referralIsAvailable && !effectiveOverride && <p className="mt-2 text-amber-600 dark:text-amber-200">Not eligible: inactive, expired, fully used, or below minimum spend ({displayPrice(referralQuote.minSpend)}).</p>}
           {effectiveOverride && <p className="mt-2 text-xs">Manager override: {effectiveOverride.reason}</p>}
-          {canOverrideReferral && <details className="mt-3"><summary className="cursor-pointer">Adjust / remove referral discount</summary>
+          {canOverrideReferral && referralQuote.discountAllowed !== false && <details className="mt-3"><summary className="cursor-pointer">Adjust / remove referral discount</summary>
             <div className="mt-2 grid gap-2 sm:grid-cols-[100px_1fr_auto]">
               <input aria-label="Referral discount percent" type="number" min="0" max="100" step="0.01" value={overridePercent} onChange={e=>setOverridePercent(e.target.value)} placeholder={String(referralPercent)} className="pos-input" />
               <input aria-label="Referral override reason" value={overrideReason} onChange={e=>setOverrideReason(e.target.value)} placeholder="Required reason (0% removes discount)" className="pos-input" />

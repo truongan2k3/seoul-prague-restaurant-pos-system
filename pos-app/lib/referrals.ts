@@ -15,6 +15,8 @@ export type ReferralCode = ReferralRules & {
   updated_at: string; created_at: string;
 };
 export type ReferralQuote = {
+  /** Discount is exclusive to one bill; commission attribution remains reservation-linked. */
+  discountAllowed?: boolean;
   codeId: string; code: string; partner: string; discountPercent: number; minSpend: number;
   active: boolean; expiresAt: string | null; remainingUses: number | null; redeemed: boolean;
   version: string; reservationId: string; visitSubtotal: number; lastInstallment: number;

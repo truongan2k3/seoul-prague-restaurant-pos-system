@@ -39,16 +39,17 @@ export async function validateReferralCodeAction(code: string): Promise<{valid:b
   return data;
 }
 
-export async function getReferralQuoteAction(tableId: string): Promise<{data:ReferralQuote|null;error:string|null}> {
+export async function getReferralQuoteAction(tableId: string): Promise<{data:ReferralQuote|null;error:string|null;scopeNotice?:string}> {
   return loadReferralQuote(tableId);
 }
 
-async function loadReferralQuote(tableId: string, context?: Awaited<ReturnType<typeof actor>>): Promise<{data:ReferralQuote|null;error:string|null}> {
+async function loadReferralQuote(tableId: string, context?: Awaited<ReturnType<typeof actor>>): Promise<{data:ReferralQuote|null;error:string|null;scopeNotice?:string}> {
   try {
     // Use the same original bill owner as findActiveReservationForTable.
     // A later check-in sharing the table must not replace its referral, including with no code.
     // Ordinary checkouts keep working without any referral service-role operation.
-    const {data:reservation,error}=await (context?.db ?? supabase).from("reservations").select("id,referral_code_id,checked_in_at")
+    const client=context?.db ?? supabase;
+    const {data:reservation,error}=await client.from("reservations").select("id,table_id,referral_code_id,checked_in_at")
       .eq("status","checked_in").or(`table_id.eq.${tableId},secondary_table_id.eq.${tableId},tertiary_table_id.eq.${tableId}`)
       .order("checked_in_at",{ascending:true,nullsFirst:false})
       .order("id",{ascending:true}).limit(1).maybeSingle();
@@ -57,6 +58,16 @@ async function loadReferralQuote(tableId: string, context?: Awaited<ReturnType<t
       throw new Error(migrationError(error.message));
     }
     if(!reservation?.referral_code_id)return {data:null,error:null};
+    const {data:firstReferredPayment,error:scopeError}=await client.from("sales").select("table_id,referral_snapshot")
+      .eq("reservation_id",reservation.id).not("referral_code_id","is",null)
+      .order("closed_at",{ascending:true}).order("id",{ascending:true}).limit(1).maybeSingle();
+    if(scopeError)throw new Error(scopeError.message);
+    // Once paid, keep the original scope even when finishing that table promotes a secondary table.
+    const discountTableId=firstReferredPayment?.referral_snapshot?.discount_table_id ?? firstReferredPayment?.table_id ?? reservation.table_id;
+    const discountAllowed=discountTableId===tableId;
+    const scopeNotice=discountAllowed?undefined:firstReferredPayment
+      ? "The referral discount is assigned to another table's bill and cannot be applied again here."
+      : "The referral discount applies to the primary table only. Merge the tables before payment to apply it to the combined bill.";
     const {db,businessId}=context ?? await actor();
     const {data:a,error:ae}=await db.from("referral_attributions").select("*").eq("reservation_id",reservation.id).eq("business_id",businessId).single();
     if(ae||!a)throw new Error("Referral attribution is unavailable for this business.");
@@ -72,8 +83,8 @@ async function loadReferralQuote(tableId: string, context?: Awaited<ReturnType<t
     history=visitStart?history.eq("seated_at",visitStart):history.is("seated_at",null);
     const {data:priorPayments,error:historyError}=await history;
     if(historyError)throw new Error(historyError.message);
-    return {data:{lastInstallment:Number(priorPayments?.[0]?.referral_installment??0),codeId:c.id,code:a.rules.code,partner:a.rules.partner_name,discountPercent:Number(a.rules.discount_percent),minSpend:Number(a.rules.min_spend),active:c.active,
-      expiresAt:c.expires_at,remainingUses:c.usage_limit==null?null:Math.max(0,c.usage_limit-c.usage_count),redeemed:!!redemption,visitSubtotal:Number(redemption?.visit_subtotal??0),version:c.updated_at,reservationId:reservation.id},error:null};
+    return {data:{discountAllowed,lastInstallment:Number(priorPayments?.[0]?.referral_installment??0),codeId:c.id,code:a.rules.code,partner:a.rules.partner_name,discountPercent:discountAllowed?Number(a.rules.discount_percent):0,minSpend:Number(a.rules.min_spend),active:c.active,
+      expiresAt:c.expires_at,remainingUses:c.usage_limit==null?null:Math.max(0,c.usage_limit-c.usage_count),redeemed:!!redemption,visitSubtotal:Number(redemption?.visit_subtotal??0),version:c.updated_at,reservationId:reservation.id},error:null,scopeNotice};
   } catch(e){return {data:null,error:message(e)}}
 }
 
@@ -190,6 +201,7 @@ export async function commitReferralSaleAction(sale:Record<string,unknown>,refer
     const expectedPercent=available?quote.discountPercent:0;
     const percent=Number(referral.discountPercent);
     if(!Number.isFinite(percent)||percent<0||percent>100)throw new Error("Invalid referral discount.");
+    if(quote.discountAllowed===false && percent>0)throw new Error("Referral discount applies to the primary bill only. Merge tables before payment.");
     if(percent!==expectedPercent){if(!["admin","cashier","manager"].includes(staff.role)||!referral.overrideReason?.trim())throw new Error("A manager and override reason are required to change the referral discount.");}
     const items=sale.items as Array<{id?:string;name:string;price:number;quantity:number;taxGroup?:string;originalPrice?:number;commissionUnitPrice?:number}>;
     if(!Array.isArray(items)||!items.length)throw new Error("No payable items.");

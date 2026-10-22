@@ -8,7 +8,7 @@ export function isExclusiveCheckInConflict(code: string) {
 
 /** Check actual seating conflicts only; unassigned demand does not lock a table. */
 export function checkInTableIssue(source: TableAvailabilitySource, tableId: string,
-  reservationId: string, partySize: number, grill: GrillNeed) {
+  reservationId: string, partySize: number, grill: GrillNeed, selectedTableIds: string[] = []) {
   const table = source.tables.find((row) => row.id === tableId);
   const issue = (code: string, message: string) => ({ code, message });
   if (!table) return issue("TABLE_NOT_CONFIGURED", "This table is not configured as a dining table. Select a dining table or ask staff to check its configuration.");
@@ -24,7 +24,9 @@ export function checkInTableIssue(source: TableAvailabilitySource, tableId: stri
     return issue("TABLE_ACTIVE_CHECK_IN", `${table.label} already has a checked-in reservation. Complete that visit before checking in another party, or select another table.`);
   }
   if (table.blocked) return issue("TABLE_BLOCKED", `${table.label} is blocked in POS. Staff can resolve the block or explicitly confirm a check-in exception.`);
-  if (partySize > table.capacity) return issue("TABLE_CAPACITY", `${table.label} seats ${table.capacity}, but this check-in has ${partySize} guests. Adjust the actual guest count or select a larger table.`);
+  const selectedIds = new Set([tableId, ...selectedTableIds]);
+  const capacity = source.tables.filter((row) => selectedIds.has(row.id)).reduce((sum, row) => sum + row.capacity, 0);
+  if (partySize > capacity) return issue("TABLE_CAPACITY", `Selected tables seat ${capacity}, but this check-in has ${partySize} guests. Select additional available tables or adjust the actual guest count.`);
   if (grill === "yes" && !table.grill) return issue("TABLE_NO_GRILL", `${table.label} has no BBQ grill, but this reservation requires BBQ. Select a BBQ table or ask staff to update the booking.`);
   const booking = assigned.filter((row) => ["pending", "confirmed", "late"].includes(row.status))
     .filter((row) => new Date(row.reservedAt).getTime() - buffer < now + duration

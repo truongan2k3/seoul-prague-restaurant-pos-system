@@ -1,4 +1,4 @@
-import { resolveGrill } from "@/lib/reservation-capacity-engine";
+import { resolveGrill, type GrillNeed } from "@/lib/reservation-capacity-engine";
 import { NextResponse } from "next/server";
 import { filterPastTimeSlots } from "@/lib/reservation-slots";
 import { evaluateGuestSlotAvailability, fetchReservationByManageToken } from "@/src/lib/reservation-guest-server";
@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   const date = url.searchParams.get("date")?.trim() ?? "";
   const partySize = Math.max(1, Number(url.searchParams.get("partySize") || 2) || 2);
   const grillRaw = url.searchParams.get("grill");
-  let grill =
+  let grill: GrillNeed | undefined =
     grillRaw === "yes" || grillRaw === "no" || grillRaw === "undecided" ? grillRaw : undefined;
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {

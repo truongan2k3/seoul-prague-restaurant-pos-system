@@ -45,7 +45,7 @@ type AvailabilitySlot = {
 
 export type ReservationStaffDraft = {
   guestName:string;email:string;phone:string;guestCount:number;date:string;time:string;
-  notes:string;eventType:string;referralCode:string;wantsBbq:"yes"|"no"|"undecided"|null;
+  notes:string;eventType:string;referralCode:string;wantsBbq:"yes"|"no"|null;
 };
 
 type StaffBookingOptions = {
@@ -109,7 +109,7 @@ export function ReservationBookingView({
   const [referralCode, setReferralCode] = useState("");
   const [notes, setNotes] = useState("");
   const [eventType, setEventType] = useState("");
-  const [wantsBbq, setWantsBbq] = useState<"yes" | "no" | "undecided" | null>(null);
+  const [wantsBbq, setWantsBbq] = useState<"yes" | "no" | null>(null);
   const [gdprConsent, setGdprConsent] = useState(false);
   const [gdprError, setGdprError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -384,9 +384,7 @@ export function ReservationBookingView({
                 ? "[BBQ: Yes]"
                 : wantsBbq === "no"
                   ? "[BBQ: No]"
-                  : wantsBbq === "undecided"
-                    ? "[BBQ: Undecided]"
-                    : "";
+                  : "";
             const userNotes = notes.trim();
             return [bbqTag, userNotes].filter(Boolean).join(" ") || undefined;
           })(),
@@ -635,7 +633,6 @@ export function ReservationBookingView({
               [
                 { value: "yes" as const, label: `🔥 ${copy.bbqYes}` },
                 { value: "no" as const, label: copy.bbqNo },
-                { value: "undecided" as const, label: copy.bbqUndecided },
               ] as const
             ).map((option) => (
               <button

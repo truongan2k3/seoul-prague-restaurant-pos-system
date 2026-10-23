@@ -249,16 +249,18 @@ function MenuOrderItemButton({
   onAdd: () => void;
 }) {
   const unavailable = !item.isAvailable;
-  const buttonClass = `overflow-hidden rounded-xl border bg-white text-left transition active:scale-[0.98] dark:bg-gray-900 ${
+  const buttonClass = `overflow-hidden rounded-xl border text-left transition active:scale-[0.98] ${
     unavailable
-      ? "cursor-not-allowed opacity-50"
-      : "border-gray-200 hover:border-emerald-300 hover:shadow-md dark:border-gray-700 dark:hover:border-emerald-700"
+      ? "cursor-not-allowed bg-white opacity-50 dark:bg-gray-900"
+      : inCartQty > 0
+        ? "border-violet-400 bg-violet-50 ring-1 ring-violet-300/60 dark:border-violet-400/70 dark:bg-violet-950/60 dark:ring-violet-400/20"
+        : "border-gray-200 bg-white hover:border-emerald-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-emerald-700"
   }`;
 
   const qtyBadge =
     inCartQty > 0 ? (
       <span
-        className={`absolute rounded-full bg-emerald-600 font-bold text-white shadow ${
+        className={`absolute rounded-full bg-violet-600 font-bold text-white shadow ${
           layout === "horizontal"
             ? "right-0 top-0 px-1 py-px text-[9px] leading-none"
             : "right-1.5 top-1.5 px-2 py-0.5 text-[11px]"
@@ -1640,15 +1642,15 @@ export function NewOrderModal({
               return (
                 <li
                   key={line.lineId}
-                  className="overflow-hidden rounded-xl border border-blue-200 bg-blue-50/70 dark:border-blue-900 dark:bg-blue-950/30"
+                  className="overflow-hidden rounded-xl border border-l-4 border-violet-400 bg-violet-50 ring-1 ring-violet-300/50 dark:border-violet-400/70 dark:bg-violet-950/60 dark:ring-violet-400/20"
                 >
                   <div className="flex items-start gap-2 px-3 py-3">
-                    <span className="mt-1 h-5 w-5 shrink-0" aria-hidden />
+                    <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center" aria-hidden><span className="h-2.5 w-2.5 rounded-full bg-violet-500 dark:bg-violet-300" /></span>
                     <div className="min-w-0 flex-1">
                       <button
                         type="button"
                         onClick={() => openNoteModal(line)}
-                        className="text-left text-base font-semibold leading-snug text-gray-900 hover:text-blue-600 dark:text-gray-100 dark:hover:text-blue-400"
+                        className="text-left text-base font-semibold leading-snug text-violet-950 hover:text-violet-700 dark:text-violet-100 dark:hover:text-violet-300"
                       >
                         {line.quantity}× {lineLabel}
                       </button>

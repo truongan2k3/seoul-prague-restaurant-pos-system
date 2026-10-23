@@ -530,9 +530,9 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     void loadReservations();
   };
 
-  const handleCheckIn = async (override = false) => {
+  const handleCheckIn = async (override = false, explicitReason?: string) => {
     if (!checkInTarget || !checkInTableIds.length || busyId === checkInTarget.id) return;
-    if (override && (!checkInConflict || checkInConflict.reservationId !== checkInTarget.id
+    if (override && !explicitReason && (!checkInConflict || checkInConflict.reservationId !== checkInTarget.id
       || checkInConflict.tableId !== checkInTableIds[0] || checkInConflict.partySize !== checkInActualParty)) return;
 
     const snapshot = await fetchReservationSnapshot(checkInTarget.id);
@@ -561,7 +561,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     const { error: checkInError } = await checkInReservationWithTables(
       checkInTarget.id,
       checkInTableIds,
-      { allowOccupied: false, actualPartySize: actualParty, override, overrideReason: override ? checkInConflict?.reason : undefined },
+      { allowOccupied: false, actualPartySize: actualParty, override, overrideReason: override ? explicitReason ?? checkInConflict?.reason : undefined },
     );
     setBusyId(null);
 
@@ -1302,6 +1302,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             allowOccupied={false}
             allowBlocked
             checkIn={checkInTarget?{reservation:checkInTarget,reservations,partySize:checkInActualParty,durationMinutes:settings.reservationDurationMinutes,bufferMinutes:settings.reservationBufferMinutes}:undefined}
+            onCheckInAnyway={checkInConflict?undefined:reason=>void handleCheckIn(true,reason)}
             onChange={(ids) => { setCheckInTableIds(ids); setCheckInConflict(null); setError(null); }}
             language={language}
             disabled={busyId===checkInTarget?.id}
@@ -1313,7 +1314,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           ) : null}
           {checkInConflict && checkInTarget && checkInConflict.reservationId === checkInTarget.id
             && checkInConflict.tableId === checkInTableIds[0] && checkInConflict.partySize === checkInActualParty && <div role="alert" className="space-y-2 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-800 dark:text-amber-100">
-              <p>{checkInConflict.reason}</p><p className="text-xs opacity-75">{translate("checkInOverrideHint")}</p>
+              <p className="whitespace-pre-line">{checkInConflict.reason}</p><p className="text-xs opacity-75">{translate("checkInOverrideHint")}</p>
               <button type="button" disabled={busyId === checkInTarget.id} onClick={() => void handleCheckIn(true)} className="min-h-10 rounded-lg bg-amber-300 px-4 py-2 font-semibold text-zinc-950 disabled:opacity-40">{translate("checkInOverrideContinue")}</button>
             </div>}
           {error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">{error}</p>}

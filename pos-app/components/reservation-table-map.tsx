@@ -7,15 +7,16 @@ import { floorTableByLabel } from "@/lib/reservation-floor-plan";
 import { MAX_NEW_RESERVATION_TABLES, normalizeReservationTableIds } from "@/lib/reservation-tables";
 import { TABLE_CARD_WIDTH, resolveFloorCardOverlaps } from "@/lib/table-layout";
 import type { LanguageCode, ReservationRecord, RestaurantTable } from "@/lib/types";
-import { checkInTableIssue, isExclusiveCheckInConflict } from "@/lib/reservation-check-in";
+import { checkInTableIssue, checkInTableIssues, isExclusiveCheckInConflict } from "@/lib/reservation-check-in";
 import { resolveGrill } from "@/lib/reservation-capacity-engine";
 import type { TableAvailabilitySource } from "@/lib/table-availability";
 
 /** Selection-only floor plan: shares the POS's saved positions and never writes them. */
-export function ReservationTableMap({tables,value,onChange,language,disabled=false,maxTables=MAX_NEW_RESERVATION_TABLES,allowOccupied=false,allowBlocked=false,checkIn}:{
+export function ReservationTableMap({tables,value,onChange,language,disabled=false,maxTables=MAX_NEW_RESERVATION_TABLES,allowOccupied=false,allowBlocked=false,checkIn,onCheckInAnyway}:{
   tables:RestaurantTable[];value:string[];onChange:(ids:string[])=>void;language:LanguageCode;
   disabled?:boolean;maxTables?:number;allowOccupied?:boolean;allowBlocked?:boolean;
   checkIn?:{reservation:ReservationRecord;reservations:ReservationRecord[];partySize:number;durationMinutes:number;bufferMinutes:number};
+  onCheckInAnyway?:(reason:string)=>void;
 }) {
   const ids=normalizeReservationTableIds(value);
   const seatingSource:TableAvailabilitySource|null=checkIn?{
@@ -24,7 +25,9 @@ export function ReservationTableMap({tables,value,onChange,language,disabled=fal
     reservations:checkIn.reservations,
   }:null;
   const issueFor=(id:string)=>seatingSource&&checkIn?checkInTableIssue(seatingSource,id,checkIn.reservation.id,checkIn.partySize,resolveGrill(checkIn.reservation),ids):null;
-  const selectedIssue=ids.map(issueFor).find(Boolean);
+  const selectedIssues=seatingSource&&checkIn?ids.flatMap(id=>checkInTableIssues(seatingSource,id,checkIn.reservation.id,checkIn.partySize,resolveGrill(checkIn.reservation),ids)):[];
+  const warningMessages=[...new Set(selectedIssues.map(issue=>issue.message))];
+  const hardConflict=selectedIssues.some(issue=>isExclusiveCheckInConflict(issue.code)||["TABLE_NOT_CONFIGURED","INVALID_PARTY_SIZE"].includes(issue.code));
   const floor=useMemo(()=>{
     const positions=resolveFloorCardOverlaps(tables.map(table=>({id:table.id,x:table.posX,y:table.posY})));
     const points=Object.values(positions);
@@ -68,7 +71,13 @@ export function ReservationTableMap({tables,value,onChange,language,disabled=fal
         })}
       </svg>
     </div>
-    {selectedIssue&&<p role="alert" className="rounded-xl border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-xs leading-relaxed text-amber-700 dark:text-amber-200">{selectedIssue.message}</p>}
+    {warningMessages.length>0&&<div role="alert" className={`space-y-3 rounded-xl border px-3 py-3 text-xs leading-relaxed ${hardConflict?"border-red-400/30 bg-red-400/10 text-red-700 dark:text-red-200":"border-amber-400/25 bg-amber-400/10 text-amber-800 dark:text-amber-100"}`}>
+      <ul className="list-disc space-y-1 pl-4">{warningMessages.map(message=><li key={message}>{message}</li>)}</ul>
+      {!hardConflict&&onCheckInAnyway&&<>
+        <p className="opacity-80">{t(language,"checkInOverrideHint")}</p>
+        <button type="button" disabled={disabled} onClick={()=>onCheckInAnyway(warningMessages.join("\n"))} className="min-h-11 w-full rounded-lg bg-amber-300 px-4 py-3 text-sm font-semibold text-zinc-950 disabled:opacity-40">{t(language,"checkInOverrideContinue")}</button>
+      </>}
+    </div>}
     <div className="flex min-h-8 flex-wrap gap-2" aria-live="polite">
       {ids.map(id=><button key={id} type="button" disabled={disabled} onClick={()=>toggle(id)} className="inline-flex items-center gap-2 rounded-lg border border-[#C9A88B]/30 bg-[#C9A88B]/10 px-3 py-2 text-sm font-semibold text-[var(--foreground)]">
         {tables.find(table=>table.id===id)?.label??"—"}<X aria-hidden className="h-3.5 w-3.5 opacity-50"/>

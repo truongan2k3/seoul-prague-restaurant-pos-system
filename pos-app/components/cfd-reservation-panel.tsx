@@ -496,6 +496,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
               <ReservationTableMap
                 tables={tables}
                 checkIn={{reservation:selected,reservations:rows,partySize:selected.partySize,durationMinutes:settings.reservationDurationMinutes,bufferMinutes:settings.reservationBufferMinutes}}
+                onCheckInAnyway={checkInConflict?undefined:reason=>void completeCheckIn(selected,checkInTableIds,reason)}
                 value={checkInTableIds}
                 maxTables={3}
                 allowOccupied={false}
@@ -512,7 +513,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
               </p>
             ) : null}
 
-            {error ? <p className="mt-3 text-sm text-amber-200/90">{error}</p> : null}
+            {error ? <p className="mt-3 whitespace-pre-line text-sm text-amber-200/90">{error}</p> : null}
             {checkInConflict && checkInConflict.reservationId === selected.id && checkInConflict.tableId === checkInTableIds[0] && <div role="alert" className="mt-3 space-y-3 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3">
               <p className="text-xs leading-relaxed text-amber-100">{translate("checkInOverrideHint")}</p>
               <button type="button" disabled={busyId !== null} onClick={() => void completeCheckIn(selected, checkInTableIds, checkInConflict.reason)} className="min-h-11 w-full rounded-lg bg-amber-300 px-4 py-3 text-sm font-semibold text-zinc-950 disabled:opacity-40">{translate("checkInOverrideContinue")}</button>

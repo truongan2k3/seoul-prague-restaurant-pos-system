@@ -3,7 +3,7 @@ import { readAuthSession } from "@/src/lib/auth/session";
 import { readStaffSession } from "@/src/lib/auth/staff-session";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 import { loadLiveTableAvailability } from "@/src/lib/table-availability-server";
-import { checkInTableIssue, isExclusiveCheckInConflict } from "@/lib/reservation-check-in";
+import { checkInTableIssues, isExclusiveCheckInConflict } from "@/lib/reservation-check-in";
 import { blockedTableLabels, evaluateReservationCapacity, resolveGrill } from "@/lib/reservation-capacity-engine";
 import { floorTableByLabel, RESERVATION_FLOOR_TABLES } from "@/lib/reservation-floor-plan";
 import { todayIsoDateInVenue } from "@/lib/venue-timezone";
@@ -71,18 +71,19 @@ export async function POST(request: Request) {
       const { source } = await loadLiveTableAvailability(auth.businessId);
       const party = Number(body.actualPartySize ?? row.party_size);
       const grill = resolveGrill({ partySize: party, reservedAt: source.serverNow, status: row.status, notes: row.notes, wantsGrill: row.wants_grill });
-      const issues = tableIds.map((id) => checkInTableIssue(source, id, body.reservationId, party, grill, tableIds));
+      const issues = tableIds.flatMap((id) => checkInTableIssues(source, id, body.reservationId, party, grill, tableIds));
       const issue = issues.find((item) => item && (isExclusiveCheckInConflict(item.code) || ["TABLE_NOT_CONFIGURED", "INVALID_PARTY_SIZE"].includes(item.code)))
         ?? issues.find(Boolean) ?? null;
       if (issue && isExclusiveCheckInConflict(issue.code)) {
         return NextResponse.json({ error: issue.message, code: issue.code, overrideAllowed: false }, { status: 409 });
       }
       const overrideAllowed = issue !== null && !["TABLE_NOT_CONFIGURED", "INVALID_PARTY_SIZE"].includes(issue.code);
-      if (issue && (body.override !== true || !overrideAllowed)) return NextResponse.json({ error: issue.message, code: issue.code, overrideAllowed }, { status: 409 });
+      const warningReason = [...new Set(issues.map((item) => item.message))].join("\n");
+      if (issue && (body.override !== true || !overrideAllowed)) return NextResponse.json({ error: warningReason, code: issue.code, overrideAllowed }, { status: 409 });
       if (tableIds.length > 1) {
         const result = await db.rpc("check_in_reservation_tables", { p_reservation: body.reservationId, p_tables: tableIds,
           p_party: party, p_business: auth.businessId, p_staff: session?.businessId === auth.businessId ? session.staffId : null,
-          p_override: body.override === true, p_reason: String(issue?.message ?? body.reason ?? "Reception check-in").slice(0, 2000) });
+          p_override: body.override === true, p_reason: String(warningReason || body.reason || "Reception check-in").slice(0, 2000) });
         if (result.error?.code === "PGRST202" || result.error?.code === "42883") return NextResponse.json({
           error: "Run supabase/patch-reservation-table-referral-scope.sql to enable separate-table check-in.", code: "CHECK_IN_SETUP_REQUIRED" }, { status: 503 });
         if (result.error) throw result.error;
@@ -96,7 +97,7 @@ export async function POST(request: Request) {
         if (issue && !overrideAllowed) return NextResponse.json({ error: issue.message, code: issue.code }, { status: 409 });
         const result = await db.rpc("override_reservation_check_in", { p_reservation: body.reservationId, p_table: body.tableId,
           p_party: party, p_staff: session?.businessId === auth.businessId ? session.staffId : null, p_business: auth.businessId,
-          p_reason: String(issue?.message ?? body.reason ?? "Reception confirmed check-in despite seating warning.").slice(0, 2000) });
+          p_reason: String(warningReason || body.reason || "Reception confirmed check-in despite seating warning.").slice(0, 2000) });
         if (result.error?.code === "PGRST202" || result.error?.code === "42883") {
           return NextResponse.json({ error: "Apply the latest supabase/patch-reservation-assignment-override.sql to enable reception check-in confirmations.", code: "CHECK_IN_OVERRIDE_SETUP_REQUIRED" }, { status: 503 });
         }

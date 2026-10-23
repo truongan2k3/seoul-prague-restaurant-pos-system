@@ -1143,7 +1143,7 @@
   "unassignTable": "Gỡ xếp bàn",
   "assignOverrideContinue": "Vẫn xếp bàn",
   "checkInOverrideContinue": "Xác nhận và vẫn đón khách",
-  "checkInOverrideHint": "Xác nhận để tiếp tục dù có cảnh báo. Không cần đăng nhập nhân viên hay quyền check-in. Bàn có khách giữ hóa đơn, món và giờ ngồi hiện tại; đặt bàn này tham gia lượt đó. Ngoại lệ sẽ được ghi lại.",
+  "checkInOverrideHint": "Staff xác nhận đã kê thêm ghế hoặc xử lý các cảnh báo xếp bàn trước khi tiếp tục. Không thể check-in trùng bàn đang có nhóm khách khác. Ngoại lệ sẽ được ghi lại.",
   "assignOverrideHint": "Xác nhận cảnh báo và lưu bàn dự kiến. Thao tác này không đón khách hoặc nhập đơn đang phục vụ.",
   "resTableReserved": "Đã đặt",
   "resTableBlocked": "Tạm khóa",

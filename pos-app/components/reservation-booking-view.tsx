@@ -4,7 +4,7 @@ import { ReservationTimePicker } from "@/components/reservation-time-picker";
 
 import { ReferralCodeField } from "@/components/referral-code-field";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { Clock, Globe, Mail, MapPin, Phone, UtensilsCrossed } from "lucide-react";
 import { Modal } from "@/components/modal";
 import {
@@ -91,6 +91,7 @@ export function ReservationBookingView({
   onBooked?: (info: { id: string; bookingCode: string }) => void;
 }) {
   const isStaff=Boolean(staff);
+  const bbqHintId = useId();
   const { settings: sharedSettings } = useSettings();
   const staffSettings=staff?.settings;
   const [appSettings, setAppSettings] = useState<AppSettings>(staffSettings??DEFAULT_APP_SETTINGS);
@@ -628,9 +629,13 @@ export function ReservationBookingView({
           </label>
         </div>
 
-        <div className="space-y-3">
-          <p className="text-sm font-medium text-white/90">{copy.bbqQuestion}</p>
-          <p className="text-xs text-white/45">{copy.bbqHint}</p>
+        <fieldset className={`space-y-3 border p-4 transition duration-300 motion-reduce:transition-none ${!isStaff && !wantsBbq
+          ? "border-[#D5AD78]/70 bg-gradient-to-br from-[#C9A88B]/15 to-amber-950/15 shadow-[0_0_24px_rgba(201,168,139,0.10)]"
+          : "border-white/10 bg-white/[0.02]"}`} aria-describedby={bbqHintId}>
+          <legend className="px-2 text-sm font-medium text-white/90">{copy.bbqQuestion}<RequiredMark show={!isStaff} /></legend>
+          <p id={bbqHintId} className={`text-xs ${!isStaff && !wantsBbq ? "text-[#E4C6A3]" : "text-white/45"}`}>
+            {!isStaff && !wantsBbq ? copy.errorBbq : copy.bbqHint}
+          </p>
           <div className="flex flex-wrap gap-2">
             {(
               [
@@ -641,18 +646,19 @@ export function ReservationBookingView({
               <button
                 key={option.value}
                 type="button"
+                aria-pressed={wantsBbq === option.value}
                 onClick={() => setWantsBbq(option.value)}
-                className={`rounded-none border px-3 py-2 text-sm transition ${
+                className={`min-h-11 flex-1 rounded-none border px-4 py-3 text-sm transition motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A88B] ${
                   wantsBbq === option.value
                     ? "border-[#C9A88B] bg-[#C9A88B]/15 text-[#C9A88B]"
-                    : "border-white/15 bg-[#0B0B0C] text-white/70 hover:border-white/30"
+                    : !isStaff && !wantsBbq ? "border-[#C9A88B]/45 bg-[#0B0B0C] text-[#E4C6A3] hover:border-[#C9A88B] hover:bg-[#C9A88B]/10" : "border-white/15 bg-[#0B0B0C] text-white/70 hover:border-white/30"
                 }`}
               >
                 {option.label}
               </button>
             ))}
           </div>
-        </div>
+        </fieldset>
 
         {showEventTypeField ? (
           <label className="block text-sm text-white/80">

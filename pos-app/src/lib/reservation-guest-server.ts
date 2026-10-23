@@ -262,74 +262,63 @@ export async function loadDayCapacityContext(dateIso: string, savedSettings?: Re
     } catch { /* Preserve existing booking behavior while the additive migration is being installed. */ }
   }
 
-  let reservations: CapacityReservationInput[] = [];
+  type ExistingRow = {
+    id: string;
+    party_size: number;
+    actual_party_size?: number | null;
+    checked_in_at?: string | null;
+    reserved_at: string;
+    status: string;
+    notes: string | null;
+    wants_grill?: string | null;
+    tables?: { label: string } | { label: string }[] | null;
+    secondary_table?: { label: string } | { label: string }[] | null;
+    tertiary_table?: { label: string } | { label: string }[] | null;
+  };
+  // Include overlapping visits from adjacent days and active check-ins, from
+  // every booking source. Keep physical assignments even on older schemas.
+  const padding = (settings.reservationDurationMinutes + settings.reservationBufferMinutes) * 60_000;
+  const from = new Date(new Date(startIso).getTime() - padding).toISOString();
+  const until = new Date(new Date(endExclusiveIso).getTime() + padding).toISOString();
+  const readReservations = async (withVisitDetails: boolean): Promise<ExistingRow[]> => {
+    const rows: ExistingRow[] = [];
+    for (let offset = 0; ; offset += 500) {
+      const { data, error } = await admin.from("reservations").select(
+        `id, party_size, reserved_at, status, notes, ${withVisitDetails ? "actual_party_size, checked_in_at, wants_grill," : ""}
+        tables!table_id(label), secondary_table:tables!secondary_table_id(label), tertiary_table:tables!tertiary_table_id(label)`,
+      ).in("status", ["pending", "confirmed", "late", "checked_in"])
+        .or(`and(reserved_at.gte.${from},reserved_at.lt.${until}),status.eq.checked_in`)
+        .order("reserved_at").order("id").range(offset, offset + 499);
+      if (error) throw error;
+      const page = (data ?? []) as unknown as ExistingRow[];
+      rows.push(...page);
+      if (page.length < 500) return rows;
+    }
+  };
+  let existingRows: ExistingRow[];
   try {
-    const { data: existingRows, error: reservationsError } = await admin
-      .from("reservations")
-      .select(
-        "id, party_size, actual_party_size, reserved_at, checked_in_at, status, notes, wants_grill, tables!table_id(label), secondary_table:tables!secondary_table_id(label), tertiary_table:tables!tertiary_table_id(label)",
-      )
-      .gte("reserved_at", startIso)
-      .lt("reserved_at", endExclusiveIso);
-    if (reservationsError) throw reservationsError;
-
-    type ExistingRow = {
-      id: string;
-      party_size: number;
-      actual_party_size?: number | null;
-      checked_in_at?: string | null;
-      reserved_at: string;
-      status: string;
-      notes: string | null;
-      wants_grill?: string | null;
-      tables?: { label: string } | { label: string }[] | null;
-      secondary_table?: { label: string } | { label: string }[] | null;
-      tertiary_table?: { label: string } | { label: string }[] | null;
-    };
-
-    reservations = ((existingRows ?? []) as ExistingRow[]).map((row) => {
-      const tableJoin = row.tables;
-      const tableLabel = Array.isArray(tableJoin) ? tableJoin[0]?.label : tableJoin?.label;
-      const secondaryJoin = row.secondary_table;
-      const secondaryTableLabel = Array.isArray(secondaryJoin)
-        ? secondaryJoin[0]?.label
-        : secondaryJoin?.label;
-      const tertiaryJoin = row.tertiary_table;
-      const tertiaryTableLabel = Array.isArray(tertiaryJoin)
-        ? tertiaryJoin[0]?.label
-        : tertiaryJoin?.label;
-      return {
-        id: row.id,
-        partySize: row.party_size,
-        actualPartySize: row.actual_party_size,
-        checkedInAt: row.checked_in_at,
-        reservedAt: row.reserved_at,
-        status: row.status,
-        notes: row.notes,
-        wantsGrill:
-          row.wants_grill === "yes" || row.wants_grill === "no" || row.wants_grill === "undecided"
-            ? row.wants_grill
-            : undefined,
-        tableLabel,
-        secondaryTableLabel,
-        tertiaryTableLabel,
-      };
-    });
-  } catch {
-    const { data: legacyRows, error: legacyError } = await admin
-      .from("reservations")
-      .select("id, party_size, reserved_at, status, notes")
-      .gte("reserved_at", startIso)
-      .lt("reserved_at", endExclusiveIso);
-    if (legacyError) throw legacyError;
-    reservations = (legacyRows ?? []).map((row) => ({
-      id: row.id,
-      partySize: row.party_size,
-      reservedAt: row.reserved_at,
-      status: row.status,
-      notes: row.notes,
-    }));
+    existingRows = await readReservations(true);
+  } catch (error) {
+    const failure = error as { code?: string; message?: string };
+    if (!["42703", "PGRST204"].includes(failure.code ?? "")
+      || !/actual_party_size|checked_in_at|wants_grill/i.test(failure.message ?? "")) throw error;
+    existingRows = await readReservations(false);
   }
+  const labelOf = (join: ExistingRow["tables"]) => Array.isArray(join) ? join[0]?.label : join?.label;
+  const reservations: CapacityReservationInput[] = existingRows.map((row) => ({
+    id: row.id,
+    partySize: row.party_size,
+    actualPartySize: row.actual_party_size,
+    checkedInAt: row.checked_in_at,
+    reservedAt: row.reserved_at,
+    status: row.status,
+    notes: row.notes,
+    wantsGrill: row.wants_grill === "yes" || row.wants_grill === "no" || row.wants_grill === "undecided"
+      ? row.wants_grill : undefined,
+    tableLabel: labelOf(row.tables),
+    secondaryTableLabel: labelOf(row.secondary_table),
+    tertiaryTableLabel: labelOf(row.tertiary_table),
+  }));
 
   let occupiedTables: OccupiedTableInput[] = [];
   try {
@@ -347,7 +336,7 @@ export async function loadDayCapacityContext(dateIso: string, savedSettings?: Re
       label: String(row.label),
       occupied: row.status === "waiting" || row.status === "ready",
       occupiedAt: (row as { occupied_at?: string | null }).occupied_at ?? null,
-      blocked: row.availability_blocked === true,
+      blocked: row.availability_blocked === true || !["empty", "waiting", "ready"].includes(String(row.status)),
     }));
   } catch (error) {
     throw new Error(error instanceof Error ? error.message : "Could not read current floor availability.");

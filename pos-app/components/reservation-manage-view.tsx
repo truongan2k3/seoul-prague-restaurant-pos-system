@@ -48,7 +48,8 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
   const token = searchParams.get("token")?.trim() ?? "";
 
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
-  const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>([]);
+  const [timeSlots, setTimeSlots] = useState<{ time: string; status: string }[]>([]);
+  const availableTimeSlots = useMemo(() => timeSlots.filter((slot) => slot.status !== "full").map((slot) => slot.time), [timeSlots]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [reservation, setReservation] = useState<ManagedReservation | null>(null);
   const [loading, setLoading] = useState(true);
@@ -122,12 +123,12 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
           const payload = await response.json();
           if (controller.signal.aborted) return;
           if (!response.ok) throw new Error(payload.error || "Could not load availability.");
-          setAvailableTimeSlots((payload.slots as { time: string; status: string }[]).filter((slot) => slot.status !== "full").map((slot) => slot.time));
-        }).catch(() => { if (!controller.signal.aborted) setAvailableTimeSlots([]); })
+          setTimeSlots(payload.slots as { time: string; status: string }[]);
+        }).catch(() => { if (!controller.signal.aborted) setTimeSlots([]); })
         .finally(() => { if (!controller.signal.aborted) setSlotsLoading(false); });
     }, 200);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [date, guestCount, token, reservation, sharedSettings.reservationCapacityLimitsEnabled]);
+  }, [date, guestCount, token, reservation, sharedSettings.reservationCapacityLimitsEnabled, sharedSettings.reservationBufferMinutes, sharedSettings.reservationDurationMinutes, sharedSettings.reservationTimeStep]);
 
   const guestOptions = useMemo(
     () =>
@@ -137,10 +138,10 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
 
   useEffect(() => {
     if (availableTimeSlots.length === 0) return;
-    if (!availableTimeSlots.includes(time)) {
+    if (!timeSlots.some((slot) => slot.time === time)) {
       setTime(availableTimeSlots[0]);
     }
-  }, [availableTimeSlots, time]);
+  }, [availableTimeSlots, timeSlots, time]);
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -307,7 +308,8 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
                   </label>
                   <div className="block text-sm sm:col-span-1">
                     <span className="font-medium text-white/90">Time</span>
-                    <ReservationTimePicker value={time} onChange={setTime} label="Time" options={availableTimeSlots} disabled={slotsLoading} dark />
+                    <ReservationTimePicker value={time} onChange={setTime} label="Time" options={timeSlots.map((slot) => ({ time: slot.time,
+                      label: slot.status === "full" ? "Unavailable" : slot.status === "limited" ? "Limited — available" : "Available", disabled: slot.status === "full" }))} disabled={slotsLoading} dark />
                   </div>
                 </div>
 
@@ -323,7 +325,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
 
                 <button
                   type="submit"
-                  disabled={saving || availableTimeSlots.length === 0}
+                  disabled={saving || slotsLoading || !availableTimeSlots.includes(time)}
                   className="w-full rounded-none bg-[#8B1E2D] py-3.5 text-sm font-semibold text-white hover:bg-[#A02435] disabled:opacity-60"
                 >
                   {saving ? "Saving…" : "Save changes"}

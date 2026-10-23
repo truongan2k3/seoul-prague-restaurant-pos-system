@@ -20,6 +20,7 @@ export type LiveTableAvailability = AvailabilityTable & {
 /** Same allocation engine on the server and for local, network-free countdowns. */
 export function calculateTableAvailability(source: TableAvailabilitySource, now = new Date(source.serverNow).getTime()) {
   const duration = source.durationMinutes * 60_000;
+  const buffer = source.bufferMinutes * 60_000;
   const occupiedTables = availabilityOccupancyInputs(source);
   const allocations = planReservationAllocations({ reservations: source.reservations, occupiedTables,
     durationMinutes: source.durationMinutes, bufferMinutes: source.bufferMinutes, nowMs: now });
@@ -29,12 +30,12 @@ export function calculateTableAvailability(source: TableAvailabilitySource, now 
     const since = table.occupiedAt ? new Date(table.occupiedAt).getTime() : NaN;
     const release = occupied && Number.isFinite(since) && since <= now ? since + duration : null;
     const spans = allocations.filter((a) => a.labels.includes(table.label)).sort((a, b) => a.startMs - b.startMs);
-    const protectedNow = spans.some((a) => a.startMs < now + duration && a.endMs > now);
+    const protectedNow = spans.some((a) => a.startMs < now + duration && a.endMs > now - buffer);
     const status: LiveTableStatus = occupied ? "occupied" : table.blocked ? "blocked" : protectedNow ? "reserved" : "available";
-    let earliest: number | null = table.blocked ? null : occupied ? release && release > now ? release : null : now;
+    let earliest: number | null = table.blocked ? null : occupied ? release && release > now ? release + buffer : null : now;
     if (earliest !== null) {
       for (const span of spans) {
-        if (span.startMs < earliest + duration && span.endMs > earliest) earliest = span.endMs;
+        if (span.startMs < earliest + duration && span.endMs > earliest - buffer) earliest = span.endMs + buffer;
       }
       if (!Number.isFinite(earliest) || earliest > new Date(source.serverNow).getTime() + 48 * 60 * 60_000) earliest = null;
     }

@@ -1399,6 +1399,7 @@ export function SettingsView({
                   <option value={30}>{translate("settingsSlot30")}</option>
                   <option value={60}>{translate("settingsSlot60")}</option>
                 </select>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{translate("settingsSlotIntervalHint")}</p>
               </label>
               <label className="block text-sm">
                 <span className="text-gray-500 dark:text-gray-400">
@@ -1418,7 +1419,7 @@ export function SettingsView({
                   className="pos-input mt-1"
                 />
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Default 30: if the guest has not checked in 30 minutes after the reserved time, status becomes Late.
+                  {translate("settingsReservationHoldingHint")}
                 </p>
               </label>
               <label className="block text-sm">

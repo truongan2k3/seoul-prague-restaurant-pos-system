@@ -1,7 +1,7 @@
 /**
  * Reservation capacity + seating recommendation engine.
  * Guests never see table labels — only Available / Limited / Full.
- * Staff and guests use the same availability rules; occupied/full tables cannot be overridden.
+ * Guest offers and final booking use the same table, BBQ and turnover-gap rules.
  */
 
 import {
@@ -82,6 +82,8 @@ export type CapacityEvaluateInput = {
   heldGuests?: number;
   /** Evaluation clock for POS occupancy windows; defaults to Date.now(). */
   nowMs?: number;
+  /** Request-local reuse across party sizes for the same reservation/floor snapshot. */
+  placementCache?: Map<string, boolean>;
 };
 
 export type CapacityEvaluateResult = {
@@ -156,7 +158,24 @@ function assignedLabels(row: CapacityReservationInput): string[] {
     .filter(Boolean);
 }
 
-export type ReservationAllocation = { labels: string[]; startMs: number; endMs: number };
+export type ReservationAllocation = { labels: string[]; startMs: number; endMs: number; reservationId?: string };
+
+/** Planning only: large staff bookings may need separate tables; never merges or assigns them in POS. */
+function planningConfigurations(partySize: number, grill: GrillNeed): SeatingConfiguration[] {
+  const singles = buildAllSeatingConfigurations().filter((config) => grillSatisfied(config, grill));
+  const suitable = singles.filter((config) => config.capacity >= partySize);
+  if (suitable.length) return suitable;
+  const groups: SeatingConfiguration[] = [];
+  for (let a = 0; a < singles.length; a++) for (let b = a + 1; b < singles.length; b++) {
+    const pair = [singles[a], singles[b]];
+    const capacity = pair.reduce((sum, config) => sum + config.capacity, 0);
+    if (capacity >= partySize) groups.push({ labels: pair.flatMap((config) => config.labels), capacity, grill: pair.every((config) => config.grill), extended: true });
+    else for (let c = b + 1; c < singles.length; c++) {
+      if (capacity + singles[c].capacity >= partySize) groups.push({ labels: [...pair.flatMap((config) => config.labels), ...singles[c].labels], capacity: capacity + singles[c].capacity, grill: pair.every((config) => config.grill) && singles[c].grill, extended: true });
+    }
+  }
+  return groups.sort((a, b) => a.labels.length - b.labels.length || a.capacity - b.capacity || Number(a.grill) - Number(b.grill));
+}
 
 /** Plan unassigned bookings using individual table capacity and BBQ eligibility. */
 export function planReservationAllocations(input: {
@@ -185,22 +204,51 @@ export function planReservationAllocations(input: {
   };
   for (const row of active) {
     const labels = assignedLabels(row);
-    if (labels.length) allocations.push({ labels, ...window(row) });
+    if (labels.length) allocations.push({ labels, reservationId: row.id, ...window(row) });
   }
   const unassigned = active.filter((r) => !assignedLabels(r).length)
     .sort((a, b) => new Date(a.reservedAt).getTime() - new Date(b.reservedAt).getTime() || effectivePartySize(b) - effectivePartySize(a));
-  for (const row of unassigned) {
-    const span = window(row);
-    if (!Number.isFinite(span.startMs) || span.endMs <= now) continue;
-    const blocked = new Set(allocations.filter((a) => a.startMs < span.endMs && a.endMs > span.startMs).flatMap((a) => a.labels));
-    for (const table of input.occupiedTables ?? []) {
-      const start = table.occupiedAt ? new Date(table.occupiedAt).getTime() : NaN;
-      const end = Number.isFinite(start) && start + duration > now ? start + duration : Infinity;
-      if (table.blocked || (table.occupied && end > Math.max(now, span.startMs))) blocked.add(normalizeTableLabel(table.label));
+  const pending = unassigned.map((row) => ({ row, span: window(row) }))
+    .filter(({ span }) => Number.isFinite(span.startMs) && span.endMs + buffer > now);
+  // Independent time ranges can be planned separately. Within a range, reconsider
+  // flexible bookings rather than letting an earlier greedy choice consume the only BBQ table.
+  for (let offset = 0; offset < pending.length;) {
+    const component = [pending[offset++]];
+    let end = component[0].span.endMs;
+    while (offset < pending.length && pending[offset].span.startMs < end) {
+      const next = pending[offset++]; component.push(next); end = Math.max(end, next.span.endMs);
     }
-    const config = recommendSeating(effectivePartySize(row), resolveGrill(row), blocked);
-    // Unseated demand that cannot fit requires staff intervention; never advertise it as spare capacity.
-    allocations.push({ labels: config?.labels ?? buildAllSeatingConfigurations().filter((c) => !c.extended).flatMap((c) => c.labels), ...span });
+    const domains = component.map(({ row, span }) => {
+      const blocked = new Set(allocations.filter((a) => a.startMs < span.endMs && a.endMs > span.startMs).flatMap((a) => a.labels));
+      for (const table of input.occupiedTables ?? []) {
+        const start = table.occupiedAt ? new Date(table.occupiedAt).getTime() : NaN;
+        const release = Number.isFinite(start) && start + duration > now ? start + duration : Infinity;
+        if (table.blocked || (table.occupied && release > span.startMs && (!Number.isFinite(start) || start < span.endMs))) blocked.add(normalizeTableLabel(table.label));
+      }
+      const configs = planningConfigurations(effectivePartySize(row), resolveGrill(row))
+        .filter((config) => config.labels.every((label) => !blocked.has(label)))
+        .sort((a, b) => a.capacity - b.capacity || Number(a.grill) - Number(b.grill) || seatingConfigKey(a.labels).localeCompare(seatingConfigKey(b.labels)));
+      return { row, span, configs };
+    }).sort((a, b) => a.configs.length - b.configs.length || effectivePartySize(b.row) - effectivePartySize(a.row));
+    const placed: ReservationAllocation[] = [];
+    let budget = 4000;
+    const place = (index: number): boolean => {
+      if (index === domains.length) return true;
+      if (--budget < 0) return false;
+      const { row, span, configs } = domains[index];
+      for (const config of configs) {
+        if (placed.some((a) => a.startMs < span.endMs && a.endMs > span.startMs && a.labels.some((label) => config.labels.includes(label)))) continue;
+        placed.push({ labels: config.labels, reservationId: row.id, ...span });
+        if (place(index + 1)) return true;
+        placed.pop();
+      }
+      return false;
+    };
+    if (place(0)) allocations.push(...placed);
+    else for (const { row, span } of component) {
+      // Existing overbookings, or an exhausted search budget, must never advertise spare capacity.
+      allocations.push({ labels: buildAllSeatingConfigurations().flatMap((config) => config.labels), reservationId: row.id, ...span });
+    }
   }
   return allocations;
 }
@@ -225,7 +273,9 @@ export function blockedTableLabels(input: {
   nowMs?: number;
 }): Set<string> {
   const blocked = new Set<string>();
-  const { startMs, endMs } = windowFor(input.dateIso, input.time, input.durationMinutes);
+  const window = windowFor(input.dateIso, input.time, input.durationMinutes);
+  const startMs = window.startMs - (input.bufferMinutes ?? 0) * 60_000;
+  const endMs = window.endMs;
   const nowMs = input.nowMs ?? Date.now();
   const durationMs = input.durationMinutes * 60 * 1000;
 
@@ -268,7 +318,7 @@ export function recommendSeating(
     .filter((config) => config.labels.every((label) => !blocked.has(normalizeTableLabel(label))))
     .sort(
       (a, b) =>
-        a.capacity - b.capacity ||
+        a.capacity - b.capacity || Number(a.grill) - Number(b.grill) ||
         seatingConfigKey(a.labels).localeCompare(seatingConfigKey(b.labels)),
     );
 
@@ -303,13 +353,27 @@ export function evaluateReservationCapacity(
     nowMs: input.nowMs,
   });
 
-  const recommendation = recommendSeating(partySize, grill, blocked);
-  const freeConfigurationCount = buildAllSeatingConfigurations()
+  const fixedBlocked = blockedTableLabels({ ...input, reservations: input.reservations.filter((row) => assignedLabels(row).length), durationMinutes: duration });
+  const candidateId = "__guest_availability_candidate__";
+  const candidateStart = startMs - (input.bufferMinutes ?? 0) * 60_000;
+  const feasible = buildAllSeatingConfigurations()
     .filter((config) => config.capacity >= partySize)
     .filter((config) => grillSatisfied(config, grill))
-    .filter((config) =>
-      config.labels.every((label) => !blocked.has(normalizeTableLabel(label))),
-    ).length;
+    .filter((config) => config.labels.every((label) => !fixedBlocked.has(normalizeTableLabel(label))))
+    .filter((config) => {
+      const key = `${input.dateIso}:${input.time}:${duration}:${input.bufferMinutes ?? 0}:${input.excludeReservationId ?? ""}:${config.labels.join("+")}`;
+      const cached = input.placementCache?.get(key);
+      if (cached !== undefined) return cached;
+      const planned = planReservationAllocations({ ...input, durationMinutes: duration,
+        reservations: [...input.reservations, { id: candidateId, partySize, reservedAt: new Date(startMs), status: "confirmed", tableLabel: config.labels[0], wantsGrill: grill }] });
+      const fits = !planned.some((allocation) => allocation.reservationId !== candidateId && allocation.startMs < endMs && allocation.endMs > candidateStart
+        && allocation.labels.some((label) => config.labels.includes(label)));
+      input.placementCache?.set(key, fits);
+      return fits;
+    })
+    .sort((a, b) => a.capacity - b.capacity || Number(a.grill) - Number(b.grill) || seatingConfigKey(a.labels).localeCompare(seatingConfigKey(b.labels)));
+  const recommendation = feasible[0] ?? null;
+  const freeConfigurationCount = feasible.length;
   const warnings: string[] = [];
 
   if (grill === "yes" && recommendation && !recommendation.grill) {
@@ -361,7 +425,9 @@ export function evaluateSlotsForGuest(params: {
   maxGuestsPerSlot?: number;
   heldGuestsByTime?: Record<string, number>;
   excludeReservationId?: string;
+  placementCache?: Map<string, boolean>;
 }): Array<{ time: string; result: CapacityEvaluateResult }> {
+  const placementCache = params.placementCache ?? new Map<string, boolean>();
   return params.times.map((time) => ({
     time,
     result: evaluateReservationCapacity({
@@ -376,6 +442,7 @@ export function evaluateSlotsForGuest(params: {
       maxGuestsPerSlot: params.maxGuestsPerSlot,
       heldGuests: params.heldGuestsByTime?.[time] ?? 0,
       excludeReservationId: params.excludeReservationId,
+      placementCache,
     }),
   }));
 }

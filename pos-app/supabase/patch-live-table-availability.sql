@@ -117,14 +117,14 @@ BEGIN
   starts := CASE WHEN NEW.status = 'checked_in' THEN clock_timestamp() ELSE NEW.reserved_at END;
   ends := starts + dining;
   IF NEW.status <> 'checked_in' AND t.status <> 'empty' AND ends > now()
-     AND (t.occupied_at IS NULL OR t.occupied_at + dining <= now() OR t.occupied_at + dining > starts) THEN
+     AND (t.occupied_at IS NULL OR t.occupied_at + dining <= now() OR t.occupied_at + dining + buffer > starts) THEN
     RAISE EXCEPTION 'Table is occupied during the requested seating period';
   END IF;
   IF EXISTS (SELECT 1 FROM public.reservations r WHERE r.id <> NEW.id
     AND r.status IN ('pending', 'confirmed', 'late', 'checked_in')
     AND NEW.table_id IN (r.table_id, r.secondary_table_id, r.tertiary_table_id)
-    AND ((r.status = 'checked_in' AND (r.checked_in_at IS NULL OR r.checked_in_at + dining <= now() OR r.checked_in_at + dining > starts))
-      OR (r.status <> 'checked_in' AND r.reserved_at - buffer < ends AND r.reserved_at + dining > starts))) THEN
+    AND ((r.status = 'checked_in' AND (r.checked_in_at IS NULL OR r.checked_in_at + dining <= now() OR r.checked_in_at + dining + buffer > starts))
+      OR (r.status <> 'checked_in' AND r.reserved_at - buffer < ends AND r.reserved_at + dining + buffer > starts))) THEN
     RAISE EXCEPTION 'Table is already reserved for this seating period';
   END IF;
   RETURN NEW;
@@ -150,7 +150,7 @@ BEGIN
   IF EXISTS (SELECT 1 FROM public.reservations b WHERE b.id <> r.id
     AND b.status IN ('pending', 'confirmed', 'late', 'checked_in') AND p_table IN (b.table_id, b.secondary_table_id, b.tertiary_table_id)
     AND (b.status = 'checked_in' OR (b.reserved_at - make_interval(mins => p_buffer) < seated + make_interval(mins => p_duration)
-      AND b.reserved_at + make_interval(mins => p_duration) > seated))) THEN RAISE EXCEPTION 'Table is reserved for another seating'; END IF;
+      AND b.reserved_at + make_interval(mins => p_duration + p_buffer) > seated))) THEN RAISE EXCEPTION 'Table is reserved for another seating'; END IF;
   UPDATE public.tables SET status = 'waiting', occupied_at = seated, orders = '[]'::jsonb,
     payment_status = 'unpaid', fulfillment_status = 'in_progress' WHERE id = p_table;
   UPDATE public.reservations SET status = 'checked_in', table_id = p_table, secondary_table_id = NULL,

@@ -32,13 +32,13 @@ BEGIN
   FOR t IN SELECT * FROM public.tables WHERE id=ANY(ids) ORDER BY id LOOP
     IF t.availability_blocked THEN RAISE EXCEPTION 'Table is unavailable'; END IF;
     IF NEW.status<>'checked_in' AND t.status<>'empty' AND ends>now()
-      AND (t.occupied_at IS NULL OR t.occupied_at+dining<=now() OR t.occupied_at+dining>starts) THEN
+      AND (t.occupied_at IS NULL OR t.occupied_at+dining<=now() OR t.occupied_at+dining+buffer>starts) THEN
       RAISE EXCEPTION 'Table is occupied during the requested seating period';
     END IF;
     IF EXISTS(SELECT 1 FROM public.reservations r WHERE r.id<>NEW.id
       AND r.status IN ('pending','confirmed','late','checked_in') AND t.id IN(r.table_id,r.secondary_table_id,r.tertiary_table_id)
-      AND ((r.status='checked_in' AND (r.checked_in_at IS NULL OR r.checked_in_at+dining<=now() OR r.checked_in_at+dining>starts))
-        OR (r.status<>'checked_in' AND r.reserved_at-buffer<ends AND r.reserved_at+dining>starts))) THEN
+      AND ((r.status='checked_in' AND (r.checked_in_at IS NULL OR r.checked_in_at+dining<=now() OR r.checked_in_at+dining+buffer>starts))
+        OR (r.status<>'checked_in' AND r.reserved_at-buffer<ends AND r.reserved_at+dining+buffer>starts))) THEN
       RAISE EXCEPTION 'Table is already reserved for this seating period';
     END IF;
   END LOOP;

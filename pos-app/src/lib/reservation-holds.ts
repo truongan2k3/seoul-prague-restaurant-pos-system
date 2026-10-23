@@ -1,6 +1,31 @@
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
+import { venueWallTimeToUtc } from "@/lib/venue-timezone";
+import type { CapacityReservationInput } from "@/lib/reservation-capacity-engine";
 
 const HOLD_TTL_MS = 3 * 60 * 1000; // ~3 minutes
+
+/** One batched read per date, not a query + expired-hold delete for every time option. */
+export async function loadActiveReservationHolds(dateIso: string, excludeToken?: string | null): Promise<CapacityReservationInput[]> {
+  const db = createSupabaseAdmin();
+  const rows: { hold_token: string; time_slot: string; party_size: number; wants_grill: string | null; created_at: string }[] = [];
+  const now = new Date().toISOString();
+  for (let offset = 0;; offset += 200) {
+    const { data, error } = await db.from("reservation_holds").select("hold_token,time_slot,party_size,wants_grill,created_at")
+      .eq("date_iso", dateIso).gt("expires_at", now).order("created_at").order("hold_token").range(offset, offset + 199);
+    if (error) {
+      if (error.code === "42P01" || error.code === "PGRST205") return [];
+      throw new Error(error.message);
+    }
+    rows.push(...(data ?? []));
+    if (!data || data.length < 200) break;
+  }
+  const ownIndex = excludeToken ? rows.findIndex((row) => row.hold_token === excludeToken) : -1;
+  // Earlier holds have priority. Later submissions must not make the first guest lose their own hold.
+  return (ownIndex >= 0 ? rows.slice(0, ownIndex) : rows).filter((row) => row.hold_token !== excludeToken).map<CapacityReservationInput>((row) => ({
+    id: `hold:${row.hold_token}`, partySize: Number(row.party_size), reservedAt: venueWallTimeToUtc(dateIso, row.time_slot), status: "pending",
+    wantsGrill: row.wants_grill === "yes" || row.wants_grill === "no" ? row.wants_grill : null,
+  }));
+}
 
 function randomToken(): string {
   return `hold_${crypto.randomUUID().replace(/-/g, "")}`;

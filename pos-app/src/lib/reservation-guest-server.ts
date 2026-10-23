@@ -36,7 +36,7 @@ import { guestReservationCopy, parseGuestReservationLang } from "@/lib/i18n/gues
 import type { AppSettings, ReservationOperatingHours, ReservationStatus } from "@/lib/types";
 import { venueDayRangeUtc, venueWallTimeToUtc } from "@/lib/venue-timezone";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
-import { sumActiveHoldsForSlot } from "@/src/lib/reservation-holds";
+import { loadActiveReservationHolds } from "@/src/lib/reservation-holds";
 
 export interface OnlineBookInput {
   referralCode?: string;
@@ -383,29 +383,19 @@ export async function evaluateGuestSlotAvailability(input: {
   if (!settings.reservationCapacityLimitsEnabled) {
     return { settings, slots: times.map((time) => ({ time, availability: "available", guestStatus: "available" })) };
   }
+  const holds = await loadActiveReservationHolds(input.date);
   const ctx = await loadDayCapacityContext(input.date, settings);
-
-  const heldGuestsByTime: Record<string, number> = {};
-  await Promise.all(
-    times.map(async (time) => {
-      heldGuestsByTime[time] = await sumActiveHoldsForSlot({
-        dateIso: input.date,
-        time,
-      });
-    }),
-  );
 
   const evaluated = evaluateSlotsForGuest({
     dateIso: input.date,
     times,
     partySize: Math.max(1, input.partySize),
     grill: input.grill ?? null,
-    reservations: ctx.reservations,
+    reservations: [...ctx.reservations, ...holds],
     occupiedTables: ctx.occupiedTables,
     maxGuestsPerSlot: ctx.settings.reservationMaxGuestsPerSlot,
     durationMinutes: ctx.settings.reservationDurationMinutes,
     bufferMinutes: ctx.settings.reservationBufferMinutes,
-    heldGuestsByTime,
     excludeReservationId: input.excludeReservationId,
   });
 
@@ -455,22 +445,18 @@ export async function evaluateStaffDayCapacity(input: {
 }> {
   const partySize = Math.max(1, input.partySize);
   const grill: GrillNeed = input.grill ?? null;
+  const holds = await loadActiveReservationHolds(input.date);
   const ctx = await loadDayCapacityContext(input.date);
+  const reservations = [...ctx.reservations, ...holds];
+  const placementCache = new Map<string, boolean>();
   const times = buildTimeSlotsForDate(
     input.date,
     ctx.settings.reservationOperatingHours,
     ctx.settings.reservationTimeStep,
   );
 
-  const heldGuestsByTime: Record<string, number> = {};
-  await Promise.all(
-    times.map(async (time) => {
-      heldGuestsByTime[time] = await sumActiveHoldsForSlot({
-        dateIso: input.date,
-        time,
-      });
-    }),
-  );
+  const heldGuestsByTime = Object.fromEntries(times.map((time) => [time, holds.filter((hold) =>
+    new Date(hold.reservedAt).getTime() === venueWallTimeToUtc(input.date, time).getTime()).reduce((sum, hold) => sum + hold.partySize, 0)]));
 
   const durationMinutes = ctx.settings.reservationDurationMinutes;
 
@@ -479,17 +465,17 @@ export async function evaluateStaffDayCapacity(input: {
     times,
     partySize,
     grill,
-    reservations: ctx.reservations,
+    reservations,
     occupiedTables: ctx.occupiedTables,
     maxGuestsPerSlot: ctx.settings.reservationMaxGuestsPerSlot,
     durationMinutes,
     bufferMinutes: ctx.settings.reservationBufferMinutes,
-    heldGuestsByTime,
+    placementCache,
   });
 
   const slots: StaffCapacitySlotDetail[] = evaluated.map(({ time, result }) => {
     const blocked = blockedTableLabels({
-      reservations: ctx.reservations,
+      reservations,
       occupiedTables: ctx.occupiedTables,
       dateIso: input.date,
       time,
@@ -528,12 +514,12 @@ export async function evaluateStaffDayCapacity(input: {
       times,
       partySize: size,
       grill,
-      reservations: ctx.reservations,
+      reservations,
       occupiedTables: ctx.occupiedTables,
       maxGuestsPerSlot: ctx.settings.reservationMaxGuestsPerSlot,
       durationMinutes,
       bufferMinutes: ctx.settings.reservationBufferMinutes,
-      heldGuestsByTime,
+      placementCache,
     });
     return {
       partySize: size,
@@ -605,12 +591,14 @@ async function validateSlotCapacity(params: {
   if (!slots.includes(time)) {
     return { ok: false, error: "Selected time is outside booking hours." };
   }
+  if (reservedAt.getTime() <= Date.now()) return { ok: false, error: "Please choose a future reservation time." };
 
   const guestCount = Math.max(1, Math.floor(params.guestCount));
   if (!settings.reservationCapacityLimitsEnabled) return { ok: true, guestCount };
+  const holds = await loadActiveReservationHolds(date);
   const ctx = await loadDayCapacityContext(date, settings);
   const result = evaluateReservationCapacity({ dateIso: date, time, partySize: guestCount, grill: params.grill ?? null,
-    reservations: ctx.reservations, occupiedTables: ctx.occupiedTables,
+    reservations: [...ctx.reservations, ...holds], occupiedTables: ctx.occupiedTables,
     durationMinutes: ctx.settings.reservationDurationMinutes, bufferMinutes: ctx.settings.reservationBufferMinutes,
     excludeReservationId });
   if (result.availability === "full") return { ok: false, error: "No available table fits this reservation. Please choose another time." };
@@ -629,6 +617,8 @@ function validateGuestInput(
   const email = input.email.trim();
   const phone = input.phone.trim();
   const eventType = input.eventType?.trim() ?? "";
+
+  if (input.wantsGrill !== "yes" && input.wantsGrill !== "no") return copy.errorBbq;
 
   if (required.name && !guestName) return copy.errorName;
   if (required.email && !email && !input.emailOptional) return copy.errorEmail;
@@ -674,26 +664,21 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
 
   const guestCount = Math.max(1, Math.floor(input.guestCount));
 
+  const holds = settings.reservationCapacityLimitsEnabled ? await loadActiveReservationHolds(input.date, input.holdToken) : [];
   const ctx = settings.reservationCapacityLimitsEnabled
     ? await loadDayCapacityContext(input.date, settings)
     : { settings, reservations: [], occupiedTables: [] };
-  const heldGuests = settings.reservationCapacityLimitsEnabled ? await sumActiveHoldsForSlot({
-    dateIso: input.date,
-    time: input.time,
-    excludeToken: input.holdToken,
-  }) : 0;
 
   const evaluation = evaluateReservationCapacity({
     dateIso: input.date,
     time: input.time,
     partySize: guestCount,
     grill: input.wantsGrill ?? null,
-    reservations: ctx.reservations,
+    reservations: [...ctx.reservations, ...holds],
     occupiedTables: ctx.occupiedTables,
     maxGuestsPerSlot: ctx.settings.reservationMaxGuestsPerSlot,
     durationMinutes: ctx.settings.reservationDurationMinutes,
     bufferMinutes: ctx.settings.reservationBufferMinutes,
-    heldGuests,
   });
 
   if (settings.reservationCapacityLimitsEnabled && evaluation.availability === "full") {
@@ -717,6 +702,7 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
   if (!slots.includes(input.time)) {
     return { data: null, error: "Selected time is outside booking hours." };
   }
+  if (venueWallTimeToUtc(input.date, input.time).getTime() <= Date.now()) return { data: null, error: "Please choose a future reservation time." };
 
   const guestName = input.guestName.trim();
   const email = input.email.trim();

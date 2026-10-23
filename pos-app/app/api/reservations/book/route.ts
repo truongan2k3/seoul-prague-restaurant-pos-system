@@ -59,6 +59,7 @@ export async function POST(request: Request) {
   });
 
   if (error || !data) {
+    await releaseReservationHold(body.holdToken);
     return NextResponse.json({ error: error ?? "Booking failed." }, { status: 400 });
   }
 

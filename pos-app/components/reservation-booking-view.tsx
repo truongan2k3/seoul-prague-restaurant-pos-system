@@ -8,8 +8,6 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Clock, Globe, Mail, MapPin, Phone, UtensilsCrossed } from "lucide-react";
 import { Modal } from "@/components/modal";
 import {
-  buildTimeSlotsForDate,
-  filterPastTimeSlots,
   formatOperatingHoursSummary,
   todayIsoDate,
 } from "@/lib/reservation-slots";
@@ -98,6 +96,9 @@ export function ReservationBookingView({
   const [appSettings, setAppSettings] = useState<AppSettings>(staffSettings??DEFAULT_APP_SETTINGS);
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState(false);
+  const [loadedAvailabilityContext, setLoadedAvailabilityContext] = useState("");
+  const [availabilityRetry, setAvailabilityRetry] = useState(0);
   const [settingsLoading, setSettingsLoading] = useState(!isStaff);
   const [lang, setLang] = useState<GuestReservationLang>(staff?.language??"en");
   const [guestName, setGuestName] = useState("");
@@ -110,6 +111,8 @@ export function ReservationBookingView({
   const [notes, setNotes] = useState("");
   const [eventType, setEventType] = useState("");
   const [wantsBbq, setWantsBbq] = useState<"yes" | "no" | null>(null);
+  const availabilityContext = `${date}:${guestCount}:${wantsBbq ?? ""}:${sharedSettings.reservationDurationMinutes}:${sharedSettings.reservationBufferMinutes}:${sharedSettings.reservationTimeStep}:${sharedSettings.reservationCapacityLimitsEnabled}`;
+  const availabilityCurrent = !slotsLoading && !availabilityError && loadedAvailabilityContext === availabilityContext;
   const [gdprConsent, setGdprConsent] = useState(false);
   const [gdprError, setGdprError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -201,55 +204,53 @@ export function ReservationBookingView({
 
   useEffect(() => {
     if(isStaff){setSlotsLoading(false);return;}
-    if (requiresLargePartyContact) {
+    if (requiresLargePartyContact || !wantsBbq || !date || settingsLoading) {
       setAvailabilitySlots([]);
       setSlotsLoading(false);
       return;
     }
 
-    let cancelled = false;
+    const controller = new AbortController();
     setSlotsLoading(true);
+    setAvailabilityError(false);
     const params = new URLSearchParams({
       date,
       partySize: String(guestCount),
     });
     if (wantsBbq) params.set("grill", wantsBbq);
 
-    void fetch(`/api/reservations/availability?${params.toString()}`)
+    const timer = window.setTimeout(() => { void fetch(`/api/reservations/availability?${params.toString()}`, { signal: controller.signal })
       .then(async (response) => {
         const payload = (await response.json().catch(() => ({}))) as {
           slots?: AvailabilitySlot[];
         };
-        if (cancelled) return;
-        if (!response.ok || !payload.slots) {
-          const base = filterPastTimeSlots(
-            buildTimeSlotsForDate(
-              date,
-              appSettings.reservationOperatingHours,
-              appSettings.reservationTimeStep,
-            ),
-            date,
-          ).map((slot) => ({ time: slot, status: "available" as const }));
-          setAvailabilitySlots(base);
-          return;
-        }
+        if (controller.signal.aborted) return;
+        if (!response.ok || !payload.slots) throw new Error("Availability unavailable");
         setAvailabilitySlots(payload.slots);
+        setLoadedAvailabilityContext(availabilityContext);
       })
       .catch(() => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setAvailabilitySlots([]);
+        setAvailabilityError(true);
       })
       .finally(() => {
-        if (!cancelled) setSlotsLoading(false);
-      });
+        if (!controller.signal.aborted) setSlotsLoading(false);
+      }); }, 200);
 
     return () => {
-      cancelled = true;
+      window.clearTimeout(timer);
+      controller.abort();
     };
   }, [
     appSettings.reservationOperatingHours,
     appSettings.reservationTimeStep,
     sharedSettings.reservationCapacityLimitsEnabled,
+    sharedSettings.reservationDurationMinutes,
+    sharedSettings.reservationBufferMinutes,
+    sharedSettings.reservationTimeStep,
+    availabilityRetry,
+    settingsLoading,
     date,
     guestCount,
     wantsBbq,
@@ -270,23 +271,23 @@ export function ReservationBookingView({
     return Array.from({ length: ONLINE_SELF_SERVE_MAX_PARTY }, (_, index) => index + 1);
   }, [appSettings.reservationMaxGuestsPerSlot, embedded,isStaff]);
 
-  /** Bookable slots for guests — Full is hidden (staff may still override in POS). */
+  /** Keep unavailable slots visible; only available slots can be submitted. */
   const availableTimeSlots = useMemo(
     () => availabilitySlots.filter((row) => row.status !== "full"),
     [availabilitySlots],
   );
 
   const selectedSlotStatus = useMemo(
-    () => availabilitySlots.find((row) => row.time === time)?.status ?? null,
-    [availabilitySlots, time],
+    () => availabilityCurrent ? availabilitySlots.find((row) => row.time === time)?.status ?? null : null,
+    [availabilitySlots, time, availabilityCurrent],
   );
 
   useEffect(() => {
-    if (isStaff || availableTimeSlots.length === 0) return;
-    if (!availableTimeSlots.some((row) => row.time === time)) {
+    if (isStaff || !availabilityCurrent || availableTimeSlots.length === 0) return;
+    if (!availabilitySlots.some((row) => row.time === time)) {
       setTime(availableTimeSlots[0].time);
     }
-  }, [availableTimeSlots, time,isStaff]);
+  }, [availableTimeSlots, availabilitySlots, availabilityCurrent, time,isStaff]);
 
   const openingHoursSummary = useMemo(
     () => formatOperatingHoursSummary(appSettings.reservationOperatingHours),
@@ -309,6 +310,8 @@ export function ReservationBookingView({
   };
 
   const validateForm = (): string | null => {
+    if (!isStaff && !wantsBbq) return copy.errorBbq;
+    if (!isStaff && (!availabilityCurrent || selectedSlotStatus === null || selectedSlotStatus === "full")) return availabilityError ? copy.errorAvailability : copy.errorTimeUnavailable;
     if (required.name && !guestName.trim()) return copy.errorName;
     if (required.email && !email.trim()) return copy.errorEmail;
     if (required.phone && !phone.trim()) return copy.errorPhone;
@@ -686,9 +689,11 @@ export function ReservationBookingView({
             {copy.selectTime}
             <RequiredMark show={required.time} />
             <ReservationTimePicker value={time} onChange={setTime} label={copy.selectTime} dark
-              disabled={settingsLoading || (!isStaff && slotsLoading)}
-              placeholder={slotsLoading ? copy.loadingTimes : copy.noTimesAvailable}
-              options={isStaff ? undefined : availableTimeSlots.map((slot) => ({ time: slot.time, label: slotStatusLabel(slot.status, copy) }))} />
+              disabled={settingsLoading || (!isStaff && !availabilityCurrent)}
+              placeholder={!isStaff&&!wantsBbq?copy.errorBbq:availabilityError?copy.errorAvailability:slotsLoading?copy.loadingTimes:copy.noTimesAvailable}
+              options={isStaff ? undefined : !availabilityCurrent ? [] : availabilitySlots.map((slot) => ({ time: slot.time, label: slotStatusLabel(slot.status, copy), disabled: slot.status === "full" }))} />
+            {!isStaff&&availabilityError&&<p role="alert" className="mt-2 text-xs text-amber-200">{copy.errorAvailability} <button type="button" onClick={()=>setAvailabilityRetry(value=>value+1)} className="min-h-10 underline">{copy.retryAvailability}</button></p>}
+            {!isStaff&&availabilityCurrent&&(selectedSlotStatus==="full"||availableTimeSlots.length===0)&&<p role="status" className="mt-2 text-xs text-amber-200">{copy.errorTimeUnavailable}</p>}
             {selectedSlotStatus === "limited" ? (
               <p className="mt-1 text-xs text-amber-300/90">{copy.slotLimited}</p>
             ) : null}
@@ -735,7 +740,7 @@ export function ReservationBookingView({
 
         <button
           type="submit"
-          disabled={submitting || (!isStaff && availableTimeSlots.length === 0)}
+          disabled={submitting || (!isStaff && (!availabilityCurrent || selectedSlotStatus === null || selectedSlotStatus === "full"))}
           className="w-full rounded-none bg-[#8B1E2D] py-4 text-base font-semibold text-white transition hover:bg-[#A02435] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {submitting ? copy.submitting : staff?.submitLabel??copy.submitReservation}

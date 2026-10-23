@@ -31,7 +31,7 @@ export function checkInTableIssues(source: TableAvailabilitySource, tableId: str
   if (grill === "yes" && !table.grill) warnings.push(issue("TABLE_NO_GRILL", `${table.label} has no BBQ grill, but this reservation requires BBQ. Staff must confirm suitable seating or update the booking.`));
   const booking = assigned.filter((row) => ["pending", "confirmed", "late"].includes(row.status))
     .filter((row) => new Date(row.reservedAt).getTime() - buffer < now + duration
-      && new Date(row.reservedAt).getTime() + duration > now)
+      && new Date(row.reservedAt).getTime() + duration + buffer > now)
     .sort((a, b) => new Date(a.reservedAt).getTime() - new Date(b.reservedAt).getTime())[0];
   if (booking) {
     const time = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Prague", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(booking.reservedAt));

@@ -1185,7 +1185,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
               <PartySizeStepper
                 value={formPartySize}
                 onChange={setFormPartySize}
-                max={settings.reservationMaxGuestsPerSlot || 50}
+                max={Math.max(50, settings.reservationMaxGuestsPerSlot)}
                 label={translate("partySize")}
               />
             </div>
@@ -1292,7 +1292,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           <PartySizeStepper
             value={checkInActualParty}
             onChange={(count) => { setCheckInActualParty(count); setCheckInConflict(null); setError(null); }}
-            max={settings.reservationMaxGuestsPerSlot || 50}
+            max={Math.max(50, settings.reservationMaxGuestsPerSlot)}
             label={translate("resActualPartySize")}
           />
           <ReservationTableMap

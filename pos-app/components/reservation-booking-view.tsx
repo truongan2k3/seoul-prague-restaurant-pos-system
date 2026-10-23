@@ -171,7 +171,8 @@ export function ReservationBookingView({
   }, [staffSettings]);
 
   useEffect(() => {
-    if (embedded || isStaff) {
+    if (isStaff) return;
+    if (embedded) {
       if (guestCount > appSettings.reservationMaxGuestsPerSlot) {
         setGuestCount(appSettings.reservationMaxGuestsPerSlot);
       }
@@ -257,7 +258,10 @@ export function ReservationBookingView({
   ]);
 
   const guestOptions = useMemo(() => {
-    if (embedded || isStaff) {
+    if (isStaff) {
+      return Array.from({ length: Math.max(50, appSettings.reservationMaxGuestsPerSlot) }, (_, index) => index + 1);
+    }
+    if (embedded) {
       return Array.from(
         { length: appSettings.reservationMaxGuestsPerSlot },
         (_, index) => index + 1,

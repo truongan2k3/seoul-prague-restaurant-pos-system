@@ -5,7 +5,7 @@ import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 import { loadLiveTableAvailability } from "@/src/lib/table-availability-server";
 import { checkInTableIssue, isExclusiveCheckInConflict } from "@/lib/reservation-check-in";
 import { blockedTableLabels, evaluateReservationCapacity, resolveGrill } from "@/lib/reservation-capacity-engine";
-import { floorTableByLabel } from "@/lib/reservation-floor-plan";
+import { floorTableByLabel, RESERVATION_FLOOR_TABLES } from "@/lib/reservation-floor-plan";
 import { todayIsoDateInVenue } from "@/lib/venue-timezone";
 import { loadDayCapacityContext } from "@/src/lib/reservation-guest-server";
 
@@ -19,7 +19,10 @@ async function validateSeating(input: { reservedAt: string; partySize: number; n
   const params = { dateIso: date, time, partySize: input.partySize, grill, reservations: ctx.reservations,
     occupiedTables: ctx.occupiedTables, durationMinutes: ctx.settings.reservationDurationMinutes,
     bufferMinutes: ctx.settings.reservationBufferMinutes, excludeReservationId: input.excludeReservationId };
-  if (!input.tableId && ctx.settings.reservationCapacityLimitsEnabled && evaluateReservationCapacity(params).availability === "full") throw new Error("No available table fits this reservation. Choose another time.");
+  // Staff can record a large group without assigning one undersized table.
+  // Its separate tables and their combined capacity are checked at actual check-in.
+  const needsMultipleTables = !RESERVATION_FLOOR_TABLES.some((table) => table.capacity >= input.partySize && (grill !== "yes" || table.grill));
+  if (!input.tableId && !needsMultipleTables && ctx.settings.reservationCapacityLimitsEnabled && evaluateReservationCapacity(params).availability === "full") throw new Error("No available table fits this reservation. Choose another time.");
   if (input.tableId) {
     const { data: table, error } = await createSupabaseAdmin().from("tables").select("label").eq("id", input.tableId).maybeSingle();
     const config = table && floorTableByLabel(table.label);

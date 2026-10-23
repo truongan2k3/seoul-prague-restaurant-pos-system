@@ -480,6 +480,8 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
         reservedAt: venueWallTimeToUtc(formDateTime.slice(0,10),formDateTime.slice(11,16)),
         notes: formNotes.trim() || undefined,
         tableId: editTarget.status === "checked_in" ? undefined : formTableId || null,
+        secondaryTableId: formTableId === editTarget.tableId ? editTarget.secondaryTableId ?? null : null,
+        tertiaryTableId: formTableId === editTarget.tableId ? editTarget.tertiaryTableId ?? null : null,
         eventType: formEventType || null,
       },
       editTarget,

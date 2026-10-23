@@ -500,7 +500,7 @@
   "markNoShow": "Không đến",
   "checkIn": "Đón khách",
   "assignTable": "Xếp bàn",
-  "assignTableHint": "Chọn bàn đủ chỗ và trống trong cả thời gian dùng bữa. Bàn có khách cần nhân viên xác nhận ngoại lệ nếu muốn tiếp tục.",
+  "assignTableHint": "Chọn tối đa 3 bàn cho một đặt chỗ. Hệ thống kiểm tra tổng số ghế và thời gian trống của từng bàn. Bàn đang có khách không thể check-in thêm.",
   "resTablePlanned": "Bàn đã xếp",
   "selectSecondTable": "Bàn thứ hai (tùy chọn)",
   "selectThirdTable": "Bàn thứ ba (tùy chọn)",

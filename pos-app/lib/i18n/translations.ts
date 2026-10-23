@@ -523,7 +523,7 @@ const en = {
   checkIn: "Check in",
   assignTable: "Assign table",
   assignTableHint:
-    "Assign one table that fits the party and is available for the entire seating period. Occupied tables cannot be checked in.",
+    "Select up to 3 tables for this reservation. Their combined capacity is checked for the full seating period. Occupied tables cannot be checked in.",
   resTablePlanned: "Planned table",
   selectSecondTable: "Second table (optional)",
   selectThirdTable: "Third table (optional)",
@@ -1981,7 +1981,7 @@ const cs: Record<TranslationKey, string> = {
   checkIn: "Check-in",
   assignTable: "Přiřadit stůl",
   assignTableHint:
-    "Přiřaďte jeden stůl s dostatečnou kapacitou, volný po celou dobu stolování. Obsazený stůl nelze použít pro check-in.",
+    "Vyberte až 3 stoly pro tuto rezervaci. Kontroluje se jejich celková kapacita a dostupnost po celou dobu stolování. Obsazený stůl nelze použít pro check-in.",
   resTablePlanned: "Plánovaný stůl",
   selectSecondTable: "Druhý stůl (volitelné)",
   selectThirdTable: "Třetí stůl (volitelné)",

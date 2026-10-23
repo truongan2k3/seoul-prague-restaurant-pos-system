@@ -9,7 +9,7 @@ import { floorTableByLabel, RESERVATION_FLOOR_TABLES } from "@/lib/reservation-f
 import { todayIsoDateInVenue } from "@/lib/venue-timezone";
 import { loadDayCapacityContext } from "@/src/lib/reservation-guest-server";
 
-async function validateSeating(input: { reservedAt: string; partySize: number; notes?: string; tableId?: string; excludeReservationId?: string }) {
+async function validateSeating(input: { reservedAt: string; partySize: number; notes?: string; tableId?: string; tableIds?: string[]; excludeReservationId?: string }) {
   const at = new Date(input.reservedAt);
   if (!Number.isFinite(at.getTime()) || !Number.isInteger(input.partySize) || input.partySize < 1) throw new Error("Invalid reservation time or party size.");
   const date = todayIsoDateInVenue(at);
@@ -19,23 +19,29 @@ async function validateSeating(input: { reservedAt: string; partySize: number; n
   const params = { dateIso: date, time, partySize: input.partySize, grill, reservations: ctx.reservations,
     occupiedTables: ctx.occupiedTables, durationMinutes: ctx.settings.reservationDurationMinutes,
     bufferMinutes: ctx.settings.reservationBufferMinutes, excludeReservationId: input.excludeReservationId };
+  const ids = input.tableIds ?? (input.tableId ? [input.tableId] : []);
+  if (!Array.isArray(ids) || ids.length > 3 || ids.some((id) => typeof id !== "string" || !id.trim())
+    || new Set(ids).size !== ids.length) throw new Error("Select up to three distinct tables.");
   // Staff can record a large group without assigning one undersized table.
   // Its separate tables and their combined capacity are checked at actual check-in.
   const needsMultipleTables = !RESERVATION_FLOOR_TABLES.some((table) => table.capacity >= input.partySize && (grill !== "yes" || table.grill));
-  if (!input.tableId && !needsMultipleTables && ctx.settings.reservationCapacityLimitsEnabled && evaluateReservationCapacity(params).availability === "full") throw new Error("No available table fits this reservation. Choose another time.");
-  if (input.tableId) {
-    const { data: table, error } = await createSupabaseAdmin().from("tables").select("label").eq("id", input.tableId).maybeSingle();
-    const config = table && floorTableByLabel(table.label);
+  if (!ids.length && !needsMultipleTables && ctx.settings.reservationCapacityLimitsEnabled && evaluateReservationCapacity(params).availability === "full") throw new Error("No available table fits this reservation. Choose another time.");
+  if (ids.length) {
+    const { data: tables, error } = await createSupabaseAdmin().from("tables").select("id,label").in("id", ids);
     if (error) throw error;
-    if (!config) throw new Error("Select a configured dining table.");
-    if (config.capacity < input.partySize || (grill === "yes" && !config.grill)
-      || blockedTableLabels({ ...params, reservations: ctx.reservations.filter((r) =>
-        r.tableLabel || r.secondaryTableLabel || r.tertiaryTableLabel) }).has(config.label)) {
-      const reason = config.capacity < input.partySize ? `${config.label} seats ${config.capacity}; this reservation has ${input.partySize} guests.`
-        : grill === "yes" && !config.grill ? `${config.label} has no BBQ grill, but this reservation requires BBQ.`
-        : `${config.label} is occupied, blocked or assigned to another reservation during this seating period.`;
-      throw Object.assign(new Error(reason), { code: "TABLE_ASSIGNMENT_CONFLICT", overrideAllowed: true });
+    const configs = ids.map((id) => floorTableByLabel(tables?.find((table) => table.id === id)?.label ?? ""));
+    if (configs.some((config) => !config)) throw new Error("Select configured dining tables.");
+    const capacity = configs.reduce((total, config) => total + (config?.capacity ?? 0), 0);
+    const blocked = blockedTableLabels({ ...params, reservations: ctx.reservations.filter((r) =>
+      r.tableLabel || r.secondaryTableLabel || r.tertiaryTableLabel) });
+    const warnings: string[] = [];
+    if (capacity < input.partySize) warnings.push(`Selected tables seat ${capacity}; this reservation has ${input.partySize} guests.`);
+    for (const config of configs) {
+      if (!config) continue;
+      if (grill === "yes" && !config.grill) warnings.push(`${config.label} has no BBQ grill, but this reservation requires BBQ.`);
+      if (blocked.has(config.label)) warnings.push(`${config.label} is occupied, blocked or assigned to another reservation during this seating period.`);
     }
+    if (warnings.length) throw Object.assign(new Error(warnings.join("\n")), { code: "TABLE_ASSIGNMENT_CONFLICT", overrideAllowed: true });
   }
 }
 
@@ -139,15 +145,20 @@ export async function POST(request: Request) {
     .eq("business_id", auth.businessId).eq("active", true).maybeSingle();
   if (!staff || !["admin", "manager", "cashier", "server"].includes(staff.role)) return NextResponse.json({ error: "Not permitted." }, { status: 403 });
   try {
-    if (body.action === "assign-override" && typeof body.reservationId === "string" && typeof body.tableId === "string") {
-      const { data: table, error: tableError } = await db.from("tables").select("label").eq("id", body.tableId).maybeSingle();
+    if (body.action === "assign-override" && typeof body.reservationId === "string") {
+      const ids: string[] = body.tableIds ?? [body.tableId];
+      if (!Array.isArray(ids) || !ids.length || ids.length > 3 || ids.some((id) => typeof id !== "string" || !id.trim())
+        || new Set(ids).size !== ids.length) throw new Error("Select one to three distinct tables.");
+      const { data: tables, error: tableError } = await db.from("tables").select("id,label").in("id", ids);
       if (tableError) throw tableError;
-      if (!table || !floorTableByLabel(table.label)) throw new Error("Select a configured dining table.");
-      const result = await db.rpc("override_reservation_table_assignment", { p_reservation: body.reservationId,
-        p_table: body.tableId, p_staff: session.staffId, p_business: auth.businessId,
-        p_reason: String(body.reason ?? "Staff confirmed assignment despite availability warning.").slice(0, 2000) });
+      if (!tables || tables.length !== ids.length || tables.some((table) => !floorTableByLabel(table.label))) throw new Error("Select configured dining tables.");
+      const args = { p_reservation: body.reservationId, p_staff: session.staffId, p_business: auth.businessId,
+        p_reason: String(body.reason ?? "Staff confirmed assignment despite availability warning.").slice(0, 2000) };
+      const result = ids.length === 1
+        ? await db.rpc("override_reservation_table_assignment", { ...args, p_table: ids[0] })
+        : await db.rpc("override_reservation_table_assignments", { ...args, p_tables: ids });
       if (result.error?.code === "PGRST202" || result.error?.code === "42883") {
-        return NextResponse.json({ error: "Apply supabase/patch-reservation-assignment-override.sql in Supabase to enable staff assignment overrides.", code: "ASSIGNMENT_OVERRIDE_SETUP_REQUIRED" }, { status: 503 });
+        return NextResponse.json({ error: `Apply supabase/${ids.length > 1 ? "patch-reservation-multi-table-assignment.sql" : "patch-reservation-assignment-override.sql"} in Supabase to enable staff assignment overrides.`, code: "ASSIGNMENT_OVERRIDE_SETUP_REQUIRED" }, { status: 503 });
       }
       if (result.error) throw result.error;
     } else if (body.action === "unassign" && typeof body.reservationId === "string") {
@@ -158,7 +169,7 @@ export async function POST(request: Request) {
       if (!data) throw new Error("Only reservations waiting to check in can be unassigned.");
     } else if (body.action === "validate") {
       await validateSeating({ reservedAt: String(body.reservedAt), partySize: Number(body.partySize),
-        tableId: body.tableId || undefined, notes: body.notes, excludeReservationId: body.excludeReservationId });
+        tableId: body.tableId || undefined, tableIds: body.tableIds, notes: body.notes, excludeReservationId: body.excludeReservationId });
     } else if (body.action === "booking-limits") {
       if (typeof body.enabled !== "boolean") return NextResponse.json({ error: "Select whether booking limits are enabled." }, { status: 400 });
       const { data, error } = await db.from("settings")

@@ -82,7 +82,7 @@ export async function fetchReservations(since?: Date) {
   return query;
 }
 
-async function validateReservationPlacement(input: { reservedAt: Date; partySize: number; tableId?: string | null; notes?: string; excludeReservationId?: string }) {
+async function validateReservationPlacement(input: { reservedAt: Date; partySize: number; tableId?: string | null; tableIds?: string[]; notes?: string; excludeReservationId?: string }) {
   try {
     const response = await fetch("/api/reservations/live-availability", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "validate", ...input, reservedAt: input.reservedAt.toISOString() }) });
@@ -284,7 +284,7 @@ export async function updateReservationDetails(
 ) {
   const { data: existing, error: fetchError } = await supabase
     .from("reservations")
-    .select("id, status, table_id")
+    .select("id, status, table_id, secondary_table_id, tertiary_table_id")
     .eq("id", reservationId)
     .single();
 
@@ -295,7 +295,9 @@ export async function updateReservationDetails(
   const status = existing.status as ReservationStatus;
   if (status !== "checked_in") {
     const availabilityError = await validateReservationPlacement({ ...input,
-      tableId: input.tableId === undefined ? existing.table_id : input.tableId, excludeReservationId: reservationId });
+      tableIds: normalizeReservationTableIds(input.tableId === undefined
+        ? [existing.table_id, existing.secondary_table_id, existing.tertiary_table_id]
+        : [input.tableId, input.secondaryTableId, input.tertiaryTableId]), excludeReservationId: reservationId });
     if (availabilityError) return { data: null, error: availabilityError };
   }
 
@@ -573,19 +575,19 @@ export async function createOnlineReservation(input: {
   });
 }
 
-/** Assign one planned table, or clear its assignment; server checks staff permissions. */
+/** Assign up to three planned tables atomically, or clear all assignments. */
 export async function assignReservationTables(
   reservationId: string,
   tableIds: string[],
   options?: { allowOccupied?: boolean; override?: boolean; overrideReason?: string },
 ) {
   const ids = normalizeReservationTableIds(tableIds);
-  if (ids.length > 1) return { data: null, error: new Error("Select exactly one table.") };
-  if (ids.length === 1 && options?.override) {
+  if (new Set(tableIds.filter((id) => id?.trim()).map((id) => id.trim())).size > 3) return { data: null, error: new Error("Select up to three tables.") };
+  if (ids.length > 0 && options?.override) {
     try {
       const response = await fetch("/api/reservations/live-availability", { method: "POST",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "assign-override",
-          reservationId, tableId: ids[0], reason: options.overrideReason }) });
+          reservationId, tableId: ids[0], tableIds: ids, reason: options.overrideReason }) });
       const result = await response.json();
       if (!response.ok) return { data: null, error: new Error(result.error ?? "Could not override table assignment.") };
       return supabase.from("reservations").select(RESERVATION_SELECT).eq("id", reservationId).single();
@@ -606,9 +608,9 @@ export async function assignReservationTables(
   if (error || !reservation) return { data: null, error: error ?? new Error("Reservation not found.") };
   if (reservation.status === "checked_in") return { data: null, error: new Error("Use the floor map to move an occupied table.") };
   const availabilityError = await validateReservationPlacement({ reservedAt: new Date(reservation.reserved_at),
-    partySize: reservation.party_size, notes: reservation.notes ?? undefined, tableId: ids[0], excludeReservationId: reservationId });
+    partySize: reservation.party_size, notes: reservation.notes ?? undefined, tableIds: ids, excludeReservationId: reservationId });
   if (availabilityError) return { data: null, error: availabilityError };
-  const assigned = await supabase.from("reservations").update({ table_id: ids[0], secondary_table_id: null, tertiary_table_id: null,
+  const assigned = await supabase.from("reservations").update({ table_id: ids[0], secondary_table_id: ids[1] ?? null, tertiary_table_id: ids[2] ?? null,
     staff_override_capacity: false,
     updated_at: nowIso() }).eq("id", reservationId).in("status", ["pending", "confirmed", "late"]).select(RESERVATION_SELECT).single();
   if (assigned.error?.code === "P0001" && /Table is (occupied|already reserved|unavailable)/i.test(assigned.error.message)) {

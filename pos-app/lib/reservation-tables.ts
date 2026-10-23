@@ -2,8 +2,8 @@
 
 import type { ReservationRecord } from "@/lib/types";
 
-export const MAX_RESERVATION_TABLES = 3; // Read historical multi-table reservations without truncation.
-export const MAX_NEW_RESERVATION_TABLES = 1;
+export const MAX_RESERVATION_TABLES = 3;
+export const MAX_NEW_RESERVATION_TABLES = MAX_RESERVATION_TABLES;
 
 /** Normalize to 1–3 unique table ids (order preserved). */
 export function normalizeReservationTableIds(tableIds: Array<string | null | undefined>): string[] {

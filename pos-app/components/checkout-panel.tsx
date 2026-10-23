@@ -86,6 +86,23 @@ interface CheckoutPanelProps {
   onOpenVouchersTab?: () => void;
 }
 
+function groupSplitBillLines(lines: CheckoutLine[]) {
+  const groups = new Map<string, { key: string; first: CheckoutLine; quantity: number; total: number }>();
+  for (const line of lines) {
+    const key = JSON.stringify([line.menuItemId, line.name, line.price, line.originalPrice,
+      line.notes, line.notesTranslated, line.station, line.itemType, line.taxGroup,
+      line.modifiers, line.selectedAddons]);
+    const group = groups.get(key);
+    if (group) {
+      group.quantity += line.quantity;
+      group.total += lineTotal(line);
+    } else {
+      groups.set(key, { key, first: line, quantity: line.quantity, total: lineTotal(line) });
+    }
+  }
+  return [...groups.values()];
+}
+
 function SummaryRow({
   label,
   value,
@@ -702,6 +719,8 @@ export function CheckoutPanel({
     () => lines.filter((line) => selectedLineIds.includes(line.lineId)),
     [lines, selectedLineIds],
   );
+  const remainingBillGroups = useMemo(() => groupSplitBillLines(remainingBillLines), [remainingBillLines]);
+  const currentBillGroups = useMemo(() => groupSplitBillLines(currentBillLines), [currentBillLines]);
 
   const moveToBill = (lineId: string) => {
     setSelectedLineIds((prev) => (prev.includes(lineId) ? prev : [...prev, lineId]));
@@ -1018,15 +1037,16 @@ export function CheckoutPanel({
           {remainingBillLines.length === 0 ? (
             <li className="py-12 text-center text-sm text-gray-400">—</li>
           ) : (
-            remainingBillLines.map((line) => (
-              <li key={line.lineId}>
+            remainingBillGroups.map((group) => (
+              <li key={group.key}>
                 <button
                   type="button"
-                  onClick={() => moveToBill(line.lineId)}
+                  onClick={() => moveToBill(group.first.lineId)}
+                  aria-label={`1x ${group.first.name} → ${translate("currentBill")}`}
                   className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left hover:border-blue-400 dark:border-gray-600 dark:bg-gray-900 dark:hover:border-blue-600"
                 >
-                  <span className="min-w-0 flex-1 font-medium text-gray-900 dark:text-gray-100">{line.name}</span>
-                  <span className="shrink-0 tabular-nums font-semibold text-gray-600">{displayPrice(lineTotal(line))}</span>
+                  <span className="min-w-0 flex-1 font-medium text-gray-900 dark:text-gray-100">{group.quantity}x {group.first.name}</span>
+                  <span className="shrink-0 tabular-nums font-semibold text-gray-600">{displayPrice(group.total)}</span>
                   <ArrowRight className="h-5 w-5 shrink-0 text-blue-600" />
                 </button>
               </li>
@@ -1054,16 +1074,17 @@ export function CheckoutPanel({
           {currentBillLines.length === 0 ? (
             <li className="py-12 text-center text-sm text-gray-500">{translate("selectItemsToPay")}</li>
           ) : (
-            currentBillLines.map((line) => (
-              <li key={line.lineId}>
+            currentBillGroups.map((group) => (
+              <li key={group.key}>
                 <button
                   type="button"
-                  onClick={() => moveToRemaining(line.lineId)}
+                  onClick={() => moveToRemaining(group.first.lineId)}
+                  aria-label={`1x ${group.first.name} → ${translate("remainingItems")}`}
                   className="flex w-full items-center gap-3 rounded-xl border border-blue-200 bg-white px-4 py-3 text-left dark:border-blue-900 dark:bg-gray-900"
                 >
                   <ArrowLeft className="h-5 w-5 shrink-0 text-gray-400" />
-                  <span className="min-w-0 flex-1 font-medium text-gray-900 dark:text-gray-100">{line.name}</span>
-                  <span className="shrink-0 tabular-nums font-semibold text-gray-600">{displayPrice(lineTotal(line))}</span>
+                  <span className="min-w-0 flex-1 font-medium text-gray-900 dark:text-gray-100">{group.quantity}x {group.first.name}</span>
+                  <span className="shrink-0 tabular-nums font-semibold text-gray-600">{displayPrice(group.total)}</span>
                 </button>
               </li>
             ))

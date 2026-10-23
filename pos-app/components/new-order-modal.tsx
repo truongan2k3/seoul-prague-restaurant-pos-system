@@ -1620,7 +1620,74 @@ export function NewOrderModal({
           </p>
         ) : (
           <ul className="space-y-2">
-            {submittedLines.map((line) => {
+            {[...cart].reverse().map((line) => {
+              const lineLabel = line.name.includes("·")
+                ? line.name
+                : cartLineDisplayName(line, menuItems, language);
+              const presetText = (line.specialRequestIds ?? [])
+                .map((id) => {
+                  const preset = notePresets.find((entry) => entry.id === id);
+                  return preset ? presetLabel(preset, language) : null;
+                })
+                .filter(Boolean)
+                .join(", ");
+              const noteTextParts = [presetText, line.note].filter(Boolean);
+              const noteText =
+                line.noteTranslated && noteTextParts.length > 0
+                  ? `${line.noteTranslated}${line.note ? ` · ${line.note}` : ""}`
+                  : noteTextParts.join(", ");
+
+              return (
+                <li
+                  key={line.lineId}
+                  className="overflow-hidden rounded-xl border border-blue-200 bg-blue-50/70 dark:border-blue-900 dark:bg-blue-950/30"
+                >
+                  <div className="flex items-start gap-2 px-3 py-3">
+                    <span className="mt-1 h-5 w-5 shrink-0" aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <button
+                        type="button"
+                        onClick={() => openNoteModal(line)}
+                        className="text-left text-base font-semibold leading-snug text-gray-900 hover:text-blue-600 dark:text-gray-100 dark:hover:text-blue-400"
+                      >
+                        {line.quantity}× {lineLabel}
+                      </button>
+                      {noteText && (
+                        <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{noteText}</p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1.5">
+                      <span className="text-base font-bold tabular-nums text-gray-900 dark:text-gray-100">
+                        {formatOrderPrice(line.price * line.quantity)}
+                      </span>
+                      <div className="inline-flex items-center overflow-hidden rounded-md border border-gray-200 dark:border-gray-600">
+                        <button
+                          type="button"
+                          onClick={() => updateCartQty(line.lineId, -1)}
+                          className="flex h-8 w-8 items-center justify-center text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+                          aria-label={`Decrease ${lineLabel}`}
+                        >
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                        <span className="flex h-8 min-w-[1.75rem] items-center justify-center border-x border-gray-200 px-1 text-sm font-semibold tabular-nums dark:border-gray-600">
+                          {line.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => updateCartQty(line.lineId, 1)}
+                          className="flex h-8 w-8 items-center justify-center text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+                          aria-label={`Increase ${lineLabel}`}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+
+            {[...submittedLines].sort((a, b) => (Date.parse(b.createdAt ?? "") || 0) - (Date.parse(a.createdAt ?? "") || 0)).map((line) => {
               const selected = line.lineId === selectedSubmittedLineId;
               const displayName = orderItemDisplayName(line, menuItems, language);
               const linePending =
@@ -1731,73 +1798,6 @@ export function NewOrderModal({
                       />
                     </div>
                   )}
-                </li>
-              );
-            })}
-
-            {cart.map((line) => {
-              const lineLabel = line.name.includes("·")
-                ? line.name
-                : cartLineDisplayName(line, menuItems, language);
-              const presetText = (line.specialRequestIds ?? [])
-                .map((id) => {
-                  const preset = notePresets.find((entry) => entry.id === id);
-                  return preset ? presetLabel(preset, language) : null;
-                })
-                .filter(Boolean)
-                .join(", ");
-              const noteTextParts = [presetText, line.note].filter(Boolean);
-              const noteText =
-                line.noteTranslated && noteTextParts.length > 0
-                  ? `${line.noteTranslated}${line.note ? ` · ${line.note}` : ""}`
-                  : noteTextParts.join(", ");
-
-              return (
-                <li
-                  key={line.lineId}
-                  className="overflow-hidden rounded-xl border border-blue-200 bg-blue-50/70 dark:border-blue-900 dark:bg-blue-950/30"
-                >
-                  <div className="flex items-start gap-2 px-3 py-3">
-                    <span className="mt-1 h-5 w-5 shrink-0" aria-hidden />
-                    <div className="min-w-0 flex-1">
-                      <button
-                        type="button"
-                        onClick={() => openNoteModal(line)}
-                        className="text-left text-base font-semibold leading-snug text-gray-900 hover:text-blue-600 dark:text-gray-100 dark:hover:text-blue-400"
-                      >
-                        {line.quantity}× {lineLabel}
-                      </button>
-                      {noteText && (
-                        <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{noteText}</p>
-                      )}
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1.5">
-                      <span className="text-base font-bold tabular-nums text-gray-900 dark:text-gray-100">
-                        {formatOrderPrice(line.price * line.quantity)}
-                      </span>
-                      <div className="inline-flex items-center overflow-hidden rounded-md border border-gray-200 dark:border-gray-600">
-                        <button
-                          type="button"
-                          onClick={() => updateCartQty(line.lineId, -1)}
-                          className="flex h-8 w-8 items-center justify-center text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
-                          aria-label={`Decrease ${lineLabel}`}
-                        >
-                          <Minus className="h-3.5 w-3.5" />
-                        </button>
-                        <span className="flex h-8 min-w-[1.75rem] items-center justify-center border-x border-gray-200 px-1 text-sm font-semibold tabular-nums dark:border-gray-600">
-                          {line.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => updateCartQty(line.lineId, 1)}
-                          className="flex h-8 w-8 items-center justify-center text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
-                          aria-label={`Increase ${lineLabel}`}
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
                 </li>
               );
             })}

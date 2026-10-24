@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Download, Globe } from "lucide-react";
+import { Check, Download, Globe, Gift, Mail, ShieldCheck } from "lucide-react";
 import { LandingNavbar } from "@/components/landing/landing-navbar";
 import { LandingFooter } from "@/components/landing/landing-menu-gallery";
 import { GuestChatWidget } from "@/components/landing/guest-chat-widget";
@@ -143,16 +143,16 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
   const emailInvalid = !isValidEmail(buyerEmail);
   const phoneInvalid = phoneDigits.length < 6;
   const detailsReady = !nameMissing && !emailInvalid && !phoneInvalid;
-  // Name is always highlighted while empty; other fields after submit/blur attempt.
-  const nameError = nameMissing;
+  // Show field errors after an attempt or blur; keep the first impression calm.
+  const nameError = showFieldErrors && nameMissing;
   const emailError = showFieldErrors && emailInvalid;
   const phoneError = showFieldErrors && phoneInvalid;
 
   const fieldClass = (hasError: boolean) =>
-    `mt-1.5 w-full rounded-xl border bg-white/5 px-3 py-3 text-sm text-white outline-none transition ${
+    `mt-2 w-full rounded-xl border bg-black/20 px-4 py-3.5 text-sm text-white outline-none transition duration-200 motion-reduce:transition-none ${
       hasError
         ? "border-red-500 bg-red-500/10 text-red-50 placeholder:text-red-200/50 focus:border-red-400"
-        : "border-white/15 focus:border-[#C9A88B]/60"
+        : "border-white/12 placeholder:text-white/25 focus:border-[#C9A88B]/70 focus:ring-2 focus:ring-[#C9A88B]/10"
     }`;
 
   const bankReady = useMemo(() => {
@@ -324,20 +324,21 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
   };
 
   return (
-    <div className="landing-theme min-h-screen bg-[#0B0B0C] text-white">
+    <div className="landing-theme relative isolate min-h-screen overflow-clip bg-[#0B0B0C] text-white">
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[700px] bg-[radial-gradient(ellipse_at_20%_10%,rgba(201,168,139,0.12),transparent_60%)]" />
       <LandingNavbar content={content} hideBookCta />
-      <main className="mx-auto max-w-3xl px-5 pb-24 pt-28 lg:px-8 lg:pt-32">
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <main className="mx-auto max-w-6xl px-5 pb-24 pt-28 sm:px-8 lg:pt-36">
+        <div className="mb-10 flex flex-wrap items-start justify-between gap-6 border-b border-[#C9A88B]/15 pb-10 sm:mb-14">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-[#C9A88B]">{copy.eyebrow}</p>
-            <h1 className="landing-serif mt-4 text-4xl tracking-wide text-[#F5EDE4] lg:text-6xl">
+            <h1 className="landing-serif mt-4 max-w-2xl text-4xl leading-tight tracking-tight text-[#F5EDE4] sm:text-5xl lg:text-6xl">
               {copy.title}
             </h1>
             <p className="mt-4 max-w-xl text-sm leading-relaxed text-white/55 lg:text-base">
               {copy.subtitle}
             </p>
           </div>
-          <label className="inline-flex items-center gap-2 border border-white/15 bg-[#121214] px-3 py-2 text-sm">
+          <label className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 bg-white/[0.03] px-4 py-2 text-sm">
             <Globe className="h-4 w-4 text-[#C9A88B]" />
             <select
               value={lang}
@@ -363,7 +364,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
         ) : placed ? (
           <section
             ref={paymentSectionRef}
-            className="mt-12 scroll-mt-28 space-y-6 rounded-2xl border border-[#C9A88B]/30 bg-[#121214] p-6 sm:p-8"
+            className="mx-auto mt-12 max-w-2xl scroll-mt-28 space-y-6 rounded-[28px] border border-[#C9A88B]/30 bg-[#121214] p-6 shadow-2xl sm:p-8"
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#C9A88B]/20 text-[#C9A88B]">
               <Check className="h-6 w-6" />
@@ -488,6 +489,8 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
               </>
             ) : null}
 
+            <p className="flex items-start gap-2 text-xs leading-relaxed text-white/50"><Mail className="mt-0.5 h-4 w-4 shrink-0 text-[#C9A88B]" aria-hidden />{copy.spamReminder}</p>
+
             {error ? <p className="text-sm text-red-300">{error}</p> : null}
 
             {!orderCancelled && !guestPaid ? (
@@ -527,7 +530,30 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
             ) : null}
           </section>
         ) : (
-          <section className="mt-12 space-y-10 lg:space-y-12">
+          <section className="grid items-start gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:gap-14">
+            <aside className="min-w-0 space-y-7 lg:sticky lg:top-28">
+            <VoucherLivePreview
+              brandName={content.settings.restaurantName || "Seoul Prague"}
+              logoUrl={content.media.logo?.fileUrl}
+              denomination={denomination}
+              quantity={quantity}
+              total={total}
+              previewLabel={copy.previewTitle}
+              previewNote={copy.previewNote}
+              voucherLabel={copy.voucher}
+              valueLabel={copy.voucherValue}
+              totalLabel={copy.total}
+            />
+              <div className="flex items-start gap-3 border-t border-[#C9A88B]/15 pt-6">
+                <Gift className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A88B]" aria-hidden />
+                <p className="landing-serif text-lg leading-relaxed text-[#E8D5C4]">{copy.giftDelivery}</p>
+              </div>
+              <div className="flex items-start gap-3 text-xs leading-relaxed text-white/50">
+                <Mail className="h-4 w-4 shrink-0 text-[#C9A88B]/70" aria-hidden />
+                <p>{copy.spamReminder}</p>
+              </div>
+            </aside>
+            <div className="min-w-0 space-y-8 rounded-[28px] border border-white/10 bg-[#121214]/80 p-5 shadow-[0_24px_80px_-40px_rgba(0,0,0,0.7)] sm:p-8">
             <VoucherDenominationSelector
               denominations={config.denominationsCzk}
               denomination={denomination}
@@ -542,22 +568,6 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
               stepQuantityLabel={copy.stepQuantity}
               quantityLabel={copy.quantityLabel}
               giftVoucherLabel={copy.voucher}
-            />
-
-            <VoucherLivePreview
-              brandName={content.settings.restaurantName || "Seoul Prague"}
-              logoUrl={content.media.logo?.fileUrl}
-              denomination={denomination}
-              quantity={quantity}
-              total={total}
-            />
-
-            <VoucherOrderSummary
-              denomination={denomination}
-              quantity={quantity}
-              total={total}
-              totalLabel={copy.total}
-              voucherLabel={copy.voucher}
             />
 
             <div>
@@ -631,6 +641,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
+                  aria-pressed={paymentMethod === "czech_qr"}
                   onClick={() => setPaymentMethod("czech_qr")}
                   className={`rounded-2xl border px-4 py-4 text-left text-sm transition duration-300 ${
                     paymentMethod === "czech_qr"
@@ -643,6 +654,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
                 </button>
                 <button
                   type="button"
+                  aria-pressed={paymentMethod === "bank_transfer"}
                   onClick={() => setPaymentMethod("bank_transfer")}
                   className={`rounded-2xl border px-4 py-4 text-left text-sm transition duration-300 ${
                     paymentMethod === "bank_transfer"
@@ -657,7 +669,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-sm text-white/65">
-              <p className="text-xs uppercase tracking-[0.24em] text-[#C9A88B]">{copy.termsTitle}</p>
+              <p className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-[#C9A88B]"><ShieldCheck className="h-4 w-4 shrink-0" aria-hidden />{copy.termsTitle}</p>
               <ul className="mt-3 list-disc space-y-2 pl-5 leading-relaxed">
                 <li>{copy.termValidity}</li>
                 <li>{copy.termCounter}</li>
@@ -667,6 +679,14 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
             </div>
 
             {error && !placed ? <p className="text-sm text-red-300">{error}</p> : null}
+
+            <VoucherOrderSummary
+              denomination={denomination}
+              quantity={quantity}
+              total={total}
+              totalLabel={copy.total}
+              voucherLabel={copy.voucher}
+            />
 
             <button
               type="button"
@@ -692,6 +712,7 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
             {!bankReady ? (
               <p className="text-center text-sm text-amber-200/80">{copy.bankNotConfigured}</p>
             ) : null}
+            </div>
           </section>
         )}
       </main>

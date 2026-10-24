@@ -47,6 +47,7 @@ type OrderRow = {
   verified_by_staff_id: string | null;
   verified_by_staff_name: string | null;
   issued_at: string | null;
+  cancelled_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -90,6 +91,7 @@ function mapOrder(row: OrderRow, codes?: VoucherCode[]): VoucherOrder {
     verifiedAt: row.verified_at,
     verifiedByStaffName: row.verified_by_staff_name,
     issuedAt: row.issued_at,
+    cancelledAt: row.cancelled_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     codes,
@@ -512,7 +514,13 @@ export async function verifyVoucherPayment(input: {
   });
 
   const order = await getVoucherOrderById(orderRow.id);
-  if (order?.codes?.length) {
+  if (order) await emailIssuedVouchers(order, config);
+
+  return { order, error: null };
+}
+
+async function emailIssuedVouchers(order: VoucherOrder, config: VoucherConfig) {
+  if (order.codes?.length) {
     const qrPayloads: { code: string; qrDataUrl: string }[] = [];
     for (const code of order.codes) {
       const qrDataUrl = await QRCode.toDataURL(code.code, {
@@ -525,8 +533,27 @@ export async function verifyVoucherPayment(input: {
     }
     void sendVoucherIssuedEmail({ order, config, vouchers: qrPayloads });
   }
+}
 
-  return { order, error: null };
+/** Atomic staff recovery: the database enforces the cancellation reason and deadline. */
+export async function recoverCancelledVoucherOrder(input: {
+  orderUuid: string; staffId: string; staffName: string; businessId: string;
+}): Promise<{ order: VoucherOrder | null; error: string | null }> {
+  const admin = createSupabaseAdmin();
+  const existing = await getVoucherOrderById(input.orderUuid);
+  if (!existing) return { order: null, error: "Order not found." };
+  const config = await fetchVoucherConfigServer();
+  const codes = Array.from({ length: existing.quantity }, () => createVoucherCode());
+  const { data: issued, error } = await admin.rpc("recover_cancelled_voucher_order", {
+    p_order: input.orderUuid, p_staff: input.staffId, p_staff_name: input.staffName,
+    p_business: input.businessId, p_codes: codes, p_validity_days: config.validityDays,
+  });
+  if (error) return { order: null, error: ["PGRST202", "42883", "42703"].includes(error.code)
+    ? "Run supabase/patch-voucher-cancelled-recovery.sql to enable 24-hour voucher recovery." : error.message };
+  const order = await getVoucherOrderById(input.orderUuid);
+  // The RPC returns false for an already issued order: no duplicate codes or email.
+  if (issued === true && order) await emailIssuedVouchers(order, config);
+  return { order, error: order ? null : "Could not load the issued voucher." };
 }
 
 export async function lookupVoucherCode(

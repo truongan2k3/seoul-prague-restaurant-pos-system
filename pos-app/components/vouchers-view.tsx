@@ -5,7 +5,7 @@ import { Camera, CheckCircle2, ChevronLeft, ChevronRight, Search, X } from "luci
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { Modal } from "@/components/modal";
 import { useApp } from "@/contexts/app-context";
-import { formatVoucherAmount, type VoucherCode, type VoucherOrder } from "@/lib/voucher";
+import { formatVoucherAmount, voucherRecoveryDeadline, type VoucherCode, type VoucherOrder } from "@/lib/voucher";
 
 const VOUCHER_PAGE_SIZE = 20;
 
@@ -66,6 +66,16 @@ export function VouchersView({
   const [selected, setSelected] = useState<VoucherOrder | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmVerify, setConfirmVerify] = useState(false);
+  const [recoveryNow, setRecoveryNow] = useState(Date.now);
+  const recoveryDeadline = selected ? voucherRecoveryDeadline(selected) : null;
+  const recoveryOpen = recoveryDeadline !== null && recoveryNow < recoveryDeadline;
+
+  useEffect(() => {
+    setRecoveryNow(Date.now());
+    if (recoveryDeadline === null || recoveryDeadline <= Date.now()) return;
+    const timer = window.setTimeout(() => { setRecoveryNow(Date.now()); setConfirmVerify(false); }, recoveryDeadline - Date.now());
+    return () => window.clearTimeout(timer);
+  }, [recoveryDeadline]);
   const [scanOpen, setScanOpen] = useState(false);
   const [manualCode, setManualCode] = useState("");
   const [lookup, setLookup] = useState<{ code: VoucherCode; order: VoucherOrder | null } | null>(
@@ -223,13 +233,17 @@ export function VouchersView({
 
   const verifyPayment = async () => {
     if (!selected || busy) return;
+    const recovery = selected.paymentStatus === "cancelled";
+    if (recovery && (recoveryDeadline === null || Date.now() >= recoveryDeadline)) {
+      setRecoveryNow(Date.now()); setConfirmVerify(false); setError(translate("voucherRecoveryExpired")); return;
+    }
     setBusy(true);
     setError(null);
     try {
       const response = await fetch("/api/vouchers/staff/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderUuid: selected.id }),
+        body: JSON.stringify({ orderUuid: selected.id, recoverCancelled: recovery, paymentReceived: recovery }),
       });
       const payload = (await response.json()) as { order?: VoucherOrder; error?: string };
       if (!response.ok || !payload.order) {
@@ -372,6 +386,7 @@ export function VouchersView({
                         </td>
                         <td className="px-4 py-3">
                           {order.orderStatus.replaceAll("_", " ")}
+                          {(voucherRecoveryDeadline(order) ?? 0) > Date.now() && <span className="mt-1 block text-[11px] font-medium text-amber-800 dark:text-[#DCC1A5]">{translate("voucherRecoveryIssue")}</span>}
                           {order.guestMarkedPaidAt && order.paymentStatus === "pending" ? (
                             <span className="mt-0.5 block text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
                               {translate("voucherGuestPaid")}
@@ -518,16 +533,21 @@ export function VouchersView({
               </div>
             ) : null}
 
-            {selected.paymentStatus === "pending" ? (
+            {recoveryDeadline !== null && <div className="space-y-2 rounded-xl border border-[#C9A88B]/40 bg-[#C9A88B]/10 p-4 text-sm">
+              <p className="font-semibold">{translate("voucherRecoveryIssue")}</p>
+              <p>{recoveryOpen ? translate("voucherRecoveryUntil").replace("{time}", formatWhen(new Date(recoveryDeadline).toISOString())) : translate("voucherRecoveryExpired")}</p>
+              {recoveryOpen && <p className="text-xs leading-relaxed opacity-75">{translate("voucherRecoveryHint")}</p>}
+            </div>}
+            {selected.paymentStatus === "pending" || recoveryDeadline !== null ? (
               confirmVerify ? (
                 <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/40">
                   <p className="text-sm text-amber-900 dark:text-amber-100">
-                    {translate("voucherVerifyConfirm")}
+                    {translate(recoveryDeadline !== null ? "voucherRecoveryConfirm" : "voucherVerifyConfirm")}
                   </p>
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      disabled={busy}
+                      disabled={busy || (recoveryDeadline !== null && !recoveryOpen)}
                       onClick={() => void verifyPayment()}
                       className="flex-1 rounded-xl bg-gray-900 py-2.5 text-sm font-semibold text-white dark:bg-gray-100 dark:text-gray-900"
                     >
@@ -545,11 +565,12 @@ export function VouchersView({
               ) : (
                 <button
                   type="button"
+                  disabled={busy || (recoveryDeadline !== null && (!recoveryOpen || !currentStaffUser))}
                   onClick={() => setConfirmVerify(true)}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 py-3 text-sm font-semibold text-white"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <CheckCircle2 className="h-4 w-4" />
-                  {translate("voucherPaymentReceived")}
+                  {translate(recoveryDeadline !== null ? "voucherRecoveryIssue" : "voucherPaymentReceived")}
                 </button>
               )
             ) : null}

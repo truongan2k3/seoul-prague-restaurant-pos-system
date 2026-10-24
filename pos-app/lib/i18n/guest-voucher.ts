@@ -61,6 +61,11 @@ export type GuestVoucherCopy = {
   confirmError: string;
   cancelError: string;
   windowExpired: string;
+  previewTitle: string;
+  previewNote: string;
+  voucherValue: string;
+  giftDelivery: string;
+  spamReminder: string;
 };
 
 const en: GuestVoucherCopy = {
@@ -128,6 +133,11 @@ const en: GuestVoucherCopy = {
   confirmError: "Could not confirm payment.",
   cancelError: "Could not cancel order.",
   windowExpired: "Payment window expired.",
+  previewTitle: "Your gift, beautifully presented",
+  previewNote: "Illustrative preview. Your unique voucher codes arrive by email after payment is verified.",
+  voucherValue: "Voucher value",
+  giftDelivery: "A memorable dining experience, delivered by email.",
+  spamReminder: "Please also check your spam / junk folder for your order confirmation and voucher codes.",
 };
 
 const cs: GuestVoucherCopy = {
@@ -193,6 +203,11 @@ const cs: GuestVoucherCopy = {
   confirmError: "Platbu se nepodařilo potvrdit.",
   cancelError: "Objednávku se nepodařilo zrušit.",
   windowExpired: "Platební okno vypršelo.",
+  previewTitle: "Váš dárek v elegantním provedení",
+  previewNote: "Ilustrační náhled. Jedinečné kódy voucherů obdržíte e-mailem po ověření platby.",
+  voucherValue: "Hodnota voucheru",
+  giftDelivery: "Nezapomenutelný gastronomický zážitek doručený e-mailem.",
+  spamReminder: "Potvrzení objednávky a kódy voucherů prosím hledejte také ve složce spam / nevyžádaná pošta.",
 };
 
 const vi: GuestVoucherCopy = {
@@ -258,6 +273,11 @@ const vi: GuestVoucherCopy = {
   confirmError: "Không xác nhận được thanh toán.",
   cancelError: "Không hủy được đơn.",
   windowExpired: "Hết thời gian thanh toán.",
+  previewTitle: "Món quà được chăm chút tinh tế",
+  previewNote: "Hình ảnh minh họa. Mã voucher riêng sẽ được gửi qua email sau khi xác minh thanh toán.",
+  voucherValue: "Giá trị voucher",
+  giftDelivery: "Trao tặng trải nghiệm ẩm thực đáng nhớ qua email.",
+  spamReminder: "Vui lòng kiểm tra cả thư mục spam / thư rác để tìm email xác nhận và mã voucher.",
 };
 
 const de: GuestVoucherCopy = {
@@ -323,6 +343,11 @@ const de: GuestVoucherCopy = {
   confirmError: "Zahlung konnte nicht bestätigt werden.",
   cancelError: "Bestellung konnte nicht storniert werden.",
   windowExpired: "Zahlungsfenster abgelaufen.",
+  previewTitle: "Ihr Geschenk, stilvoll präsentiert",
+  previewNote: "Illustrative Vorschau. Ihre individuellen Gutscheincodes erhalten Sie nach Zahlungsprüfung per E-Mail.",
+  voucherValue: "Gutscheinwert",
+  giftDelivery: "Ein unvergessliches kulinarisches Erlebnis, per E-Mail übermittelt.",
+  spamReminder: "Bitte prüfen Sie auch Ihren Spam-Ordner auf die Bestellbestätigung und Gutscheincodes.",
 };
 
 const ko: GuestVoucherCopy = {
@@ -388,6 +413,11 @@ const ko: GuestVoucherCopy = {
   confirmError: "결제를 확인할 수 없습니다.",
   cancelError: "주문을 취소할 수 없습니다.",
   windowExpired: "결제 시간이 만료되었습니다.",
+  previewTitle: "정성을 담아 우아하게 전하는 선물",
+  previewNote: "미리보기 이미지입니다. 결제 확인 후 고유 바우처 코드를 이메일로 보내드립니다.",
+  voucherValue: "바우처 금액",
+  giftDelivery: "잊지 못할 다이닝 경험을 이메일로 선물하세요.",
+  spamReminder: "주문 확인 메일과 바우처 코드가 스팸 메일함에 있을 수 있으니 함께 확인해 주세요.",
 };
 
 const GUEST_VOUCHER_COPY: Record<GuestReservationLang, GuestVoucherCopy> = {

@@ -106,6 +106,11 @@ const en = {
   voucherGuestPaidAlertBody:
     "The guest tapped “I’ve paid”. Verify the bank transfer, then confirm payment to issue codes.",
   voucherPaymentReceived: "Payment Received",
+  voucherRecoveryIssue: "Recover & issue voucher",
+  voucherRecoveryConfirm: "I have checked the bank account and confirm this transfer was received. Issue the cancelled order and email its voucher codes to the customer?",
+  voucherRecoveryUntil: "Support available until {time} — 24 hours after cancellation.",
+  voucherRecoveryExpired: "The 24-hour support window has ended. This order can no longer be issued.",
+  voucherRecoveryHint: "For orders automatically cancelled because the customer did not confirm payment. Staff must verify the actual bank transfer before issuing. No new payment is collected.",
   voucherConfirmPayment: "Confirm payment & issue codes",
   voucherVerifyConfirm:
     "Confirm that bank payment was received? This issues voucher codes and emails the guest.",
@@ -1564,6 +1569,11 @@ const cs: Record<TranslationKey, string> = {
   voucherGuestPaidAlertBody:
     "Host klepl na „Zaplatil jsem“. Ověřte bankovní převod a potvrďte platbu pro vydání kódů.",
   voucherPaymentReceived: "Platba přijata",
+  voucherRecoveryIssue: "Obnovit a vydat voucher",
+  voucherRecoveryConfirm: "Zkontroloval(a) jsem bankovní účet a potvrzuji přijetí převodu. Vydat zrušenou objednávku a odeslat zákazníkovi kódy e-mailem?",
+  voucherRecoveryUntil: "Podpora je dostupná do {time} — 24 hodin od zrušení.",
+  voucherRecoveryExpired: "24hodinová lhůta podpory vypršela. Tuto objednávku již nelze vydat.",
+  voucherRecoveryHint: "Pro objednávky automaticky zrušené bez potvrzení platby zákazníkem. Personál musí před vydáním ověřit skutečný převod. Nová platba se nevybírá.",
   voucherConfirmPayment: "Potvrdit platbu a vydat kódy",
   voucherVerifyConfirm:
     "Potvrdit, že bankovní platba dorazila? Tím se vydají kódy a odešle e-mail hostovi.",

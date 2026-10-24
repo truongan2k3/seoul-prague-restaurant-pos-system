@@ -47,6 +47,15 @@ export const DEFAULT_VOUCHER_CONFIG: VoucherConfig = {
 };
 
 export const VOUCHER_PAYMENT_WINDOW_MINUTES = 15;
+export const VOUCHER_RECOVERY_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Only payment-window cancellations can be recovered, for 24 hours after cancellation. */
+export function voucherRecoveryDeadline(order: VoucherOrder): number | null {
+  if (order.paymentStatus !== "cancelled" || order.orderStatus !== "cancelled" || order.guestMarkedPaidAt
+    || order.notes !== "Auto-cancelled: payment window expired" || order.codes?.length) return null;
+  const cancelledAt = new Date(order.cancelledAt ?? order.updatedAt).getTime();
+  return Number.isFinite(cancelledAt) ? cancelledAt + VOUCHER_RECOVERY_WINDOW_MS : null;
+}
 
 export interface VoucherOrder {
   id: string;
@@ -69,6 +78,7 @@ export interface VoucherOrder {
   verifiedAt?: string | null;
   verifiedByStaffName?: string | null;
   issuedAt?: string | null;
+  cancelledAt?: string | null;
   createdAt: string;
   updatedAt: string;
   codes?: VoucherCode[];

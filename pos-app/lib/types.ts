@@ -253,7 +253,7 @@ export interface AppSettings {
    * Default 90. Used by online availability + staff capacity overview.
    */
   reservationDurationMinutes: number;
-  /** Protection before an upcoming reservation, shared with the booking engine. */
+  /** @deprecated Legacy compatibility field; always 0. Only dining duration blocks tables. */
   reservationBufferMinutes: number;
   reservationOperatingHours: ReservationOperatingHours;
   /** Seconds each today's reservation stays on the floor-map vertical ticker. */

@@ -154,7 +154,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   reservationMaxGuestsPerSlot: 20,
   reservationTableHoldingTime: 30,
   reservationDurationMinutes: 90,
-  reservationBufferMinutes: 15,
+  reservationBufferMinutes: 0,
   reservationOperatingHours: DEFAULT_RESERVATION_OPERATING_HOURS,
   mapReservationTickerSeconds: 6,
   reservationReminderMode: "30",
@@ -670,8 +670,8 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
       partial.reservationDurationMinutes,
     );
   }
-  if (partial.reservationBufferMinutes !== undefined) {
-    payload.reservation_buffer_minutes = clampReservationBufferMinutes(partial.reservationBufferMinutes);
+  if (partial.reservationDurationMinutes !== undefined || partial.reservationBufferMinutes !== undefined) {
+    payload.reservation_buffer_minutes = 0;
   }
   if (partial.reservationOperatingHours !== undefined) {
     payload.reservation_operating_hours = partial.reservationOperatingHours;

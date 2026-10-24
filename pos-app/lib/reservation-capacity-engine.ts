@@ -17,12 +17,11 @@ import { venueWallTimeToUtc } from "@/lib/venue-timezone";
 
 /** Default assumed dining duration for overlap (minutes). Overridable in Settings. */
 export const DEFAULT_RESERVATION_DURATION_MINUTES = 90;
-export const DEFAULT_RESERVATION_BUFFER_MINUTES = 15;
+export const DEFAULT_RESERVATION_BUFFER_MINUTES = 0;
 
-export function clampReservationBufferMinutes(value: unknown): number {
-  if (value == null || value === "") return DEFAULT_RESERVATION_BUFFER_MINUTES;
-  const n = Number(value);
-  return Number.isFinite(n) ? Math.min(120, Math.max(0, Math.round(n))) : DEFAULT_RESERVATION_BUFFER_MINUTES;
+/** Legacy settings remain readable, but dining duration is the only seating window. */
+export function clampReservationBufferMinutes(_value: unknown): number {
+  return DEFAULT_RESERVATION_BUFFER_MINUTES;
 }
 
 /** Clamp staff-configured dining window used by the capacity engine. */
@@ -188,13 +187,12 @@ export function planReservationAllocations(input: {
 }): ReservationAllocation[] {
   const now = input.nowMs ?? Date.now();
   const duration = input.durationMinutes * 60_000;
-  const buffer = (input.bufferMinutes ?? 0) * 60_000;
   const active = input.reservations.filter((r) => ACTIVE_STATUSES.has(r.status)
     && (!input.excludeReservationId || r.id !== input.excludeReservationId));
   const allocations: ReservationAllocation[] = [];
   const window = (r: CapacityReservationInput) => {
     const start = new Date(r.reservedAt).getTime();
-    if (r.status !== "checked_in") return { startMs: start - buffer, endMs: start + duration };
+    if (r.status !== "checked_in") return { startMs: start, endMs: start + duration };
     const seated = r.checkedInAt ? new Date(r.checkedInAt).getTime() : NaN;
     const floorStarts = assignedLabels(r).map((label) => input.occupiedTables?.find((t) => normalizeTableLabel(t.label) === label)?.occupiedAt)
       .filter((value) => value != null).map((value) => new Date(value!).getTime()).filter(Number.isFinite);
@@ -209,7 +207,7 @@ export function planReservationAllocations(input: {
   const unassigned = active.filter((r) => !assignedLabels(r).length)
     .sort((a, b) => new Date(a.reservedAt).getTime() - new Date(b.reservedAt).getTime() || effectivePartySize(b) - effectivePartySize(a));
   const pending = unassigned.map((row) => ({ row, span: window(row) }))
-    .filter(({ span }) => Number.isFinite(span.startMs) && span.endMs + buffer > now);
+    .filter(({ span }) => Number.isFinite(span.startMs) && span.endMs > now);
   // Independent time ranges can be planned separately. Within a range, reconsider
   // flexible bookings rather than letting an earlier greedy choice consume the only BBQ table.
   for (let offset = 0; offset < pending.length;) {
@@ -274,7 +272,7 @@ export function blockedTableLabels(input: {
 }): Set<string> {
   const blocked = new Set<string>();
   const window = windowFor(input.dateIso, input.time, input.durationMinutes);
-  const startMs = window.startMs - (input.bufferMinutes ?? 0) * 60_000;
+  const startMs = window.startMs;
   const endMs = window.endMs;
   const nowMs = input.nowMs ?? Date.now();
   const durationMs = input.durationMinutes * 60 * 1000;
@@ -355,18 +353,17 @@ export function evaluateReservationCapacity(
 
   const fixedBlocked = blockedTableLabels({ ...input, reservations: input.reservations.filter((row) => assignedLabels(row).length), durationMinutes: duration });
   const candidateId = "__guest_availability_candidate__";
-  const candidateStart = startMs - (input.bufferMinutes ?? 0) * 60_000;
   const feasible = buildAllSeatingConfigurations()
     .filter((config) => config.capacity >= partySize)
     .filter((config) => grillSatisfied(config, grill))
     .filter((config) => config.labels.every((label) => !fixedBlocked.has(normalizeTableLabel(label))))
     .filter((config) => {
-      const key = `${input.dateIso}:${input.time}:${duration}:${input.bufferMinutes ?? 0}:${input.excludeReservationId ?? ""}:${config.labels.join("+")}`;
+      const key = `${input.dateIso}:${input.time}:${duration}:${input.excludeReservationId ?? ""}:${config.labels.join("+")}`;
       const cached = input.placementCache?.get(key);
       if (cached !== undefined) return cached;
       const planned = planReservationAllocations({ ...input, durationMinutes: duration,
         reservations: [...input.reservations, { id: candidateId, partySize, reservedAt: new Date(startMs), status: "confirmed", tableLabel: config.labels[0], wantsGrill: grill }] });
-      const fits = !planned.some((allocation) => allocation.reservationId !== candidateId && allocation.startMs < endMs && allocation.endMs > candidateStart
+      const fits = !planned.some((allocation) => allocation.reservationId !== candidateId && allocation.startMs < endMs && allocation.endMs > startMs
         && allocation.labels.some((label) => config.labels.includes(label)));
       input.placementCache?.set(key, fits);
       return fits;

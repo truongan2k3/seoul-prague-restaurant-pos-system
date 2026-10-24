@@ -182,14 +182,14 @@ export async function POST(request: Request) {
       if (!data) throw new Error("Save POS settings once before changing booking limits.");
     } else if (body.action === "settings") {
       if (!["admin", "manager"].includes(staff.role)) return NextResponse.json({ error: "Manager permission required." }, { status: 403 });
-      const duration = Number(body.durationMinutes), buffer = Number(body.bufferMinutes);
-      if (!Number.isInteger(duration) || duration < 60 || duration > 240 || !Number.isInteger(buffer) || buffer < 0 || buffer > 120) {
-        return NextResponse.json({ error: "Dining duration: 60–240 minutes. Buffer: 0–120 minutes." }, { status: 400 });
+      const duration = Number(body.durationMinutes);
+      if (!Number.isInteger(duration) || duration < 60 || duration > 240) {
+        return NextResponse.json({ error: "Dining duration: 60–240 minutes." }, { status: 400 });
       }
       const { data: existing, error: lookupError } = await db.from("settings").select("id")
         .eq("business_id", auth.businessId).maybeSingle();
       if (lookupError) throw lookupError;
-      const payload = { reservation_duration_minutes: duration, reservation_buffer_minutes: buffer };
+      const payload = { reservation_duration_minutes: duration, reservation_buffer_minutes: 0 };
       const result = existing
         ? await db.from("settings").update(payload).eq("id", existing.id)
         : await db.from("settings").insert({ business_id: auth.businessId, ...payload });

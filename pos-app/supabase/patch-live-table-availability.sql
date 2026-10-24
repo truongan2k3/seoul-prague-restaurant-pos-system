@@ -2,7 +2,7 @@ BEGIN;
 
 ALTER TABLE public.settings
   ADD COLUMN IF NOT EXISTS reservation_duration_minutes integer NOT NULL DEFAULT 90,
-  ADD COLUMN IF NOT EXISTS reservation_buffer_minutes integer NOT NULL DEFAULT 15;
+  ADD COLUMN IF NOT EXISTS reservation_buffer_minutes integer NOT NULL DEFAULT 0;
 ALTER TABLE public.tables
   ADD COLUMN IF NOT EXISTS availability_blocked boolean NOT NULL DEFAULT false;
 
@@ -34,17 +34,16 @@ FOR EACH ROW EXECUTE FUNCTION public.live_table_occupancy_guard();
 CREATE OR REPLACE FUNCTION public.live_reservation_settings_guard()
 RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
 BEGIN
-  IF (TG_OP = 'INSERT' AND (NEW.reservation_duration_minutes <> 90 OR NEW.reservation_buffer_minutes <> 15))
-     OR (TG_OP = 'UPDATE' AND (NEW.reservation_duration_minutes IS DISTINCT FROM OLD.reservation_duration_minutes
-       OR NEW.reservation_buffer_minutes IS DISTINCT FROM OLD.reservation_buffer_minutes)) THEN
+  NEW.reservation_buffer_minutes := 0;
+  IF (TG_OP = 'INSERT' AND NEW.reservation_duration_minutes <> 90)
+    OR (TG_OP = 'UPDATE' AND NEW.reservation_duration_minutes IS DISTINCT FROM OLD.reservation_duration_minutes) THEN
     IF auth.role() IS DISTINCT FROM 'service_role'
-       AND current_user NOT IN ('postgres', 'supabase_admin') THEN
+      AND current_user NOT IN ('postgres', 'supabase_admin') THEN
       RAISE EXCEPTION 'Staff authorization required';
     END IF;
-    IF NEW.reservation_duration_minutes NOT BETWEEN 60 AND 240
-       OR NEW.reservation_buffer_minutes NOT BETWEEN 0 AND 120 THEN
-      RAISE EXCEPTION 'Invalid dining duration or reservation buffer';
-    END IF;
+  END IF;
+  IF NEW.reservation_duration_minutes IS NULL OR NEW.reservation_duration_minutes NOT BETWEEN 60 AND 240 THEN
+    RAISE EXCEPTION 'Dining duration must be between 60 and 240 minutes';
   END IF;
   RETURN NEW;
 END;
@@ -52,6 +51,9 @@ $$;
 DROP TRIGGER IF EXISTS live_reservation_settings_guard ON public.settings;
 CREATE TRIGGER live_reservation_settings_guard BEFORE INSERT OR UPDATE ON public.settings
 FOR EACH ROW EXECUTE FUNCTION public.live_reservation_settings_guard();
+
+ALTER TABLE public.settings ALTER COLUMN reservation_buffer_minutes SET DEFAULT 0;
+UPDATE public.settings SET reservation_buffer_minutes = 0 WHERE reservation_buffer_minutes IS DISTINCT FROM 0;
 
 -- One consistent database snapshot; no customer contacts leave this RPC.
 CREATE OR REPLACE FUNCTION public.live_table_availability_snapshot(p_business uuid)

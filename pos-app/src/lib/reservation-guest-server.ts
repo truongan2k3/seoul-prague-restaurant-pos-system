@@ -94,7 +94,7 @@ const DEFAULT_RESERVATION_SETTINGS: ReservationGuestSettings = {
   reservationCapacityLimitsEnabled: true,
   reservationMaxGuestsPerSlot: 20,
   reservationDurationMinutes: DEFAULT_RESERVATION_DURATION_MINUTES,
-  reservationBufferMinutes: 15,
+  reservationBufferMinutes: 0,
   reservationOperatingHours: DEFAULT_RESERVATION_OPERATING_HOURS,
   reservationRequiredFields: parseReservationRequiredFields(null),
   reservationEventTypes: parseReservationEventTypes(null),
@@ -277,7 +277,7 @@ export async function loadDayCapacityContext(dateIso: string, savedSettings?: Re
   };
   // Include overlapping visits from adjacent days and active check-ins, from
   // every booking source. Keep physical assignments even on older schemas.
-  const padding = (settings.reservationDurationMinutes + settings.reservationBufferMinutes) * 60_000;
+  const padding = settings.reservationDurationMinutes * 60_000;
   const from = new Date(new Date(startIso).getTime() - padding).toISOString();
   const until = new Date(new Date(endExclusiveIso).getTime() + padding).toISOString();
   const readReservations = async (withVisitDetails: boolean): Promise<ExistingRow[]> => {

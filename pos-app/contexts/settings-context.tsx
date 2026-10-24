@@ -91,12 +91,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           return false;
         }
       }
-      if ((partial.reservationDurationMinutes !== undefined && partial.reservationDurationMinutes !== settings.reservationDurationMinutes)
-        || (partial.reservationBufferMinutes !== undefined && partial.reservationBufferMinutes !== settings.reservationBufferMinutes)) {
+      if (partial.reservationDurationMinutes !== undefined && partial.reservationDurationMinutes !== settings.reservationDurationMinutes) {
         try {
           const response = await fetch("/api/reservations/live-availability", { method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "settings", durationMinutes: partial.reservationDurationMinutes ?? settings.reservationDurationMinutes,
-              bufferMinutes: partial.reservationBufferMinutes ?? settings.reservationBufferMinutes }) });
+            body: JSON.stringify({ action: "settings", durationMinutes: partial.reservationDurationMinutes }) });
           const result = await response.json();
           if (!response.ok) throw new Error(result.error ?? "Could not save dining duration.");
         } catch (err) {
@@ -124,7 +122,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       }
       return true;
     },
-    [businessId, settings.reservationDurationMinutes, settings.reservationBufferMinutes],
+    [businessId, settings.reservationDurationMinutes],
   );
 
   const savePrinterBillSettings = useCallback(

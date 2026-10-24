@@ -17,6 +17,7 @@ export type GuestReservationCopy = {
   numberOfGuests: string;
   selectDate: string;
   selectTime: string;
+  diningCourtesyNote: string;
   additionalNotes: string;
   eventType: string;
   selectEventType: string;
@@ -77,6 +78,7 @@ const en: GuestReservationCopy = {
   numberOfGuests: "Number of Guests",
   selectDate: "Select Date",
   selectTime: "Select Time",
+  diningCourtesyNote: "During busy periods, we kindly encourage you to enjoy your meal within 1 hour and 30 minutes. Thank you for your understanding.",
   additionalNotes: "Additional Notes",
   eventType: "Event Type",
   selectEventType: "Select event type",
@@ -140,6 +142,7 @@ const cs: GuestReservationCopy = {
   numberOfGuests: "Počet hostů",
   selectDate: "Datum",
   selectTime: "Čas",
+  diningCourtesyNote: "V době zvýšené návštěvnosti vás prosíme, abyste si své stolování užili během 1 hodiny a 30 minut. Děkujeme za pochopení.",
   additionalNotes: "Poznámka",
   eventType: "Typ akce",
   selectEventType: "Vyberte typ akce",
@@ -203,6 +206,7 @@ const vi: GuestReservationCopy = {
   numberOfGuests: "Số khách",
   selectDate: "Chọn ngày",
   selectTime: "Chọn giờ",
+  diningCourtesyNote: "Trong trường hợp nhà hàng đông, chúng tôi khuyến khích quý khách dùng bữa trong vòng 1 giờ 30 phút. Trân trọng và cảm ơn quý khách.",
   additionalNotes: "Ghi chú thêm",
   eventType: "Loại sự kiện",
   selectEventType: "Chọn loại sự kiện",
@@ -266,6 +270,7 @@ const de: GuestReservationCopy = {
   numberOfGuests: "Anzahl der Gäste",
   selectDate: "Datum wählen",
   selectTime: "Uhrzeit wählen",
+  diningCourtesyNote: "Bei hohem Gästeaufkommen bitten wir Sie freundlich, Ihre Mahlzeit innerhalb von 1 Stunde und 30 Minuten zu genießen. Vielen Dank für Ihr Verständnis.",
   additionalNotes: "Zusätzliche Hinweise",
   eventType: "Anlass",
   selectEventType: "Anlass wählen",
@@ -329,6 +334,7 @@ const ko: GuestReservationCopy = {
   numberOfGuests: "인원",
   selectDate: "날짜 선택",
   selectTime: "시간 선택",
+  diningCourtesyNote: "매장이 혼잡한 경우, 식사 시간을 1시간 30분 이내로 이용해 주시면 감사하겠습니다. 고객님의 이해와 협조에 진심으로 감사드립니다.",
   additionalNotes: "추가 요청",
   eventType: "행사 유형",
   selectEventType: "행사 유형 선택",

@@ -703,6 +703,11 @@ export function ReservationBookingView({
             {selectedSlotStatus === "limited" ? (
               <p className="mt-1 text-xs text-amber-300/90">{copy.slotLimited}</p>
             ) : null}
+            {!isStaff && availabilityCurrent && (selectedSlotStatus === "available" || selectedSlotStatus === "limited") && (
+              <p role="note" className="mt-3 border-l-2 border-[#C9A88B]/50 bg-[#C9A88B]/[0.06] px-3 py-2.5 text-xs leading-relaxed text-white/65">
+                {copy.diningCourtesyNote}
+              </p>
+            )}
           </div>
         </div>
 

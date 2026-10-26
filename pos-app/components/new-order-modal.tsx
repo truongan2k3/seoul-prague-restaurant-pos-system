@@ -70,7 +70,7 @@ import {
   isManageTablePriceEditable,
 } from "@/lib/order-sla";
 import { normalizeOrderItemStatus, statusTranslationKey } from "@/lib/order-status";
-import { matchesFoldedSearch } from "@/lib/search-normalize";
+import { matchesFoldedSearch, menuNameSearchRank } from "@/lib/search-normalize";
 import { isTablePaidInProgress } from "@/lib/table-payment";
 import type {
   LanguageCode,
@@ -559,23 +559,27 @@ export function NewOrderModal({
 
   const filteredItems = useMemo(() => {
     const query = search.trim();
+    const ranks = new Map<string, number>();
+    const selectedCategoryName = categoryOptions.find((c) => c.id === activeCategory)?.name;
     const filtered = menuItems.filter((item) => {
       const matchesCategory =
         activeCategory === "__all__" ||
         item.categoryId === activeCategory ||
         item.category === activeCategory ||
-        categoryOptions.find((c) => c.id === activeCategory)?.name === item.category;
+        selectedCategoryName === item.category;
+      if (!matchesCategory) return false;
+      if (!query) return true;
       const label = menuItemDisplayName(item, language);
-      const matchesSearch =
-        !query ||
-        matchesFoldedSearch(label, query) ||
-        matchesFoldedSearch(item.nameEn, query) ||
-        matchesFoldedSearch(item.nameCz, query) ||
-        matchesFoldedSearch(item.nameZh, query) ||
-        matchesFoldedSearch(item.id, query);
-      return matchesCategory && matchesSearch;
+      const rank = Math.min(
+        ...[label, item.nameEn, item.nameCz, item.nameZh].map((name) => menuNameSearchRank(name, query)),
+        matchesFoldedSearch(item.id, query) ? 4 : Infinity,
+      );
+      if (!Number.isFinite(rank)) return false;
+      ranks.set(item.id, rank);
+      return true;
     });
-    return sortMenuItemsForDisplay(filtered, settings.menuItemSortMode);
+    const sorted = sortMenuItemsForDisplay(filtered, settings.menuItemSortMode);
+    return query ? sorted.sort((a, b) => ranks.get(a.id)! - ranks.get(b.id)!) : sorted;
   }, [
     menuItems,
     activeCategory,

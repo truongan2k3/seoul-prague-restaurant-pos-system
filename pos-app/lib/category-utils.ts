@@ -1,5 +1,6 @@
 import { MENU_CATEGORIES } from "@/lib/menu-categories";
 import { sortCategoriesForDisplay } from "@/lib/menu-sort";
+import { matchesFoldedSearch, menuNameSearchRank } from "@/lib/search-normalize";
 import type { MenuCategoryRecord, MenuItem, MenuSortMode } from "@/lib/types";
 
 export type ItemTypeFilter = "all" | "dish" | "drink";
@@ -79,7 +80,8 @@ export function filterMenuItems(
       .join(" ")
       .toLowerCase();
 
-    return haystack.includes(query);
+    return matchesFoldedSearch(haystack, query)
+      || [item.nameEn, item.nameCz, item.nameZh].some((name) => Number.isFinite(menuNameSearchRank(name, query)));
   });
 }
 

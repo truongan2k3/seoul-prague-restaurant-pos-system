@@ -35,7 +35,7 @@ import { buildCfdCheckoutPayload, type CfdCheckoutPayload } from "@/lib/cfd-disp
 import { buildCfdTipChoices, canApplyCfdTip, cfdTipAmount, newCfdTipId, type CfdTipOffer, type CfdTipRequest } from "@/lib/cfd-tip";
 import { acknowledgeCfdTip, subscribeCfdTipRequests } from "@/lib/cfd-tip-channel";
 import { buildReferralCheckoutTotals, referralAvailable, referralBillSubtotal, type ReferralQuote } from "@/lib/referrals";
-import { getReferralQuoteAction } from "@/src/lib/referral-actions";
+import { getReferralQuoteAction, removeCheckoutReferralAction } from "@/src/lib/referral-actions";
 import { playPaymentSuccessSound } from "@/lib/notification-sound";
 import {
   clearEqualSplitSession,
@@ -186,25 +186,32 @@ export function CheckoutPanel({
   const referralContext = `${tableId ?? ""}:${sessionResetKey}`;
   const [referralState, setReferralState] = useState<{context:string;data:ReferralQuote|null;error:string|null;scopeNotice?:string}>({context:"",data:null,error:null});
   const [referralRetry, setReferralRetry] = useState(0);
+  const referralRequest = useRef(0);
+  const currentReferralContext = useRef(referralContext);
+  currentReferralContext.current = referralContext;
+  const [referralRemoving, setReferralRemoving] = useState(false);
+  const [removeReferralDraft, setRemoveReferralDraft] = useState<{ context: string; reason: string } | null>(null);
   const [referralOverride, setReferralOverride] = useState<{context:string;percent:number;reason:string}|null>(null);
   const [overridePercent, setOverridePercent] = useState("");
   const [overrideReason, setOverrideReason] = useState("");
   const [successfulReferralPayments,setSuccessfulReferralPayments]=useState(0);
   const [referralPaymentKey, setReferralPaymentKey] = useState(newCfdTipId);
   const referralQuote = referralState.context === referralContext ? referralState.data : null;
-  const referralLoading = Boolean(tableId && referralState.context !== referralContext);
+  const referralLoading = referralRemoving || Boolean(tableId && referralState.context !== referralContext);
   const referralError = referralState.context === referralContext ? referralState.error : null;
   const referralIsAvailable = referralQuote ? referralAvailable(referralQuote, referralBillSubtotal(lines)) : false;
   const effectiveOverride = referralOverride?.context === referralContext && referralQuote?.discountAllowed !== false ? referralOverride : null;
   const referralPercent = effectiveOverride?.percent ?? (referralIsAvailable ? referralQuote?.discountPercent ?? 0 : 0);
   const canOverrideReferral = currentStaffUser?.role === "admin" || currentStaffUser?.role === "manager";
+  const canRemoveReferral = ["admin", "manager", "cashier", "server"].includes(currentStaffUser?.role ?? "");
   useEffect(() => {
     if (!tableId) return;
     let cancelled = false;
+    const request = ++referralRequest.current;
     void getReferralQuoteAction(tableId).then(result => {
-      if(!cancelled) setReferralState({context:referralContext,...result});
+      if(!cancelled && request === referralRequest.current) setReferralState({context:referralContext,...result});
     }).catch(() => {
-      if(!cancelled) setReferralState({context:referralContext,data:null,error:"Unable to load referral. Please retry."});
+      if(!cancelled && request === referralRequest.current) setReferralState({context:referralContext,data:null,error:"Unable to load referral. Please retry."});
     });
     return () => { cancelled=true; };
   }, [tableId,referralContext,referralRetry]);
@@ -801,6 +808,30 @@ export function CheckoutPanel({
   const customTipDisplay =
     !usingRoundUp && tipMode === "custom" && customTip > 0 ? String(customTip) : "";
   const discountValueDisplay = discountValue > 0 ? String(discountValue) : "";
+
+  const removeReferral = async () => {
+    if (!tableId || !canRemoveReferral || referralRemoving || isSaving || paymentInFlight.current || submitting
+      || removeReferralDraft?.context !== referralContext || removeReferralDraft.reason.trim().length < 3) return;
+    const context = referralContext;
+    ++referralRequest.current;
+    setReferralRemoving(true);
+    setLocalError(null);
+    try {
+      const result = await removeCheckoutReferralAction({ tableId, reservationId: referralQuote?.reservationId,
+        reason: removeReferralDraft.reason.trim() });
+      if (currentReferralContext.current !== context) return;
+      if (result.error) { setLocalError(result.error); return; }
+      ++referralRequest.current;
+      setReferralState({ context, data: null, error: null });
+      setReferralOverride(null);
+      setOverridePercent("");
+      setOverrideReason("");
+      setRemoveReferralDraft(null);
+      setReferralPaymentKey(newCfdTipId());
+    } catch (error) {
+      if (currentReferralContext.current === context) setLocalError(error instanceof Error ? error.message : "Could not remove referral.");
+    } finally { setReferralRemoving(false); }
+  };
 
   const handleCheckout = async (method: PaymentMethod = paymentMethod) => {
     if (isSaving || paymentInFlight.current || referralLoading) return;
@@ -1400,7 +1431,7 @@ export function CheckoutPanel({
       {referralLoading && <p role="status" className="text-sm text-amber-700 dark:text-amber-200">Loading reservation referral…</p>}
       {referralError && <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-200">
         {referralError}
-        <button type="button" className="ml-3 underline" disabled={submitting || isSaving} onClick={() => {
+        <button type="button" className="ml-3 underline" disabled={submitting || isSaving || referralRemoving} onClick={() => {
           setReferralState({context:"",data:null,error:null});
           setReferralRetry(value=>value+1);
         }}>Retry</button>
@@ -1421,6 +1452,26 @@ export function CheckoutPanel({
             </div>
           </details>}
         </section>
+      )}
+
+      {canRemoveReferral && (referralQuote || referralError) && (
+        removeReferralDraft?.context === referralContext ? (
+          <div className="space-y-3 rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm" role="group" aria-label={translate("checkoutRemoveReferral")}>
+            <p>{translate("checkoutRemoveReferralHint")}</p>
+            <input className="pos-input w-full" value={removeReferralDraft.reason} maxLength={2000}
+              disabled={referralRemoving || submitting || isSaving} aria-label={translate("checkoutRemoveReferralReason")}
+              placeholder={translate("checkoutRemoveReferralReason")}
+              onChange={event => setRemoveReferralDraft({ context: referralContext, reason: event.target.value })} />
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={referralLoading || submitting || isSaving || removeReferralDraft.reason.trim().length < 3}
+                onClick={() => void removeReferral()} className="min-h-11 rounded-lg bg-amber-300 px-4 py-2 font-semibold text-zinc-950 disabled:opacity-40">{translate("checkoutRemoveReferralConfirm")}</button>
+              <button type="button" disabled={referralRemoving} onClick={() => setRemoveReferralDraft(null)} className="min-h-11 rounded-lg border px-4 py-2 disabled:opacity-40">{translate("cancel")}</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" disabled={referralLoading || submitting || isSaving} onClick={() => setRemoveReferralDraft({ context: referralContext, reason: "" })}
+            className="min-h-11 rounded-xl border border-red-400/35 px-4 py-2 text-sm text-red-700 disabled:opacity-40 dark:text-red-200">{translate("checkoutRemoveReferral")}</button>
+        )
       )}
 
       {customerSelection && (

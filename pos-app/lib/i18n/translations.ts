@@ -106,6 +106,10 @@ const en = {
   voucherGuestPaidAlertBody:
     "The guest tapped “I’ve paid”. Verify the bank transfer, then confirm payment to issue codes.",
   voucherPaymentReceived: "Payment Received",
+  checkoutRemoveReferral: "Remove referral from checkout",
+  checkoutRemoveReferralHint: "Remove this reservation's referral code from all linked tables and recalculate the bill without its discount or commission. Removal is allowed before the first payment. The reason and staff member are recorded.",
+  checkoutRemoveReferralReason: "Reason for removing referral",
+  checkoutRemoveReferralConfirm: "Confirm removal & recalculate",
   voucherRecoveryIssue: "Recover & issue voucher",
   voucherRecoveryConfirm: "I have checked the bank account and confirm this transfer was received. Issue the cancelled order and email its voucher codes to the customer?",
   voucherRecoveryUntil: "Support available until {time} — 24 hours after cancellation.",
@@ -1567,6 +1571,10 @@ const cs: Record<TranslationKey, string> = {
   voucherGuestPaidAlertBody:
     "Host klepl na „Zaplatil jsem“. Ověřte bankovní převod a potvrďte platbu pro vydání kódů.",
   voucherPaymentReceived: "Platba přijata",
+  checkoutRemoveReferral: "Odebrat doporučující kód z platby",
+  checkoutRemoveReferralHint: "Odeberte doporučující kód této rezervace ze všech propojených stolů a přepočítejte účet bez příslušné slevy a provize. Odebrání je možné před první platbou. Důvod a člen personálu se zaznamenají.",
+  checkoutRemoveReferralReason: "Důvod odebrání kódu",
+  checkoutRemoveReferralConfirm: "Potvrdit odebrání a přepočítat",
   voucherRecoveryIssue: "Obnovit a vydat voucher",
   voucherRecoveryConfirm: "Zkontroloval(a) jsem bankovní účet a potvrzuji přijetí převodu. Vydat zrušenou objednávku a odeslat zákazníkovi kódy e-mailem?",
   voucherRecoveryUntil: "Podpora je dostupná do {time} — 24 hodin od zrušení.",

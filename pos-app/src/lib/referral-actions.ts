@@ -173,6 +173,32 @@ export async function changeReservationReferralAction(reservationId:string,code:
   }catch(e){return {error:message(e)}}
 }
 
+/** Staff may detach an unpaid visit's referral; existing DB guards preserve paid history. */
+export async function removeCheckoutReferralAction(input: { tableId: string; reservationId?: string; reason: string }) {
+  try {
+    const { db, businessId, staff } = await actor();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(input.tableId ?? ""))) throw new Error("Select a valid checkout table.");
+    const reason = String(input.reason ?? "").trim();
+    if (reason.length < 3 || reason.length > 2000) throw new Error("Enter a removal reason (3–2000 characters).");
+    const { data: reservation, error } = await db.from("reservations").select("id,referral_code_id")
+      .eq("status", "checked_in").or(`table_id.eq.${input.tableId},secondary_table_id.eq.${input.tableId},tertiary_table_id.eq.${input.tableId}`)
+      .order("checked_in_at", { ascending: true, nullsFirst: false }).order("id").limit(1).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!reservation || (input.reservationId && input.reservationId !== reservation.id)) throw new Error("The bill reservation changed. Reopen checkout.");
+    if (!reservation.referral_code_id) return { error: null };
+    const { data: code, error: codeError } = await db.from("referral_codes").select("id")
+      .eq("id", reservation.referral_code_id).eq("business_id", businessId).maybeSingle();
+    if (codeError) throw new Error(codeError.message);
+    if (!code) throw new Error("Reservation access denied.");
+    const { error: updateError } = await db.from("reservations").update({ referral_code: null, referral_code_id: null,
+      referral_override_reason: reason, referral_changed_by: staff.id, updated_at: new Date().toISOString() })
+      .eq("id", reservation.id).eq("status", "checked_in").eq("referral_code_id", reservation.referral_code_id).select("id").single();
+    if (updateError) throw new Error(updateError.message);
+    await notifyChange(db);
+    return { error: null };
+  } catch (error) { return { error: message(error) }; }
+}
+
 export async function commitReferralSaleAction(sale:Record<string,unknown>,referral:ReferralPayment|undefined) {
   try{
     const context=await actor();

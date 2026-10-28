@@ -227,6 +227,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const [editTarget, setEditTarget] = useState<ReservationRecord | null>(null);
   const [detailsId,setDetailsId]=useState<string|null>(null);
   const detailsTarget=reservations.find(row=>row.id===detailsId)??null;
+  const detailsTables=detailsTarget?(detailsTarget.seatedTableLabels?.length?detailsTarget.seatedTableLabels:reservationTableLabels(detailsTarget)).join(" · "):"";
   const [cancelTarget, setCancelTarget] = useState<ReservationRecord | null>(null);
   const [cancelReason, setCancelReason] = useState<ReservationCancelReasonId | "">("");
   const [cancelNote, setCancelNote] = useState("");
@@ -1111,38 +1112,16 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             <h3 className="pos-serif break-words text-2xl text-[var(--foreground)]">{detailsTarget.guestName}</h3>
             <span className={`rounded-full px-3 py-1 text-xs font-semibold ${reservationStatusTone(detailsTarget.status)}`}>{translate(reservationStatusLabelKey(detailsTarget.status))}</span>
           </div>
-          <dl className="grid gap-4 text-sm sm:grid-cols-2">
-            <div><dt className="text-xs text-[var(--muted)]">{translate("guestPhone")}</dt><dd className="mt-1 break-words font-medium">{detailsTarget.guestPhone?<a href={`tel:${detailsTarget.guestPhone.replace(/[^\d+]/g,"")}`} className="hover:text-[#C9A88B]">{detailsTarget.guestPhone}</a>:"—"}</dd></div>
-            <div><dt className="text-xs text-[var(--muted)]">{translate("guestEmail")}</dt><dd className="mt-1 break-words font-medium">{detailsTarget.guestEmail?<a href={`mailto:${detailsTarget.guestEmail}`} className="hover:text-[#C9A88B]">{detailsTarget.guestEmail}</a>:"—"}</dd></div>
-            {[
-              [translate("reservedAt"),formatDateTime(detailsTarget.reservedAt)],
-              [translate("bookingCode"),detailsTarget.bookingCode],
-              [translate("partySize"),String(detailsTarget.partySize)],
-              [translate("resActualPartySize"),detailsTarget.actualPartySize?.toString()],
-              [translate("table"),formatReservationTableLabels(detailsTarget)],
-              [translate("resReferralCode"),detailsTarget.referralCode],
-              [translate("reservationSource"),translate(({reservation:"resSourceReservation",phone_call:"resSourcePhoneCall",online:"resSourceOnline",walk_in:"resSourceWalkIn"} as const)[detailsTarget.source])],
-              [translate("resEventType"),settings.reservationEventTypes.find(option=>option.id===detailsTarget.eventType)?pickEventTypeLabel(settings.reservationEventTypes.find(option=>option.id===detailsTarget.eventType)!,language==="cs"?"cs":language==="vi"?"vi":"en"):detailsTarget.eventType],
-              [translate("checkIn"),detailsTarget.checkedInAt?formatDateTime(detailsTarget.checkedInAt):undefined],
-              [translate("resStatusCompleted"),detailsTarget.completedAt?formatDateTime(detailsTarget.completedAt):undefined],
-              [translate("staff"),detailsTarget.staffName],
-            ].map(([label,value])=><div key={label}><dt className="text-xs text-[var(--muted)]">{label}</dt><dd className="mt-1 break-words font-medium">{value||"—"}</dd></div>)}
-          </dl>
-          {(()=>{
-            const parsed=parseReservationBbqNotes(detailsTarget.notes);
-            const bbq=detailsTarget.wantsGrill??parsed.bbq;
-            return <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--accent)]/30 p-4">
-              {bbq&&<p className="text-xs font-semibold text-[#C9A88B]">{bbq==="yes"?translate("mapResTickerBbqYes"):bbq==="no"?translate("mapResTickerBbqNo"):translate("resBbqUndecided")}</p>}
-              <p className="text-xs text-[var(--muted)]">{translate("resNotes")}</p>
-              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{parsed.noteText||"—"}</p>
-            </div>;
-          })()}
-          {detailsTarget.status==="cancelled"&&<div className="space-y-2 rounded-2xl border border-red-400/20 bg-red-500/5 p-4 text-sm">
-            <p className="font-semibold text-red-700 dark:text-red-200">{translate("resStatusCancelled")}</p>
-            {(detailsTarget.cancelledAt||detailsTarget.cancelledBy)&&<p className="text-xs text-[var(--muted)]">{[detailsTarget.cancelledAt?formatDateTime(detailsTarget.cancelledAt):null,detailsTarget.cancelledBy].filter(Boolean).join(" · ")}</p>}
-            {detailsTarget.cancellationReason&&<p>{detailsTarget.cancellationReason}</p>}
-            {detailsTarget.cancellationNote&&<div><p className="text-xs text-[var(--muted)]">{translate("resCancelNoteLabel")}</p><p className="mt-1 whitespace-pre-wrap break-words">{detailsTarget.cancellationNote}</p></div>}
-          </div>}
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-[var(--muted)]">
+            {detailsTarget.guestPhone&&<a href={`tel:${detailsTarget.guestPhone.replace(/[^\d+]/g,"")}`} className="break-all transition hover:text-[#C9A88B]">{detailsTarget.guestPhone}</a>}
+            {detailsTarget.guestEmail&&<a href={`mailto:${detailsTarget.guestEmail}`} className="break-all transition hover:text-[#C9A88B]">{detailsTarget.guestEmail}</a>}
+            {detailsTarget.bookingCode&&<span className="font-mono text-xs">{detailsTarget.bookingCode}</span>}
+          </div>
+          <div className="grid grid-cols-2 gap-3 rounded-2xl border border-[#C9A88B]/25 bg-[#C9A88B]/[0.06] p-4 sm:grid-cols-3">
+            <div><p className="text-[11px] text-[var(--muted)]">{translate("reservedAt")}</p><p className="mt-1 text-sm font-semibold">{formatDateTime(detailsTarget.reservedAt)}</p></div>
+            <div><p className="text-[11px] text-[var(--muted)]">{translate("partySize")}</p><p className="mt-1 text-lg font-semibold tabular-nums">{detailsTarget.partySize}</p>{detailsTarget.actualPartySize!=null&&<p className="mt-1 text-[11px] text-[var(--muted)]">{translate("resActualPartySize")}: {detailsTarget.actualPartySize}</p>}</div>
+            <div className="col-span-2 border-t border-[#C9A88B]/15 pt-3 sm:col-span-1 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0"><p className="text-[11px] text-[var(--muted)]">{translate(detailsTarget.checkedInAt||detailsTarget.status==="completed"?"resTimelineSeatedTables":"table")}</p><p className="pos-serif mt-1 break-words text-2xl font-semibold text-[#C9A88B]">{detailsTables||"—"}</p></div>
+          </div>
           <ReservationChangeTimeline key={detailsTarget.id} reservation={detailsTarget} />
           <button type="button" onClick={()=>setDetailsId(null)} className="min-h-11 w-full rounded-xl border border-[var(--border)] text-sm font-medium transition hover:bg-[var(--accent)]">{translate("close")}</button>
         </div>}

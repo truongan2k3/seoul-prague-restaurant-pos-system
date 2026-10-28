@@ -17,10 +17,10 @@ export async function GET(request: Request) {
   }
   try {
     const { data, error } = await createSupabaseAdmin().from("reservation_guest_changes")
-      .select("id,changed_at,changes").eq("reservation_id", id)
+      .select("id,changed_at,changes,event_kind").eq("reservation_id", id)
       .order("changed_at", { ascending: false }).order("id", { ascending: false }).range(offset, offset + 50);
     if (error) return NextResponse.json({ error: "Reservation history unavailable.",
-      setupRequired: ["42P01", "PGRST205"].includes(error.code) }, { status: 503 });
+      setupRequired: ["42P01", "PGRST205", "42703", "PGRST204"].includes(error.code) }, { status: 503 });
     return NextResponse.json({ events: (data ?? []).slice(0, 50), hasMore: (data?.length ?? 0) > 50 },
       { headers: { "Cache-Control": "private, no-store" } });
   } catch {

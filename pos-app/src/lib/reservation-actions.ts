@@ -684,9 +684,6 @@ async function completeReservationTableLink(tableId: string, row: {
   if (remaining.length === 0) {
     return updateReservationStatus(row.id, "completed", {
       completedAt: new Date(),
-      tableId: null,
-      secondaryTableId: null,
-      tertiaryTableId: null,
     });
   }
 
@@ -800,6 +797,7 @@ export function mapReservationRow(
     updated_at: string;
     guest_submitted_at?: string | null;
     guest_changed_at?: string | null;
+    seated_table_labels?: string[] | null;
     booking_code?: string | null;
     manage_token?: string | null;
     event_type?: string | null;
@@ -869,6 +867,7 @@ export function mapReservationRow(
     updatedAt: new Date(row.updated_at),
     guestSubmittedAt: row.guest_submitted_at ? new Date(row.guest_submitted_at) : undefined,
     guestChangedAt: row.guest_changed_at ? new Date(row.guest_changed_at) : undefined,
+    seatedTableLabels: row.seated_table_labels ?? undefined,
     bookingCode: row.booking_code ?? undefined,
     eventType: row.event_type ?? undefined,
     suggestedSeating: row.suggested_seating ?? undefined,

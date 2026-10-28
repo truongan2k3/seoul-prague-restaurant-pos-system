@@ -553,6 +553,8 @@ export interface ReservationRecord {
   id: string;
   tableId?: string;
   tableLabel?: string;
+  /** Historical table labels actually used during the visit, preserved after checkout. */
+  seatedTableLabels?: string[];
   /** Optional second table for large parties (max 3 total). */
   secondaryTableId?: string;
   secondaryTableLabel?: string;

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, Eye, MapPin, ChevronLeft, ChevronRight, Pencil, Plus } from "lucide-react";
 import { GuestReturningBadge } from "@/components/guest-returning-badge";
+import { ReservationChangeTimeline } from "@/components/reservation-change-timeline";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { Modal } from "@/components/modal";
 import { DateRangeInputs } from "@/components/date-range-inputs";
@@ -1142,6 +1143,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             {detailsTarget.cancellationReason&&<p>{detailsTarget.cancellationReason}</p>}
             {detailsTarget.cancellationNote&&<div><p className="text-xs text-[var(--muted)]">{translate("resCancelNoteLabel")}</p><p className="mt-1 whitespace-pre-wrap break-words">{detailsTarget.cancellationNote}</p></div>}
           </div>}
+          <ReservationChangeTimeline key={detailsTarget.id} reservation={detailsTarget} />
           <button type="button" onClick={()=>setDetailsId(null)} className="min-h-11 w-full rounded-xl border border-[var(--border)] text-sm font-medium transition hover:bg-[var(--accent)]">{translate("close")}</button>
         </div>}
       </Modal>

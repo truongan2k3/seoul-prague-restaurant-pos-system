@@ -25,8 +25,9 @@ function statusLabel(table: RestaurantTable, translate: (key: "open" | "closed" 
   return translate("open");
 }
 
-export function ToolsVoucherScannerView() {
+export function ToolsVoucherScannerView({ returnTo = "pos" }: { returnTo?: "pos" | "server" } = {}) {
   const { translate } = useApp();
+  const backHref = returnTo === "server" ? "/server" : POS_HOME_PATH;
   const [phase, setPhase] = useState<Phase>("scan");
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [tablesLoading, setTablesLoading] = useState(true);
@@ -252,7 +253,7 @@ export function ToolsVoucherScannerView() {
         <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <Link
-              href={POS_HOME_PATH}
+              href={backHref}
               className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-white/70 hover:text-white"
               aria-label={translate("toolsBack")}
             >
@@ -476,10 +477,10 @@ export function ToolsVoucherScannerView() {
               {translate("toolsScanAnother")}
             </button>
             <Link
-              href={POS_HOME_PATH}
+              href={backHref}
               className="block w-full rounded-xl border border-white/20 py-3 text-center text-sm font-semibold text-white/80"
             >
-              {translate("toolsBackToPos")}
+              {translate(returnTo === "server" ? "toolsBackToServer" : "toolsBackToPos")}
             </Link>
           </section>
         ) : null}

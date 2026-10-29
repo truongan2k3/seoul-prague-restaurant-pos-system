@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { QrCode } from "lucide-react";
 import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
 import { useSessionHealth } from "@/hooks/use-session-health";
 import { useApp } from "@/contexts/app-context";
@@ -191,17 +193,23 @@ function ServerApp() {
     <div className="min-h-screen bg-zinc-100 dark:bg-zinc-950">
       <PrintFailedListener />
       <header className="flex items-start justify-between gap-3 border-b border-zinc-200 bg-white px-4 py-4 dark:border-zinc-800 dark:bg-zinc-900">
-        <div>
+        <div className="min-w-0">
           <p className="text-xs uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
             {translate("tabletServer")}
           </p>
-          <p className="font-semibold text-zinc-900 dark:text-zinc-100">{staff?.name}</p>
+          <p className="truncate font-semibold text-zinc-900 dark:text-zinc-100">{staff?.name}</p>
         </div>
-        <LanguageSelector
-          variant="flag-menu"
-          language={language}
-          onLanguageChange={setLanguage}
-        />
+        <div className="flex shrink-0 items-center gap-2">
+          <Link href="/server/voucher" title={translate("voucherScanFab")} aria-label={translate("voucherScanFab")}
+            className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl border border-[#C9A88B]/45 bg-[#C9A88B]/10 px-3 text-sm font-semibold text-zinc-800 transition hover:bg-[#C9A88B]/20 dark:text-[#E8D5C4]">
+            <QrCode className="h-5 w-5" aria-hidden /><span className="hidden sm:inline">{translate("voucherScanFab")}</span>
+          </Link>
+          <LanguageSelector
+            variant="flag-menu"
+            language={language}
+            onLanguageChange={setLanguage}
+          />
+        </div>
       </header>
       <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 sm:gap-3 md:grid-cols-4 md:gap-4 lg:grid-cols-6">
         {tables.map((table) => (

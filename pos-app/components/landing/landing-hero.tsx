@@ -133,41 +133,41 @@ export function LandingHero({ content }: LandingHeroProps) {
 
       <div className="relative z-10 mx-auto w-full max-w-7xl px-5 lg:px-8">
         <motion.p
-          initial={reduceMotion ? false : { opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.1 }}
+          initial={reduceMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: reduceMotion ? 0 : 0.4 }}
           className="mb-4 text-xs font-medium uppercase tracking-[0.35em] text-[#C9A88B]"
         >
           {settings.restaurantName}
         </motion.p>
         <motion.h1
-          initial={reduceMotion ? false : { opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9, delay: 0.25 }}
+          initial={reduceMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: reduceMotion ? 0 : 0.4, delay: reduceMotion ? 0 : 0.04 }}
           className="landing-serif max-w-4xl text-4xl font-medium leading-[1.05] text-white sm:text-5xl lg:text-7xl"
         >
           {settings.heroHeadline}
         </motion.h1>
         <motion.p
-          initial={reduceMotion ? false : { opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9, delay: 0.4 }}
+          initial={reduceMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: reduceMotion ? 0 : 0.4, delay: reduceMotion ? 0 : 0.08 }}
           className="mt-5 max-w-xl text-lg text-white/80 lg:text-xl"
         >
           {settings.heroTagline}
         </motion.p>
         <motion.p
-          initial={reduceMotion ? false : { opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9, delay: 0.55 }}
+          initial={reduceMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: reduceMotion ? 0 : 0.4, delay: reduceMotion ? 0 : 0.12 }}
           className="mt-3 max-w-2xl text-sm text-white/60"
         >
           {settings.heroDescription}
         </motion.p>
         <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9, delay: 0.7 }}
+          initial={reduceMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: reduceMotion ? 0 : 0.4, delay: reduceMotion ? 0 : 0.16 }}
           className="mt-10 flex flex-wrap gap-4"
         >
           <BookingCta size="lg" />
@@ -198,7 +198,7 @@ export function LandingHero({ content }: LandingHeroProps) {
       </div>
 
       <div className="absolute bottom-8 left-1/2 z-10 hidden -translate-x-1/2 text-white/50 lg:block">
-        <ChevronDown className="h-6 w-6 animate-bounce" />
+        <ChevronDown className="h-6 w-6" />
       </div>
 
       {active ? (

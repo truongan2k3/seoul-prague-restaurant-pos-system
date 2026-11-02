@@ -8,7 +8,6 @@ import type { NavId } from "@/lib/types";
 
 const TAB_LABEL_KEYS: Record<NavId, TranslationKey> = {
   map: "map",
-  order: "order",
   reservations: "reservations",
   history: "history",
   summary: "summary",

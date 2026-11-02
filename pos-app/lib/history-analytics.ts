@@ -3,10 +3,11 @@ import { todayIsoDateInVenue, venueDayRangeUtc, venueWeekdayIndex } from "@/lib/
 import type { SaleRecord } from "@/lib/types";
 
 export type HistoryDates = { from: string; to: string };
-export type HistoryMetric = { from: string; to: string; payments: number; orders: number; gross: number; revenue: number; average: number; averagePerPerson?: number | null; discounts: number; tips: number; referralRevenue: number; referralDiscounts: number; hourly: { hour: number; revenue: number; orders: number }[] };
+export type HistoryDailyPoint = { date: string; revenue: number; orders: number; tips?: number; average?: number | null };
+export type HistoryMetric = { from: string; to: string; payments: number; orders: number; gross: number; revenue: number; average: number; averagePerPerson?: number | null; discounts: number; tips: number; referralRevenue: number; referralDiscounts: number; hourly: { hour: number; revenue: number; orders: number; tips?: number; average?: number | null }[]; timeline?: HistoryDailyPoint[] };
 export type HistoryAttribution = { codeId: string | null; code: string | null; partner: string | null; discountPercent: number; discountAmount: number; commission: number | null };
 export type HistoryAnalytics = {
-  canViewCommission: boolean; periods: HistoryMetric[]; daily: { date: string; revenue: number; orders: number }[];
+  canViewCommission: boolean; periods: HistoryMetric[]; daily: HistoryDailyPoint[];
   breakdown: { food: number; drinks: number; unclassified: number };
   referrals: { referral_code_id: string | null; code: string; partner: string; orders: number; payments: number; net_sales: number; discounts: number; commission: number | null }[];
   attributions: Record<string, HistoryAttribution>; codes: string[]; partners: string[];

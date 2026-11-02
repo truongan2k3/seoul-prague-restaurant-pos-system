@@ -3,34 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, ChevronDown, TrendingDown, TrendingUp, X } from "lucide-react";
 import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
+import { HistoryLineChart, type HistoryLineSeries } from "@/components/history-line-chart";
 import { useApp } from "@/contexts/app-context";
 import { useAuth } from "@/contexts/auth-context";
 import { formatCzk } from "@/lib/currency";
-import { todayIsoDateInVenue } from "@/lib/venue-timezone";
+import { formatInVenueTz, todayIsoDateInVenue } from "@/lib/venue-timezone";
 import { cachedHistoryAnalytics, expireHistoryAnalyticsCache, historyChangeMatches, historyComparisonPeriods, isHistoryCalendarMonth, subscribeHistoryFinancialChanges, type HistoryAnalytics, type HistoryDates } from "@/lib/history-analytics";
 import { historyItemBreakdown } from "@/lib/history-item-breakdown";
 import type { MenuItem, SaleRecord } from "@/lib/types";
 import { getHistoryAnalyticsAction } from "@/src/lib/history-analytics-actions";
-
-const colors = ["#DCC1A5", "#58BBA1", "#9D99C5"];
-function Bars({ title, labels, series, money=true, large=false }: { title: string; labels: string[]; series: { name: string; values: number[] }[]; money?: boolean; large?: boolean }) {
-  const [focused,setFocused]=useState<number|null>(null);
-  const active=focused!==null&&focused<labels.length?focused:null;
-  const maximum=Math.max(1,...series.flatMap(row=>row.values));
-  return <section className="min-w-0 rounded-xl border border-white/10 bg-[#141416] p-4">
-    <h3 className="text-sm font-medium text-[#E8D5C4]">{title}</h3>
-    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/65">{series.map((row,index)=><span key={row.name} className="inline-flex items-center gap-1.5"><i className="h-1.5 w-1.5 rounded-full" style={{backgroundColor:colors[index%colors.length]}}/>{row.name}</span>)}</div>
-    <div className={`mt-4 flex items-end gap-1 border-b border-white/10 ${large?"h-48":"h-28"}`} role="group" aria-label={title}>
-      {labels.map((label,index)=><button key={`${label}-${index}`} type="button" onFocus={()=>setFocused(index)} onBlur={()=>setFocused(null)} onMouseEnter={()=>setFocused(index)} onMouseLeave={()=>setFocused(null)}
-        aria-label={`${label}: ${series.map(row=>`${row.name} ${money?formatCzk(row.values[index]??0):row.values[index]??0}`).join(", ")}`}
-        className="flex h-full min-w-0 flex-1 items-end gap-px rounded-t outline-none focus-visible:ring-1 focus-visible:ring-[#C9A88B]">
-        {series.map((row,color)=><span key={row.name} className="min-w-0 flex-1 rounded-t-sm transition-[height,opacity] duration-300 motion-reduce:transition-none" style={{height:`${Math.max(0,(row.values[index]??0)/maximum*100)}%`,backgroundColor:colors[color%colors.length],opacity:active===null||active===index?0.9:0.4}}/>)}
-      </button>)}
-    </div>
-    <div className="mt-2 flex justify-between gap-3 text-xs text-white/60"><span>{labels[0]}</span><span>{labels[Math.floor(labels.length/2)]}</span><span>{labels.at(-1)}</span></div>
-    <p className="mt-2 min-h-8 text-sm leading-relaxed text-white/60">{active===null?"—":`${labels[active]} · ${series.map(row=>`${row.name}: ${money?formatCzk(row.values[active]??0):row.values[active]??0}`).join(" · ")}`}</p>
-  </section>;
-}
 
 export function HistoryAnalyticsDashboard({dates,payment,monthComparison=false,sales,menuItems,onData}: {
   dates: HistoryDates; payment:string;monthComparison?:boolean;sales:SaleRecord[];menuItems:MenuItem[];onData:(data:HistoryAnalytics|null)=>void;
@@ -68,6 +49,16 @@ export function HistoryAnalyticsDashboard({dates,payment,monthComparison=false,s
   const itemDetails=useMemo(()=>expandedCategory?historyItemBreakdown(sales,expandedCategory,menuItems,language):[],[sales,expandedCategory,menuItems,language]);
   const graph=fields.find(field=>field.key===graphMetric);
   const graphIndices=[0,...comparisonIndices];
+  const seriesForMetric=(metric: "revenue"|"tips"|"orders"|"average", hourly=false): HistoryLineSeries[] => {
+    if(!data)return [];
+    const locale=language==="cs"?"cs-CZ":language==="vi"?"vi-VN":"en-GB";
+    return graphIndices.map(index=>{
+      const period=data.periods[index];
+      const points=hourly?period.hourly.map(point=>({label:`${String(point.hour).padStart(2,"0")}:00`,value:point[metric]??null}))
+        :(period.timeline??(index===0?data.daily:[])).map(point=>({label:formatInVenueTz(`${point.date}T12:00:00Z`,locale,{day:"numeric",month:"short"}),value:point[metric]??null}));
+      return {name:index===0?t("haSelected"):previousNames[index-1],points};
+    });
+  };
   return <section aria-label={t("haTitle")} className="space-y-4" aria-busy={loading}>
     <div className="flex flex-wrap items-end justify-between gap-2"><h2 className="pos-serif text-xl text-[#F5F2EF]">{t("haTitle")}</h2><span className="text-xs text-white/60">{loading?t("loading"):rangeLabel(dates)}</span></div>
     {error&&<p role="alert" className="rounded-lg border border-amber-400/20 bg-amber-950/20 p-3 text-xs text-amber-200">{error}</p>}
@@ -101,15 +92,15 @@ export function HistoryAnalyticsDashboard({dates,payment,monthComparison=false,s
         <BarChart3 className="h-4 w-4"/>{t("haHourly")}<ChevronDown className={`h-4 w-4 transition-transform motion-reduce:transition-none ${showHourly?"rotate-180":""}`}/>
       </button>
       {showHourly&&data&&current&&<div id="history-hourly-chart" className="mt-3">
-        <Bars title={t("haHourly")} labels={current.hourly.map(row=>`${String(row.hour).padStart(2,"0")}:00`)} series={[0,...comparisonIndices].map(index=>({name:index===0?t("haSelected"):previousNames[index-1],values:data.periods[index].hourly.map(row=>row.revenue)}))}/>
+        <HistoryLineChart title={t("haHourly")} series={seriesForMetric("revenue",true)}/>
       </div>}
     </div>
     <ModalOverlay open={graphMetric!==null} onClose={()=>setGraphMetric(null)} ariaLabelledBy="history-metric-title" className="flex items-center justify-center p-4">
-      <ModalPanel className="max-h-[90dvh] w-full max-w-3xl overflow-auto rounded-2xl border border-[#C9A88B]/25 bg-[#101012] p-4 shadow-2xl sm:p-6">
+      <ModalPanel className="max-h-[90dvh] w-full max-w-4xl overflow-auto rounded-2xl border border-[#C9A88B]/25 bg-[#101012] p-4 shadow-2xl sm:p-6">
         <div className="mb-4 flex items-center justify-between gap-3"><h3 id="history-metric-title" className="pos-serif text-xl text-[#E8D5C4]">{graph?.label}</h3><button type="button" aria-label={t("close")} onClick={()=>setGraphMetric(null)} className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-white/10 text-white/70"><X className="h-5 w-5"/></button></div>
         {graph&&data&&<>
-          <Bars title={graph.label} large money={graph.money} labels={graphIndices.map(index=>index===0?t("haSelected"):previousNames[index-1])} series={[{name:graph.label,values:graphIndices.map(index=>data.periods[index][graph.key])}]}/>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">{graphIndices.map(index=><div key={index} className="rounded-lg bg-white/5 p-3"><p className="text-xs text-white/65">{index===0?t("haSelected"):previousNames[index-1]}</p><p className="mt-1 text-lg font-semibold tabular-nums text-[#E8D5C4]">{graph.money?formatCzk(data.periods[index][graph.key]):data.periods[index][graph.key].toLocaleString()}</p><p className="mt-1 text-xs text-white/50">{rangeLabel(periods[index])}</p></div>)}</div>
+          <HistoryLineChart title={graph.label} money={graph.money} series={seriesForMetric(graph.key,oneDay&&!monthly)}/>
+          <div className={`mt-4 grid gap-3 ${graphIndices.length===2?"sm:grid-cols-2":"sm:grid-cols-3"}`}>{graphIndices.map(index=><div key={index} className="rounded-lg bg-white/5 p-3"><p className="text-xs text-white/65">{index===0?t("haSelected"):previousNames[index-1]}</p><p className="mt-1 text-lg font-semibold tabular-nums text-[#E8D5C4]">{graph.money?formatCzk(data.periods[index][graph.key]):data.periods[index][graph.key].toLocaleString()}</p><p className="mt-1 text-xs text-white/50">{rangeLabel(periods[index])}</p></div>)}</div>
         </>}
       </ModalPanel>
     </ModalOverlay>

@@ -77,14 +77,20 @@ BEGIN
       coalesce(sum(m.referral_discount),0) referral_discounts
     FROM windows w LEFT JOIN matched m ON m.closed_at>=w.starts AND m.closed_at<w.ends GROUP BY w.n,w.f,w.t
   ), hourly AS (
-    SELECT w.n,h.hour,coalesce(sum(m.net),0) revenue,count(DISTINCT m.order_key) FILTER(WHERE m.completed) orders
+    SELECT w.n,h.hour,coalesce(sum(m.net),0) revenue,coalesce(sum(m.tip),0) tips,
+      count(DISTINCT m.order_key) FILTER(WHERE m.completed) orders,
+      round(sum(m.completed_value) FILTER(WHERE m.completed)/nullif(count(DISTINCT m.order_key) FILTER(WHERE m.completed),0),2) average
     FROM windows w CROSS JOIN generate_series(0,23) h(hour)
     LEFT JOIN matched m ON m.closed_at>=w.starts AND m.closed_at<w.ends AND extract(hour FROM m.closed_at AT TIME ZONE 'Europe/Prague')=h.hour
     GROUP BY w.n,h.hour
   ), daily AS (
-    SELECT d::date AS sales_date,coalesce(sum(c.net),0) revenue,count(DISTINCT c.order_key) FILTER(WHERE c.completed) orders
-    FROM generate_series(p_from::timestamp,p_to::timestamp,interval '1 day') d
-    LEFT JOIN current_rows c ON (c.closed_at AT TIME ZONE 'Europe/Prague')::date=d::date GROUP BY d
+    SELECT w.n,d.sales_date::date AS sales_date,coalesce(sum(m.net),0) revenue,coalesce(sum(m.tip),0) tips,
+      count(DISTINCT m.order_key) FILTER(WHERE m.completed) orders,
+      round(sum(m.completed_value) FILTER(WHERE m.completed)/nullif(count(DISTINCT m.order_key) FILTER(WHERE m.completed),0),2) average
+    FROM windows w CROSS JOIN LATERAL generate_series(w.f::timestamp,w.t::timestamp,interval '1 day') d(sales_date)
+    LEFT JOIN matched m ON (m.closed_at AT TIME ZONE 'Europe/Prague')::date=d.sales_date::date
+      AND m.closed_at>=w.starts AND m.closed_at<w.ends
+    GROUP BY w.n,d.sales_date
   ), food_drink AS (
     SELECT c.id,c.net,coalesce(sum((item->>'price')::numeric*(item->>'quantity')::numeric),0) lines,
       coalesce(sum((item->>'price')::numeric*(item->>'quantity')::numeric) FILTER(WHERE
@@ -110,8 +116,9 @@ BEGIN
     'periods',(SELECT jsonb_agg(jsonb_build_object('from',f,'to',t,'payments',payments,'orders',orders,'gross',gross,'revenue',revenue,
       'average',CASE WHEN orders>0 THEN round(completed_value/orders,2) ELSE 0 END,'averagePerPerson',average_per_person,'discounts',discounts,'tips',tips,
       'referralRevenue',referral_revenue,'referralDiscounts',referral_discounts,'hourly',
-      (SELECT jsonb_agg(jsonb_build_object('hour',h.hour,'revenue',h.revenue,'orders',h.orders) ORDER BY h.hour) FROM hourly h WHERE h.n=p.n)) ORDER BY n) FROM period_totals p),
-    'daily',coalesce((SELECT jsonb_agg(jsonb_build_object('date',sales_date,'revenue',revenue,'orders',orders) ORDER BY sales_date) FROM daily),'[]'::jsonb),
+      (SELECT jsonb_agg(jsonb_build_object('hour',h.hour,'revenue',h.revenue,'tips',h.tips,'orders',h.orders,'average',h.average) ORDER BY h.hour) FROM hourly h WHERE h.n=p.n),
+      'timeline',(SELECT jsonb_agg(jsonb_build_object('date',d.sales_date,'revenue',d.revenue,'tips',d.tips,'orders',d.orders,'average',d.average) ORDER BY d.sales_date) FROM daily d WHERE d.n=p.n)) ORDER BY n) FROM period_totals p),
+    'daily',coalesce((SELECT jsonb_agg(jsonb_build_object('date',sales_date,'revenue',revenue,'tips',tips,'orders',orders,'average',average) ORDER BY sales_date) FROM daily WHERE n=0),'[]'::jsonb),
     'breakdown',(SELECT to_jsonb(b) FROM breakdown b),
     'referrals',coalesce((SELECT jsonb_agg(to_jsonb(r) ORDER BY net_sales DESC,code,partner) FROM referrals r),'[]'::jsonb),
     'attributions',coalesce((SELECT jsonb_object_agg(id::text,jsonb_build_object('codeId',referral_code_id,'code',code,'partner',partner,

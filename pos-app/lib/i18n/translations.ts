@@ -11,7 +11,7 @@ const en = {
   haAverage: "Average completed order",
   haDiscounts: "Total bill discounts",
   haReferralRevenue: "Referral-attributed net sales",
-  haYesterday: "Previous calendar day",
+  haYesterday: "Yesterday",
   haLastWeek: "Same day last week",
   haPreviousPeriod: "Previous equivalent period",
   haWeekEarlier: "Equivalent period · 7 days earlier",

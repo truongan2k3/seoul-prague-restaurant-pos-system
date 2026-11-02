@@ -5,6 +5,7 @@ import { BarChart3, ChevronDown, TrendingDown, TrendingUp } from "lucide-react";
 import { useApp } from "@/contexts/app-context";
 import { useAuth } from "@/contexts/auth-context";
 import { formatCzk } from "@/lib/currency";
+import { todayIsoDateInVenue } from "@/lib/venue-timezone";
 import { cachedHistoryAnalytics, expireHistoryAnalyticsCache, historyChangeMatches, historyComparisonDates, subscribeHistoryFinancialChanges, type HistoryAnalytics, type HistoryDates } from "@/lib/history-analytics";
 import { getHistoryAnalyticsAction } from "@/src/lib/history-analytics-actions";
 
@@ -53,16 +54,18 @@ export function HistoryAnalyticsDashboard({dates,payment,onData}: {
   },[dates,load]);
   const data=result?.key===key?result.data:null;const current=data?.periods[0];
   const periods=historyComparisonDates(dates);const oneDay=dates.from===dates.to;
+  const comparisonIndices=oneDay&&dates.from===todayIsoDateInVenue()?[1,2]:[2];
   const previousNames=[t(oneDay?"haYesterday":"haPreviousPeriod"),t(oneDay?"haLastWeek":"haWeekEarlier")];
   const rangeLabel=(range:HistoryDates)=>range.from===range.to?range.from:`${range.from} – ${range.to}`;
-  const fields=[{key:"revenue",label:t("haRevenue"),money:true},{key:"tips",label:t("tips"),money:true},{key:"orders",label:t("haOrders"),money:false},{key:"averagePerPerson",label:t("haAverage"),money:true}] as const;
+  const fields=[{key:"revenue",label:t("haRevenue"),money:true},{key:"tips",label:t("tips"),money:true},{key:"orders",label:t("haOrders"),money:false},{key:"average",label:t("haAverage"),money:true}] as const;
+  const revenueBreakdown=[{key:"food",label:t("haFoodRevenue")},{key:"drinks",label:t("haDrinksRevenue")}] as const;
   return <section aria-label={t("haTitle")} className="space-y-4" aria-busy={loading}>
-    <div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-xs uppercase tracking-[0.25em] text-[#C9A88B]/70">SEOUL PRAGUE · EUROPE/PRAGUE</p><h2 className="pos-serif mt-1 text-xl text-[#F5F2EF]">{t("haTitle")}</h2></div><span className="text-xs text-white/60">{loading?t("loading"):rangeLabel(dates)}</span></div>
+    <div className="flex flex-wrap items-end justify-between gap-2"><h2 className="pos-serif text-xl text-[#F5F2EF]">{t("haTitle")}</h2><span className="text-xs text-white/60">{loading?t("loading"):rangeLabel(dates)}</span></div>
     {error&&<p role="alert" className="rounded-lg border border-amber-400/20 bg-amber-950/20 p-3 text-xs text-amber-200">{error}</p>}
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{fields.map(field=>{
       const value=current?.[field.key];return <div key={field.key} className="min-w-0 rounded-xl border border-[#C9A88B]/15 bg-gradient-to-br from-[#1B1918] to-[#121214] p-4">
         <p className="text-xs font-semibold uppercase tracking-wider text-white/65">{field.label}</p><p className="mt-2 break-words text-xl font-semibold tabular-nums text-[#E8D5C4] sm:text-2xl">{value==null?"—":field.money?formatCzk(value):value.toLocaleString()}</p>
-        <div className="mt-4 space-y-2">{[1,2].map((index)=>{
+        <div className="mt-4 space-y-2">{comparisonIndices.map((index)=>{
           const baseline=data?.periods[index]?.[field.key];const delta=value!=null&&baseline!=null?value-baseline:null;
           const percent=delta!==null&&baseline!=null?(baseline===0?(value===0?0:null):delta/Math.abs(baseline)*100):null;
           const positive=delta!==null&&delta>0;
@@ -74,12 +77,17 @@ export function HistoryAnalyticsDashboard({dates,payment,onData}: {
         })}</div>
       </div>;
     })}</div>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {revenueBreakdown.map(field=><div key={field.key} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#C9A88B]/15 bg-[#141416] px-4 py-3">
+        <p className="text-sm text-white/70">{field.label}</p><p className="text-lg font-semibold tabular-nums text-[#E8D5C4]">{data?formatCzk(data.breakdown[field.key]):"—"}</p>
+      </div>)}
+    </div>
     <div>
       <button type="button" disabled={!data||!current} aria-expanded={showHourly} aria-controls="history-hourly-chart" onClick={()=>setShowHourly(value=>!value)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[#C9A88B]/25 bg-[#141416] px-3 text-sm text-[#DCC1A5] disabled:opacity-40">
         <BarChart3 className="h-4 w-4"/>{t("haHourly")}<ChevronDown className={`h-4 w-4 transition-transform motion-reduce:transition-none ${showHourly?"rotate-180":""}`}/>
       </button>
       {showHourly&&data&&current&&<div id="history-hourly-chart" className="mt-3">
-        <Bars title={t("haHourly")} labels={current.hourly.map(row=>`${String(row.hour).padStart(2,"0")}:00`)} series={data.periods.map((period,index)=>({name:index===0?t("haSelected"):previousNames[index-1],values:period.hourly.map(row=>row.revenue)}))}/>
+        <Bars title={t("haHourly")} labels={current.hourly.map(row=>`${String(row.hour).padStart(2,"0")}:00`)} series={[0,...comparisonIndices].map(index=>({name:index===0?t("haSelected"):previousNames[index-1],values:data.periods[index].hourly.map(row=>row.revenue)}))}/>
       </div>}
     </div>
   </section>;

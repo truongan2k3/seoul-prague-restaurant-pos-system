@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
-import { AlertTriangle, ChevronLeft, ChevronRight, Eye, Pencil, Percent, Ticket } from "lucide-react";
+import { AlertTriangle, Banknote, ChevronLeft, ChevronRight, CreditCard, Eye, Pencil, Percent, Ticket } from "lucide-react";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { DateRangeInputs } from "@/components/date-range-inputs";
 import { HistoryAnalyticsDashboard } from "@/components/history-analytics-dashboard";
@@ -354,8 +354,10 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                     key={option}
                     type="button"
                     onClick={() => setPaymentFilter(option)}
-                    className={`${paymentFilterClass(paymentFilter === option, option)} shrink-0 whitespace-nowrap`}
+                    className={`${paymentFilterClass(paymentFilter === option, option)} inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap`}
                   >
+                    {option==="cash"&&<Banknote className="h-4 w-4" aria-hidden="true"/>}
+                    {option==="card"&&<CreditCard className="h-4 w-4" aria-hidden="true"/>}
                     {translate(PAYMENT_LABEL_KEYS[option])}
                   </button>
                 ))}

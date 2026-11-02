@@ -240,7 +240,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       id,
       message,
       staffName,
-      playSound = "ready",
+      playSound = false,
       variant = "success",
     }: PushNotificationInput) => {
       const notificationId = id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

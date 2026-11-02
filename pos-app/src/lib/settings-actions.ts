@@ -12,6 +12,7 @@ import type {
   SoundConfigs,
 } from "@/lib/types";
 import { ALL_NAV_TABS } from "@/lib/staff-roles";
+import { DEFAULT_SIDEBAR_NAV_ORDER, normalizeSidebarNavOrder } from "@/lib/sidebar-navigation";
 import { DEFAULT_SOUND_CONFIGS, parseSoundConfigs, soundConfigsToDb } from "@/lib/auto-serve";
 import {
   DEFAULT_GUEST_CHAT_CONFIG,
@@ -209,6 +210,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     forceChineseMenuItemIds: [...DEFAULT_SERVER_SCREEN_CONFIG.forceChineseMenuItemIds],
   },
   hiddenSidebarNav: [],
+  sidebarNavOrder: [...DEFAULT_SIDEBAR_NAV_ORDER],
 };
 
 type SettingsRow = {
@@ -295,6 +297,7 @@ type SettingsRow = {
   voucher_config?: unknown;
   server_screen_config?: unknown;
   sidebar_nav_hidden?: unknown;
+  sidebar_nav_order?: unknown;
 };
 
 function parseHiddenSidebarNav(value: unknown): NavId[] {
@@ -580,6 +583,7 @@ function mapSettingsRow(row: SettingsRow): AppSettings {
     voucher: parseVoucherConfig(row.voucher_config),
     serverScreen: parseServerScreenConfig(row.server_screen_config),
     hiddenSidebarNav: parseHiddenSidebarNav(row.sidebar_nav_hidden),
+    sidebarNavOrder: normalizeSidebarNavOrder(row.sidebar_nav_order),
   };
 }
 
@@ -766,6 +770,9 @@ function mapSettingsToRow(partial: Partial<AppSettings>): Record<string, unknown
   if (partial.hiddenSidebarNav !== undefined) {
     payload.sidebar_nav_hidden = parseHiddenSidebarNav(partial.hiddenSidebarNav);
   }
+  if (partial.sidebarNavOrder !== undefined) {
+    payload.sidebar_nav_order = normalizeSidebarNavOrder(partial.sidebarNavOrder);
+  }
   return payload;
 }
 
@@ -784,10 +791,17 @@ export async function updateAppSettings(partial: Partial<AppSettings>, businessI
   const payload = mapSettingsToRow(partial);
   async function persist<T extends {error:{message:string}|null}>(write:()=>PromiseLike<T>):Promise<T> {
     const result=await write();
+    // Older databases can keep saving existing settings until the ordering patch is applied.
+    if (result.error && payload.sidebar_nav_order !== undefined &&
+        /sidebar_nav_order/i.test(result.error.message) && /column|schema cache/i.test(result.error.message) &&
+        normalizeSidebarNavOrder(payload.sidebar_nav_order).join(",") === DEFAULT_SIDEBAR_NAV_ORDER.join(",")) {
+      delete payload.sidebar_nav_order;
+      return persist(write);
+    }
     if (result.error && payload.show_eur_on_client === false &&
         /show_eur_on_client/i.test(result.error.message) && /column|schema cache/i.test(result.error.message)) {
       delete payload.show_eur_on_client;
-      return write();
+      return persist(write);
     }
     return result;
   }
@@ -1008,6 +1022,7 @@ export type SettingsPageDraft = PrinterBillSettingsDraft &
     | "voucher"
     | "serverScreen"
     | "hiddenSidebarNav"
+    | "sidebarNavOrder"
   >;
 
 export function pickPrinterBillDraft(settings: AppSettings): PrinterBillSettingsDraft {
@@ -1100,5 +1115,6 @@ export function pickSettingsPageDraft(settings: AppSettings): SettingsPageDraft 
       forceChineseMenuItemIds: [...(settings.serverScreen.forceChineseMenuItemIds ?? [])],
     },
     hiddenSidebarNav: [...settings.hiddenSidebarNav],
+    sidebarNavOrder: normalizeSidebarNavOrder(settings.sidebarNavOrder),
   };
 }

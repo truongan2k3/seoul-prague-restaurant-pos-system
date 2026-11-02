@@ -1,4 +1,9 @@
 {
+  "settingsNavOrderTitle": "Thứ tự tab POS",
+  "settingsNavOrderHint": "Dùng nút lên/xuống rồi nhấn Lưu. Thứ tự áp dụng cho mọi thiết bị POS.",
+  "settingsNavOrderReset": "Thứ tự mặc định",
+  "settingsNavMoveUp": "Đưa lên",
+  "settingsNavMoveDown": "Đưa xuống",
   "referralsTitle": "Giới thiệu & hoa hồng",
   "map": "Sơ đồ bàn",
   "order": "Đơn đang phục vụ",

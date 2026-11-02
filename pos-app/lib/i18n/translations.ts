@@ -5,6 +5,11 @@ import type { LanguageCode } from "@/lib/types";
 export const menuCategories = ["Hotpot", "Meat", "Drinks"] as const;
 
 const en = {
+  settingsNavOrderTitle: "POS tab order",
+  settingsNavOrderHint: "Move tabs up or down, then Save. The order applies to all POS devices.",
+  settingsNavOrderReset: "Default order",
+  settingsNavMoveUp: "Move up",
+  settingsNavMoveDown: "Move down",
   haTitle: "Sales analytics",
   haRevenue: "Total revenue",
   haOrders: "Completed orders",
@@ -1578,6 +1583,11 @@ const en = {
 } as const;
 
 const cs: Record<TranslationKey, string> = {
+  settingsNavOrderTitle: "Pořadí záložek POS",
+  settingsNavOrderHint: "Přesuňte záložky nahoru nebo dolů a uložte. Pořadí platí pro všechna zařízení POS.",
+  settingsNavOrderReset: "Výchozí pořadí",
+  settingsNavMoveUp: "Posunout nahoru",
+  settingsNavMoveDown: "Posunout dolů",
   haTitle: "Analýza tržeb",
   haRevenue: "Celkové tržby",
   haOrders: "Dokončené objednávky",

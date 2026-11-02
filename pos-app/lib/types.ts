@@ -332,6 +332,8 @@ export interface AppSettings {
    * `settings` is never hideable and must not appear here.
    */
   hiddenSidebarNav: NavId[];
+  /** Restaurant-wide sidebar order, independent of staff access and visibility. */
+  sidebarNavOrder: NavId[];
 }
 
 export type StaffRole = "admin" | "manager" | "server" | "kitchen" | "bar";

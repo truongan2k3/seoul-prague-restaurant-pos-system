@@ -32,6 +32,7 @@ import { navButtonClass } from "@/lib/theme-classes";
 import { canAccessNavTabForMember } from "@/lib/staff-roles";
 import type { NavId } from "@/lib/types";
 import { useSettings } from "@/contexts/settings-context";
+import { normalizeSidebarNavOrder } from "@/lib/sidebar-navigation";
 
 const SIDEBAR_COLLAPSED_KEY = "pos-sidebar-collapsed";
 
@@ -85,11 +86,12 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   }, []);
 
   const { settings } = useSettings();
+  const navOrder = normalizeSidebarNavOrder(settings.sidebarNavOrder);
   const visibleNavItems = navItems.filter((item) => {
     if (!canAccessNavTabForMember(currentStaffUser, item.id)) return false;
     if (item.id === "settings") return true;
     return !settings.hiddenSidebarNav.includes(item.id);
-  });
+  }).sort((a, b) => navOrder.indexOf(a.id) - navOrder.indexOf(b.id));
 
   const isExpanded = !collapsed;
 

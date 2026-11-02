@@ -46,6 +46,7 @@ import { StaffView } from "@/components/staff-view";
 import { ManagerPasscodeChangeForm } from "@/components/manager-passcode-change-form";
 import { VoucherSettingsFields } from "@/components/voucher-settings-fields";
 import { ServerScreenSettingsEditor } from "@/components/server-screen-settings-editor";
+import { SidebarNavOrderEditor } from "@/components/sidebar-nav-order-editor";
 import type { TranslationKey } from "@/lib/i18n/translations";
 import { DEFAULT_SERVER_SCREEN_CONFIG } from "@/lib/server-screen";
 import { pingPrintBridge } from "@/src/lib/print-bridge-client";
@@ -1910,6 +1911,7 @@ export function SettingsView({
 
         {activeSettingsTab === "general" && (
         <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2">
+          <SidebarNavOrderEditor value={draft.sidebarNavOrder} onChange={order => updateDraft("sidebarNavOrder", order)} disabled={saving}/>
           <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">{translate("language")}</h2>
             <LanguageSelector variant="flag-menu" className="mt-3" />

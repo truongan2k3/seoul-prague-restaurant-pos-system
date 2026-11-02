@@ -1,16 +1,4 @@
 .landing-theme.digital-menu-page {
-  --menu-bg: #f9f5ee;
-  --menu-fg: #302a24;
-  --menu-muted: #756b5e;
-  --menu-accent: #856131;
-  --menu-line: #ded3c2;
-  --menu-surface: #fffaf3;
-  --menu-wash: rgb(133 97 49 / 7%);
-  color-scheme: light;
-  background: var(--menu-bg);
-  color: var(--menu-fg);
-}
-.dark .landing-theme.digital-menu-page {
   --menu-bg: #0e0e10;
   --menu-fg: #f2ece3;
   --menu-muted: #b0a79a;
@@ -19,16 +7,8 @@
   --menu-surface: #171719;
   --menu-wash: rgb(212 184 153 / 5%);
   color-scheme: dark;
-}
-html[data-website-theme="halloween"] .landing-theme.digital-menu-page {
-  --menu-bg: #100d10;
-  --menu-fg: #f3e7d7;
-  --menu-muted: #c5ae9e;
-  --menu-accent: #d6a17a;
-  --menu-line: rgb(197 131 80 / 24%);
-  --menu-surface: #1a1416;
-  --menu-wash: rgb(197 131 80 / 7%);
-  color-scheme: dark;
+  background: var(--menu-bg);
+  color: var(--menu-fg);
 }
 .digital-menu-main { padding: 112px 0 88px; }
 .digital-menu-container { width: min(100% - 40px, 1080px); margin: 0 auto; }

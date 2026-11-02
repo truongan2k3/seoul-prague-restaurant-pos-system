@@ -28,7 +28,7 @@ export type DiscountType = "percent" | "fixed";
 export type SplitMode = "total" | "equal" | "items";
 /** Chinese is retained for legacy content/printing; UI selectors use en/cs/vi. */
 export type LanguageCode = "en" | "cs" | "vi" | "zh";
-export type ThemeMode = "light" | "dark" | "halloween";
+export type ThemeMode = "dark";
 export type ServerScreenLanguageMode = "single" | "bilingual" | "multilingual";
 
 export interface ServerScreenConfig {
@@ -401,6 +401,10 @@ export interface SelectedMenuOption {
 export interface OrderLineModifiers {
   /** Unit price before staff price changes; retained with the original order. */
   originalUnitPrice?: number;
+  itemTransferRevision?: string;
+  /** Durable backend transfer lineage; never creates a kitchen print event. */
+  itemTransfer?: { event: "TRANSFER_ORDER_ITEM" | "UNDO_ITEM_TRANSFER"; transferId: string; rootItemId: string; fromLabel: string; fromTableId: string; parentItemId?: string; reversalOf?: string };
+
   selectedOptions?: SelectedMenuOption[];
   specialRequestIds?: string[];
   /** Staff table → kitchen message (KDS card until ack; not billed). */
@@ -490,6 +494,7 @@ export interface RestaurantTable {
   posY: number;
   occupiedAt?: Date;
   availabilityBlocked?: boolean;
+  itemTransferVersion?: number;
   orders?: OrderItem[];
 }
 

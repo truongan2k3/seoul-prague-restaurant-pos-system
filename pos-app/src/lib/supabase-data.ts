@@ -32,6 +32,7 @@ import {
   mapOptionGroupLibraryResponse,
 } from "@/src/lib/option-group-library-actions";
 import { subscribeToPostgresChanges, subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
+import { orderItemEventKind } from "@/lib/item-transfers";
 import { supabase } from "@/src/lib/supabase";
 import type { Station } from "@/lib/types";
 
@@ -85,6 +86,7 @@ export interface SupabaseTableRow {
   pos_y?: number | null;
   occupied_at: string | null;
   availability_blocked?: boolean;
+  item_transfer_version?: number;
   orders?: OrderItem[] | null;
 }
 
@@ -204,6 +206,7 @@ export function mapTableRow(row: SupabaseTableRow): RestaurantTable {
     posY: row.pos_y ?? fallback.y,
     occupiedAt: row.occupied_at ? new Date(row.occupied_at) : undefined,
     availabilityBlocked: row.availability_blocked,
+    itemTransferVersion: row.item_transfer_version,
     orders: row.orders ?? undefined,
   };
 }
@@ -922,7 +925,9 @@ export function subscribeToOrderItemInserts(
     channelName,
     { event: "INSERT", schema: "public", table: "order_items" },
     (payload) => {
-      onInsert(payload.new as SupabaseOrderItemRow);
+      const row = payload.new as SupabaseOrderItemRow;
+      if (orderItemEventKind({ modifiers: row.modifiers ?? undefined }) !== "NEW_ORDER_ITEM") return;
+      onInsert(row);
     },
   );
 }

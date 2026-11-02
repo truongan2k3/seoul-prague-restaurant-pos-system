@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ItemTransferModal } from "@/components/item-transfer-modal";
 import { ChangeTableModal } from "@/components/change-table-modal";
 import { NewOrderModal } from "@/components/new-order-modal";
 import { PaymentModal } from "@/components/payment-modal";
@@ -72,12 +73,17 @@ export function useTableOrderWorkflow({
   const { settings } = useSettings();
   const { printReceipt, printKitchenOrder } = useReceiptPrint();
   const [modal, setModal] = useState<TableOrderModalState>(null);
+  const [transferTableId, setTransferTableId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const actionLockRef = useRef(false);
   const [appliedVouchers, setAppliedVouchers] = useState<AppliedVoucherLine[]>([]);
   const [appliedVouchersTableId, setAppliedVouchersTableId] = useState<string | null>(null);
   const [voucherAppliedFlash, setVoucherAppliedFlash] = useState<VoucherCode | null>(null);
+
+  useEffect(() => {
+    if (modal?.type !== "new-order" || modal.tableId !== transferTableId) setTransferTableId(null);
+  }, [modal, transferTableId]);
 
   const selectedTable = modal ? tables.find((t) => t.id === modal.tableId) : undefined;
   const activeTableIdForVoucher =
@@ -434,6 +440,8 @@ export function useTableOrderWorkflow({
       if (data) {
         const updatedTable = mapTableRow(data);
         setTables((prev) => prev.map((t) => (t.id === tableId ? updatedTable : t)));
+        if (updatedTable.orders) setModal(previous => previous?.type === "checkout" && previous.tableId === tableId
+          ? { ...previous, orders: updatedTable.orders!.filter(item => !isKitchenMessageOrder(item)) } : previous);
       }
       refreshAfterAction();
     });
@@ -633,6 +641,27 @@ export function useTableOrderWorkflow({
     finishChangeTable(fromId, toId, "merge");
   };
 
+  const transferVersions = useRef(new Map<string, number>());
+  useEffect(() => {
+    if (isSaving) return;
+    for (const table of tables) {
+      const version = table.itemTransferVersion;
+      if (version === undefined || version === transferVersions.current.get(table.id)) continue;
+      transferVersions.current.set(table.id, version);
+      if (version === 0 || !table.orders || modal?.type !== "checkout" || modal.tableId !== table.id) continue;
+      // The atomic transfer updates the existing table cache after both item lists.
+      // Refresh an open checkout from that snapshot, including its customer display totals.
+      const orders = filterItemsForBoard(table.orders, "floor").filter(item => !isKitchenMessageOrder(item));
+      if (!orders.length) {
+        void sendCfdEvent("CANCEL_CHECKOUT", {});
+        setModal({ type: "new-order", tableId: table.id, mode: "append" });
+      } else {
+        setModal({ ...modal, orders });
+      }
+
+    }
+  }, [tables, isSaving, modal]);
+
   const floorItemsForTable = (tableId: string) =>
     filterItemsForBoard(
       orderItems.filter((item) => item.tableId === tableId),
@@ -641,6 +670,12 @@ export function useTableOrderWorkflow({
 
   const modals = (
     <>
+      {transferTableId && modal?.type === "new-order" && modal.tableId === transferTableId && tables.find(table => table.id === transferTableId) && (
+        <ItemTransferModal table={tables.find(table => table.id === transferTableId)!} tables={tables}
+          revision={JSON.stringify(orderItems.filter(item => item.tableId === transferTableId).map(item => [item.id,item.quantity,item.price,item.notes,item.modifiers]))}
+          onClose={() => setTransferTableId(null)} onChanged={refreshAfterAction} />
+      )}
+
       {selectedTable && modal?.type === "change-table" && (
         <ChangeTableModal
           open
@@ -695,6 +730,7 @@ export function useTableOrderWorkflow({
           onCheckout={handleProceedToCheckout}
           onCloseTable={handleForceCloseTable}
           onChangeTable={() => openChangeTable(selectedTable.id, "new-order-append")}
+          onTransferItems={() => setTransferTableId(selectedTable.id)}
           onSaveExistingOrders={(orders, options) =>
             handleSaveOrders(orders, selectedTable.id, options)
           }

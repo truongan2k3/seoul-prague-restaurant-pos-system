@@ -15,13 +15,6 @@ import { DEFAULT_EUR_RATE, DEFAULT_USD_RATE } from "@/lib/currency";
 import { canManageStaff } from "@/lib/staff-roles";
 import type { LanguageCode, StaffMember, ThemeMode } from "@/lib/types";
 import {
-  applyLightBackgroundToDocument,
-  LIGHT_BG_STORAGE_KEY,
-  readStoredLightBackground,
-  serializeLightBackground,
-  type LightBackgroundSelection,
-} from "@/lib/light-theme";
-import {
   getCurrentStaffMemberAction,
   listStaffAction,
   switchStaffAction,
@@ -50,12 +43,6 @@ function readStoredNumber(key: string, fallback: number): number {
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
-function readStoredTheme(): ThemeMode {
-  if (typeof window === "undefined") return "dark";
-  const stored = localStorage.getItem(THEME_STORAGE_KEY);
-  return stored === "light" || stored === "halloween" ? stored : "dark";
-}
-
 function readStoredLanguage(): LanguageCode {
   if (typeof window === "undefined") return "en";
   const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
@@ -72,9 +59,6 @@ interface AppContextValue {
   setLanguage: (lang: LanguageCode) => void;
   theme: ThemeMode;
   setTheme: (theme: ThemeMode) => void;
-  /** Light-mode shell background (pastel presets or custom hex). Ignored in dark mode. */
-  lightBackground: LightBackgroundSelection;
-  setLightBackground: (next: LightBackgroundSelection) => void;
   /** @deprecated Use currentStaffUser — kept for existing components */
   staff: StaffMember | null;
   setStaff: (staff: StaffMember | null) => void;
@@ -114,10 +98,6 @@ const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<LanguageCode>("en");
   const [theme, setTheme] = useState<ThemeMode>("dark");
-  const [lightBackground, setLightBackgroundState] = useState<LightBackgroundSelection>({
-    kind: "preset",
-    id: "default",
-  });
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [currentStaffUser, setCurrentStaffUser] = useState<StaffMember | null>(null);
   const [staffSwitchOpen, setStaffSwitchOpen] = useState(false);
@@ -149,11 +129,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const applyStaffSession = useCallback((member: StaffMember) => {
     setCurrentStaffUser(member);
-  }, []);
-
-  useLayoutEffect(() => {
-    setTheme(readStoredTheme());
-    setLightBackgroundState(readStoredLightBackground());
   }, []);
 
   useEffect(() => {
@@ -217,50 +192,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(LANGUAGE_STORAGE_KEY, next);
   }, []);
 
-  const applyThemeToDocument = useCallback(
-    (mode: ThemeMode, lightBg: LightBackgroundSelection) => {
-      const root = document.documentElement;
-      root.dataset.theme = mode;
-      if (mode !== "light") {
-        root.classList.add("dark");
-      } else {
-        root.classList.remove("dark");
-      }
-      applyLightBackgroundToDocument(lightBg, mode === "light" ? "light" : "dark");
-    },
-    [],
-  );
-
-  const setThemeMode = useCallback(
-    (next: ThemeMode) => {
-      setTheme(next);
-      localStorage.setItem(THEME_STORAGE_KEY, next);
-      applyThemeToDocument(next, lightBackground);
-    },
-    [applyThemeToDocument, lightBackground],
-  );
-
-  const setLightBackground = useCallback(
-    (next: LightBackgroundSelection) => {
-      setLightBackgroundState(next);
-      localStorage.setItem(LIGHT_BG_STORAGE_KEY, serializeLightBackground(next));
-      applyThemeToDocument(theme, next);
-    },
-    [applyThemeToDocument, theme],
-  );
-
-  useEffect(() => {
-    applyThemeToDocument(theme, lightBackground);
-  }, [theme, lightBackground, applyThemeToDocument]);
-
-  useEffect(() => {
-    const syncTheme = (event: StorageEvent) => {
-      if (event.key === THEME_STORAGE_KEY || event.key === null) setTheme(readStoredTheme());
-      if (event.key === LIGHT_BG_STORAGE_KEY || event.key === null) setLightBackgroundState(readStoredLightBackground());
-    };
-    window.addEventListener("storage", syncTheme);
-    return () => window.removeEventListener("storage", syncTheme);
+  const setThemeMode = useCallback((_next: ThemeMode) => {
+    const root = document.documentElement;
+    setTheme("dark");
+    root.classList.add("dark");
+    root.dataset.theme = "dark";
+    root.style.colorScheme = "dark";
+    delete root.dataset.websiteTheme;
+    delete root.dataset.posTheme;
+    root.removeAttribute("data-light-bg");
+    root.style.removeProperty("--background");
+    root.style.removeProperty("--accent");
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, "dark");
+      localStorage.removeItem("pos-light-bg");
+      localStorage.removeItem("pos-halloween-animations");
+    } catch { /* Dark mode also works with storage disabled. */ }
   }, []);
+
+  useLayoutEffect(() => { setThemeMode("dark"); }, [setThemeMode]);
 
   const translate = useCallback((key: TranslationKey) => t(language, key), [language]);
 
@@ -323,8 +273,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLanguage,
       theme,
       setTheme: setThemeMode,
-      lightBackground,
-      setLightBackground,
       staff: currentStaffUser,
       setStaff,
       currentStaffUser,
@@ -359,7 +307,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [
       language,
       theme,
-      lightBackground,
       currentStaffUser,
       staffList,
       refreshStaffList,
@@ -375,7 +322,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setUsdRate,
       setLanguage,
       setThemeMode,
-      setLightBackground,
       setStaff,
       switchStaff,
       staffSwitchOpen,

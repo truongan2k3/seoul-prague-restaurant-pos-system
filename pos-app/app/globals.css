@@ -7,26 +7,7 @@
  * Brand: charcoal canvas, burgundy primary, champagne accent.
  * Status colors stay semantic (amber waiting / emerald ready / rose alert).
  */
-:root {
-  color-scheme: light;
-  --background: #f7f5f3;
-  --foreground: #141416;
-  --card: #ffffff;
-  --card-foreground: #141416;
-  --muted: #6b6560;
-  --border: #e6e1db;
-  --input-bg: #ffffff;
-  --accent: #efeae4;
-  --pos-brand: #8b1e2d;
-  --pos-brand-hover: #a02435;
-  --pos-champagne: #c9a88b;
-  --pos-champagne-soft: #e8d5c4;
-  --pos-ink: #0b0b0c;
-  --pos-raised: #ffffff;
-  --pos-ring: rgba(139, 30, 45, 0.35);
-}
-
-.dark {
+:root, .dark {
   color-scheme: dark;
   --background: #0b0b0c;
   --foreground: #f5f2ef;
@@ -70,7 +51,7 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
-/* Light pastel shell — views using bg-background pick up --background. */
+/* Shared shell background. */
 .pos-shell-bg {
   background-color: var(--background);
 }

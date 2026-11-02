@@ -95,12 +95,13 @@ async function logCancelledOrderItems(input: {
 async function fetchTableCancelActivityLog(
   tableId: string,
   since?: string | null,
+  includeTransfers = false,
 ): Promise<OrderLogEntry[]> {
   let query = supabase
     .from("table_activity_logs")
     .select("id, order_item_id, item_name, action, staff_name, meta, created_at")
     .eq("table_id", tableId)
-    .in("action", ["cancel_item", "qty_reduced", "removed_from_order"])
+    .in("action", ["cancel_item", "qty_reduced", "removed_from_order", ...(includeTransfers ? ["TRANSFER_ORDER_ITEM", "UNDO_ITEM_TRANSFER"] : [])])
     .order("created_at", { ascending: true });
 
   if (since) {
@@ -144,7 +145,7 @@ async function persistOpenCancelActivityToSale(tableId: string): Promise<void> {
     .maybeSingle();
 
   const seatedAt = (table?.occupied_at as string | null) ?? null;
-  const activityLog = await fetchTableCancelActivityLog(tableId, seatedAt);
+  const activityLog = await fetchTableCancelActivityLog(tableId, seatedAt, true);
   if (activityLog.length === 0) return;
 
   const tableLabel = (table?.label as string | null) ?? "";
@@ -202,7 +203,12 @@ function aggregateOrderItems(items: OrderItem[]): OrderItem[] {
         entry.hideOnKds === item.hideOnKds &&
         normalizeOrderItemStatus(entry.status) === normalizeOrderItemStatus(item.status) &&
         entry.price === item.price &&
-        entry.station === item.station,
+        entry.station === item.station &&
+        entry.menuItemId === item.menuItemId &&
+        entry.kitchenStatus === item.kitchenStatus &&
+        entry.taxGroup === item.taxGroup && entry.itemType === item.itemType &&
+        JSON.stringify(entry.modifiers ?? {}) === JSON.stringify(item.modifiers ?? {}) &&
+        JSON.stringify(entry.selectedAddons ?? []) === JSON.stringify(item.selectedAddons ?? []),
     );
 
     if (match) {
@@ -273,6 +279,8 @@ function expandOrderToUnits(order: OrderItem): OrderItem[] {
         id: undefined,
         unitIds: undefined,
         createdAt: undefined,
+        modifiers: order.modifiers ? { ...order.modifiers, itemTransfer: undefined, itemTransferRevision: undefined } : undefined,
+        skipPrint: order.modifiers?.itemTransfer ? false : order.skipPrint,
         status: extraUnitStatus,
         kitchenStatus: kitchenStatusFromOrderStatus(extraUnitStatus),
         readyAt: undefined,
@@ -307,7 +315,7 @@ function orderItemRowUpdate(unit: OrderItem) {
   return {
     name: unit.name,
     price: unit.price,
-    quantity: 1,
+    quantity: unit.quantity,
     notes: unit.notes ?? null,
     notes_translated: unit.notesTranslated ?? null,
     is_printed_note: unit.isPrintedNote ?? false,
@@ -379,6 +387,14 @@ function computeTableFloorStatus(
   return allReadyOrServed ? "ready" : "waiting";
 }
 
+async function preserveEmptyTransferredVisit(tableId: string): Promise<boolean> {
+  const { data: table, error } = await supabase.from("tables").select("*").eq("id", tableId).single();
+  if (error) return true; // A failed read must never release a live table.
+  if (Number(table.item_transfer_version ?? 0) <= 0 || table.status === "empty" || table.payment_status === "paid") return false;
+  await supabase.from("tables").update({ orders: [] }).eq("id", tableId);
+  return true;
+}
+
 async function syncTableOrdersFromDb(tableId: string) {
   const { data: rows, error } = await supabase
     .from("order_items")
@@ -394,6 +410,7 @@ async function syncTableOrdersFromDb(tableId: string) {
   }
 
   if (!rows?.length) {
+    if (await preserveEmptyTransferredVisit(tableId)) return;
     const { data: table } = await supabase.from("tables").select("status").eq("id", tableId).single();
     if (table?.status === "empty") return;
     await clearTablePreservingCancelHistory(tableId);
@@ -406,6 +423,7 @@ async function syncTableOrdersFromDb(tableId: string) {
 
   // All lines archived/served and nothing left for KDS — free the table.
   if (billable.length === 0 && !kitchenOpen) {
+    if (await preserveEmptyTransferredVisit(tableId)) return;
     await clearTablePreservingCancelHistory(tableId);
     return;
   }
@@ -590,6 +608,15 @@ export async function updateTableOrders(
 
   if (fetchItemsError) return { data: null, error: fetchItemsError };
 
+  const availableRows = new Map((existingRows ?? []).map(row => [row.id, row]));
+  if (activeOrders.some(item => (item.unitIds?.length ? item.unitIds : item.id ? [item.id] : []).some(id => {
+    const row = availableRows.get(id);
+    return !row || row.modifiers?.itemTransferRevision !== item.modifiers?.itemTransferRevision
+      || row.modifiers?.itemTransfer?.transferId !== item.modifiers?.itemTransfer?.transferId;
+  }))) {
+    return { data: null, error: new Error("Items moved or changed. Reopen the table before saving or checking out.") };
+  }
+
   if (activeOrders.length === 0) {
     const openIds = (existingRows ?? [])
       .filter((row) => {
@@ -615,7 +642,7 @@ export async function updateTableOrders(
             kitchen_status: "cancelled",
             updated_at: cancelledAt,
           })
-          .in("id", openIds);
+          .in("id", openIds).eq("table_id", tableId);
         if (cancelError) return { data: null, error: cancelError };
 
         const staff = resolveStaffActorLocal({
@@ -646,7 +673,7 @@ export async function updateTableOrders(
             kitchen_status: "archived",
             updated_at: cancelledAt,
           })
-          .in("id", openIds);
+          .in("id", openIds).eq("table_id", tableId);
         if (archiveError) return { data: null, error: archiveError };
       }
     }
@@ -655,7 +682,29 @@ export async function updateTableOrders(
     return fetchTableWithOrders(tableId);
   }
 
-  const desiredUnits = activeOrders.flatMap(expandOrderToUnits);
+  const desiredUnits = activeOrders.flatMap((order) => {
+    const ids = order.unitIds?.length ? order.unitIds : order.id ? [order.id] : [];
+    if (!ids.some(id => Number(availableRows.get(id)?.quantity ?? 0) > 1)) return expandOrderToUnits(order);
+    // Legacy multi-quantity rows and transfer fragments retain their physical identity.
+    // Merely opening checkout must not split them into fresh, printable kitchen rows.
+    let remaining = order.quantity;
+    const retained: OrderItem[] = [];
+    for (const id of ids) {
+      const row = availableRows.get(id);
+      if (!row || remaining <= 0) continue;
+      const quantity = Math.min(remaining, Number(row.quantity));
+      retained.push({ ...order, id, unitIds: undefined, quantity,
+        status: normalizeOrderItemStatus(row.status), kitchenStatus: row.kitchen_status as OrderItem["kitchenStatus"],
+        readyAt: row.ready_at ?? undefined, createdAt: row.created_at,
+      });
+      remaining -= quantity;
+    }
+    if (remaining > 0) retained.push(...expandOrderToUnits({ ...order, id: undefined, unitIds: undefined, quantity: remaining,
+      modifiers: order.modifiers ? { ...order.modifiers, itemTransfer: undefined, itemTransferRevision: undefined } : undefined,
+      skipPrint: order.modifiers?.itemTransfer ? false : order.skipPrint,
+    }));
+    return retained;
+  });
   // Only compare against open (non-archived / non-cancelled) rows. Archived
   // history rows must never enter the cancel set.
   const existingOpenIds = new Set(
@@ -731,7 +780,7 @@ export async function updateTableOrders(
   if (unitsToUpdate.length > 0) {
     const updateResults = await Promise.all(
       unitsToUpdate.map((unit) =>
-        supabase.from("order_items").update(orderItemRowUpdate(unit)).eq("id", unit.id!),
+        supabase.from("order_items").update(orderItemRowUpdate(unit)).eq("id", unit.id!).eq("table_id", tableId),
       ),
     );
     const updateError = updateResults.find((result) => result.error)?.error;
@@ -826,6 +875,15 @@ async function settlePaidTable(tableId: string) {
   return clearTable(tableId);
 }
 
+async function fetchCheckoutVisit(tableId: string) {
+  const result = await supabase.from("tables").select("occupied_at,item_transfer_version").eq("id", tableId).maybeSingle();
+  if (result.error && /item_transfer_version/i.test(result.error.message) && /column|schema cache/i.test(result.error.message)) {
+    const legacy = await supabase.from("tables").select("occupied_at").eq("id", tableId).maybeSingle();
+    return { data: legacy.data ? { ...legacy.data, item_transfer_version: undefined } : null, error: legacy.error };
+  }
+  return { data: result.data as { occupied_at: string | null; item_transfer_version?: number } | null, error: result.error };
+}
+
 export async function checkoutTable(
   tableId: string,
   tableLabel: string,
@@ -859,7 +917,7 @@ export async function checkoutTable(
 
   const [{ data: activeReservationRow, error: reservationError }, { data: tableRow, error: tableError }] = await Promise.all([
     findActiveReservationForTable(tableId),
-    supabase.from("tables").select("occupied_at").eq("id", tableId).maybeSingle(),
+    fetchCheckoutVisit(tableId),
   ]);
   if (reservationError || tableError) return { data: null, error: reservationError ?? tableError };
   const activeReservation = activeReservationRow ? mapReservationRow(activeReservationRow) : null;
@@ -879,6 +937,7 @@ export async function checkoutTable(
   const activityLog = await fetchTableCancelActivityLog(tableId, seatedAt);
 
   const salePayload = {
+    ...(tableRow?.item_transfer_version !== undefined ? { item_transfer_closes_bill: options?.closeTable !== false } : {}),
     table_id: tableId,
     table_label: tableLabel,
     staff_id: staff.staffId ?? null,

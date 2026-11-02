@@ -143,6 +143,7 @@ interface NewOrderModalProps {
   onCheckout?: (orders: OrderItem[]) => void | Promise<void>;
   onCloseTable?: () => void | Promise<void>;
   onChangeTable?: () => void;
+  onTransferItems?: () => void;
   onSaveExistingOrders?: (
     orders: OrderItem[],
     options?: { silent?: boolean; printOrders?: OrderItem[] },
@@ -346,6 +347,7 @@ export function NewOrderModal({
   onCheckout,
   onCloseTable,
   onChangeTable,
+  onTransferItems,
   onSaveExistingOrders,
   onRefreshExistingOrders,
   isSaving = false,
@@ -1565,7 +1567,7 @@ export function NewOrderModal({
   ]);
 
   const isLineSentToKitchen = (line: OrderItem) => {
-    if (line.isCancelled || line.hideOnKds || line.skipPrint) return false;
+    if (line.isCancelled || line.hideOnKds || (line.skipPrint && !line.modifiers?.itemTransfer)) return false;
     const kitchen = resolveKitchenStatus(line);
     return kitchen !== "archived" && kitchen !== "cancelled";
   };
@@ -1588,7 +1590,15 @@ export function NewOrderModal({
             </span>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+          {onTransferItems && mode === "append" && (
+            <button type="button" onClick={onTransferItems}
+              disabled={isBusy || hasSubmittedChanges || cart.length > 0}
+              title={hasSubmittedChanges || cart.length > 0 ? translate("transferSaveFirst") : translate("transferItems")}
+              className="min-h-11 rounded-lg border border-[#C9A88B]/50 bg-[#C9A88B]/10 px-2.5 py-1.5 text-xs font-semibold text-[#DCC1A5] disabled:opacity-35">
+              {translate("transferItems")}
+            </button>
+          )}
           {onChangeTable && mode === "append" && (
             <button
               type="button"

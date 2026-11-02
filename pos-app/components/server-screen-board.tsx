@@ -36,6 +36,7 @@ import { POS_EGRESS } from "@/lib/egress-config";
 import { isGrillGuestPrepOrder, grillGuestPrepDisplayName } from "@/lib/grill-guest-count";
 import { isKitchenMessageOrder } from "@/lib/kitchen-message-order";
 import { usesKitchenScreen } from "@/lib/kitchen-fulfillment-mode";
+import { itemTransferLabel, orderItemEventKind } from "@/lib/item-transfers";
 import { orderItemDisplayName, resolveMenuItemForOrder } from "@/lib/menu-display";
 import {
   isNotificationAudioUnlocked,
@@ -240,7 +241,7 @@ function itemNote(item: StationOrderItem, language: LanguageCode): string | null
     language === "zh"
       ? item.notesTranslated?.trim() || item.notes?.trim()
       : item.notes?.trim() || item.notesTranslated?.trim();
-  return primary || null;
+  return [itemTransferLabel(item.modifiers, language), primary].filter(Boolean).join(" · ") || null;
 }
 
 function forcedChineseName(
@@ -679,6 +680,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       if (payload.eventType !== "INSERT") return;
       const row = payload.new as unknown as SupabaseOrderItemRow | undefined;
       if (!row?.id) return;
+      if (orderItemEventKind({ modifiers: row.modifiers ?? undefined }) !== "NEW_ORDER_ITEM") return;
       if (row.station !== station) return;
       if (row.hide_on_kds) return;
       if (

@@ -17,7 +17,6 @@ import { ConnectionStatusBadge } from "@/components/connection-status-badge";
 import { PagePresenceTracker } from "@/components/page-presence-tracker";
 import { ConnectionStatusProvider } from "@/contexts/connection-status-context";
 import { LuxuryPreloader } from "@/components/luxury-preloader";
-import { HalloweenThemeRuntime } from "@/components/landing/halloween-atmosphere";
 
 function PinGateWrapper({ children }: { children: React.ReactNode }) {
   const { settings } = useSettings();
@@ -49,7 +48,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <AuthProvider>
       <AppProvider>
         <SettingsProvider>
-          <HalloweenThemeRuntime />
           <NotificationProvider>
             <ReceiptPrintProvider>
               <LuxuryPreloader />

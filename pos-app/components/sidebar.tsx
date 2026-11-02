@@ -12,17 +12,13 @@ import {
   Map,
   Gift,
   MessageCircle,
-  Moon,
   Package,
   QrCode,
   Settings,
-  Sun,
   Info,
   User,
   Users,
 } from "lucide-react";
-import { useSharedDisplayTheme } from "@/hooks/use-shared-display-theme";
-import { PosHalloweenEffectsToggle } from "@/components/landing/pos-halloween-effects-toggle";
 import { SidebarStatusIcons } from "@/components/connection-status-badge";
 import { LanguageSelector } from "@/components/language-selector";
 import { StaffSelfProfileModal } from "@/components/staff-self-profile-modal";
@@ -75,7 +71,6 @@ function readCollapsedPreference(): boolean {
  */
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const {
-    theme,
     currentStaffUser,
     translate,
   } = useApp();
@@ -92,7 +87,6 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   }, []);
 
   const { settings } = useSettings();
-  const { selectTheme, saving: themeSaving } = useSharedDisplayTheme();
   const visibleNavItems = navItems.filter((item) => {
     if (!canAccessNavTabForMember(currentStaffUser, item.id)) return false;
     if (item.id === "settings") return true;
@@ -257,26 +251,6 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           <div className="flex justify-center">
             <LanguageSelector variant="flag-menu" />
           </div>
-
-          <PosHalloweenEffectsToggle compact={!isExpanded} />
-
-          <button
-            type="button"
-            disabled={themeSaving}
-            onClick={() => void selectTheme(theme === "light" ? "dark" : "light")}
-            title={theme === "light" ? translate("darkMode") : translate("lightMode")}
-            className={`flex min-h-8 w-full items-center rounded-md border text-xs text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] lg:min-h-[44px] lg:rounded-lg lg:text-sm ${
-              isExpanded ? "gap-2 px-2 py-1.5 lg:px-3 lg:py-2" : "justify-center px-1 py-1.5 lg:px-2 lg:py-2"
-            }`}
-            style={{ borderColor: "var(--border)", backgroundColor: "var(--accent)" }}
-          >
-            {theme === "light" ? (
-              <Moon className="h-3.5 w-3.5 shrink-0 lg:h-4 lg:w-4" />
-            ) : (
-              <Sun className="h-3.5 w-3.5 shrink-0 lg:h-4 lg:w-4" />
-            )}
-            {isExpanded && (theme === "light" ? translate("darkMode") : translate("lightMode"))}
-          </button>
 
           <button
             type="button"

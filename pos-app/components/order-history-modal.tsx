@@ -258,6 +258,19 @@ export function OrderHistoryModal({
             </ul>
           </section>
 
+          {(sale.activityLog ?? []).some(entry => ["TRANSFER_ORDER_ITEM", "UNDO_ITEM_TRANSFER"].includes(entry.action)) && (
+            <section className="rounded-xl border border-[#C9A88B]/30 bg-[#C9A88B]/5 p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-[#DCC1A5]">{translate("transferHistory")}</h3>
+              <ul className="mt-3 space-y-3">{(sale.activityLog ?? []).filter(entry => ["TRANSFER_ORDER_ITEM", "UNDO_ITEM_TRANSFER"].includes(entry.action)).map(entry => (
+                <li key={entry.id} className="text-sm text-white/80">
+                  <p>{String(entry.meta?.from ?? "—")} → {String(entry.meta?.to ?? "—")} · {formatCzk(Number(entry.meta?.amount ?? 0))}{entry.action === "UNDO_ITEM_TRANSFER" ? ` · ${translate("transferUndone")}` : ""}</p>
+                  <p className="mt-1 text-xs text-white/50">{entry.staffName} · {formatHistoryDateTime(entry.createdAt, language)}{entry.meta?.note ? ` · ${String(entry.meta.note)}` : ""}</p>
+                  <p className="mt-1 break-all text-[10px] text-white/35">{String(entry.meta?.transferId ?? "")}</p>
+                </li>
+              ))}</ul>
+            </section>
+          )}
+
           {saleHasHistoryAlert(sale) && (
             <section className="rounded-xl border border-amber-300 bg-amber-50/80 p-4 dark:border-amber-800 dark:bg-amber-950/30">
               <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">

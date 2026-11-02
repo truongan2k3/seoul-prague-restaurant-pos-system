@@ -5,7 +5,6 @@ import { Providers } from "@/components/providers";
 import { ThemeScript } from "@/components/theme-script";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
-import "./halloween.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -36,17 +35,14 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
-    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
-  ],
+  themeColor: "#09090b",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} dark h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-background text-gray-900 dark:bg-gray-950 dark:text-gray-100">

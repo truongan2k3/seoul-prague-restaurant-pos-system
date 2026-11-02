@@ -1,3 +1,5 @@
+import { supabase } from "@/src/lib/supabase";
+import { orderItemEventKind } from "@/lib/item-transfers";
 import { aggregateDisplayItems } from "@/lib/order-item-aggregate";
 import { resolveKitchenTicketItemDisplay } from "@/lib/kitchen-ticket-display";
 import {
@@ -621,11 +623,34 @@ export async function printKitchenTicket(input: {
 }): Promise<void> {
   if (!shouldPrintKitchenOnSend(input.settings) || input.orders.length === 0) return;
 
-  const kitchenOrders = input.orders.filter(
-    (order) => order.station !== "bar" && !order.skipPrint,
+  // Re-check persisted identities even for a stale failed-print job restored after reconnect.
+  // Transferred rows stay permanently suppressed by the database trigger.
+  const ids = [...new Set(input.orders.flatMap(order => order.unitIds?.length ? order.unitIds : order.id ? [order.id] : []))]
+    .filter(id => /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(id));
+  let eligible = input.orders.filter(order => !order.skipPrint && orderItemEventKind(order) === "NEW_ORDER_ITEM");
+  if (ids.length) {
+    const printable = new Map<string, number>();
+    for (let offset = 0; offset < ids.length; offset += 100) {
+      const { data, error } = await supabase.from("order_items").select("id,quantity,skip_print,modifiers,is_cancelled").in("id", ids.slice(offset, offset + 100));
+      if (error) throw new Error("Cannot verify kitchen print eligibility. Retry when connected.");
+      for (const row of data ?? []) {
+        if (!row.skip_print && !row.is_cancelled && orderItemEventKind({ modifiers: row.modifiers }) === "NEW_ORDER_ITEM") printable.set(row.id, Number(row.quantity));
+      }
+    }
+    const checked = new Set(ids);
+    eligible = eligible.flatMap(order => {
+      const rowIds = order.unitIds?.length ? order.unitIds : order.id ? [order.id] : [];
+      if (!rowIds.some(id => checked.has(id))) return [order];
+      const remaining = rowIds.reduce((sum, id) => sum + (printable.get(id) ?? 0), 0);
+      return remaining > 0 ? [{ ...order, quantity: Math.min(order.quantity, remaining) }] : [];
+    });
+  }
+
+  const kitchenOrders = eligible.filter(
+    (order) => order.station !== "bar" && !order.skipPrint && orderItemEventKind(order) === "NEW_ORDER_ITEM",
   );
-  const barOrders = input.orders.filter(
-    (order) => order.station === "bar" && !order.skipPrint,
+  const barOrders = eligible.filter(
+    (order) => order.station === "bar" && !order.skipPrint && orderItemEventKind(order) === "NEW_ORDER_ITEM",
   );
   if (kitchenOrders.length === 0 && barOrders.length === 0) return;
 

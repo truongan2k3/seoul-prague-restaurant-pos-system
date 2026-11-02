@@ -116,7 +116,7 @@ export function parseServerScreenConfig(raw: unknown): ServerScreenConfig {
   }
 
   return {
-    sharedTheme: row.sharedTheme === "light" || row.sharedTheme === "dark" || row.sharedTheme === "halloween" ? row.sharedTheme : undefined,
+    sharedTheme: "dark",
     languageMode,
     languages: normalizeServerScreenLanguages(languageMode, parsed),
     autoRotateLanguage:
@@ -146,7 +146,7 @@ export function parseServerScreenConfig(raw: unknown): ServerScreenConfig {
 export function serverScreenConfigToDb(config: ServerScreenConfig) {
   const languages = normalizeServerScreenLanguages(config.languageMode, config.languages);
   return {
-    ...(config.sharedTheme === "light" || config.sharedTheme === "dark" || config.sharedTheme === "halloween" ? { sharedTheme: config.sharedTheme } : {}),
+    sharedTheme: "dark",
     languageMode: config.languageMode,
     languages,
     autoRotateLanguage: Boolean(config.autoRotateLanguage),
@@ -314,7 +314,7 @@ export function shouldShowGrillCompanions(
   tableItems: OrderItem[],
   menuItems: MenuItem[],
 ): boolean {
-  if (!item.id || !orderIsGrillDish(item, menuItems)) return false;
+  if (!item.id || item.modifiers?.itemTransfer || !orderIsGrillDish(item, menuItems)) return false;
   return firstGrillOrderItemId(tableItems, menuItems) === item.id;
 }
 
@@ -398,7 +398,7 @@ export function mergeGrillCompanionAnchors(
 
   for (const [tableId, tableItems] of tableItemsByTable) {
     if (anchors[tableId]) continue;
-    const firstId = firstGrillOrderItemId(tableItems, menuItems);
+    const firstId = firstGrillOrderItemId(tableItems.filter(item => !item.modifiers?.itemTransfer), menuItems);
     if (!firstId) continue;
     const parent = tableItems.find((item) => item.id === firstId);
     if (!parent?.id) continue;
@@ -617,6 +617,7 @@ function lineAggregateKey(item: OrderItem): string {
     item.notes ?? "",
     item.notesTranslated ?? "",
     item.station ?? "",
+    item.modifiers?.itemTransfer?.fromLabel ?? "",
   ].join("\u0001");
 }
 

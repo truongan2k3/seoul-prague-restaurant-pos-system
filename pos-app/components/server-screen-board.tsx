@@ -42,6 +42,7 @@ import { isKitchenMessageOrder } from "@/lib/kitchen-message-order";
 import { usesKitchenScreen } from "@/lib/kitchen-fulfillment-mode";
 import { itemTransferLabel, orderItemEventKind } from "@/lib/item-transfers";
 import { orderItemDisplayName, resolveMenuItemForOrder } from "@/lib/menu-display";
+import { stationTicketNumber } from "@/lib/station-ticket-number";
 import {
   isNotificationAudioUnlocked,
   NOTIFICATION_AUDIO_UNLOCKED,
@@ -148,6 +149,7 @@ type HistoryRow = {
   orderedAt?: string;
   completedAt?: string;
   tableId?: string;
+  ticketNumber?: number;
 };
 
 type HistoryCardGroup = {
@@ -586,6 +588,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             languageRef.current,
           ),
           orderedAt: row.created_at,
+          ticketNumber: stationTicketNumber(mapped.modifiers),
           completedAt: row.ready_at ?? undefined,
           tableId: row.table_id,
         };
@@ -981,6 +984,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         tableLabel: tableId ? tableLabelById.get(tableId) ?? "—" : "—",
         note: null,
         orderedAt: parent?.createdAt ?? anchor?.createdAt,
+        ticketNumber: stationTicketNumber(parent?.modifiers)??anchor?.ticketNumber,
         completedAt: readyAt,
         tableId,
       });
@@ -1012,7 +1016,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         group = {
           key: waveId,
           tableLabel: row.tableLabel,
-          ticketId: formatServerScreenTicketId(row.orderedAt),
+          ticketId: formatServerScreenTicketId(row.orderedAt,row.ticketNumber),
           orderedAt: row.orderedAt,
           completedAt: row.completedAt,
           lineMap: new Map(),
@@ -1021,8 +1025,9 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       }
       if (row.orderedAt && (!group.orderedAt || row.orderedAt < group.orderedAt)) {
         group.orderedAt = row.orderedAt;
-        group.ticketId = formatServerScreenTicketId(row.orderedAt);
+        group.ticketId = formatServerScreenTicketId(row.orderedAt,row.ticketNumber);
       }
+      if(group.ticketId==="—"&&row.ticketNumber)group.ticketId=formatServerScreenTicketId(row.orderedAt,row.ticketNumber);
       if (row.completedAt && (!group.completedAt || row.completedAt > group.completedAt)) {
         group.completedAt = row.completedAt;
       }
@@ -1149,6 +1154,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         tableLabel: tableLabelById.get(item.tableId) ?? "—",
         note: itemNote(item, language),
         orderedAt: item.createdAt,
+        ticketNumber: stationTicketNumber(item.modifiers),
         completedAt: item.readyAt,
         tableId: item.tableId,
       });
@@ -1420,6 +1426,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             tableLabel: tableId ? tableLabelById.get(tableId) ?? "—" : "—",
             note: null,
             orderedAt: parent?.createdAt ?? anchor?.createdAt,
+            ticketNumber: stationTicketNumber(parent?.modifiers)??anchor?.ticketNumber,
             completedAt: readyAt,
             tableId,
           });

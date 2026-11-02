@@ -2,10 +2,11 @@ BEGIN;
 CREATE INDEX IF NOT EXISTS sales_history_visit_idx ON public.sales(table_id,seated_at,closed_at) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS referral_commissions_sale_idx ON public.referral_commissions(sale_id,business_id);
 
+DROP FUNCTION IF EXISTS public.history_sales_analytics(date,date,uuid,uuid,text,text,text);
 CREATE OR REPLACE FUNCTION public.history_sales_analytics(
-  p_from date,p_to date,p_actor uuid,p_business uuid,p_payment text DEFAULT 'all',p_code text DEFAULT NULL,p_partner text DEFAULT NULL
+  p_from date,p_to date,p_actor uuid,p_business uuid,p_payment text DEFAULT 'all',p_code text DEFAULT NULL,p_partner text DEFAULT NULL,p_month_compare boolean DEFAULT false
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $history$
-DECLARE actor public.staff; result jsonb; days integer; can_commission boolean;
+DECLARE actor public.staff; result jsonb; days integer; can_commission boolean; previous_from date; previous_to date;
 BEGIN
   IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Server authorization required'; END IF;
   SELECT * INTO actor FROM public.staff WHERE id=p_actor AND business_id=p_business AND active;
@@ -14,9 +15,14 @@ BEGIN
   IF p_payment NOT IN ('all','cash','card') THEN RAISE EXCEPTION 'Invalid payment filter'; END IF;
   IF actor.role NOT IN ('admin','manager','cashier') AND NOT (coalesce(to_jsonb(actor)->'allowed_nav','[]'::jsonb) ? 'history') THEN RAISE EXCEPTION 'History access required'; END IF;
   can_commission:=actor.role IN ('admin','manager','cashier'); days:=p_to-p_from+1;
+  IF p_month_compare OR (p_from=date_trunc('month',p_from::timestamp)::date AND p_to=(date_trunc('month',p_from::timestamp)+interval '1 month - 1 day')::date) THEN
+    previous_to:=date_trunc('month',p_from::timestamp)::date-1;
+    previous_from:=date_trunc('month',previous_to::timestamp)::date;
+  ELSE previous_from:=p_from-days; previous_to:=p_to-days;
+  END IF;
   WITH windows AS (
     SELECT n,f,t,f::timestamp AT TIME ZONE 'Europe/Prague' starts,(t+1)::timestamp AT TIME ZONE 'Europe/Prague' ends
-    FROM (VALUES(0,p_from,p_to),(1,p_from-days,p_to-days),(2,p_from-7,p_to-7)) x(n,f,t)
+    FROM (VALUES(0,p_from,p_to),(1,previous_from,previous_to),(2,p_from-7,p_to-7)) x(n,f,t)
   ), bounds AS (SELECT min(starts) starts,max(ends) ends FROM windows),
   scoped AS MATERIALIZED (
     SELECT s.* FROM public.sales s,bounds b WHERE s.closed_at>=b.starts AND s.closed_at<b.ends
@@ -116,7 +122,77 @@ BEGIN
   RETURN result;
 END;
 $history$;
-REVOKE ALL ON FUNCTION public.history_sales_analytics(date,date,uuid,uuid,text,text,text) FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION public.history_sales_analytics(date,date,uuid,uuid,text,text,text) TO service_role;
+REVOKE ALL ON FUNCTION public.history_sales_analytics(date,date,uuid,uuid,text,text,text,boolean) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.history_sales_analytics(date,date,uuid,uuid,text,text,text,boolean) TO service_role;
+
+-- One persisted number per Send, shared by kitchen and bar, reset by Prague day.
+CREATE TABLE IF NOT EXISTS public.station_order_numbers (
+  table_id uuid NOT NULL,
+  ordered_at timestamptz NOT NULL,
+  ticket_day date NOT NULL,
+  ticket_number bigint NOT NULL CHECK(ticket_number>0),
+  PRIMARY KEY(table_id,ordered_at),
+  UNIQUE(ticket_day,ticket_number)
+);
+ALTER TABLE public.station_order_numbers ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.station_order_numbers FROM PUBLIC,anon,authenticated;
+GRANT ALL ON public.station_order_numbers TO service_role;
+LOCK TABLE public.order_items IN SHARE ROW EXCLUSIVE MODE;
+
+DO $backfill$
+BEGIN
+  IF NOT EXISTS(SELECT 1 FROM public.station_order_numbers) THEN
+    WITH snapshots AS (
+      SELECT oi.table_id,oi.created_at ordered_at,oi.modifiers FROM public.order_items oi WHERE NOT coalesce(oi.hide_on_kds,false)
+      UNION ALL
+      SELECT s.table_id,(j->>'createdAt')::timestamptz,j->'modifiers'
+      FROM public.sales s CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(s.items)='array' THEN s.items ELSE '[]'::jsonb END) j
+      WHERE s.table_id IS NOT NULL AND j->>'createdAt' ~ '^\d{4}-\d{2}-\d{2}T' AND NOT coalesce((j->>'hideOnKds')::boolean,false)
+    ), waves AS (
+      SELECT DISTINCT coalesce(nullif(modifiers#>>'{itemTransfer,fromTableId}','')::uuid,table_id) table_id,ordered_at,
+        (ordered_at AT TIME ZONE 'Europe/Prague')::date ticket_day FROM snapshots WHERE ordered_at IS NOT NULL
+    )
+    INSERT INTO public.station_order_numbers(table_id,ordered_at,ticket_day,ticket_number)
+    SELECT table_id,ordered_at,ticket_day,row_number() OVER(PARTITION BY ticket_day ORDER BY ordered_at,table_id) FROM waves;
+  END IF;
+END;
+$backfill$;
+
+CREATE OR REPLACE FUNCTION public.stamp_station_order_number() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $ticket$
+DECLARE assigned_number bigint; assigned_day date; original_table uuid;
+BEGIN
+  IF TG_OP='UPDATE' AND OLD.modifiers->>'kitchenOrderNumber' ~ '^[1-9][0-9]*$' THEN
+    NEW.modifiers:=coalesce(NEW.modifiers,'{}'::jsonb)||jsonb_build_object('kitchenOrderNumber',OLD.modifiers->'kitchenOrderNumber',
+      'kitchenOrderDay',coalesce(OLD.modifiers->>'kitchenOrderDay',(OLD.created_at AT TIME ZONE 'Europe/Prague')::date::text));
+    RETURN NEW;
+  END IF;
+  -- Transfer fragments inherit their original order; they never reserve a new number.
+  IF auth.role()='service_role' AND NEW.modifiers ? 'itemTransfer' AND EXISTS(
+    SELECT 1 FROM public.station_order_numbers n WHERE n.ticket_day::text=NEW.modifiers->>'kitchenOrderDay'
+      AND n.ticket_number::text=NEW.modifiers->>'kitchenOrderNumber'
+  ) THEN RETURN NEW; END IF;
+  IF coalesce(NEW.hide_on_kds,false) THEN RETURN NEW; END IF;
+  NEW.created_at:=coalesce(NEW.created_at,now());
+  assigned_day:=(NEW.created_at AT TIME ZONE 'Europe/Prague')::date;
+  original_table:=coalesce(nullif(NEW.modifiers#>>'{itemTransfer,fromTableId}','')::uuid,NEW.table_id);
+  SELECT ticket_number INTO assigned_number FROM public.station_order_numbers WHERE table_id=original_table AND ordered_at=NEW.created_at;
+  IF assigned_number IS NULL THEN
+    PERFORM pg_advisory_xact_lock(hashtextextended('station-ticket:'||assigned_day::text,0));
+    SELECT ticket_number INTO assigned_number FROM public.station_order_numbers WHERE table_id=original_table AND ordered_at=NEW.created_at;
+    IF assigned_number IS NULL THEN
+      SELECT coalesce(max(ticket_number),0)+1 INTO assigned_number FROM public.station_order_numbers WHERE ticket_day=assigned_day;
+      INSERT INTO public.station_order_numbers VALUES(original_table,NEW.created_at,assigned_day,assigned_number);
+    END IF;
+  END IF;
+  NEW.modifiers:=coalesce(NEW.modifiers,'{}'::jsonb)||jsonb_build_object('kitchenOrderNumber',assigned_number,'kitchenOrderDay',assigned_day);
+  RETURN NEW;
+END;
+$ticket$;
+REVOKE ALL ON FUNCTION public.stamp_station_order_number() FROM PUBLIC,anon,authenticated;
+DROP TRIGGER IF EXISTS stamp_station_order_number ON public.order_items;
+CREATE TRIGGER stamp_station_order_number BEFORE INSERT OR UPDATE ON public.order_items FOR EACH ROW EXECUTE FUNCTION public.stamp_station_order_number();
+UPDATE public.order_items SET modifiers=coalesce(modifiers,'{}'::jsonb)
+WHERE NOT coalesce(hide_on_kds,false) AND NOT(coalesce(modifiers,'{}'::jsonb) ? 'kitchenOrderNumber');
 NOTIFY pgrst,'reload schema';
 COMMIT;

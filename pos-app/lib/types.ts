@@ -404,6 +404,9 @@ export interface SelectedMenuOption {
 }
 
 export interface OrderLineModifiers {
+  /** Server-assigned daily order sequence, shared by kitchen and bar. */
+  kitchenOrderNumber?: number;
+  kitchenOrderDay?: string;
   /** Unit price before staff price changes; retained with the original order. */
   originalUnitPrice?: number;
   itemTransferRevision?: string;

@@ -9,6 +9,7 @@ import { resolveKitchenStatus } from "@/lib/auto-serve";
 import { resolveMenuItemForOrder } from "@/lib/menu-display";
 import { SLA_THRESHOLD_MS } from "@/lib/order-sla";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
+import { stationTicketNumber } from "@/lib/station-ticket-number";
 import type {
   LanguageCode,
   MenuItem,
@@ -323,6 +324,7 @@ export type GrillCompanionAnchor = {
   parentId: string;
   tableId: string;
   createdAt: string;
+  ticketNumber?: number;
 };
 
 /** Bump when companion id set changes (e.g. split lettuce/garlic). */
@@ -397,7 +399,12 @@ export function mergeGrillCompanionAnchors(
   const anchors = { ...store.anchors };
 
   for (const [tableId, tableItems] of tableItemsByTable) {
-    if (anchors[tableId]) continue;
+    if (anchors[tableId]) {
+      const parent=tableItems.find(item=>item.id===anchors[tableId].parentId);
+      const number=stationTicketNumber(parent?.modifiers);
+      if(number&&anchors[tableId].ticketNumber!==number){anchors[tableId]={...anchors[tableId],ticketNumber:number};changed=true;}
+      continue;
+    }
     const firstId = firstGrillOrderItemId(tableItems.filter(item => !item.modifiers?.itemTransfer), menuItems);
     if (!firstId) continue;
     const parent = tableItems.find((item) => item.id === firstId);
@@ -406,6 +413,7 @@ export function mergeGrillCompanionAnchors(
       parentId: parent.id,
       tableId,
       createdAt: parent.createdAt ?? new Date().toISOString(),
+      ticketNumber: stationTicketNumber(parent.modifiers),
     };
     changed = true;
   }
@@ -533,14 +541,12 @@ export function serverScreenOrderWaveKey(
   return `${tableId}|${createdAt ?? ""}`;
 }
 
-/** Compact ticket number from creation time (display only). */
+/** Durable daily sequence; never derive an order number from a timestamp. */
 export function formatServerScreenTicketId(
-  createdAt: string | Date | null | undefined,
+  _createdAt: string | Date | null | undefined,
+  ticketNumber?: number,
 ): string {
-  if (!createdAt) return "---";
-  const date = typeof createdAt === "string" ? new Date(createdAt) : createdAt;
-  if (Number.isNaN(date.getTime())) return "---";
-  return String(Math.floor(date.getTime() / 1000) % 1000).padStart(3, "0");
+  return Number.isSafeInteger(ticketNumber)&&Number(ticketNumber)>0?String(ticketNumber):"—";
 }
 
 export type ServerScreenOrderCardLineKind = "item" | "companion";
@@ -958,7 +964,7 @@ export function buildServerScreenOrderCards(
       id: waveId,
       tableId: wave.tableId,
       tableLabel: tableLabelById.get(wave.tableId) ?? "—",
-      ticketId: formatServerScreenTicketId(wave.orderedAt),
+      ticketId: formatServerScreenTicketId(wave.orderedAt,wave.items.map(item=>stationTicketNumber(item.modifiers)).find(number=>number!==undefined)??anchor?.ticketNumber),
       orderedAt: wave.orderedAt,
       ageFrom,
       lines,

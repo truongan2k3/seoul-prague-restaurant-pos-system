@@ -1,6 +1,7 @@
 import { resolveKitchenStatus } from "@/lib/auto-serve";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
 import type { OrderItem } from "@/lib/types";
+import { withoutStationTicketNumber } from "@/lib/station-ticket-number";
 
 /** Same-send wave so later appends stay separate tickets. */
 function createdAtBucket(iso?: string): string {
@@ -11,7 +12,7 @@ function createdAtBucket(iso?: string): string {
 function modifiersKey(item: OrderItem): string {
   try {
     return JSON.stringify({
-      modifiers: item.modifiers ?? null,
+      modifiers: withoutStationTicketNumber(item.modifiers) ?? null,
       selectedAddons: item.selectedAddons ?? null,
     });
   } catch {

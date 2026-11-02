@@ -27,9 +27,17 @@ export function historyUtcRange(dates: HistoryDates) {
   const end = new Date(new Date(venueDayRangeUtc(dates.to).endExclusiveIso).getTime()-1);
   return { start, end };
 }
-export function historyComparisonDates(dates: HistoryDates) {
+export function isHistoryCalendarMonth(dates: HistoryDates) {
+  return dates.from.endsWith("-01") && dates.from.slice(0,7)===dates.to.slice(0,7) && shiftIsoDate(dates.to,1).endsWith("-01");
+}
+export function historyComparisonPeriods(dates: HistoryDates, monthComparison=false) {
   const days = Math.round((Date.parse(`${dates.to}T00:00:00Z`)-Date.parse(`${dates.from}T00:00:00Z`))/86_400_000)+1;
-  return [dates, { from: shiftIsoDate(dates.from,-days), to: shiftIsoDate(dates.to,-days) }, { from: shiftIsoDate(dates.from,-7), to: shiftIsoDate(dates.to,-7) }];
+  const monthStart=`${dates.from.slice(0,7)}-01`;
+  const previousMonthEnd=shiftIsoDate(monthStart,-1);
+  const previous=monthComparison||isHistoryCalendarMonth(dates)
+    ? {from:`${previousMonthEnd.slice(0,7)}-01`,to:previousMonthEnd}
+    : {from:shiftIsoDate(dates.from,-days),to:shiftIsoDate(dates.to,-days)};
+  return [dates,previous,{from:shiftIsoDate(dates.from,-7),to:shiftIsoDate(dates.to,-7)}];
 }
 export function saleReferral(sale: SaleRecord, extra?: HistoryAttribution) {
   return { codeId: sale.referralCodeId ?? extra?.codeId ?? null, code: sale.referralCode ?? extra?.code ?? null,
@@ -52,11 +60,11 @@ export function publishHistoryFinancialChange(event: HistoryFinancialChange) {
 }
 /** Re-entering History follows an unobserved period: expire snapshots once, without polling. */
 export function expireHistoryAnalyticsCache() { for(const entry of cache.values()){entry.expires=0;entry.version++;entry.pending=undefined;} }
-export async function cachedHistoryAnalytics(key: string, dates: HistoryDates, loader: () => Promise<HistoryAnalytics>): Promise<HistoryAnalytics> {
+export async function cachedHistoryAnalytics(key: string, dates: HistoryDates, loader: () => Promise<HistoryAnalytics>, monthComparison=false): Promise<HistoryAnalytics> {
   let entry=cache.get(key);
   if(entry?.data && entry.expires>Date.now())return entry.data;
   if(entry?.pending)return entry.pending;
-  if(!entry){entry={dates:historyComparisonDates(dates),expires:0,version:0};cache.set(key,entry);}
+  if(!entry){entry={dates:historyComparisonPeriods(dates,monthComparison),expires:0,version:0};cache.set(key,entry);}
   const target=entry,version=entry.version;
   const pending=loader().then(data=>{if(target.version===version){target.data=data;target.expires=Date.now()+60_000;}return data;}).finally(()=>{if(target.pending===pending)target.pending=undefined;});
   target.pending=pending;

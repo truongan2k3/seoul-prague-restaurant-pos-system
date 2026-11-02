@@ -24,6 +24,7 @@ import {
 } from "@/src/lib/supabase-data";
 import { supabase } from "@/src/lib/supabase";
 import { inferServiceChannel } from "@/lib/tax-summary";
+import { withoutStationTicketNumber } from "@/lib/station-ticket-number";
 
 type ActivityItemRow = {
   id: string;
@@ -207,7 +208,7 @@ function aggregateOrderItems(items: OrderItem[]): OrderItem[] {
         entry.menuItemId === item.menuItemId &&
         entry.kitchenStatus === item.kitchenStatus &&
         entry.taxGroup === item.taxGroup && entry.itemType === item.itemType &&
-        JSON.stringify(entry.modifiers ?? {}) === JSON.stringify(item.modifiers ?? {}) &&
+        JSON.stringify(withoutStationTicketNumber(entry.modifiers) ?? {}) === JSON.stringify(withoutStationTicketNumber(item.modifiers) ?? {}) &&
         JSON.stringify(entry.selectedAddons ?? []) === JSON.stringify(item.selectedAddons ?? []),
     );
 

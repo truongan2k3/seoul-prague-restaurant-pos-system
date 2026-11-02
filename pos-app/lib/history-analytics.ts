@@ -1,5 +1,6 @@
 import { shiftIsoDate } from "@/lib/reservation-analytics";
 import { todayIsoDateInVenue, venueDayRangeUtc, venueWeekdayIndex } from "@/lib/venue-timezone";
+import { resolveTipPaymentMethod } from "@/lib/summary-analytics";
 import type { SaleRecord } from "@/lib/types";
 
 export type HistoryDates = { from: string; to: string };
@@ -7,11 +8,12 @@ export type HistoryDates = { from: string; to: string };
 export function historyCollectedPayments(sales: SaleRecord[]) {
   let cash=0,card=0,cashTips=0,cardTips=0;
   for(const sale of sales){
-    if(sale.deletedAt||!Number.isFinite(sale.grandTotal)||(sale.paymentMethod!=="cash"&&sale.paymentMethod!=="card"))continue;
-    const total=Math.max(0,Math.round((sale.grandTotal+Number.EPSILON)*100));
+    if(sale.deletedAt||(sale.paymentMethod!=="cash"&&sale.paymentMethod!=="card"))continue;
     const recordedTip=Math.round((Number(sale.tip)||0)*100);
-    const tipMethod=sale.tipPaymentMethod??sale.paymentMethod;
+    const tipMethod=resolveTipPaymentMethod(sale);
     if(tipMethod==="cash")cashTips+=recordedTip;else cardTips+=recordedTip;
+    if(!Number.isFinite(sale.grandTotal))continue;
+    const total=Math.max(0,Math.round((sale.grandTotal+Number.EPSILON)*100));
     const tip=Math.min(total,Math.max(0,recordedTip));
     const base=total-tip;
     if(sale.paymentMethod==="cash")cash+=base;else card+=base;

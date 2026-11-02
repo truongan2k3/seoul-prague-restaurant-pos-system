@@ -16,6 +16,7 @@ export interface CheckoutPaymentRecord {
   referral?: import("@/lib/referrals").ReferralPayment;
   referralEqualScope?: EqualAdjustScope;
   paymentMethod: "cash" | "card";
+  tipPaymentMethod?: "cash" | "card";
   subtotal: number;
   discountType: DiscountType;
   discountValue: number;

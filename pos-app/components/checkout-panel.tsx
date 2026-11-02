@@ -885,6 +885,7 @@ export function CheckoutPanel({
     const payment = {
       ...(referralQuote ? {referral: {reservationId:referralQuote.reservationId,paymentKey:referralPaymentKey,installment:referralQuote.lastInstallment+successfulReferralPayments+1,codeId:referralQuote.codeId,version:referralQuote.version,discountPercent:referralPercent,discountAmount:totals.referralDiscountAmount,overrideReason:effectiveOverride?.reason},referralEqualScope:equalAdjustScope} : {}),
       paymentMethod: method,
+      tipPaymentMethod: method,
       subtotal: totals.subtotal,
       discountType,
       discountValue,

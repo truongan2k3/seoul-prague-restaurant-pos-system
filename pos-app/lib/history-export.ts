@@ -1,5 +1,5 @@
 import { historyCollectedPayments, type HistoryAnalytics } from "@/lib/history-analytics";
-import { saleNetTotal } from "@/lib/summary-analytics";
+import { resolveTipPaymentMethod, saleNetTotal } from "@/lib/summary-analytics";
 import { formatInVenueTz } from "@/lib/venue-timezone";
 import type { SaleRecord } from "@/lib/types";
 
@@ -7,7 +7,7 @@ export async function exportHistory(sales:SaleRecord[],analytics:HistoryAnalytic
   const rows=sales.map(sale=>({
     Payment_ID:sale.id,Table:sale.tableLabel,Closed_Prague:formatInVenueTz(sale.closedAt,"en-GB",{dateStyle:"short",timeStyle:"medium",hour12:false}),
     Staff:sale.staffName,Method:sale.paymentMethod,Voided:!!sale.deletedAt,Recorded_total_CZK:sale.grandTotal,Subtotal_CZK:sale.deletedAt?0:sale.subtotal,Net_sales_CZK:sale.deletedAt?0:saleNetTotal(sale),
-    Discount_CZK:sale.deletedAt?0:sale.discountAmount,Tip_CZK:sale.deletedAt?0:sale.tip,Tip_Method:sale.tipPaymentMethod??sale.paymentMethod,Collected_CZK:sale.deletedAt?0:sale.grandTotal,Voucher_credit_CZK:sale.deletedAt?0:sale.voucherDiscountAmount??0,
+    Discount_CZK:sale.deletedAt?0:sale.discountAmount,Tip_CZK:sale.deletedAt?0:sale.tip,Tip_Method:resolveTipPaymentMethod(sale),Collected_CZK:sale.deletedAt?0:sale.grandTotal,Voucher_credit_CZK:sale.deletedAt?0:sale.voucherDiscountAmount??0,
     Split_mode:sale.splitMode??"total",Split_count:sale.splitCount??1,
   }));
   if(excel){

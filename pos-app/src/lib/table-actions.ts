@@ -948,6 +948,7 @@ export async function checkoutTable(
     discount_type: payment.discountValue > 0 ? payment.discountType : null,
     discount_value: payment.discountValue,
     tip: shareAmounts.tip,
+    tip_payment_method: payment.tipPaymentMethod ?? payment.paymentMethod,
     grand_total: shareAmounts.grandTotal,
     payment_method: payment.paymentMethod,
     amount_given: payment.amountGiven ?? null,

@@ -74,6 +74,7 @@ export function OrderHistoryModal({
   const [editTipMode, setEditTipMode] = useState(resolvedInitialEditTip);
   const [editTip, setEditTip] = useState(sale.tip);
   const [editPaymentMethod, setEditPaymentMethod] = useState<PaymentMethod>(sale.paymentMethod);
+  const [tipMethodExplicit, setTipMethodExplicit] = useState(sale.tipPaymentMethod != null);
   const [editTipPaymentMethod, setEditTipPaymentMethod] = useState<PaymentMethod>(
     resolveTipPaymentMethod(sale),
   );
@@ -87,6 +88,7 @@ export function OrderHistoryModal({
     setEditTip(sale.tip);
     setEditPaymentMethod(sale.paymentMethod);
     setEditTipPaymentMethod(resolveTipPaymentMethod(sale));
+    setTipMethodExplicit(sale.tipPaymentMethod != null);
     setSaveError(null);
   };
 
@@ -96,8 +98,8 @@ export function OrderHistoryModal({
   }, [sale, resolvedInitialEditTip]);
 
   const editGrandTotal = useMemo(
-    () => Math.max(0, sale.subtotal - sale.discountAmount) + editTip,
-    [sale.subtotal, sale.discountAmount, editTip],
+    () => Math.max(0, Number((sale.grandTotal - sale.tip + editTip).toFixed(2))),
+    [sale.grandTotal, sale.tip, editTip],
   );
 
   const guestSeatedAt = resolveGuestSeatedAt(sale);
@@ -307,7 +309,7 @@ export function OrderHistoryModal({
                       <button
                         key={method}
                         type="button"
-                        onClick={() => setEditPaymentMethod(method)}
+                        onClick={() => { setEditPaymentMethod(method); if (!tipMethodExplicit) setEditTipPaymentMethod(method); }}
                         className={`min-h-[40px] flex-1 rounded-lg px-3 text-sm font-semibold capitalize ${paymentFilterClass(
                           editPaymentMethod === method,
                           method,
@@ -337,7 +339,7 @@ export function OrderHistoryModal({
                       <button
                         key={method}
                         type="button"
-                        onClick={() => setEditTipPaymentMethod(method)}
+                        onClick={() => { setEditTipPaymentMethod(method); setTipMethodExplicit(true); }}
                         className={`min-h-[40px] flex-1 rounded-lg px-3 text-sm font-semibold capitalize ${paymentFilterClass(
                           editTipPaymentMethod === method,
                           method,

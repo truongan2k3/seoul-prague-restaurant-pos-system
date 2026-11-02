@@ -48,6 +48,11 @@ const en = {
   haPayments: "Paid payment records",
 
   notificationSoundsTitle: "Notification Sounds",
+  notificationSoundPickerHint: "Open a category to manage sounds, then Save.",
+  notificationChooseSounds: "Choose sounds",
+  notificationRenameSound: "Rename sound",
+  notificationSoundName: "Sound name",
+  notificationDeleteSoundHint: "Remove this uploaded sound from the library and all notification categories? Empty categories will use their default sound.",
   notificationSoundsHint: "Choose one or more sounds per event. One sound plays at random, avoiding the previous choice. Selections sync across the venue.",
   notificationKitchen: "Kitchen (KDS)",
   notificationBar: "Bar",
@@ -1628,6 +1633,11 @@ const cs: Record<TranslationKey, string> = {
   haPayments: "Zaplacené platby",
 
   notificationSoundsTitle: "Zvuky oznámení",
+  notificationSoundPickerHint: "Otevřete kategorii, upravte zvuky a uložte.",
+  notificationChooseSounds: "Vybrat zvuky",
+  notificationRenameSound: "Přejmenovat zvuk",
+  notificationSoundName: "Název zvuku",
+  notificationDeleteSoundHint: "Odebrat tento nahraný zvuk z knihovny a všech kategorií? Prázdné kategorie použijí výchozí zvuk.",
   notificationSoundsHint: "Vyberte jeden nebo více zvuků. Pro každou událost zazní náhodně jeden, pokud možno jiný než předchozí. Výběr se synchronizuje.",
   notificationKitchen: "Kuchyně (KDS)",
   notificationBar: "Bar",

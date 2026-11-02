@@ -12,6 +12,7 @@ export const AUTO_SERVE_MS = 0;
 export const AUTO_SERVE_POLL_MS = 10_000;
 
 export const DEFAULT_SOUND_CONFIGS: SoundConfigs = {
+  library: [],
   notifications: DEFAULT_NOTIFICATION_SOUNDS,
   callWaiter: "/sounds/bell.mp3",
   newOrder: "/sounds/new_order.mp3",
@@ -137,6 +138,7 @@ export function parseSoundConfigs(value: unknown): SoundConfigs {
   if (!value || typeof value !== "object") return { ...DEFAULT_SOUND_CONFIGS };
   const row = value as Record<string, unknown>;
   return {
+    library: parseSoundLibrary(row.library),
     notifications: parseNotificationSounds(row.notifications, row),
     callWaiter:
       typeof row.call_waiter === "string"
@@ -191,6 +193,7 @@ export function parseSoundConfigs(value: unknown): SoundConfigs {
 
 export function soundConfigsToDb(configs: SoundConfigs) {
   return {
+    library: parseSoundLibrary(configs.library),
     notifications: parseNotificationSounds(configs.notifications),
     call_waiter: configs.callWaiter,
     new_order: configs.newOrder,
@@ -201,4 +204,17 @@ export function soundConfigsToDb(configs: SoundConfigs) {
     cfd_welcome: configs.cfdWelcome,
     guest_chat: configs.guestChat,
   };
+}
+
+function parseSoundLibrary(value: unknown): SoundConfigs["library"] {
+  if (!Array.isArray(value)) return [];
+  const seen=new Set<string>();
+  const result:SoundConfigs["library"]=[];
+  for(const entry of value){
+    if(!entry||typeof entry!=="object")continue;
+    const {url,name}=entry as Record<string,unknown>;
+    if(typeof url!=="string"||url.length>2048||! /^(\/sounds\/|https?:\/\/)/i.test(url)||seen.has(url))continue;
+    seen.add(url);result.push({url,name:typeof name==="string"&&name.trim()?name.trim().slice(0,80):soundFileLabel(url)});
+  }
+  return result;
 }

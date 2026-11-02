@@ -149,6 +149,7 @@ export type NotificationSoundSettings = Record<NotificationSoundCategory, { soun
 
 /** Configurable alert sounds (paths under /public/sounds). */
 export interface SoundConfigs {
+  library: { url: string; name: string }[];
   notifications: NotificationSoundSettings;
   callWaiter: string;
   /** Kitchen / bar KDS new ticket bell. */

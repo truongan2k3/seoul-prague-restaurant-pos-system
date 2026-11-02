@@ -6,7 +6,6 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  ClipboardList,
   History,
   LogOut,
   Map,
@@ -38,7 +37,6 @@ const SIDEBAR_COLLAPSED_KEY = "pos-sidebar-collapsed";
 
 export const navItems = [
   { id: "map" as const, labelKey: "map" as const, icon: Map },
-  { id: "order" as const, labelKey: "order" as const, icon: ClipboardList },
   { id: "reservations" as const, labelKey: "reservations" as const, icon: CalendarDays },
   { id: "guestChat" as const, labelKey: "guestChatTitle" as const, icon: MessageCircle },
   { id: "referrals" as const, labelKey: "referralsTitle" as const, icon: Users },

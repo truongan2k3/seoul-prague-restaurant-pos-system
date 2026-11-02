@@ -15,7 +15,6 @@ import type { StaffInput } from "@/src/lib/staff-actions";
 
 const NAV_LABEL_KEYS: Record<NavId, TranslationKey> = {
   map: "map",
-  order: "order",
   reservations: "reservations",
   history: "history",
   summary: "summary",

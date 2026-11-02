@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MapView } from "@/components/map-view";
-import { OrderView } from "@/components/order-view";
 import { HistoryView } from "@/components/history-view";
 import { ReservationsView } from "@/components/reservations-view";
 import { ReferralDashboard } from "@/components/referral-dashboard";
@@ -614,19 +613,6 @@ export function DashboardShell() {
             onRefresh={refreshPosData}
             onTableClick={tableOrder.handleTableClick}
             actionError={tableOrder.actionError}
-          />
-        );
-      case "order":
-        return (
-          <OrderView
-            tables={tables}
-            orderItems={orderItems}
-            menuItems={menuItems}
-            onOpenTable={(tableId) => tableOrder.openNewOrder(tableId, "append")}
-            onCheckout={tableOrder.openCheckoutForTable}
-            onChangeTable={tableOrder.openChangeTable}
-            actionError={tableOrder.actionError}
-            checkoutBusy={tableOrder.isSaving}
           />
         );
       case "reservations":

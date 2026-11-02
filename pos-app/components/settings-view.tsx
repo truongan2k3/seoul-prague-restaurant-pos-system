@@ -1931,7 +1931,6 @@ export function SettingsView({
               {(
                 [
                   { id: "map" as const, labelKey: "map" as const },
-                  { id: "order" as const, labelKey: "order" as const },
                   { id: "reservations" as const, labelKey: "reservations" as const },
                   { id: "guestChat" as const, labelKey: "guestChatTitle" as const },
                   { id: "vouchers" as const, labelKey: "vouchersTitle" as const },

@@ -42,7 +42,7 @@ import {
   mergeNoteWithKitchenModifiers,
 } from "@/lib/menu-customization";
 import { finalizeNoteTranslation, presetLabel, presetsForMenuItem, togglePresetId } from "@/lib/note-presets";
-import { resolveOrderLineStation, resolveStation } from "@/lib/order-routing";
+import { isDrinkOrderItem, resolveOrderLineStation, resolveStation } from "@/lib/order-routing";
 import {
   finalizeBillOnlyOrder,
   isBillOnlyOrderLine,
@@ -730,6 +730,22 @@ export function NewOrderModal({
   const submittedNoteLinePresets = submittedNoteMenuItem
     ? presetsForMenuItem(notePresets, submittedNoteMenuItem)
     : notePresets;
+
+  const submittedMenuById = useMemo(() => new Map(menuItems.map(item => [item.id, item])), [menuItems]);
+  const submittedSections = useMemo(() => {
+    const food: EditableLine[] = [];
+    const drinks: EditableLine[] = [];
+    // Preserve the existing newest-first display order within each section.
+    const ordered = [...submittedLines].sort((a, b) => (Date.parse(b.createdAt ?? "") || 0) - (Date.parse(a.createdAt ?? "") || 0));
+    for (const line of ordered) {
+      const product = line.menuItemId ? submittedMenuById.get(line.menuItemId) : undefined;
+      const beverage = isDrinkOrderItem({ itemType: line.itemType ?? product?.itemType, station: line.station ?? product?.station, menuItemId: line.menuItemId });
+      (beverage ? drinks : food).push(line);
+    }
+    return ([{ id: "food", label: "summaryFood", items: food }, { id: "drinks", label: "summaryDrinks", items: drinks }] as const)
+      .filter(section => section.items.length > 0)
+      .map(section => ({ ...section, quantity: section.items.reduce((sum, line) => sum + line.quantity, 0) }));
+  }, [submittedLines, submittedMenuById]);
 
   const submittedDraftOrders = useMemo(
     () => editableLinesToOrders(submittedLines),
@@ -1703,7 +1719,16 @@ export function NewOrderModal({
               );
             })}
 
-            {[...submittedLines].sort((a, b) => (Date.parse(b.createdAt ?? "") || 0) - (Date.parse(a.createdAt ?? "") || 0)).map((line) => {
+            {submittedSections.map(section => (
+              <li key={section.id} className="list-none pt-2 first:pt-0">
+                <section aria-label={translate(section.label)}>
+                  <h4 className="mb-2 flex items-center gap-2 px-1 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#DCC1A5]">
+                    <span>{translate(section.label)}</span>
+                    <span className="rounded-md border border-[#C9A88B]/20 bg-[#C9A88B]/10 px-2 py-0.5 text-[10px] tracking-normal tabular-nums">{section.quantity}</span>
+                    <span aria-hidden className="h-px flex-1 bg-gradient-to-r from-[#C9A88B]/25 to-transparent" />
+                  </h4>
+                  <ul className="space-y-2">
+            {section.items.map((line) => {
               const selected = line.lineId === selectedSubmittedLineId;
               const displayName = orderItemDisplayName(line, menuItems, language);
               const linePending =
@@ -1817,6 +1842,10 @@ export function NewOrderModal({
                 </li>
               );
             })}
+                  </ul>
+                </section>
+              </li>
+            ))}
 
             {appliedVouchers.map((voucher) => (
               <li

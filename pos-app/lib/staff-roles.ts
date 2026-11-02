@@ -4,7 +4,6 @@ export const STAFF_ROLES: StaffRole[] = ["admin", "manager", "server", "kitchen"
 
 export const ALL_NAV_TABS: NavId[] = [
   "map",
-  "order",
   "reservations",
   "guestChat",
   "vouchers",
@@ -36,7 +35,7 @@ export function staffBypassesManagerPasscode(role: StaffRole | undefined): boole
 export function defaultNavTabsForRole(role: StaffRole | undefined): NavId[] {
   if (!role) return ["map"];
   if (role === "admin" || role === "manager") return [...ALL_NAV_TABS];
-  if (role === "server") return ["map", "order", "reservations", "guestChat", "vouchers"];
+  if (role === "server") return ["map", "reservations", "guestChat", "vouchers"];
   // Kitchen / bar primarily use dedicated screens; POS map is the fallback home.
   return ["map"];
 }
@@ -46,9 +45,9 @@ export function parseAllowedNav(value: unknown): NavId[] | undefined {
   const allowed = new Set<string>(ALL_NAV_TABS);
   const tabs = value
     .filter((entry): entry is string => typeof entry === "string")
-    .map((entry) => entry.trim())
+    .map((entry) => entry.trim() === "order" ? "map" : entry.trim())
     .filter((entry): entry is NavId => allowed.has(entry));
-  return tabs.length > 0 ? tabs : undefined;
+  return tabs.length > 0 ? [...new Set(tabs)] : undefined;
 }
 
 /** Effective tabs for a member (custom list or role defaults). */

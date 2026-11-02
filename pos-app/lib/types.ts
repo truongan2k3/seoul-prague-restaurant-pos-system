@@ -56,7 +56,6 @@ export interface ServerScreenConfig {
 }
 export type NavId =
   | "map"
-  | "order"
   | "reservations"
   | "history"
   | "summary"

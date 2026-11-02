@@ -764,13 +764,6 @@ export function useTableOrderWorkflow({
     setActionError,
     openChangeTable,
     openNewOrder,
-    openCheckoutForTable: (tableId: string) => {
-      const orders = filterItemsForBoard(
-        orderItems.filter((item) => item.tableId === tableId),
-        "floor",
-      );
-      void handleProceedToCheckout(orders, tableId);
-    },
     handleTableClick,
     tableOrderModals: modals,
     isSaving,

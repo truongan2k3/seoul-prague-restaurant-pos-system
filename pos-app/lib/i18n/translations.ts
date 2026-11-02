@@ -48,7 +48,9 @@ const en = {
   haPayments: "Paid payment records",
 
   notificationSoundsTitle: "Notification Sounds",
-  notificationSoundPickerHint: "Open a category to manage sounds, then Save.",
+  notificationSoundPickerHint: "Choose sounds by category. Manage uploaded sounds below, then Save.",
+  notificationUploadedLibrary: "Manage uploaded sounds",
+  notificationNoUploadedSounds: "No uploaded sounds yet.",
   notificationChooseSounds: "Choose sounds",
   notificationRenameSound: "Rename sound",
   notificationSoundName: "Sound name",
@@ -1633,7 +1635,9 @@ const cs: Record<TranslationKey, string> = {
   haPayments: "Zaplacené platby",
 
   notificationSoundsTitle: "Zvuky oznámení",
-  notificationSoundPickerHint: "Otevřete kategorii, upravte zvuky a uložte.",
+  notificationSoundPickerHint: "Vyberte zvuky podle kategorie. Nahrané zvuky spravujte níže a uložte.",
+  notificationUploadedLibrary: "Správa nahraných zvuků",
+  notificationNoUploadedSounds: "Zatím nejsou nahrány žádné zvuky.",
   notificationChooseSounds: "Vybrat zvuky",
   notificationRenameSound: "Přejmenovat zvuk",
   notificationSoundName: "Název zvuku",

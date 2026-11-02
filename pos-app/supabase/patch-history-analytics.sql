@@ -25,7 +25,8 @@ BEGIN
   ), visits AS (SELECT DISTINCT table_id,seated_at FROM scoped WHERE table_id IS NOT NULL AND seated_at IS NOT NULL),
   sessions AS (
     SELECT s.table_id,s.seated_at,(array_agg(s.id ORDER BY s.closed_at DESC,s.id DESC))[1] last_id,
-      sum(greatest(0,s.subtotal-coalesce(s.discount_amount,0))) value
+      sum(greatest(0,s.subtotal-coalesce(s.discount_amount,0))) value,
+      max(s.party_size) FILTER(WHERE s.party_size>0) guests
     FROM public.sales s JOIN visits v ON s.table_id=v.table_id AND s.seated_at=v.seated_at
     WHERE s.deleted_at IS NULL AND s.payment_method IN ('cash','card')
       AND coalesce(s.referral_snapshot->>'business_id',p_business::text)=p_business::text
@@ -46,7 +47,8 @@ BEGIN
         SELECT 1 FROM public.tables t WHERE t.id=s.table_id AND t.occupied_at=s.seated_at
           AND t.status<>'empty' AND coalesce(t.payment_status,'unpaid')<>'paid'
       ) END completed,
-      coalesce(se.value,greatest(0,s.subtotal-coalesce(s.discount_amount,0))) completed_value
+      coalesce(se.value,greatest(0,s.subtotal-coalesce(s.discount_amount,0))) completed_value,
+      CASE WHEN se.last_id IS NOT NULL THEN se.guests WHEN s.party_size>0 THEN s.party_size ELSE NULL END completed_guests
     FROM scoped s LEFT JOIN ledger l ON l.sale_id=s.id LEFT JOIN sessions se ON se.table_id=s.table_id AND se.seated_at=s.seated_at
   ), matched AS MATERIALIZED (
     SELECT * FROM attributed a WHERE a.deleted_at IS NULL AND (p_code IS NULL OR ((a.referral_code_id IS NOT NULL OR a.code IS NOT NULL) AND coalesce(a.code,'[unrecorded]')=p_code))
@@ -61,6 +63,8 @@ BEGIN
     SELECT w.n,w.f,w.t,count(m.id) payments,
       count(DISTINCT m.order_key) FILTER(WHERE m.completed) orders,
       coalesce(sum(m.completed_value) FILTER(WHERE m.completed),0) completed_value,
+      round(sum(m.completed_value) FILTER(WHERE m.completed AND m.completed_guests>0)
+        /nullif(sum(m.completed_guests) FILTER(WHERE m.completed AND m.completed_guests>0),0),2) average_per_person,
       coalesce(sum(m.subtotal),0) gross,coalesce(sum(m.net),0) revenue,
       coalesce(sum(m.discount_amount),0) discounts,coalesce(sum(m.tip),0) tips,
       coalesce(sum(m.net) FILTER(WHERE m.referral_code_id IS NOT NULL OR m.code IS NOT NULL),0) referral_revenue,
@@ -98,7 +102,7 @@ BEGIN
   SELECT jsonb_build_object(
     'canViewCommission',can_commission,
     'periods',(SELECT jsonb_agg(jsonb_build_object('from',f,'to',t,'payments',payments,'orders',orders,'gross',gross,'revenue',revenue,
-      'average',CASE WHEN orders>0 THEN round(completed_value/orders,2) ELSE 0 END,'discounts',discounts,'tips',tips,
+      'average',CASE WHEN orders>0 THEN round(completed_value/orders,2) ELSE 0 END,'averagePerPerson',average_per_person,'discounts',discounts,'tips',tips,
       'referralRevenue',referral_revenue,'referralDiscounts',referral_discounts,'hourly',
       (SELECT jsonb_agg(jsonb_build_object('hour',h.hour,'revenue',h.revenue,'orders',h.orders) ORDER BY h.hour) FROM hourly h WHERE h.n=p.n)) ORDER BY n) FROM period_totals p),
     'daily',coalesce((SELECT jsonb_agg(jsonb_build_object('date',sales_date,'revenue',revenue,'orders',orders) ORDER BY sales_date) FROM daily),'[]'::jsonb),

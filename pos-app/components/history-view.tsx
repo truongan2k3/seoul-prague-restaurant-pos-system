@@ -22,7 +22,6 @@ import {
 import { generateOrderNumber } from "@/lib/receipt-calculations";
 import { shiftIsoDate } from "@/lib/reservation-analytics";
 import {
-  computeRevenueStats,
   saleNetTotal,
   type HistoryPaymentFilter,
 } from "@/lib/summary-analytics";
@@ -171,8 +170,6 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
     const start = (currentPage - 1) * HISTORY_PAGE_SIZE;
     return cancelledItems.slice(start, start + HISTORY_PAGE_SIZE);
   }, [cancelledItems, currentPage]);
-
-  const stats = useMemo(() => computeRevenueStats(filteredSales), [filteredSales]);
 
   const dateNavLocale = language === "cs" ? "cs-CZ" : language === "vi" ? "vi-VN" : "en-GB";
 
@@ -347,35 +344,31 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
               ) : null}
             </div>
 
-            <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              <p className="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">
+            <div className="mt-2.5 flex items-center gap-2 overflow-x-auto pb-0.5">
+              <p className="shrink-0 whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 {translate("paymentMethod")}
               </p>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex shrink-0 gap-1.5">
                 {PAYMENT_OPTIONS.map((option) => (
                   <button
                     key={option}
                     type="button"
                     onClick={() => setPaymentFilter(option)}
-                    className={paymentFilterClass(paymentFilter === option, option)}
+                    className={`${paymentFilterClass(paymentFilter === option, option)} shrink-0 whitespace-nowrap`}
                   >
                     {translate(PAYMENT_LABEL_KEYS[option])}
                   </button>
                 ))}
               </div>
+              {!showingCancelled && <div className="ml-auto flex shrink-0 gap-2 pl-2">
+                <button type="button" disabled={loading} className="min-h-10 rounded-lg border border-[#C9A88B]/30 px-3 text-sm text-[#DCC1A5] disabled:opacity-40" onClick={()=>void downloadHistory(false)}>CSV</button>
+                <button type="button" disabled={loading} className="min-h-10 rounded-lg border border-[#C9A88B]/30 px-3 text-sm text-[#DCC1A5] disabled:opacity-40" onClick={()=>void downloadHistory(true)}>Excel</button>
+              </div>}
             </div>
           </section>
 
-          {!showingCancelled && <div className="flex justify-end gap-2">
-            <button type="button" disabled={loading} className="min-h-11 rounded-lg border border-[#C9A88B]/30 px-4 text-sm text-[#DCC1A5] disabled:opacity-40" onClick={()=>void downloadHistory(false)}>CSV</button><button type="button" disabled={loading} className="min-h-11 rounded-lg border border-[#C9A88B]/30 px-4 text-sm text-[#DCC1A5] disabled:opacity-40" onClick={()=>void downloadHistory(true)}>Excel</button>
-          </div>}
           {!showingCancelled && <HistoryAnalyticsDashboard dates={selectedDates} payment={paymentFilter} onData={setAnalytics}/>}
-          {!showingCancelled ? (
-          <section className="flex flex-wrap gap-x-5 gap-y-2 rounded-xl border border-white/10 bg-[#141416] px-4 py-3 text-xs text-white/55">
-            <span>{translate("haPayments")}: {stats.orderCount}</span><span>{translate("cash")}: {formatCzk(stats.cash)}</span><span>{translate("card")}: {formatCzk(stats.card)}</span>
-            <span>{translate("tipsCash")}: {formatCzk(stats.cashTips)}</span><span>{translate("tipsCard")}: {formatCzk(stats.cardTips)}</span><span>{translate("totalCollected")}: {formatCzk(stats.grandTotal)}</span>
-          </section>
-          ) : (
+          {showingCancelled && (
           <section className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
               {translate("historyCancelledItems")}

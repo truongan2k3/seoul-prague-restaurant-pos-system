@@ -3,7 +3,7 @@ import { todayIsoDateInVenue, venueDayRangeUtc, venueWeekdayIndex } from "@/lib/
 import type { SaleRecord } from "@/lib/types";
 
 export type HistoryDates = { from: string; to: string };
-export type HistoryMetric = { from: string; to: string; payments: number; orders: number; gross: number; revenue: number; average: number; discounts: number; tips: number; referralRevenue: number; referralDiscounts: number; hourly: { hour: number; revenue: number; orders: number }[] };
+export type HistoryMetric = { from: string; to: string; payments: number; orders: number; gross: number; revenue: number; average: number; averagePerPerson?: number | null; discounts: number; tips: number; referralRevenue: number; referralDiscounts: number; hourly: { hour: number; revenue: number; orders: number }[] };
 export type HistoryAttribution = { codeId: string | null; code: string | null; partner: string | null; discountPercent: number; discountAmount: number; commission: number | null };
 export type HistoryAnalytics = {
   canViewCommission: boolean; periods: HistoryMetric[]; daily: { date: string; revenue: number; orders: number }[];

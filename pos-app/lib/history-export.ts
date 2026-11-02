@@ -13,7 +13,7 @@ export async function exportHistory(sales:SaleRecord[],analytics:HistoryAnalytic
   if(excel){
     const XLSX=await import("xlsx");const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(rows),"Payments");
     if(analytics){
-      XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(analytics.periods.map(({from,to,payments,orders,gross,revenue,average,discounts,tips})=>({from,to,payments,orders,gross,revenue,average,discounts,tips}))),"Revenue comparisons");
+      XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(analytics.periods.map(({from,to,revenue,tips,orders,averagePerPerson})=>({from,to,revenue,tips,orders,averagePerPerson:averagePerPerson??null}))),"Revenue comparisons");
     }
     XLSX.writeFile(book,`${filename}.xlsx`);return;
   }

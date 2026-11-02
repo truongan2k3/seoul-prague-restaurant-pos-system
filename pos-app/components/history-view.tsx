@@ -1,9 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { AlertTriangle, ChevronLeft, ChevronRight, Eye, Pencil, Percent, Ticket } from "lucide-react";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { DateRangeInputs } from "@/components/date-range-inputs";
+import { HistoryAnalyticsDashboard } from "@/components/history-analytics-dashboard";
+import { HistoryReferralDetails } from "@/components/history-referral-details";
+import { historyDates, historyUtcRange, saleReferral, historyChangeMatches, publishHistoryFinancialChange, subscribeHistoryFinancialChanges, type HistoryAnalytics } from "@/lib/history-analytics";
+import { todayIsoDateInVenue, venueWallTimeToUtc, formatInVenueTz } from "@/lib/venue-timezone";
 import { OrderHistoryModal } from "@/components/order-history-modal";
 import { useApp } from "@/contexts/app-context";
 import { formatCzk } from "@/lib/currency";
@@ -20,11 +24,7 @@ import { generateOrderNumber } from "@/lib/receipt-calculations";
 import { shiftIsoDate } from "@/lib/reservation-analytics";
 import {
   computeRevenueStats,
-  filterHistorySales,
-  formatSummaryDate,
-  getPeriodRange,
   saleNetTotal,
-  toDateInputValue,
   type HistoryPaymentFilter,
 } from "@/lib/summary-analytics";
 import { formatHistoryDateTime, resolveGuestSeatedAt } from "@/lib/sale-history";
@@ -33,6 +33,8 @@ import type { MenuItem, SaleRecord } from "@/lib/types";
 import {
   fetchOpenTableCancelLogs,
   fetchSales,
+  fetchHistorySaleById,
+  type SupabaseSaleRow,
   mapSalesResponse,
 } from "@/src/lib/supabase-data";
 
@@ -84,72 +86,88 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<HistoryPeriodOption>("day");
-  const [anchorDate, setAnchorDate] = useState(() => toDateInputValue(new Date()));
-  const [customFrom, setCustomFrom] = useState(() => toDateInputValue(new Date()));
-  const [customTo, setCustomTo] = useState(() => toDateInputValue(new Date()));
+  const [anchorDate, setAnchorDate] = useState(() => todayIsoDateInVenue());
+  const [customFrom, setCustomFrom] = useState(() => todayIsoDateInVenue());
+  const [customTo, setCustomTo] = useState(() => todayIsoDateInVenue());
   const [paymentFilter, setPaymentFilter] = useState<HistoryPaymentFilter>("all");
   const [listMode, setListMode] = useState<HistoryListMode>("orders");
   const [page, setPage] = useState(1);
   const [selectedSale, setSelectedSale] = useState<SaleRecord | null>(null);
   const [openEditTip, setOpenEditTip] = useState(false);
+  const [referralCode, setReferralCode] = useState("");
+  const [referralPartner, setReferralPartner] = useState("");
+  const [analytics, setAnalytics] = useState<HistoryAnalytics | null>(null);
+  const [cancelSnapshots, setCancelSnapshots] = useState<SaleRecord[]>([]);
+  const [cancelRefresh, setCancelRefresh] = useState(0);
+  const requests = useRef(0);
+  const cancelRequests = useRef(0);
+  const listCache = useRef(new Map<string, { dates: {from:string;to:string}; rows: SaleRecord[]; expires: number }>());
+  const canViewCommission = ["admin","manager","cashier"].includes(currentStaffUser?.role ?? "");
+
 
   const canEditTip = Boolean(currentStaffUser);
 
-  const rangeOptions = useMemo(() => {
-    if (period === "day") return { from: anchorDate, to: anchorDate };
-    if (period === "custom") return { from: customFrom, to: customTo };
-    return undefined;
-  }, [period, anchorDate, customFrom, customTo]);
-
-  const loadSales = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    // Full history — fetchSales pages past the PostgREST 1000-row cap.
-    const [{ data, error: fetchError }, openResult] = await Promise.all([
-      fetchSales(),
-      fetchOpenTableCancelLogs(),
-    ]);
-    if (fetchError) {
-      setError(fetchError.message);
-      setSales([]);
-    } else {
-      setSales(mapSalesResponse(data));
-    }
-    if (openResult.error) {
-      console.warn("[History] open cancel logs:", openResult.error.message);
-      setOpenCancelLogs([]);
-    } else {
-      setOpenCancelLogs(collectCancelledItemsFromOpenLogs(openResult.data));
-    }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    void loadSales();
-  }, [loadSales]);
-
-  const filteredSales = useMemo(
-    () =>
-      filterHistorySales(sales, period, paymentFilter, rangeOptions).filter(
-        (sale) => !isCancelOnlyAuditSale(sale),
-      ),
-    [sales, period, paymentFilter, rangeOptions],
-  );
-
-  const activeRange = useMemo(
-    () => getPeriodRange(period, rangeOptions),
-    [period, rangeOptions],
-  );
+  const selectedDates = useMemo(() => historyDates(period, anchorDate, customFrom, customTo), [period, anchorDate, customFrom, customTo]);
+  const activeRange = useMemo(() => historyUtcRange(selectedDates), [selectedDates]);
+  const loadSales = useCallback(async (force=false) => {
+    const request=++requests.current;
+    const key=JSON.stringify(selectedDates);const cached=listCache.current.get(key);
+    if(!force && cached && cached.expires>Date.now()){setSales(cached.rows);setLoading(false);setError(null);return;}
+    setLoading(true);setError(null);
+    try {
+      const result=await fetchSales(activeRange.start,activeRange.end,{includeReferral:true});
+      if(request!==requests.current)return;
+      if(result.error)throw new Error(result.error.message);
+      const rows=mapSalesResponse(result.data);
+      listCache.current.set(key,{dates:selectedDates,rows,expires:Date.now()+30_000});
+      if(listCache.current.size>3)listCache.current.delete(listCache.current.keys().next().value!);
+      setSales(rows);
+    }catch(cause){if(request===requests.current){setError(cause instanceof Error?cause.message:"History unavailable");setSales([]);}}
+    finally{if(request===requests.current)setLoading(false);}
+  },[selectedDates,activeRange]);
+  useEffect(()=>{void loadSales();return()=>{requests.current++;};},[loadSales]);
+  useEffect(()=>{
+    let timer:ReturnType<typeof setTimeout>|undefined;
+    const unsubscribe=subscribeHistoryFinancialChanges(event=>{
+      for(const entry of listCache.current.values())if(historyChangeMatches(event,entry.dates))entry.expires=0;
+      const relevant=historyChangeMatches(event,selectedDates);
+      if(!relevant&&listMode!=="cancelled")return;
+      if(relevant)setAnalytics(null);
+      if(timer)clearTimeout(timer);timer=setTimeout(()=>{if(relevant)void loadSales(true);if(listMode==="cancelled")setCancelRefresh(value=>value+1);},350);
+    });return()=>{unsubscribe();if(timer)clearTimeout(timer);};
+  },[selectedDates,loadSales,listMode]);
+  // Cancellation timestamps can precede the payment day. Fetch only lightweight log snapshots when this view is opened.
+  useEffect(()=>{
+    if(listMode!=="cancelled")return;
+    setCancelSnapshots([]);setOpenCancelLogs([]);
+    const request=++cancelRequests.current;
+    void Promise.all([fetchOpenTableCancelLogs(activeRange.start,activeRange.end),fetchSales(activeRange.start,undefined,{activityOnly:true})]).then(([open,closed])=>{
+      if(request!==cancelRequests.current)return;
+      if(open.error||closed.error){setError(open.error?.message??closed.error?.message??"Cancellation logs unavailable");return;}
+      setOpenCancelLogs(collectCancelledItemsFromOpenLogs(open.data));setCancelSnapshots(mapSalesResponse(closed.data));
+    }).catch(cause=>{if(request===cancelRequests.current)setError(cause instanceof Error?cause.message:"Cancellation logs unavailable");});
+    return()=>{cancelRequests.current++;};
+  },[listMode,activeRange,cancelRefresh]);
+  const filteredSales = useMemo(()=>sales.filter(sale=>{
+    const referral=saleReferral(sale,analytics?.attributions[sale.id]);
+    return sale.closedAt>=activeRange.start && sale.closedAt<=activeRange.end && !isCancelOnlyAuditSale(sale) && (paymentFilter==="all"||sale.paymentMethod===paymentFilter)
+      && (!referralCode || ((referral.codeId||referral.code) && (referral.code??"[unrecorded]")===referralCode))
+      && (!referralPartner || ((referral.codeId||referral.code) && (referral.partner??"[unrecorded]")===referralPartner));
+  }),[sales,paymentFilter,referralCode,referralPartner,analytics,activeRange]);
+  const referralOptions=useMemo(()=>({
+    codes:[...new Set([...sales.filter(sale=>sale.referralCodeId||sale.referralCode).map(sale=>sale.referralCode??"[unrecorded]"),...(analytics?.codes??[]),...(referralCode?[referralCode]:[])])].sort(),
+    partners:[...new Set([...sales.filter(sale=>sale.referralCodeId||sale.referralCode).map(sale=>sale.referralPartner??"[unrecorded]"),...(analytics?.partners??[]),...(referralPartner?[referralPartner]:[])])].sort(),
+  }),[sales,analytics,referralCode,referralPartner]);
 
   const cancelledItems = useMemo(() => {
-    const fromSales = collectCancelledItemsFromSales(sales);
+    const fromSales = collectCancelledItemsFromSales(cancelSnapshots.length ? cancelSnapshots : sales);
     const merged = mergeCancelledItemSources(fromSales, openCancelLogs);
     return filterCancelledItemsInRange(merged, activeRange);
-  }, [sales, openCancelLogs, activeRange]);
+  }, [sales, cancelSnapshots, openCancelLogs, activeRange]);
 
   useEffect(() => {
     setPage(1);
-  }, [period, paymentFilter, rangeOptions, listMode]);
+  }, [period, paymentFilter, selectedDates, listMode, referralCode, referralPartner]);
 
   const listLength = listMode === "cancelled" ? cancelledItems.length : filteredSales.length;
   const totalPages = Math.max(1, Math.ceil(listLength / HISTORY_PAGE_SIZE));
@@ -170,31 +188,33 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   const dateNavLocale = language === "cs" ? "cs-CZ" : language === "vi" ? "vi-VN" : "en-GB";
 
   const dayLabel = useMemo(() => {
-    const date = new Date(`${anchorDate}T12:00:00`);
+    const date = venueWallTimeToUtc(selectedDates.from,"12:00");
     return date.toLocaleDateString(dateNavLocale, {
+      timeZone: "Europe/Prague",
       weekday: "short",
       day: "numeric",
       month: "short",
       year: "numeric",
     });
-  }, [anchorDate, dateNavLocale]);
+  }, [selectedDates.from, dateNavLocale]);
 
   const showDayNav = period === "day";
-  const isTodayAnchor = anchorDate === toDateInputValue(new Date());
+  const isTodayAnchor = anchorDate === todayIsoDateInVenue();
   const showingCancelled = listMode === "cancelled";
 
   const jumpToToday = () => {
-    setAnchorDate(toDateInputValue(new Date()));
+    setAnchorDate(todayIsoDateInVenue());
     setListMode("orders");
   };
   const shiftAnchor = (days: number) => {
     setAnchorDate((prev) => shiftIsoDate(prev, days));
   };
 
+  const formatPeriodDate = (date: Date) => formatInVenueTz(date,dateNavLocale,{weekday:"short",day:"numeric",month:"short",year:"numeric"});
   const periodLabel =
     period === "custom" || period === "week" || period === "month"
-      ? `${formatSummaryDate(activeRange.start, language)} – ${formatSummaryDate(activeRange.end, language)}`
-      : formatSummaryDate(activeRange.start, language);
+      ? `${formatPeriodDate(activeRange.start)} – ${formatPeriodDate(activeRange.end)}`
+      : formatPeriodDate(activeRange.start);
 
   const openSale = (sale: SaleRecord, editTip = false) => {
     setSelectedSale(sale);
@@ -206,10 +226,18 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
     setOpenEditTip(false);
   };
 
-  const openSaleFromCancelled = (row: CancelledItemRecord) => {
+  const openSaleFromCancelled = async (row: CancelledItemRecord) => {
     if (!row.saleId) return;
-    const sale = sales.find((s) => s.id === row.saleId);
-    if (sale) openSale(sale);
+    const sale=sales.find(s=>s.id===row.saleId);
+    if(sale){openSale(sale);return;}
+    const result=await fetchHistorySaleById(row.saleId);
+    if(result.error){setError(result.error.message);return;}
+    const record=mapSalesResponse(result.data?[result.data as unknown as SupabaseSaleRow]:[])[0];
+    if(record)openSale(record);
+  };
+  const downloadHistory = async (excel:boolean) => {
+    try{const {exportHistory}=await import("@/lib/history-export");await exportHistory(filteredSales,analytics,`history-${selectedDates.from}-${selectedDates.to}`,excel,canViewCommission);}
+    catch(cause){setError(cause instanceof Error?cause.message:"Export failed");}
   };
 
   return (
@@ -224,7 +252,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => void loadSales()}
+            onClick={() => publishHistoryFinancialChange({})}
             className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 dark:border-gray-700 dark:text-gray-300"
           >
             Refresh
@@ -248,7 +276,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                     onClick={() => {
                       setPeriod(option);
                       if (option === "day") {
-                        setAnchorDate((prev) => prev || toDateInputValue(new Date()));
+                        setAnchorDate((prev) => prev || todayIsoDateInVenue());
                       }
                       if (option === "custom") {
                         setCustomFrom(anchorDate);
@@ -349,37 +377,22 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
             </div>
           </section>
 
+          {!showingCancelled && <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#C9A88B]/15 bg-[#141416] p-3">
+            <label className="min-w-0 flex-1 text-[10px] uppercase tracking-wide text-white/45">{translate("notificationReferralCode")}
+              <select value={referralCode} onChange={event=>setReferralCode(event.target.value)} className="pos-input mt-1 min-h-11 text-xs normal-case tracking-normal">
+                <option value="">{translate("haAllCodes")}</option>{referralOptions.codes.map(code=><option key={code} value={code}>{code==="[unrecorded]"?translate("haUnrecorded"):code}</option>)}
+              </select></label>
+            <label className="min-w-0 flex-1 text-[10px] uppercase tracking-wide text-white/45">{translate("haPartner")}
+              <select value={referralPartner} onChange={event=>setReferralPartner(event.target.value)} className="pos-input mt-1 min-h-11 text-xs normal-case tracking-normal">
+                <option value="">{translate("haAllPartners")}</option>{referralOptions.partners.map(partner=><option key={partner} value={partner}>{partner==="[unrecorded]"?translate("haUnrecorded"):partner}</option>)}
+              </select></label>
+            <div className="flex gap-2 self-end"><button type="button" disabled={loading} className="min-h-11 rounded-lg border border-[#C9A88B]/30 px-3 text-xs text-[#DCC1A5] disabled:opacity-40" onClick={()=>void downloadHistory(false)}>CSV</button><button type="button" disabled={loading} className="min-h-11 rounded-lg border border-[#C9A88B]/30 px-3 text-xs text-[#DCC1A5] disabled:opacity-40" onClick={()=>void downloadHistory(true)}>Excel</button></div>
+          </div>}
+          {!showingCancelled && <HistoryAnalyticsDashboard dates={selectedDates} payment={paymentFilter} code={referralCode} partner={referralPartner} onData={setAnalytics} refreshVersion={0}/>}
           {!showingCancelled ? (
-          <section className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                {translate("historyPaidBills")}
-              </p>
-              <p className="mt-2 text-3xl font-bold tabular-nums text-gray-900 dark:text-gray-100">{stats.orderCount}</p>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800 sm:col-span-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                {translate("revenue")}
-              </p>
-              <p className="mt-2 text-3xl font-bold tabular-nums text-gray-900 dark:text-gray-100">{formatCzk(stats.revenue)}</p>
-              <div className="mt-3 flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-300">
-                <span>
-                  {translate("cash")}: {formatCzk(stats.cash)}
-                </span>
-                <span>
-                  {translate("card")}: {formatCzk(stats.card)}
-                </span>
-                <span>
-                  {translate("tipsCash")}: {formatCzk(stats.cashTips)}
-                </span>
-                <span>
-                  {translate("tipsCard")}: {formatCzk(stats.cardTips)}
-                </span>
-                <span className="text-gray-500 dark:text-gray-400">
-                  {translate("totalCollected")}: {formatCzk(stats.grandTotal)}
-                </span>
-              </div>
-            </div>
+          <section className="flex flex-wrap gap-x-5 gap-y-2 rounded-xl border border-white/10 bg-[#141416] px-4 py-3 text-xs text-white/55">
+            <span>{translate("haPayments")}: {stats.orderCount}</span><span>{translate("cash")}: {formatCzk(stats.cash)}</span><span>{translate("card")}: {formatCzk(stats.card)}</span>
+            <span>{translate("tipsCash")}: {formatCzk(stats.cashTips)}</span><span>{translate("tipsCard")}: {formatCzk(stats.cardTips)}</span><span>{translate("totalCollected")}: {formatCzk(stats.grandTotal)}</span>
           </section>
           ) : (
           <section className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
@@ -569,6 +582,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                               </span>
                             )}
                           </div>
+                          <HistoryReferralDetails sale={sale} attribution={analytics?.attributions[sale.id]} compact />
                           {sale.guestName && (
                             <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
                               {sale.guestName}
@@ -695,11 +709,17 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
       {selectedSale && (
         <OrderHistoryModal
           sale={selectedSale}
+          referralAttribution={analytics?.attributions[selectedSale.id]}
+          commissionAllowed={canViewCommission}
           menuItems={menuItems}
           initialEditTip={openEditTip}
           onClose={closeModal}
           onUpdated={(updated) => {
-            setSales((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
+            setSales((prev) => prev.map((row) => row.id===updated.id?{...updated,
+              referralCodeId:updated.referralCodeId??row.referralCodeId,referralCode:updated.referralCode??row.referralCode,
+              referralPartner:updated.referralPartner??row.referralPartner,referralDiscountPercent:updated.referralDiscountPercent??row.referralDiscountPercent,
+              referralDiscountAmount:updated.referralDiscountAmount??row.referralDiscountAmount}:row));
+            publishHistoryFinancialChange({closedAt:updated.closedAt.toISOString(),saleId:updated.id});
             onSaleUpdated?.(updated);
           }}
           onDeleted={(deletedId, deletedAt) => {
@@ -708,6 +728,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                 row.id === deletedId ? { ...row, deletedAt: deletedAt ?? new Date() } : row,
               ),
             );
+            publishHistoryFinancialChange({closedAt:selectedSale.closedAt.toISOString(),saleId:deletedId});
             closeModal();
           }}
         />

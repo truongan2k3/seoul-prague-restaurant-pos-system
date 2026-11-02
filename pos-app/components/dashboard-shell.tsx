@@ -27,6 +27,8 @@ import { POS_EGRESS } from "@/lib/egress-config";
 import { getPeriodRange, type DateRange } from "@/lib/summary-analytics";
 import { clearPosInitCache, patchPosInitCacheMenu, readPosInitCache, readPosInitCacheStale, writePosInitCache } from "@/lib/pos-init-cache";
 import { withTimeout } from "@/lib/fetch-timeout";
+import { supabase } from "@/src/lib/supabase";
+import { publishHistoryFinancialChange } from "@/lib/history-analytics";
 import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
 import { useTableOrderWorkflow } from "@/hooks/use-table-order-workflow";
 import { useSessionHealth } from "@/hooks/use-session-health";
@@ -219,6 +221,9 @@ export function DashboardShell() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<MenuCategoryRecord[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+  const historyTables = useRef(tables); historyTables.current=tables;
+  const latestPaymentByTable = useRef(new Map<string,string>());
+
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [salesLoaded, setSalesLoaded] = useState(false);
@@ -487,6 +492,11 @@ export function DashboardShell() {
         "tables-row-sync",
         { event: "*", schema: "public", table: "tables" },
         (payload) => {
+          const row=payload.new as Record<string,unknown>;
+          const previous=historyTables.current.find(table=>table.id===row.id);
+          if(previous && previous.status!=="empty" && previous.paymentStatus!=="paid" && (row.status==="empty"||row.payment_status==="paid")) {
+            publishHistoryFinancialChange({closedAt:latestPaymentByTable.current.get(String(row.id))});
+          }
           setTables((prev) => applyTableRealtimeEvent(prev, payload));
         },
       ),
@@ -505,6 +515,21 @@ export function DashboardShell() {
     ];
     return () => unsubs.forEach((u) => u());
   }, [loading, error, reloadMenu, reloadCategories]);
+
+  useEffect(()=>{
+    if(loading || error || activeTab!=="history")return;
+    const unsubscribe=subscribeToPostgresRowChanges("history-sales-sync",{event:"*",schema:"public",table:"sales"},payload=>{
+      const row=payload.new as Record<string,unknown>;const previous=payload.old as Record<string,unknown>;
+      if(typeof row.table_id==="string" && typeof row.closed_at==="string"){
+        const oldTime=latestPaymentByTable.current.get(row.table_id);
+        if(!oldTime || Date.parse(row.closed_at)>=Date.parse(oldTime))latestPaymentByTable.current.set(row.table_id,row.closed_at);
+      }
+      publishHistoryFinancialChange({saleId:String(row.id??previous.id??""),closedAt:typeof row.closed_at==="string"?row.closed_at:undefined,
+        previousClosedAt:typeof previous.closed_at==="string"?previous.closed_at:undefined});
+    });
+    const referrals=supabase.channel("referral_management").on("broadcast",{event:"CHANGED"},()=>publishHistoryFinancialChange({})).subscribe();
+    return()=>{unsubscribe();void supabase.removeChannel(referrals);};
+  },[loading,error,activeTab]);
 
   useEffect(() => {
     if (loading || error || activeTab !== "storage") return;

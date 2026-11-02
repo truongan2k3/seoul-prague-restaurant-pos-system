@@ -1,0 +1,118 @@
+BEGIN;
+CREATE INDEX IF NOT EXISTS sales_history_visit_idx ON public.sales(table_id,seated_at,closed_at) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS referral_commissions_sale_idx ON public.referral_commissions(sale_id,business_id);
+
+CREATE OR REPLACE FUNCTION public.history_sales_analytics(
+  p_from date,p_to date,p_actor uuid,p_business uuid,p_payment text DEFAULT 'all',p_code text DEFAULT NULL,p_partner text DEFAULT NULL
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $history$
+DECLARE actor public.staff; result jsonb; days integer; can_commission boolean;
+BEGIN
+  IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Server authorization required'; END IF;
+  SELECT * INTO actor FROM public.staff WHERE id=p_actor AND business_id=p_business AND active;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Staff authorization required'; END IF;
+  IF p_from IS NULL OR p_to IS NULL OR p_to<p_from OR p_to-p_from>3650 THEN RAISE EXCEPTION 'Choose a date range of up to 10 years'; END IF;
+  IF p_payment NOT IN ('all','cash','card') THEN RAISE EXCEPTION 'Invalid payment filter'; END IF;
+  IF actor.role NOT IN ('admin','manager','cashier') AND NOT (coalesce(to_jsonb(actor)->'allowed_nav','[]'::jsonb) ? 'history') THEN RAISE EXCEPTION 'History access required'; END IF;
+  can_commission:=actor.role IN ('admin','manager','cashier'); days:=p_to-p_from+1;
+  WITH windows AS (
+    SELECT n,f,t,f::timestamp AT TIME ZONE 'Europe/Prague' starts,(t+1)::timestamp AT TIME ZONE 'Europe/Prague' ends
+    FROM (VALUES(0,p_from,p_to),(1,p_from-days,p_to-days),(2,p_from-7,p_to-7)) x(n,f,t)
+  ), bounds AS (SELECT min(starts) starts,max(ends) ends FROM windows),
+  scoped AS MATERIALIZED (
+    SELECT s.* FROM public.sales s,bounds b WHERE s.closed_at>=b.starts AND s.closed_at<b.ends
+      AND s.payment_method IN ('cash','card') AND (p_payment='all' OR s.payment_method=p_payment)
+      AND coalesce(s.referral_snapshot->>'business_id',p_business::text)=p_business::text
+  ), visits AS (SELECT DISTINCT table_id,seated_at FROM scoped WHERE table_id IS NOT NULL AND seated_at IS NOT NULL),
+  sessions AS (
+    SELECT s.table_id,s.seated_at,(array_agg(s.id ORDER BY s.closed_at DESC,s.id DESC))[1] last_id,
+      sum(greatest(0,s.subtotal-coalesce(s.discount_amount,0))) value
+    FROM public.sales s JOIN visits v ON s.table_id=v.table_id AND s.seated_at=v.seated_at
+    WHERE s.deleted_at IS NULL AND s.payment_method IN ('cash','card')
+      AND coalesce(s.referral_snapshot->>'business_id',p_business::text)=p_business::text
+    GROUP BY s.table_id,s.seated_at
+  ), ledger AS (
+    SELECT l.sale_id,count(*) entries,sum(l.amount) amount,
+      (jsonb_agg(l.rules ORDER BY CASE WHEN l.kind='earned' THEN 0 ELSE 1 END,l.created_at,l.id)->0) rules
+    FROM public.referral_commissions l JOIN scoped s ON s.id=l.sale_id WHERE l.business_id=p_business GROUP BY l.sale_id
+  ), attributed AS (
+    SELECT s.*,greatest(0,s.subtotal-coalesce(s.discount_amount,0)) net,
+      coalesce(nullif(s.referral_snapshot->>'code',''),nullif(l.rules->>'code','')) code,
+      coalesce(nullif(s.referral_snapshot->>'partner_name',''),nullif(l.rules->>'partner_name','')) partner,
+      coalesce(s.referral_discount_amount,0) referral_discount,
+      coalesce(s.referral_discount_percent,0) referral_percent,
+      CASE WHEN l.entries>0 AND can_commission THEN l.amount ELSE NULL END commission,
+      CASE WHEN s.table_id IS NOT NULL AND s.seated_at IS NOT NULL THEN s.table_id::text||':'||s.seated_at::text ELSE s.id::text END order_key,
+      CASE WHEN se.last_id IS NULL THEN true ELSE s.id=se.last_id AND NOT EXISTS (
+        SELECT 1 FROM public.tables t WHERE t.id=s.table_id AND t.occupied_at=s.seated_at
+          AND t.status<>'empty' AND coalesce(t.payment_status,'unpaid')<>'paid'
+      ) END completed,
+      coalesce(se.value,greatest(0,s.subtotal-coalesce(s.discount_amount,0))) completed_value
+    FROM scoped s LEFT JOIN ledger l ON l.sale_id=s.id LEFT JOIN sessions se ON se.table_id=s.table_id AND se.seated_at=s.seated_at
+  ), matched AS MATERIALIZED (
+    SELECT * FROM attributed a WHERE a.deleted_at IS NULL AND (p_code IS NULL OR ((a.referral_code_id IS NOT NULL OR a.code IS NOT NULL) AND coalesce(a.code,'[unrecorded]')=p_code))
+      AND (p_partner IS NULL OR ((a.referral_code_id IS NOT NULL OR a.code IS NOT NULL) AND coalesce(a.partner,'[unrecorded]')=p_partner))
+  ), metadata_rows AS MATERIALIZED (
+    SELECT a.* FROM attributed a,windows w WHERE w.n=0 AND a.closed_at>=w.starts AND a.closed_at<w.ends
+      AND (p_code IS NULL OR ((a.referral_code_id IS NOT NULL OR a.code IS NOT NULL) AND coalesce(a.code,'[unrecorded]')=p_code))
+      AND (p_partner IS NULL OR ((a.referral_code_id IS NOT NULL OR a.code IS NOT NULL) AND coalesce(a.partner,'[unrecorded]')=p_partner))
+  ), current_rows AS MATERIALIZED (
+    SELECT m.* FROM matched m,windows w WHERE w.n=0 AND m.closed_at>=w.starts AND m.closed_at<w.ends
+  ), period_totals AS (
+    SELECT w.n,w.f,w.t,count(m.id) payments,
+      count(DISTINCT m.order_key) FILTER(WHERE m.completed) orders,
+      coalesce(sum(m.completed_value) FILTER(WHERE m.completed),0) completed_value,
+      coalesce(sum(m.subtotal),0) gross,coalesce(sum(m.net),0) revenue,
+      coalesce(sum(m.discount_amount),0) discounts,coalesce(sum(m.tip),0) tips,
+      coalesce(sum(m.net) FILTER(WHERE m.referral_code_id IS NOT NULL OR m.code IS NOT NULL),0) referral_revenue,
+      coalesce(sum(m.referral_discount),0) referral_discounts
+    FROM windows w LEFT JOIN matched m ON m.closed_at>=w.starts AND m.closed_at<w.ends GROUP BY w.n,w.f,w.t
+  ), hourly AS (
+    SELECT w.n,h.hour,coalesce(sum(m.net),0) revenue,count(DISTINCT m.order_key) FILTER(WHERE m.completed) orders
+    FROM windows w CROSS JOIN generate_series(0,23) h(hour)
+    LEFT JOIN matched m ON m.closed_at>=w.starts AND m.closed_at<w.ends AND extract(hour FROM m.closed_at AT TIME ZONE 'Europe/Prague')=h.hour
+    GROUP BY w.n,h.hour
+  ), daily AS (
+    SELECT d::date day,coalesce(sum(c.net),0) revenue,count(DISTINCT c.order_key) FILTER(WHERE c.completed) orders
+    FROM generate_series(p_from::timestamp,p_to::timestamp,interval '1 day') d
+    LEFT JOIN current_rows c ON (c.closed_at AT TIME ZONE 'Europe/Prague')::date=d::date GROUP BY d
+  ), food_drink AS (
+    SELECT c.id,c.net,coalesce(sum((item->>'price')::numeric*(item->>'quantity')::numeric),0) lines,
+      coalesce(sum((item->>'price')::numeric*(item->>'quantity')::numeric) FILTER(WHERE
+        coalesce(item->>'itemType',item->>'item_type','')='food' OR
+        (coalesce(item->>'itemType',item->>'item_type','')<>'drink' AND item->>'station'='kitchen')),0) food,
+      coalesce(sum((item->>'price')::numeric*(item->>'quantity')::numeric) FILTER(WHERE
+        coalesce(item->>'itemType',item->>'item_type','')='drink' OR
+        (coalesce(item->>'itemType',item->>'item_type','')<>'food' AND item->>'station'='bar')),0) drinks
+    FROM current_rows c LEFT JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(c.items)='array' THEN c.items ELSE '[]'::jsonb END) item ON true
+    GROUP BY c.id,c.net
+  ), breakdown AS (
+    SELECT coalesce(sum(CASE WHEN lines>0 THEN least(round(net*food/lines,2),greatest(0,net-round(net*drinks/lines,2))) ELSE 0 END),0) food,
+      coalesce(sum(CASE WHEN lines>0 THEN round(net*drinks/lines,2) ELSE 0 END),0) drinks,
+      coalesce(sum(CASE WHEN lines>0 THEN greatest(0,net-round(net*food/lines,2)-round(net*drinks/lines,2)) ELSE net END),0) unclassified FROM food_drink
+  ), referrals AS (
+    SELECT referral_code_id,coalesce(code,'[unrecorded]') code,coalesce(partner,'[unrecorded]') partner,
+      count(DISTINCT order_key) FILTER(WHERE completed) orders,count(*) payments,sum(net) net_sales,
+      sum(referral_discount) discounts,CASE WHEN can_commission THEN sum(commission) ELSE NULL END commission
+    FROM current_rows WHERE referral_code_id IS NOT NULL OR code IS NOT NULL GROUP BY referral_code_id,code,partner
+  )
+  SELECT jsonb_build_object(
+    'canViewCommission',can_commission,
+    'periods',(SELECT jsonb_agg(jsonb_build_object('from',f,'to',t,'payments',payments,'orders',orders,'gross',gross,'revenue',revenue,
+      'average',CASE WHEN orders>0 THEN round(completed_value/orders,2) ELSE 0 END,'discounts',discounts,'tips',tips,
+      'referralRevenue',referral_revenue,'referralDiscounts',referral_discounts,'hourly',
+      (SELECT jsonb_agg(jsonb_build_object('hour',h.hour,'revenue',h.revenue,'orders',h.orders) ORDER BY h.hour) FROM hourly h WHERE h.n=p.n)) ORDER BY n) FROM period_totals p),
+    'daily',coalesce((SELECT jsonb_agg(jsonb_build_object('date',day,'revenue',revenue,'orders',orders) ORDER BY day) FROM daily),'[]'::jsonb),
+    'breakdown',(SELECT to_jsonb(b) FROM breakdown b),
+    'referrals',coalesce((SELECT jsonb_agg(to_jsonb(r) ORDER BY net_sales DESC,code,partner) FROM referrals r),'[]'::jsonb),
+    'attributions',coalesce((SELECT jsonb_object_agg(id::text,jsonb_build_object('codeId',referral_code_id,'code',code,'partner',partner,
+      'discountPercent',referral_percent,'discountAmount',referral_discount,'commission',commission)) FROM metadata_rows WHERE referral_code_id IS NOT NULL OR code IS NOT NULL),'{}'::jsonb),
+    'codes',coalesce((SELECT jsonb_agg(code ORDER BY code) FROM (SELECT DISTINCT coalesce(code,'[unrecorded]') code FROM attributed a,windows w WHERE w.n=0 AND a.closed_at>=w.starts AND a.closed_at<w.ends AND (a.referral_code_id IS NOT NULL OR a.code IS NOT NULL)) x),'[]'::jsonb),
+    'partners',coalesce((SELECT jsonb_agg(partner ORDER BY partner) FROM (SELECT DISTINCT coalesce(partner,'[unrecorded]') partner FROM attributed a,windows w WHERE w.n=0 AND a.closed_at>=w.starts AND a.closed_at<w.ends AND (a.referral_code_id IS NOT NULL OR a.code IS NOT NULL)) x),'[]'::jsonb)
+  ) INTO result;
+  RETURN result;
+END;
+$history$;
+REVOKE ALL ON FUNCTION public.history_sales_analytics(date,date,uuid,uuid,text,text,text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.history_sales_analytics(date,date,uuid,uuid,text,text,text) TO service_role;
+NOTIFY pgrst,'reload schema';
+COMMIT;

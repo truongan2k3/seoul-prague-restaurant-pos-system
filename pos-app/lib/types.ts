@@ -611,6 +611,11 @@ export interface ReservationRecord {
 }
 
 export interface SaleRecord {
+  referralCodeId?: string;
+  referralCode?: string;
+  referralPartner?: string;
+  referralDiscountPercent?: number;
+  referralDiscountAmount?: number;
   id: string;
   tableLabel: string;
   staffName: string;

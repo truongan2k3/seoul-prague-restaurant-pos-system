@@ -635,6 +635,10 @@ export async function fetchStaff() {
 
 /** PostgREST/Supabase default max rows is 1000 — page past it. */
 export type SupabaseSaleRow = {
+  referral_code_id?: string | null;
+  referral_snapshot?: { code?: string; partner_name?: string } | null;
+  referral_discount_percent?: number | null;
+  referral_discount_amount?: number | null;
   id: string;
   table_label: string | null;
   staff_name: string | null;
@@ -668,17 +672,19 @@ export type SupabaseSaleRow = {
  * A bare `.select()` silently truncates at ~1000 newest rows and made older bills
  * "disappear" from History / Summary.
  */
-export async function fetchSales(since?: Date, until?: Date) {
+export async function fetchSales(since?: Date, until?: Date, options?: { includeReferral?: boolean; activityOnly?: boolean }) {
   const rows: SupabaseSaleRow[] = [];
   let cursor: SupabaseSaleRow | undefined;
+  let withReferral = options?.includeReferral === true;
 
   for (;;) {
     let query = supabase
       .from("sales")
-      .select(SALES_COLUMNS)
+      .select(options?.activityOnly ? "id,table_label,staff_name,subtotal,discount_amount,tip,grand_total,payment_method,activity_log,closed_at,deleted_at" : withReferral ? `${SALES_COLUMNS},referral_code_id,referral_snapshot,referral_discount_percent,referral_discount_amount` : SALES_COLUMNS)
       .order("closed_at", { ascending: false })
       .order("id", { ascending: false })
       .limit(SALES_PAGE_SIZE);
+    if (options?.activityOnly) query = query.not("activity_log", "is", null).neq("activity_log", "[]");
     if (since) query = query.gte("closed_at", since.toISOString());
     if (until) query = query.lte("closed_at", until.toISOString());
     if (cursor) {
@@ -688,9 +694,10 @@ export async function fetchSales(since?: Date, until?: Date) {
     }
 
     const { data, error } = await query;
+    if (error && withReferral && /referral_|schema cache/i.test(error.message) && /column|schema cache/i.test(error.message)) { withReferral=false; continue; }
     if (error) return { data: null, error };
 
-    const page = (data as SupabaseSaleRow[] | null) ?? [];
+    const page = (data as unknown as SupabaseSaleRow[] | null) ?? [];
     if (page.length === 0) break;
     rows.push(...page);
     // Continue even if the project's PostgREST row cap is below our page size.
@@ -701,8 +708,17 @@ export async function fetchSales(since?: Date, until?: Date) {
   return { data: rows, error: null };
 }
 
+export async function fetchHistorySaleById(id: string) {
+  const columns = `${SALES_COLUMNS},referral_code_id,referral_snapshot,referral_discount_percent,referral_discount_amount`;
+  const result = await supabase.from("sales").select(columns).eq("id", id).single();
+  if (result.error && /referral_|schema cache/i.test(result.error.message) && /column|schema cache/i.test(result.error.message)) {
+    return supabase.from("sales").select(SALES_COLUMNS).eq("id", id).single();
+  }
+  return result;
+}
+
 /** Cancel / qty-reduce logs still on open (unpaid) tables. */
-export async function fetchOpenTableCancelLogs(since?: Date) {
+export async function fetchOpenTableCancelLogs(since?: Date, until?: Date) {
   const pageSize = 1000;
   const rows: Array<{
     id: string;
@@ -723,6 +739,7 @@ export async function fetchOpenTableCancelLogs(since?: Date) {
       .order("created_at", { ascending: false })
       .range(from, from + pageSize - 1);
     if (since) query = query.gte("created_at", since.toISOString());
+    if (until) query = query.lte("created_at", until.toISOString());
 
     const { data, error } = await query;
     if (error) return { data: [] as const, error };
@@ -789,6 +806,11 @@ export function mapStaffResponse(
 
 export function mapSalesResponse(data: SupabaseSaleRow[] | null): SaleRecord[] {
   return (data ?? []).map((s) => ({
+    referralCodeId: s.referral_code_id ?? undefined,
+    referralCode: s.referral_snapshot?.code ?? undefined,
+    referralPartner: s.referral_snapshot?.partner_name ?? undefined,
+    referralDiscountPercent: s.referral_discount_percent != null ? Number(s.referral_discount_percent) : undefined,
+    referralDiscountAmount: s.referral_discount_amount != null ? Number(s.referral_discount_amount) : undefined,
     id: s.id,
     tableLabel: s.table_label ?? "",
     staffName: s.staff_name ?? "",
@@ -806,7 +828,7 @@ export function mapSalesResponse(data: SupabaseSaleRow[] | null): SaleRecord[] {
     splitCount: s.split_count ?? undefined,
     voucherDiscountAmount: Number(s.voucher_discount_amount ?? 0),
     voucherCodes: Array.isArray(s.voucher_codes) ? s.voucher_codes.filter(Boolean) : [],
-    items: s.items,
+    items: Array.isArray(s.items) ? s.items : [],
     activityLog: ((s.activity_log as Array<{
       id: string;
       orderId?: string;

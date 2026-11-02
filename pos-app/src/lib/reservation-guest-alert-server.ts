@@ -23,9 +23,10 @@ function realtimeKey(): string | null {
 export async function broadcastGuestReservationAlert(
   payload: GuestReservationAlertPayload,
 ): Promise<void> {
-  const sentHttp = await sendViaRealtimeHttp(payload);
+  const event = { ...payload, occurredAt: new Date().toISOString() };
+  const sentHttp = await sendViaRealtimeHttp(event);
   if (sentHttp) return;
-  await sendViaChannel(payload);
+  await sendViaChannel(event);
 }
 
 async function sendViaRealtimeHttp(payload: GuestReservationAlertPayload): Promise<boolean> {

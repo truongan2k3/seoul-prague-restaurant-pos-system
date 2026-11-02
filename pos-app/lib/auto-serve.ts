@@ -1,3 +1,4 @@
+import { DEFAULT_NOTIFICATION_SOUNDS, parseNotificationSounds } from "@/lib/notification-preferences";
 import type { KitchenStatus, OrderItem, SoundConfigs, Station } from "@/lib/types";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
 
@@ -11,6 +12,7 @@ export const AUTO_SERVE_MS = 0;
 export const AUTO_SERVE_POLL_MS = 10_000;
 
 export const DEFAULT_SOUND_CONFIGS: SoundConfigs = {
+  notifications: DEFAULT_NOTIFICATION_SOUNDS,
   callWaiter: "/sounds/bell.mp3",
   newOrder: "/sounds/new_order.mp3",
   mainNewOrder: "/sounds/new_order.mp3",
@@ -135,6 +137,7 @@ export function parseSoundConfigs(value: unknown): SoundConfigs {
   if (!value || typeof value !== "object") return { ...DEFAULT_SOUND_CONFIGS };
   const row = value as Record<string, unknown>;
   return {
+    notifications: parseNotificationSounds(row.notifications, row),
     callWaiter:
       typeof row.call_waiter === "string"
         ? row.call_waiter
@@ -188,6 +191,7 @@ export function parseSoundConfigs(value: unknown): SoundConfigs {
 
 export function soundConfigsToDb(configs: SoundConfigs) {
   return {
+    notifications: parseNotificationSounds(configs.notifications),
     call_waiter: configs.callWaiter,
     new_order: configs.newOrder,
     main_new_order: configs.mainNewOrder,

@@ -7,6 +7,7 @@ export type GuestReservationAlertKind = "updated" | "cancelled";
 
 export interface GuestReservationAlertPayload {
   kind: GuestReservationAlertKind;
+  occurredAt?: string;
   reservation: {
     id: string;
     guestName: string;

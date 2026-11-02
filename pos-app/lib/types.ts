@@ -145,8 +145,12 @@ export interface NetworkPrinter {
   legacyBitmap?: boolean;
 }
 
+export type NotificationSoundCategory = "kitchen" | "bar" | "newReservation" | "cancelledReservation";
+export type NotificationSoundSettings = Record<NotificationSoundCategory, { sounds: string[]; enabled: boolean }>;
+
 /** Configurable alert sounds (paths under /public/sounds). */
 export interface SoundConfigs {
+  notifications: NotificationSoundSettings;
   callWaiter: string;
   /** Kitchen / bar KDS new ticket bell. */
   newOrder: string;

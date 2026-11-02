@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { Bell, Check, X } from "lucide-react";
 import {
   createContext,
@@ -11,7 +12,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { playCustomAlertSound, unlockNotificationAudio } from "@/lib/notification-sound";
+import { playCustomAlertSound, preloadNotificationSounds, unlockNotificationAudio } from "@/lib/notification-sound";
 import { MODAL_FADE_MS, useModalPresence } from "@/hooks/use-modal-presence";
 import { useSettings } from "@/contexts/settings-context";
 
@@ -213,6 +214,15 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ActiveToast[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  const pathname = usePathname() ?? "";
+  const soundSurface = pathname.startsWith("/kds") ? "kitchen" : pathname.startsWith("/bar") ? "bar"
+    : /^\/(app|server|tools|pos)(?:\/|$)/.test(pathname) ? "pos" : "public";
+  const selectedSoundsKey = JSON.stringify(settings.soundConfigs.notifications);
+  useEffect(() => {
+    if (soundSurface === "public") return;
+    preloadNotificationSounds(JSON.parse(selectedSoundsKey), soundSurface === "pos" ? ["newReservation", "cancelledReservation"] : [soundSurface]);
+  }, [selectedSoundsKey, soundSurface]);
 
   const unreadCount = useMemo(() => history.filter((n) => !n.read).length, [history]);
 

@@ -60,7 +60,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     if (fetchError) {
       setError(fetchError.message);
     } else {
-      setSettings(data);
+      setSettings(previous => JSON.stringify(previous) === JSON.stringify(data) ? previous : data);
       setError(null);
     }
     setLoading(false);
@@ -117,7 +117,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         return false;
       }
       if (data) {
-        setSettings(data);
+        setSettings(previous => JSON.stringify(previous) === JSON.stringify(data) ? previous : data);
         setError(null);
       }
       return true;
@@ -147,7 +147,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (data) {
-        setSettings(data);
+        setSettings(previous => JSON.stringify(previous) === JSON.stringify(data) ? previous : data);
         setError(null);
       }
     },
@@ -182,7 +182,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (data) {
-        setSettings(data);
+        setSettings(previous => JSON.stringify(previous) === JSON.stringify(data) ? previous : data);
         setError(null);
       }
     },
@@ -200,7 +200,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (data) {
-        setSettings(data);
+        setSettings(previous => JSON.stringify(previous) === JSON.stringify(data) ? previous : data);
         setError(null);
       }
     },

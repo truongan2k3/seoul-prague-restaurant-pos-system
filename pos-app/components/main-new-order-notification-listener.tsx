@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useApp } from "@/contexts/app-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { useSettings } from "@/contexts/settings-context";
+import { claimNotificationEvent } from "@/lib/notification-preferences";
 import { playCustomAlertSound } from "@/lib/notification-sound";
 import type { RestaurantTable } from "@/lib/types";
 import { subscribeToOrderItemInserts } from "@/src/lib/supabase-data";
@@ -65,6 +66,7 @@ export function MainNewOrderNotificationListener({
 
     return subscribeToOrderItemInserts((row) => {
       if (row.skip_print && row.hide_on_kds) return;
+      if (!claimNotificationEvent("main-order", `${row.table_id}:${row.created_at}`, row.created_at)) return;
       const tableId = row.table_id;
       scheduleNotify(tableId, tableLabelsRef.current.get(tableId));
     }, "main-new-order-items");

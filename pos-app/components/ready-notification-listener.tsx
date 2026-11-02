@@ -30,7 +30,7 @@ export function ReadyNotificationListener({
   tables,
   menuItems,
 }: ReadyNotificationListenerProps) {
-  const { language, translate, soundMainEnabled } = useApp();
+  const { language, translate } = useApp();
   const { pushNotification } = useNotifications();
 
   useEffect(() => {
@@ -58,11 +58,11 @@ export function ReadyNotificationListener({
           id: `ready-${row.id}-${row.updated_at}`,
           message,
           staffName,
-          playSound: soundMainEnabled ? "ready" : false,
+          playSound: false,
         });
       })();
     });
-  }, [tables, menuItems, language, translate, pushNotification, soundMainEnabled]);
+  }, [tables, menuItems, language, translate, pushNotification]);
 
   return null;
 }

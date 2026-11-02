@@ -10,13 +10,8 @@ import {
   ensureBrowserNotificationPermission,
   showBrowserNotification,
 } from "@/lib/browser-notification";
-import {
-  isAlertSoundLoopActive,
-  playCustomAlertSound,
-  startAlertSoundLoop,
-  stopAlertSoundLoop,
-  unlockNotificationAudio,
-} from "@/lib/notification-sound";
+import { playNotificationCategory } from "@/lib/notification-sound";
+import { claimNotificationEvent } from "@/lib/notification-preferences";
 import {
   classifyReservationUpdate,
   reservationAlertDedupeKey,
@@ -39,7 +34,7 @@ import {
   subscribeToReservationChanges,
 } from "@/src/lib/reservation-actions";
 
-type ScreenAlert =
+type ScreenAlert = (
   | { kind: "new"; reservation: ReservationRecord }
   | {
       kind: "updated";
@@ -47,7 +42,8 @@ type ScreenAlert =
       previous?: GuestReservationAlertPayload["previous"];
     }
   | { kind: "cancelled"; reservation: ReservationRecord }
-  | { kind: "no_show"; reservation: ReservationRecord };
+  | { kind: "no_show"; reservation: ReservationRecord }
+) & { silent?: boolean };
 
 const DEDUPE_MS = 12_000;
 
@@ -66,8 +62,8 @@ function lookbackSince(): Date {
   return since;
 }
 
-/** Pending new/updated alerts keep a single looping sound until Confirm (or local dismiss). */
-function needsConfirmSoundLoop(alert: ScreenAlert | null): boolean {
+/** Pending alerts stay visible until staff confirms or dismisses them. */
+function isPendingReservationAlert(alert: ScreenAlert | null): boolean {
   if (!alert) return false;
   if (alert.kind !== "new" && alert.kind !== "updated") return false;
   return alert.reservation.status === "pending";
@@ -77,7 +73,7 @@ function needsConfirmSoundLoop(alert: ScreenAlert | null): boolean {
 export function ReservationIncomingListener({
   enableLateMarker = true,
 }: ReservationIncomingListenerProps = {}) {
-  const { translate, language, soundMainEnabled } = useApp();
+  const { translate, language } = useApp();
   const { settings } = useSettings();
   const { pushNotification } = useNotifications();
   const [alert, setAlert] = useState<ScreenAlert | null>(null);
@@ -94,7 +90,8 @@ export function ReservationIncomingListener({
   const recentAlertAtRef = useRef<Map<string, number>>(new Map());
   const suppressUntilRef = useRef<Map<string, number>>(new Map());
   const syncingRef = useRef(false);
-  const loopingIdRef = useRef<string | null>(null);
+  const soundSettingsRef = useRef(settings.soundConfigs.notifications);
+  soundSettingsRef.current = settings.soundConfigs.notifications;
 
   const formatDateTime = useCallback(
     (date: Date | string) =>
@@ -113,64 +110,10 @@ export function ReservationIncomingListener({
     [language],
   );
 
-  const alertSoundUrl = useCallback(() => {
-    return (
-      settings.soundConfigs.reservationReminder ||
-      settings.soundConfigs.newOrder ||
-      settings.soundConfigs.mainNewOrder
-    );
-  }, [
-    settings.soundConfigs.mainNewOrder,
-    settings.soundConfigs.newOrder,
-    settings.soundConfigs.reservationReminder,
-  ]);
-
-  const stopLoop = useCallback(() => {
-    loopingIdRef.current = null;
-    stopAlertSoundLoop();
+  const showNext = useCallback((next: ScreenAlert | null) => {
+    alertRef.current = next;
+    setAlert(next); setError(null); setVisitProfile(null);
   }, []);
-
-  const startLoopFor = useCallback(
-    (next: ScreenAlert, opts?: { forceRestart?: boolean }) => {
-      if (!soundMainEnabled) {
-        stopLoop();
-        return;
-      }
-      if (!needsConfirmSoundLoop(next)) {
-        stopLoop();
-        unlockNotificationAudio();
-        playCustomAlertSound(alertSoundUrl(), "newOrder");
-        return;
-      }
-      unlockNotificationAudio();
-      // One loop per reservation — restart if stalled or forced (e.g. after unlock gesture).
-      if (
-        !opts?.forceRestart &&
-        loopingIdRef.current === next.reservation.id &&
-        isAlertSoundLoopActive()
-      ) {
-        return;
-      }
-      loopingIdRef.current = next.reservation.id;
-      startAlertSoundLoop(alertSoundUrl(), { variant: "reservation" });
-    },
-    [alertSoundUrl, soundMainEnabled, stopLoop],
-  );
-
-  const showNext = useCallback(
-    (next: ScreenAlert | null) => {
-      alertRef.current = next;
-      setAlert(next);
-      setError(null);
-      setVisitProfile(null);
-      if (!next) {
-        stopLoop();
-        return;
-      }
-      startLoopFor(next);
-    },
-    [startLoopFor, stopLoop],
-  );
 
   const markDeduped = useCallback((kind: ReservationChangeAlertKind, id: string) => {
     recentAlertAtRef.current.set(reservationAlertDedupeKey(kind, id), Date.now());
@@ -228,11 +171,8 @@ export function ReservationIncomingListener({
         showNext(queued);
         return;
       }
-      if (loopingIdRef.current === reservationId) {
-        stopLoop();
-      }
     },
-    [showNext, stopLoop],
+    [showNext],
   );
 
   const enqueueAlert = useCallback(
@@ -248,14 +188,19 @@ export function ReservationIncomingListener({
               : "updated";
       if (wasRecentlyAlerted(dedupeKind, next.reservation.id)) return;
       markDeduped(dedupeKind, next.reservation.id);
+      const category = next.kind === "new" ? "newReservation" : next.kind === "cancelled" ? "cancelledReservation" : null;
+      const eventTime = next.kind === "new" ? next.reservation.createdAt : next.reservation.cancelledAt ?? next.reservation.updatedAt;
+      if (category && !next.silent && claimNotificationEvent(category, next.reservation.id, eventTime)) {
+        playNotificationCategory(category, soundSettingsRef.current);
+      }
 
-      // Same pending reservation already showing — refresh payload, keep one loop.
+      // Same pending reservation already showing — refresh the payload.
       const current = alertRef.current;
       if (
         current &&
         current.reservation.id === next.reservation.id &&
-        needsConfirmSoundLoop(current) &&
-        needsConfirmSoundLoop(next)
+        isPendingReservationAlert(current) &&
+        isPendingReservationAlert(next)
       ) {
         alertRef.current = next;
         setAlert(next);
@@ -296,7 +241,6 @@ export function ReservationIncomingListener({
         return;
       }
       queueRef.current.push(next);
-      // Do not start a second loop while another alert is already showing.
     },
     [
       browserBodyFor,
@@ -310,12 +254,12 @@ export function ReservationIncomingListener({
   );
 
   const applyRemoteRow = useCallback(
-    (reservation: ReservationRecord, opts?: { alert: boolean }) => {
+    (reservation: ReservationRecord, opts?: { alert: boolean; silent?: boolean }) => {
       const previous = cacheRef.current.get(reservation.id);
       cacheRef.current.set(reservation.id, reservation);
       if (!opts?.alert || !readyRef.current) return;
 
-      // Cross-screen Confirm sync: pending → confirmed closes popup + stops sound everywhere.
+      // Cross-screen Confirm sync closes the popup everywhere.
       if (previous?.status === "pending" && reservation.status === "confirmed") {
         clearReservationAlert(reservation.id);
         return;
@@ -326,7 +270,7 @@ export function ReservationIncomingListener({
       if (
         open &&
         open.reservation.id === reservation.id &&
-        needsConfirmSoundLoop(open) &&
+        isPendingReservationAlert(open) &&
         reservation.status !== "pending"
       ) {
         clearReservationAlert(reservation.id);
@@ -335,7 +279,7 @@ export function ReservationIncomingListener({
 
       if (!previous) {
         if (shouldAlertOnReservationInsert(reservation)) {
-          enqueueAlert({ kind: "new", reservation });
+          enqueueAlert({ kind: "new", reservation, silent: opts?.silent });
         }
         return;
       }
@@ -351,6 +295,7 @@ export function ReservationIncomingListener({
         enqueueAlert({
           kind: "updated",
           reservation,
+          silent: opts?.silent,
           previous: {
             partySize: previous.partySize,
             reservedAt: previous.reservedAt.toISOString(),
@@ -359,20 +304,20 @@ export function ReservationIncomingListener({
         });
         return;
       }
-      enqueueAlert({ kind: toScreenKind(kind), reservation } as ScreenAlert);
+      enqueueAlert({ kind: toScreenKind(kind), reservation, silent: opts?.silent } as ScreenAlert);
     },
     [clearReservationAlert, enqueueAlert, wasRecentlyAlerted],
   );
 
   const syncFromServer = useCallback(
-    async (opts?: { alert: boolean }) => {
+    async (opts?: { alert: boolean; silent?: boolean }) => {
       if (syncingRef.current) return;
       syncingRef.current = true;
       try {
         const { data } = await fetchReservations(lookbackSince());
         const rows = mapReservationsResponse(data);
         for (const row of rows) {
-          applyRemoteRow(row, { alert: Boolean(opts?.alert) });
+          applyRemoteRow(row, { alert: Boolean(opts?.alert), silent: true });
         }
       } finally {
         syncingRef.current = false;
@@ -411,11 +356,11 @@ export function ReservationIncomingListener({
       if (document.visibilityState === "hidden") return;
       ensureBrowserNotificationPermission();
       if (!readyRef.current) return;
-      void syncFromServer({ alert: true });
+      void syncFromServer({ alert: true, silent: true });
     };
     const onResume = () => {
       if (!readyRef.current) return;
-      void syncFromServer({ alert: true });
+      void syncFromServer({ alert: true, silent: true });
     };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pageshow", onResume);
@@ -461,10 +406,14 @@ export function ReservationIncomingListener({
       const merged: ReservationRecord = {
         ...(cacheRef.current.get(reservation.id) ?? reservation),
         ...reservation,
-        updatedAt: new Date(),
+        updatedAt: payload.occurredAt ? new Date(payload.occurredAt) : reservation.updatedAt,
       };
       cacheRef.current.set(reservation.id, merged);
       if (payload.kind === "cancelled") {
+        if (alertRef.current?.kind === "cancelled" && alertRef.current.reservation.id === merged.id) {
+          const refreshed: ScreenAlert = { ...alertRef.current, reservation: merged };
+          alertRef.current = refreshed; setAlert(refreshed); return;
+        }
         // Replace any pending popup for this id with the cancelled alert.
         clearReservationAlert(merged.id);
         enqueueAlert({ kind: "cancelled", reservation: merged });
@@ -495,53 +444,6 @@ export function ReservationIncomingListener({
     };
   }, [alert, visitProfileKey]);
 
-  // Stop looping sound on unmount so reconnect/remount cannot leave orphan audio.
-  useEffect(() => {
-    return () => {
-      stopAlertSoundLoop();
-    };
-  }, []);
-
-  // If staff mutes main sound while looping, stop immediately.
-  useEffect(() => {
-    if (!soundMainEnabled) {
-      stopLoop();
-      return;
-    }
-    const current = alertRef.current;
-    if (current && needsConfirmSoundLoop(current)) {
-      startLoopFor(current, { forceRestart: true });
-    }
-  }, [soundMainEnabled, startLoopFor, stopLoop]);
-
-  // Browsers block audio until a gesture — unlock + (re)start loop on any interaction
-  // while a pending reservation alert is open.
-  useEffect(() => {
-    if (!alert || !needsConfirmSoundLoop(alert) || !soundMainEnabled) return;
-
-    const onGesture = () => {
-      unlockNotificationAudio();
-      const current = alertRef.current;
-      if (!current || !needsConfirmSoundLoop(current)) return;
-      if (!isAlertSoundLoopActive()) {
-        startLoopFor(current, { forceRestart: true });
-      }
-    };
-
-    // Kick immediately (may be silent until first gesture, then gesture handler unlocks).
-    unlockNotificationAudio();
-    startLoopFor(alert, { forceRestart: !isAlertSoundLoopActive() });
-
-    window.addEventListener("pointerdown", onGesture);
-    window.addEventListener("keydown", onGesture);
-    window.addEventListener("touchstart", onGesture, { passive: true });
-    return () => {
-      window.removeEventListener("pointerdown", onGesture);
-      window.removeEventListener("keydown", onGesture);
-      window.removeEventListener("touchstart", onGesture);
-    };
-  }, [alert, soundMainEnabled, startLoopFor]);
-
   const handleConfirm = async () => {
     if (!alert || (alert.kind !== "new" && alert.kind !== "updated")) return;
     if (alert.reservation.status !== "pending") {
@@ -553,17 +455,11 @@ export function ReservationIncomingListener({
     const reservationId = alert.reservation.id;
     suppressUntilRef.current.set(reservationId, Date.now() + DEDUPE_MS);
     markDeduped("updated", reservationId);
-    // Stop local sound immediately; other screens stop via postgres UPDATE.
-    stopLoop();
     const result = await confirmReservationWithEmail(reservationId);
     setBusy(false);
     if (result.error) {
       suppressUntilRef.current.delete(reservationId);
       setError(result.error);
-      // Resume loop if confirm failed and alert is still showing.
-      if (alertRef.current?.reservation.id === reservationId) {
-        startLoopFor(alertRef.current);
-      }
       return;
     }
     // Optimistic local clear; remote UPDATE also clears peers.
@@ -655,6 +551,12 @@ export function ReservationIncomingListener({
               <dt className="text-gray-500 dark:text-gray-400">{translate("guestName")}</dt>
               <dd className="font-semibold text-gray-900 dark:text-gray-100">{reservation.guestName}</dd>
             </div>
+            {reservation.referralCode?.trim() ? (
+              <div className="flex justify-between gap-3">
+                <dt className="text-gray-400">{translate("notificationReferralCode")}</dt>
+                <dd className="rounded-md border border-[#C9A88B]/30 bg-[#C9A88B]/10 px-2 py-0.5 font-semibold tracking-wide text-[#E8D5C4]">{reservation.referralCode}</dd>
+              </div>
+            ) : null}
             {reservation.bookingCode ? (
               <div className="flex justify-between gap-3">
                 <dt className="text-gray-500 dark:text-gray-400">{translate("bookingCode")}</dt>

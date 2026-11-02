@@ -49,7 +49,7 @@ export function classifyReservationUpdate(
     if (!hasMeaningfulReservationFieldChange(previous, next)) return null;
   }
 
-  if (next.status === "cancelled") return "cancelled";
+  if (next.status === "cancelled") return previous?.status === "cancelled" ? null : "cancelled";
   if (next.status === "no_show") return "no_show";
 
   if (!previous) {

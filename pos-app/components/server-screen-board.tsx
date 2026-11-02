@@ -16,6 +16,8 @@ import {
   History,
   LayoutGrid,
   RefreshCw,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { ServerScreenOrderCards } from "@/components/server-screen-order-cards";
@@ -26,6 +28,8 @@ import { DISH_DONE_VISIBLE_MS, type DishEntry, type DishCompletion } from "@/lib
 import { ServerScreenPaymentOverlay } from "@/components/server-screen-payment-overlay";
 import { ServerScreenPrepStatsPanel } from "@/components/server-screen-prep-stats";
 import { ServerScreenReservationPanel } from "@/components/server-screen-reservation-panel";
+import { useDeviceNotificationSound } from "@/hooks/use-device-notification-sound";
+import { claimNotificationEvent } from "@/lib/notification-preferences";
 import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
 import { useStationScreen } from "@/contexts/station-screen-context";
@@ -40,8 +44,8 @@ import { itemTransferLabel, orderItemEventKind } from "@/lib/item-transfers";
 import { orderItemDisplayName, resolveMenuItemForOrder } from "@/lib/menu-display";
 import {
   isNotificationAudioUnlocked,
-  playCustomAlertSound,
-  playServerScreenNewOrderAlert,
+  NOTIFICATION_AUDIO_UNLOCKED,
+  playNotificationCategory,
   unlockNotificationAudio,
 } from "@/lib/notification-sound";
 import {
@@ -117,7 +121,6 @@ import {
 const COMPANION_STORE_KEY = "pos-server-screen-companion-store";
 const HISTORY_CACHE_KEY = "pos-server-screen-history-cache";
 /** Collapse multi-line inserts from one Send into a single alert. */
-const NEW_ORDER_SOUND_DEBOUNCE_MS = 700;
 /** Hidden edge swipe (same idea as Client Screen). */
 const SWIPE_EDGE_PX = 36;
 const SWIPE_OPEN_PX = 72;
@@ -434,11 +437,6 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const rotateResetRef = useRef(Date.now());
   const languageRef = useRef(language);
   const languagesRef = useRef(languages);
-  const newOrderSoundTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingNewOrderSoundRef = useRef(false);
-  const seenPreparingRef = useRef<Set<string>>(new Set());
-  const preparingSeededRef = useRef(false);
-  const lastAlertAtRef = useRef(0);
   const playNewOrderAlertRef = useRef<() => void>(() => {});
   const prepStatsCacheRef = useRef<{ key: string; stats: PrepTimeStats; at: number } | null>(null);
   const tableLabelByIdRef = useRef(new Map<string, string>());
@@ -462,81 +460,22 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const realtimeOpts = { debounceMs: POS_EGRESS.REALTIME_DEBOUNCE_MS };
   const minLabel = translate("serverScreenMin");
 
-  /** Dedicated KDS/Bar always alerts — don't depend on POS kitchen-sound toggle. */
+  const [deviceSoundEnabled, setDeviceSoundEnabled] = useDeviceNotificationSound(station);
   const playNewOrderAlert = useCallback(() => {
-    unlockNotificationAudio();
-    if (!isNotificationAudioUnlocked()) {
-      pendingNewOrderSoundRef.current = true;
-    }
-    // Web Audio triple-bell first (reliable; /sounds/*.mp3 are optional placeholders).
-    playServerScreenNewOrderAlert();
-    // Optional custom URL on top (falls back to bell if missing).
-    const url = settings.soundConfigs.newOrder;
-    if (url && !url.startsWith("/sounds/")) {
-      playCustomAlertSound(url, "newOrder");
-    }
-    if (isNotificationAudioUnlocked()) setAudioUnlocked(true);
-  }, [settings.soundConfigs.newOrder]);
+    playNotificationCategory(station, settings.soundConfigs.notifications, deviceSoundEnabled);
+  }, [station, settings.soundConfigs.notifications, deviceSoundEnabled]);
   playNewOrderAlertRef.current = playNewOrderAlert;
-
-  const playReadySound = useCallback(() => {
-    unlockNotificationAudio();
-    playCustomAlertSound(settings.soundConfigs.itemReady, "ready");
-  }, [settings.soundConfigs.itemReady]);
-
-  const scheduleNewOrderSound = useCallback(() => {
-    if (newOrderSoundTimerRef.current) clearTimeout(newOrderSoundTimerRef.current);
-    newOrderSoundTimerRef.current = setTimeout(() => {
-      newOrderSoundTimerRef.current = null;
-      const now = Date.now();
-      // De-dupe INSERT + items-diff for the same Send burst.
-      if (now - lastAlertAtRef.current < NEW_ORDER_SOUND_DEBOUNCE_MS) return;
-      lastAlertAtRef.current = now;
-      playNewOrderAlertRef.current();
-    }, NEW_ORDER_SOUND_DEBOUNCE_MS);
-  }, []);
-
-  const flushPendingNewOrderSound = useCallback(() => {
-    unlockNotificationAudio();
-    if (isNotificationAudioUnlocked()) setAudioUnlocked(true);
-    if (!pendingNewOrderSoundRef.current) return;
-    if (!isNotificationAudioUnlocked()) return;
-    pendingNewOrderSoundRef.current = false;
-    playNewOrderAlertRef.current();
-  }, []);
-
+  const scheduleNewOrderSound = useCallback(() => { playNewOrderAlertRef.current(); }, []);
   const enableAudioWithTestBeep = useCallback(() => {
     unlockNotificationAudio();
-    pendingNewOrderSoundRef.current = false;
-    playServerScreenNewOrderAlert();
-    // User gesture — hide banner immediately; ctx.state may lag one tick.
-    setAudioUnlocked(true);
+    setAudioUnlocked(isNotificationAudioUnlocked());
   }, []);
-
-  // Browser autoplay: unlock on any interaction; replay missed new-order alert once unlocked.
   useEffect(() => {
-    const unlock = () => {
-      unlockNotificationAudio();
-      flushPendingNewOrderSound();
-      if (isNotificationAudioUnlocked()) setAudioUnlocked(true);
-    };
-    window.addEventListener("pointerdown", unlock);
-    window.addEventListener("keydown", unlock);
-    window.addEventListener("touchstart", unlock, { passive: true });
-    const poll = window.setInterval(() => {
-      if (isNotificationAudioUnlocked()) {
-        setAudioUnlocked(true);
-        flushPendingNewOrderSound();
-        window.clearInterval(poll);
-      }
-    }, 800);
-    return () => {
-      window.removeEventListener("pointerdown", unlock);
-      window.removeEventListener("keydown", unlock);
-      window.removeEventListener("touchstart", unlock);
-      window.clearInterval(poll);
-    };
-  }, [flushPendingNewOrderSound]);
+    const onUnlocked = () => setAudioUnlocked(true);
+    if (isNotificationAudioUnlocked()) onUnlocked();
+    window.addEventListener(NOTIFICATION_AUDIO_UNLOCKED, onUnlocked);
+    return () => window.removeEventListener(NOTIFICATION_AUDIO_UNLOCKED, onUnlocked);
+  }, []);
 
   useEffect(() => {
     const store = readCompanionStore(station);
@@ -545,8 +484,6 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     setHistoryCache(pruneHistoryRows(readHistoryCache(station)));
     setLayoutMode(readServerScreenLayoutMode());
     setBootstrapped(false);
-    preparingSeededRef.current = false;
-    seenPreparingRef.current = new Set();
   }, [station]);
 
   useEffect(() => {
@@ -694,6 +631,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       const status = normalizeOrderItemStatus(row.status);
       // Include held — some flows insert held then fire via UPDATE; still worth a ping.
       if (status !== "preparing" && status !== "pending" && status !== "held") return;
+      if (!claimNotificationEvent(`station:${station}`, `${row.table_id}:${row.created_at}`, row.created_at)) return;
       scheduleNewOrderSound();
     },
     [scheduleNewOrderSound, station],
@@ -727,10 +665,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       unsubItems();
       unsubTables();
       unsubMenu();
-      if (newOrderSoundTimerRef.current) {
-        clearTimeout(newOrderSoundTimerRef.current);
-        newOrderSoundTimerRef.current = null;
-      }
+
     };
   }, [maybeAlertNewOrderInsert, reloadAll, reloadMenu, station]);
 
@@ -761,38 +696,6 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       window.clearInterval(timer);
     };
   }, [station, reloadStationItems]);
-
-  // Backup detector: new preparing IDs after bootstrap (covers missed INSERT / UPDATE fire).
-  // Soft-refresh / cache reload of the same tickets does not beep — only brand-new IDs.
-  useEffect(() => {
-    const pendingIds = new Set(
-      items.filter((item) => isPreparingColumnVisible(item) && item.id).map((item) => item.id!),
-    );
-
-    // Before first load finishes, keep the seed in sync but never alert.
-    if (!bootstrapped) {
-      seenPreparingRef.current = pendingIds;
-      preparingSeededRef.current = false;
-      return;
-    }
-
-    // First snapshot after bootstrap — seed only (covers batched setItems + setBootstrapped).
-    if (!preparingSeededRef.current) {
-      seenPreparingRef.current = pendingIds;
-      preparingSeededRef.current = true;
-      return;
-    }
-
-    let hasNew = false;
-    for (const id of pendingIds) {
-      if (!seenPreparingRef.current.has(id)) {
-        hasNew = true;
-        break;
-      }
-    }
-    if (hasNew) scheduleNewOrderSound();
-    seenPreparingRef.current = pendingIds;
-  }, [items, bootstrapped, scheduleNewOrderSound]);
 
   const tableLabelById = useMemo(() => {
     const map = new Map<string, string>();
@@ -1455,10 +1358,9 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     } catch(cause){
       throw Object.assign(new Error(cause instanceof Error?cause.message:"Unable to complete these items."),{completed});
     } finally {
-      if(completed.length)playReadySound();
       void reloadStationItems();void reloadTables();
     }
-  },[actor,sharedGrill.complete,registerLingerAfterMark,playReadySound,reloadStationItems,reloadTables]);
+  },[actor,sharedGrill.complete,registerLingerAfterMark,reloadStationItems,reloadTables]);
 
   const dishPreparation = useDishPreparation({entries:dishEntries,completedTimes:dishCompletionTimes,nowMs,blocked:busy,externalSelected:selectedKeys,onComplete:completeDishEntries});
 
@@ -1531,7 +1433,6 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         }
       }
 
-      playReadySound();
       setSelectedKeys(new Set());
       setBusy(false);
       window.setTimeout(() => setAnimatingOut(new Set()), 280);
@@ -1545,7 +1446,6 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       companionStore.anchors,
       items,
       language,
-      playReadySound,
       registerLingerAfterMark,
       reloadStationItems,
       reloadTables,
@@ -2020,7 +1920,6 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
 
   const onBackgroundPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     unlockNotificationAudio();
-    flushPendingNewOrderSound();
     const target = event.target as HTMLElement | null;
     if (!target) return;
     // Don't steal taps from buttons / toolbar / list rows.
@@ -2186,7 +2085,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     >
       <AnnouncementMarquee surface={station === "kitchen" ? "kds" : "bar"} tone="dark" />
 
-      {!audioUnlocked ? (
+      {deviceSoundEnabled && !audioUnlocked ? (
         <button
           type="button"
           data-server-interactive
@@ -2220,6 +2119,14 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
               : dishPreparation.entries.filter(entry=>!entry.completedAt).reduce((sum,entry)=>sum+entry.quantity,0)}
           </span>
           </div>
+          <button type="button" data-server-interactive aria-pressed={deviceSoundEnabled}
+            aria-label={translate(deviceSoundEnabled ? "notificationDeviceOn" : "notificationDeviceOff")}
+            title={translate(deviceSoundEnabled ? "notificationDeviceOn" : "notificationDeviceOff")}
+            onPointerDown={event => event.stopPropagation()}
+            onClick={() => { setDeviceSoundEnabled(!deviceSoundEnabled); if (!deviceSoundEnabled) unlockNotificationAudio(); }}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border transition ${deviceSoundEnabled ? "border-[#C9A88B]/35 bg-[#C9A88B]/10 text-[#E8D5C4]" : "border-white/10 text-white/35"}`}>
+            {deviceSoundEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+          </button>
           <FloatingToolbar
         refreshing={refreshing}
         onHistory={() => setHistoryOpen(true)}

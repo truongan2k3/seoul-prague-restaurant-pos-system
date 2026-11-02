@@ -1,5 +1,13 @@
+import type { NotificationSoundCategory, NotificationSoundSettings } from "@/lib/types";
+
 let audioContext: AudioContext | null = null;
 let unlocked = false;
+export const NOTIFICATION_AUDIO_UNLOCKED = "pos:notification-audio-unlocked";
+function markAudioUnlocked() {
+  if (unlocked) return;
+  unlocked = true;
+  window.dispatchEvent(new Event(NOTIFICATION_AUDIO_UNLOCKED));
+}
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -29,7 +37,7 @@ export function unlockNotificationAudio() {
   if (!ctx) return;
 
   const markIfRunning = () => {
-    if (ctx.state === "running") unlocked = true;
+    if (ctx.state === "running") markAudioUnlocked();
   };
 
   kickSilentBuffer(ctx);
@@ -50,7 +58,6 @@ export function unlockNotificationAudio() {
 export function isNotificationAudioUnlocked(): boolean {
   const ctx = getAudioContext();
   if (ctx?.state === "running") {
-    unlocked = true;
     return true;
   }
   return false;
@@ -252,27 +259,89 @@ export function startAlertSoundLoop(
   playAlertLoopOnce();
 }
 
-export function playCustomAlertSound(
-  url: string,
-  variant: "ready" | "newOrder" = "ready",
-) {
-  unlockNotificationAudio();
-  if (!url || isPresetSoundUrl(url)) {
-    if (variant === "newOrder") playNewOrderBell();
-    else playReadyBell();
-    return;
-  }
+const soundBuffers = new Map<string, Promise<AudioBuffer | null>>();
+const previousSounds = new Map<string, string>();
 
-  const audio = new Audio(url);
-  audio.volume = 0.85;
-  void audio.play().catch(() => {
-    if (variant === "newOrder") playNewOrderBell();
-    else playReadyBell();
+function loadSoundBuffer(url: string): Promise<AudioBuffer | null> {
+  const existing = soundBuffers.get(url);
+  if (existing) return existing;
+  const pending = (async () => {
+    const ctx = getAudioContext();
+    if (!ctx) return null;
+    try {
+      let cache: Cache | null = null;
+      try { if (typeof caches !== "undefined") cache = await caches.open("seoul-notification-sounds-v1"); } catch { /* Memory cache remains available. */ }
+      let response = await cache?.match(url).catch(() => undefined);
+      if (!response) {
+        response = await fetch(url, { cache: "force-cache", credentials: "omit" });
+        if (!response.ok) return null;
+        if (cache) void cache.put(url, response.clone()).catch(() => {});
+      }
+      return await ctx.decodeAudioData(await response.arrayBuffer());
+    } catch { return null; }
+  })();
+  soundBuffers.set(url, pending);
+  return pending;
+}
+
+/** Built-in effects are synthesized locally: no missing-MP3 fetches or asset downloads. */
+function playPreset(url: string, variant: "ready" | "newOrder") {
+  const file = url.split("/").pop()?.split("?")[0];
+  switch (file) {
+    case "chime.mp3": playBellTone([659, 988, 1318], 0.8); break;
+    case "success.mp3": playBellTone([523, 659, 784, 1047], 0.65); break;
+    case "buzzer.mp3": playBellTone([220, 277, 330], 0.5, 0.55); break;
+    case "new_order.mp3": playNewOrderBell(); break;
+    case "bell.mp3": playReadyBell(); break;
+    case "default-bell.mp3": playBellTone([784, 1174, 1568], 0.6); break;
+    default: if (variant === "newOrder") playNewOrderBell(); else playReadyBell();
+  }
+}
+
+export function preloadNotificationSounds(settings: NotificationSoundSettings, categories: NotificationSoundCategory[] = ["kitchen", "bar", "newReservation", "cancelledReservation"]) {
+  if (typeof window === "undefined") return;
+  const selected = new Set(categories.map(category => settings[category]).filter(row => row.enabled).flatMap(row => row.sounds));
+  for (const url of soundBuffers.keys()) if (!selected.has(url)) soundBuffers.delete(url);
+  for (const url of selected) if (!isPresetSoundUrl(url)) void loadSoundBuffer(url);
+}
+
+export function playNotificationCategory(category: NotificationSoundCategory, settings: NotificationSoundSettings, deviceEnabled = true) {
+  const config = settings[category];
+  if (!deviceEnabled || !config?.enabled || !config.sounds.length || !isNotificationAudioUnlocked()) return;
+  let previous = previousSounds.get(category);
+  try { previous ??= localStorage.getItem(`pos:last-notification-sound:${category}`) ?? undefined; } catch { /* Memory fallback. */ }
+  const alternatives = config.sounds.filter(url => url !== previous);
+  const pool = alternatives.length ? alternatives : config.sounds;
+  const chosen = pool[Math.floor(Math.random() * pool.length)];
+  previousSounds.set(category, chosen);
+  try { localStorage.setItem(`pos:last-notification-sound:${category}`, chosen); } catch { /* Memory fallback. */ }
+  playCustomAlertSound(chosen, "newOrder");
+}
+
+export function playCustomAlertSound(url: string, variant: "ready" | "newOrder" = "ready") {
+  unlockNotificationAudio();
+  if (!url || isPresetSoundUrl(url)) { playPreset(url, variant); return; }
+  const requestedAt = Date.now();
+  void loadSoundBuffer(url).then(buffer => {
+    const ctx = getAudioContext();
+    // Never replay a stale notification when the browser eventually permits audio.
+    if (!ctx || ctx.state !== "running" || Date.now() - requestedAt > 5_000) return;
+    if (!buffer) { playPreset("", variant); return; }
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    const gain = ctx.createGain(); gain.gain.value = 0.85;
+    source.connect(gain); gain.connect(ctx.destination);
+    source.onended = () => { source.disconnect(); gain.disconnect(); };
+    source.start();
   });
 }
 
 export function playTestAlertSound(url: string) {
-  playCustomAlertSound(url, "newOrder");
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  unlockNotificationAudio();
+  if (ctx.state === "running") playCustomAlertSound(url, "newOrder");
+  else void ctx.resume().then(() => playCustomAlertSound(url, "newOrder")).catch(() => {});
 }
 
 export function playPaymentSuccessSound(url?: string) {
@@ -340,7 +409,7 @@ function playBellTone(frequencies: number[], durationSec: number, peakGain = 0.4
   };
 
   if (ctx.state === "running") {
-    unlocked = true;
+    markAudioUnlocked();
     run();
     return;
   }
@@ -349,7 +418,7 @@ function playBellTone(frequencies: number[], durationSec: number, peakGain = 0.4
     .resume()
     .then(() => {
       if (ctx.state !== "running") return;
-      unlocked = true;
+      markAudioUnlocked();
       run();
     })
     .catch(() => {

@@ -1,20 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, ChevronDown, TrendingDown, TrendingUp, X } from "lucide-react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Banknote, BarChart3, ChevronDown, CreditCard, TrendingDown, TrendingUp, X } from "lucide-react";
 import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { HistoryLineChart, type HistoryLineSeries } from "@/components/history-line-chart";
 import { useApp } from "@/contexts/app-context";
 import { useAuth } from "@/contexts/auth-context";
 import { formatCzk } from "@/lib/currency";
 import { formatInVenueTz, todayIsoDateInVenue } from "@/lib/venue-timezone";
-import { cachedHistoryAnalytics, expireHistoryAnalyticsCache, historyChangeMatches, historyComparisonPeriods, isHistoryCalendarMonth, subscribeHistoryFinancialChanges, type HistoryAnalytics, type HistoryDates } from "@/lib/history-analytics";
+import { cachedHistoryAnalytics, expireHistoryAnalyticsCache, historyChangeMatches, historyCollectedPayments, historyComparisonPeriods, isHistoryCalendarMonth, subscribeHistoryFinancialChanges, type HistoryAnalytics, type HistoryDates } from "@/lib/history-analytics";
 import { historyItemBreakdown } from "@/lib/history-item-breakdown";
 import type { MenuItem, SaleRecord } from "@/lib/types";
 import { getHistoryAnalyticsAction } from "@/src/lib/history-analytics-actions";
 
-export function HistoryAnalyticsDashboard({dates,payment,monthComparison=false,sales,menuItems,onData}: {
-  dates: HistoryDates; payment:string;monthComparison?:boolean;sales:SaleRecord[];menuItems:MenuItem[];onData:(data:HistoryAnalytics|null)=>void;
+export function HistoryAnalyticsDashboard({dates,payment,monthComparison=false,sales,salesLoading=false,menuItems,onData}: {
+  dates: HistoryDates; payment:string;monthComparison?:boolean;sales:SaleRecord[];salesLoading?:boolean;menuItems:MenuItem[];onData:(data:HistoryAnalytics|null)=>void;
 }) {
   const {translate:t,currentStaffUser,language}=useApp();const {session}=useAuth();
   const monthly=monthComparison||isHistoryCalendarMonth(dates);
@@ -22,7 +22,7 @@ export function HistoryAnalyticsDashboard({dates,payment,monthComparison=false,s
   const [result,setResult]=useState<{key:string;data:HistoryAnalytics}|null>(null);
   const [showHourly,setShowHourly]=useState(false);
   const [expandedCategory,setExpandedCategory]=useState<"food"|"drinks"|null>(null);
-  const [graphMetric,setGraphMetric]=useState<"revenue"|"tips"|"orders"|"average"|null>(null);
+  const [graphMetric,setGraphMetric]=useState<"revenue"|"tips"|"average"|null>(null);
   const [error,setError]=useState<string|null>(null);const [loading,setLoading]=useState(true);const sequence=useRef(0);
   const load=useCallback(async()=>{
     const request=++sequence.current;setLoading(true);setError(null);
@@ -44,12 +44,13 @@ export function HistoryAnalyticsDashboard({dates,payment,monthComparison=false,s
   const comparisonIndices=monthly?[1]:oneDay&&dates.from===todayIsoDateInVenue()?[1,2]:[2];
   const previousNames=[t(monthly?"haLastMonth":oneDay?"haYesterday":"haPreviousPeriod"),t(oneDay?"haLastWeek":"haWeekEarlier")];
   const rangeLabel=(range:HistoryDates)=>range.from===range.to?range.from:`${range.from} – ${range.to}`;
-  const fields=[{key:"revenue",label:t("haRevenue"),money:true},{key:"tips",label:t("tips"),money:true},{key:"orders",label:t("haOrders"),money:false},{key:"average",label:t("haAverage"),money:true}] as const;
+  const fields=[{key:"revenue",label:t("haRevenue"),money:true},{key:"tips",label:t("tips"),money:true},{key:"average",label:t("haAverage"),money:true}] as const;
+  const collected=useMemo(()=>historyCollectedPayments(sales),[sales]);
   const revenueBreakdown=[{key:"food",label:t("haFoodRevenue")},{key:"drinks",label:t("haDrinksRevenue")}] as const;
   const itemDetails=useMemo(()=>expandedCategory?historyItemBreakdown(sales,expandedCategory,menuItems,language):[],[sales,expandedCategory,menuItems,language]);
   const graph=fields.find(field=>field.key===graphMetric);
   const graphIndices=[0,...comparisonIndices];
-  const seriesForMetric=(metric: "revenue"|"tips"|"orders"|"average", hourly=false): HistoryLineSeries[] => {
+  const seriesForMetric=(metric: "revenue"|"tips"|"average", hourly=false): HistoryLineSeries[] => {
     if(!data)return [];
     const locale=language==="cs"?"cs-CZ":language==="vi"?"vi-VN":"en-GB";
     return graphIndices.map(index=>{
@@ -63,7 +64,16 @@ export function HistoryAnalyticsDashboard({dates,payment,monthComparison=false,s
     <div className="flex flex-wrap items-end justify-between gap-2"><h2 className="pos-serif text-xl text-[#F5F2EF]">{t("haTitle")}</h2><span className="text-xs text-white/60">{loading?t("loading"):rangeLabel(dates)}</span></div>
     {error&&<p role="alert" className="rounded-lg border border-amber-400/20 bg-amber-950/20 p-3 text-xs text-amber-200">{error}</p>}
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{fields.map(field=>{
-      const value=current?.[field.key];return <button key={field.key} type="button" disabled={!data} aria-haspopup="dialog" onClick={()=>setGraphMetric(field.key)} className="min-w-0 rounded-xl border border-[#C9A88B]/15 bg-gradient-to-br from-[#1B1918] to-[#121214] p-4 text-left transition-colors hover:border-[#C9A88B]/50 focus-visible:outline focus-visible:outline-[#C9A88B] disabled:cursor-wait motion-reduce:transition-none">
+      const value=current?.[field.key];return <Fragment key={field.key}>
+      {field.key==="average"&&<div aria-label={t("totalCollected")} aria-busy={salesLoading} className="min-w-0 rounded-xl border border-[#C9A88B]/15 bg-gradient-to-br from-[#1B1918] to-[#121214] p-4">
+        <p className="text-xs font-semibold uppercase tracking-wider text-white/65">{t("totalCollected")}</p>
+        <p className="mt-2 break-words text-xl font-semibold tabular-nums text-[#E8D5C4] sm:text-2xl">{salesLoading?"—":formatCzk(collected.total)}</p>
+        <div className="mt-4 space-y-2 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2"><span className="inline-flex items-center gap-2 text-white/70"><Banknote className="h-4 w-4 text-[#C9A88B]" aria-hidden="true"/>{t("cash")}</span><span className="font-medium tabular-nums text-[#E8D5C4]">{salesLoading?"—":formatCzk(collected.cash)}</span></div>
+          <div className="flex flex-wrap items-center justify-between gap-2"><span className="inline-flex items-center gap-2 text-white/70"><CreditCard className="h-4 w-4 text-[#C9A88B]" aria-hidden="true"/>{t("card")}</span><span className="font-medium tabular-nums text-[#E8D5C4]">{salesLoading?"—":formatCzk(collected.card)}</span></div>
+        </div>
+      </div>}
+      <button type="button" disabled={!data} aria-haspopup="dialog" onClick={()=>setGraphMetric(field.key)} className="min-w-0 rounded-xl border border-[#C9A88B]/15 bg-gradient-to-br from-[#1B1918] to-[#121214] p-4 text-left transition-colors hover:border-[#C9A88B]/50 focus-visible:outline focus-visible:outline-[#C9A88B] disabled:cursor-wait motion-reduce:transition-none">
         <p className="text-xs font-semibold uppercase tracking-wider text-white/65">{field.label}</p><p className="mt-2 break-words text-xl font-semibold tabular-nums text-[#E8D5C4] sm:text-2xl">{value==null?"—":field.money?formatCzk(value):value.toLocaleString()}</p>
         <div className="mt-4 space-y-2">{comparisonIndices.map((index)=>{
           const baseline=data?.periods[index]?.[field.key];const delta=value!=null&&baseline!=null?value-baseline:null;
@@ -75,7 +85,7 @@ export function HistoryAnalyticsDashboard({dates,payment,monthComparison=false,s
               <span className="opacity-90">({percent===null?"—":`${percent>0?"+":""}${percent.toFixed(1)}%`})</span>
             </span></div>;
         })}</div>
-      </button>;
+      </button></Fragment>;
     })}</div>
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {revenueBreakdown.map(field=><button key={field.key} type="button" disabled={loading} aria-expanded={expandedCategory===field.key} aria-controls="history-item-details" onClick={()=>setExpandedCategory(value=>value===field.key?null:field.key)} className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-[#141416] px-4 py-3 text-left transition-colors focus-visible:outline focus-visible:outline-[#C9A88B] motion-reduce:transition-none ${expandedCategory===field.key?"border-[#C9A88B]/60":"border-[#C9A88B]/15 hover:border-[#C9A88B]/40"}`}>

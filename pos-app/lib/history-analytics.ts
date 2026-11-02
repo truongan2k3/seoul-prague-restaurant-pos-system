@@ -3,6 +3,19 @@ import { todayIsoDateInVenue, venueDayRangeUtc, venueWeekdayIndex } from "@/lib/
 import type { SaleRecord } from "@/lib/types";
 
 export type HistoryDates = { from: string; to: string };
+/** Actual cash/card collection, using each payment's stored charge after voucher credit. */
+export function historyCollectedPayments(sales: SaleRecord[]) {
+  let cash=0,card=0;
+  for(const sale of sales){
+    if(sale.deletedAt||!Number.isFinite(sale.grandTotal)||(sale.paymentMethod!=="cash"&&sale.paymentMethod!=="card"))continue;
+    const total=Math.max(0,Math.round((sale.grandTotal+Number.EPSILON)*100));
+    const tip=Math.min(total,Math.max(0,Math.round((Number(sale.tip)||0)*100)));
+    const base=total-tip;
+    if(sale.paymentMethod==="cash")cash+=base;else card+=base;
+    if((sale.tipPaymentMethod??sale.paymentMethod)==="cash")cash+=tip;else card+=tip;
+  }
+  return {cash:cash/100,card:card/100,total:(cash+card)/100};
+}
 export type HistoryDailyPoint = { date: string; revenue: number; orders: number; tips?: number; average?: number | null };
 export type HistoryMetric = { from: string; to: string; payments: number; orders: number; gross: number; revenue: number; average: number; averagePerPerson?: number | null; discounts: number; tips: number; referralRevenue: number; referralDiscounts: number; hourly: { hour: number; revenue: number; orders: number; tips?: number; average?: number | null }[]; timeline?: HistoryDailyPoint[] };
 export type HistoryAttribution = { codeId: string | null; code: string | null; partner: string | null; discountPercent: number; discountAmount: number; commission: number | null };

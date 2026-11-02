@@ -369,7 +369,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
             </div>
           </section>
 
-          {!showingCancelled && <HistoryAnalyticsDashboard dates={selectedDates} payment={paymentFilter} monthComparison={period==="month"} sales={filteredSales} menuItems={menuItems} onData={setAnalytics}/>}
+          {!showingCancelled && <HistoryAnalyticsDashboard dates={selectedDates} payment={paymentFilter} monthComparison={period==="month"} sales={filteredSales} salesLoading={loading||!!error} menuItems={menuItems} onData={setAnalytics}/>}
           {showingCancelled && (
           <section className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">

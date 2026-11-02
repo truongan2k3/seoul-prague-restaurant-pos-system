@@ -1,4 +1,4 @@
-import type { HistoryAnalytics } from "@/lib/history-analytics";
+import { historyCollectedPayments, type HistoryAnalytics } from "@/lib/history-analytics";
 import { saleNetTotal } from "@/lib/summary-analytics";
 import { formatInVenueTz } from "@/lib/venue-timezone";
 import type { SaleRecord } from "@/lib/types";
@@ -12,8 +12,10 @@ export async function exportHistory(sales:SaleRecord[],analytics:HistoryAnalytic
   }));
   if(excel){
     const XLSX=await import("xlsx");const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(rows),"Payments");
+    const collected=historyCollectedPayments(sales);
+    XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet([{Cash_CZK:collected.cash,Card_CZK:collected.card,Total_Collected_CZK:collected.total}]),"Collected payments");
     if(analytics){
-      XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(analytics.periods.map(({from,to,revenue,tips,orders,average})=>({from,to,revenue,tips,orders,averagePerTable:average}))),"Revenue comparisons");
+      XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(analytics.periods.map(({from,to,revenue,tips,average})=>({from,to,revenue,tips,averagePerTable:average}))),"Revenue comparisons");
       XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet([{Revenue_Food_CZK:analytics.breakdown.food,Revenue_Drinks_CZK:analytics.breakdown.drinks}]),"Food and Drinks");
     }
     XLSX.writeFile(book,`${filename}.xlsx`);return;

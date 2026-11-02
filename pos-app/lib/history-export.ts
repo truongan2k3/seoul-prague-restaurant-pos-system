@@ -7,13 +7,13 @@ export async function exportHistory(sales:SaleRecord[],analytics:HistoryAnalytic
   const rows=sales.map(sale=>({
     Payment_ID:sale.id,Table:sale.tableLabel,Closed_Prague:formatInVenueTz(sale.closedAt,"en-GB",{dateStyle:"short",timeStyle:"medium",hour12:false}),
     Staff:sale.staffName,Method:sale.paymentMethod,Voided:!!sale.deletedAt,Recorded_total_CZK:sale.grandTotal,Subtotal_CZK:sale.deletedAt?0:sale.subtotal,Net_sales_CZK:sale.deletedAt?0:saleNetTotal(sale),
-    Discount_CZK:sale.deletedAt?0:sale.discountAmount,Tip_CZK:sale.deletedAt?0:sale.tip,Collected_CZK:sale.deletedAt?0:sale.grandTotal,Voucher_credit_CZK:sale.deletedAt?0:sale.voucherDiscountAmount??0,
+    Discount_CZK:sale.deletedAt?0:sale.discountAmount,Tip_CZK:sale.deletedAt?0:sale.tip,Tip_Method:sale.tipPaymentMethod??sale.paymentMethod,Collected_CZK:sale.deletedAt?0:sale.grandTotal,Voucher_credit_CZK:sale.deletedAt?0:sale.voucherDiscountAmount??0,
     Split_mode:sale.splitMode??"total",Split_count:sale.splitCount??1,
   }));
   if(excel){
     const XLSX=await import("xlsx");const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(rows),"Payments");
     const collected=historyCollectedPayments(sales);
-    XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet([{Cash_CZK:collected.cash,Card_CZK:collected.card,Total_Collected_CZK:collected.total}]),"Collected payments");
+    XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet([{Cash_CZK:collected.cash,Card_CZK:collected.card,Total_Collected_CZK:collected.total,Tips_Cash_CZK:collected.cashTips,Tips_Card_CZK:collected.cardTips}]),"Collected payments");
     if(analytics){
       XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(analytics.periods.map(({from,to,revenue,tips,average})=>({from,to,revenue,tips,averagePerTable:average}))),"Revenue comparisons");
       XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet([{Revenue_Food_CZK:analytics.breakdown.food,Revenue_Drinks_CZK:analytics.breakdown.drinks}]),"Food and Drinks");

@@ -75,6 +75,10 @@ export function HistoryAnalyticsDashboard({dates,payment,monthComparison=false,s
       </div>}
       <button type="button" disabled={!data} aria-haspopup="dialog" onClick={()=>setGraphMetric(field.key)} className="min-w-0 rounded-xl border border-[#C9A88B]/15 bg-gradient-to-br from-[#1B1918] to-[#121214] p-4 text-left transition-colors hover:border-[#C9A88B]/50 focus-visible:outline focus-visible:outline-[#C9A88B] disabled:cursor-wait motion-reduce:transition-none">
         <p className="text-xs font-semibold uppercase tracking-wider text-white/65">{field.label}</p><p className="mt-2 break-words text-xl font-semibold tabular-nums text-[#E8D5C4] sm:text-2xl">{value==null?"—":field.money?formatCzk(value):value.toLocaleString()}</p>
+        {field.key==="tips"&&<div className="mt-3 space-y-2 border-b border-white/10 pb-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2"><span className="inline-flex items-center gap-2 text-white/70"><Banknote className="h-4 w-4 text-[#C9A88B]" aria-hidden="true"/>{t("tipsCash")}</span><span className="font-medium tabular-nums text-[#E8D5C4]">{salesLoading?"—":formatCzk(collected.cashTips)}</span></div>
+          <div className="flex flex-wrap items-center justify-between gap-2"><span className="inline-flex items-center gap-2 text-white/70"><CreditCard className="h-4 w-4 text-[#C9A88B]" aria-hidden="true"/>{t("tipsCard")}</span><span className="font-medium tabular-nums text-[#E8D5C4]">{salesLoading?"—":formatCzk(collected.cardTips)}</span></div>
+        </div>}
         <div className="mt-4 space-y-2">{comparisonIndices.map((index)=>{
           const baseline=data?.periods[index]?.[field.key];const delta=value!=null&&baseline!=null?value-baseline:null;
           const percent=delta!==null&&baseline!=null?(baseline===0?(value===0?0:null):delta/Math.abs(baseline)*100):null;

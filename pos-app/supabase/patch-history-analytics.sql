@@ -72,7 +72,7 @@ BEGIN
     LEFT JOIN matched m ON m.closed_at>=w.starts AND m.closed_at<w.ends AND extract(hour FROM m.closed_at AT TIME ZONE 'Europe/Prague')=h.hour
     GROUP BY w.n,h.hour
   ), daily AS (
-    SELECT d::date day,coalesce(sum(c.net),0) revenue,count(DISTINCT c.order_key) FILTER(WHERE c.completed) orders
+    SELECT d::date AS sales_date,coalesce(sum(c.net),0) revenue,count(DISTINCT c.order_key) FILTER(WHERE c.completed) orders
     FROM generate_series(p_from::timestamp,p_to::timestamp,interval '1 day') d
     LEFT JOIN current_rows c ON (c.closed_at AT TIME ZONE 'Europe/Prague')::date=d::date GROUP BY d
   ), food_drink AS (
@@ -101,7 +101,7 @@ BEGIN
       'average',CASE WHEN orders>0 THEN round(completed_value/orders,2) ELSE 0 END,'discounts',discounts,'tips',tips,
       'referralRevenue',referral_revenue,'referralDiscounts',referral_discounts,'hourly',
       (SELECT jsonb_agg(jsonb_build_object('hour',h.hour,'revenue',h.revenue,'orders',h.orders) ORDER BY h.hour) FROM hourly h WHERE h.n=p.n)) ORDER BY n) FROM period_totals p),
-    'daily',coalesce((SELECT jsonb_agg(jsonb_build_object('date',day,'revenue',revenue,'orders',orders) ORDER BY day) FROM daily),'[]'::jsonb),
+    'daily',coalesce((SELECT jsonb_agg(jsonb_build_object('date',sales_date,'revenue',revenue,'orders',orders) ORDER BY sales_date) FROM daily),'[]'::jsonb),
     'breakdown',(SELECT to_jsonb(b) FROM breakdown b),
     'referrals',coalesce((SELECT jsonb_agg(to_jsonb(r) ORDER BY net_sales DESC,code,partner) FROM referrals r),'[]'::jsonb),
     'attributions',coalesce((SELECT jsonb_object_agg(id::text,jsonb_build_object('codeId',referral_code_id,'code',code,'partner',partner,

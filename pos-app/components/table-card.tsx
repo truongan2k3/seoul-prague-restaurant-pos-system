@@ -2,22 +2,14 @@
 
 import { type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { Pencil } from "lucide-react";
-import { ElapsedTimer } from "@/components/live-clock";
+import { FloorTableIndicator } from "@/components/floor-table-indicator";
+import { useSettings } from "@/contexts/settings-context";
 import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
 import { orderItemDisplayName } from "@/lib/menu-display";
 import { resolveTableOccupiedSince } from "@/lib/order-item-timers";
 import { isTablePaidInProgress } from "@/lib/table-payment";
 import { useApp } from "@/contexts/app-context";
 import { TABLE_CARD_WIDTH } from "@/lib/table-layout";
-
-function TableTimer({ start }: { start: Date }) {
-  return (
-    <ElapsedTimer
-      start={start}
-      className="rounded-md bg-black/20 px-2 py-0.5 font-mono text-xs font-semibold text-[var(--foreground)] dark:bg-white/10"
-    />
-  );
-}
 
 const statusStyles = {
   empty:
@@ -49,7 +41,7 @@ interface TableCardProps {
 export function TableCard({
   table,
   menuItems = [],
-  orderItems = [],
+  orderItems,
   slaAlert = false,
   editMode = false,
   compact = false,
@@ -60,10 +52,11 @@ export function TableCard({
   onPointerDown,
 }: TableCardProps) {
   const { translate, language } = useApp();
+  const { settings } = useSettings();
   const isRound = table.shape === "round";
   const isPaidInProgress = isTablePaidInProgress(table);
   const displayOrders =
-    orderItems.length > 0 ? orderItems : (table.orders ?? []);
+    orderItems ?? table.orders ?? [];
   const occupiedSince = resolveTableOccupiedSince(table, displayOrders);
   const showPlannedReservation = table.status === "empty" && plannedReservation != null;
 
@@ -102,7 +95,7 @@ export function TableCard({
             ) : null}
           </div>
         </div>
-        {occupiedSince && <TableTimer start={occupiedSince} />}
+        {occupiedSince && <FloorTableIndicator table={table} start={occupiedSince} items={displayOrders} enablePriceRounding={settings.enablePriceRounding} />}
       </div>
 
       {table.status !== "empty" && displayOrders.length > 0 && (

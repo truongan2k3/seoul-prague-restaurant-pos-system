@@ -49,6 +49,7 @@ import {
 } from "@/lib/item-split-session";
 import type { MenuItem, OrderItem, PaymentMethod } from "@/lib/types";
 import type { VoucherCode } from "@/lib/voucher";
+import { cacheFloorBillPricing, floorBillItemKey, releaseFloorBillPricing } from "@/lib/floor-bill-preview";
 import { filterButtonClass } from "@/lib/theme-classes";
 
 type CheckoutPanelView = "main" | "split";
@@ -63,6 +64,7 @@ interface CheckoutPanelProps {
   menuItems: MenuItem[];
   tableLabel?: string;
   tableId?: string;
+  billVisitKey?: string | null;
   isSaving?: boolean;
   customerTippingEnabled?: boolean;
   /** Return false on a failed payment; keep the draft and split position unchanged. */
@@ -142,6 +144,7 @@ export function CheckoutPanel({
   menuItems,
   tableLabel,
   tableId,
+  billVisitKey = null,
   isSaving = false,
   customerTippingEnabled = true,
   onCheckout,
@@ -428,6 +431,22 @@ export function CheckoutPanel({
     // Only react to mode changes — refreshing remaining lines must not wipe a mid-pick selection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [splitMode]);
+
+  const floorBillOwner = useRef(Symbol("checkout-pricing"));
+  const floorBillItemsKey = useMemo(() => floorBillItemKey(orderSummary), [orderSummary]);
+  useEffect(() => {
+    if (!tableId || referralLoading || referralError) return;
+    cacheFloorBillPricing(tableId, {
+      owner: floorBillOwner.current, visitKey: billVisitKey, itemKey: floorBillItemsKey,
+      quote: referralQuote,
+      overridePercent: splitMode === "total" || (splitMode === "equal" && equalAdjustScope === "bill") ? effectiveOverride?.percent : undefined,
+      discountType, discountValue: splitMode === "total" || (splitMode === "equal" && equalAdjustScope === "bill") ? discountValue : 0,
+    });
+  }, [tableId, billVisitKey, floorBillItemsKey, referralLoading, referralError, referralQuote, effectiveOverride, discountType, discountValue, splitMode, equalAdjustScope]);
+  useEffect(() => {
+    const owner = floorBillOwner.current;
+    return () => { if (tableId) releaseFloorBillPricing(tableId, owner); };
+  }, [tableId, billVisitKey]);
 
   const baseTotals = useMemo(
     () =>

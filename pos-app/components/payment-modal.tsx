@@ -171,6 +171,7 @@ export function PaymentModal({
           menuItems={menuItems}
           tableLabel={table.label}
           tableId={table.id}
+          billVisitKey={table.occupiedAt?.toISOString() ?? null}
           customerTippingEnabled={open && progressReady}
           isSaving={isSaving}
           onCheckout={onConfirm}

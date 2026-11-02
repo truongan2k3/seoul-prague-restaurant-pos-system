@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { MapReservationTicker } from "@/components/map-reservation-ticker";
 import { NotificationBell } from "@/components/notification-bell";
+import { FloorTableIndicatorProvider } from "@/components/floor-table-indicator";
 import { TableCard } from "@/components/table-card";
 import { TableEditModal } from "@/components/table-edit-modal";
 import { useApp } from "@/contexts/app-context";
@@ -17,6 +18,7 @@ import {
 } from "@/lib/reservation-floor-display";
 import { formatInVenueTz, todayIsoDateInVenue, venueDayRangeUtc } from "@/lib/venue-timezone";
 import { TABLE_CARD_WIDTH, resolveFloorCardOverlaps } from "@/lib/table-layout";
+import { reconcileFloorBillReservations } from "@/lib/floor-bill-preview";
 import { tableIdsWithSlaBreach } from "@/lib/order-sla";
 import type { MenuItem, OrderItem, ReservationRecord, ReservationStatus, RestaurantTable } from "@/lib/types";
 import {
@@ -126,7 +128,9 @@ export function MapView({
     const { startIso } = venueDayRangeUtc(dateIso);
     const { data, error } = await fetchReservations(new Date(startIso));
     if (error || !data) return;
-    setPlannedReservations(mapReservationsResponse(data));
+    const reservations = mapReservationsResponse(data);
+    reconcileFloorBillReservations(reservations);
+    setPlannedReservations(reservations);
   }, []);
 
   useEffect(() => {
@@ -245,6 +249,7 @@ export function MapView({
   };
 
   return (
+    <FloorTableIndicatorProvider active={tables.some(table => table.status !== "empty")}>
     <div className="flex h-full flex-col bg-background text-[var(--foreground)]">
       <header className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--pos-raised)] px-2.5 py-1.5 sm:gap-3 sm:px-4 sm:py-2.5 lg:px-6 lg:py-3">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2.5">
@@ -405,5 +410,6 @@ export function MapView({
         onSaved={onRefresh}
       />
     </div>
+    </FloorTableIndicatorProvider>
   );
 }

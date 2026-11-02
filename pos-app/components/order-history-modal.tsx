@@ -10,8 +10,6 @@ import { useNotifications } from "@/contexts/notification-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { canManageStaff } from "@/lib/staff-roles";
 import type { CheckoutPaymentRecord } from "@/lib/checkout-calculations";
-import { HistoryReferralDetails } from "@/components/history-referral-details";
-import type { HistoryAttribution } from "@/lib/history-analytics";
 import { formatCzk } from "@/lib/currency";
 import {
   formatHistoryActivityLine,
@@ -48,8 +46,6 @@ function saleToPaymentRecord(sale: SaleRecord): CheckoutPaymentRecord {
 }
 
 interface OrderHistoryModalProps {
-  referralAttribution?: HistoryAttribution;
-  commissionAllowed?: boolean;
   sale: SaleRecord;
   menuItems: MenuItem[];
   onClose: () => void;
@@ -68,8 +64,6 @@ export function OrderHistoryModal({
   onDeleted,
   initialEditMode = false,
   initialEditTip,
-  referralAttribution,
-  commissionAllowed = false,
 }: OrderHistoryModalProps) {
   const resolvedInitialEditTip = initialEditTip ?? initialEditMode;
 
@@ -276,8 +270,6 @@ export function OrderHistoryModal({
               ))}</ul>
             </section>
           )}
-
-          <HistoryReferralDetails sale={sale} attribution={referralAttribution} commissionAllowed={commissionAllowed} />
 
           {saleHasHistoryAlert(sale) && (
             <section className="rounded-xl border border-amber-300 bg-amber-50/80 p-4 dark:border-amber-800 dark:bg-amber-950/30">

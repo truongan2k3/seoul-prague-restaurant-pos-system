@@ -27,7 +27,6 @@ import { POS_EGRESS } from "@/lib/egress-config";
 import { getPeriodRange, type DateRange } from "@/lib/summary-analytics";
 import { clearPosInitCache, patchPosInitCacheMenu, readPosInitCache, readPosInitCacheStale, writePosInitCache } from "@/lib/pos-init-cache";
 import { withTimeout } from "@/lib/fetch-timeout";
-import { supabase } from "@/src/lib/supabase";
 import { publishHistoryFinancialChange } from "@/lib/history-analytics";
 import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
 import { useTableOrderWorkflow } from "@/hooks/use-table-order-workflow";
@@ -527,8 +526,7 @@ export function DashboardShell() {
       publishHistoryFinancialChange({saleId:String(row.id??previous.id??""),closedAt:typeof row.closed_at==="string"?row.closed_at:undefined,
         previousClosedAt:typeof previous.closed_at==="string"?previous.closed_at:undefined});
     });
-    const referrals=supabase.channel("referral_management").on("broadcast",{event:"CHANGED"},()=>publishHistoryFinancialChange({})).subscribe();
-    return()=>{unsubscribe();void supabase.removeChannel(referrals);};
+    return unsubscribe;
   },[loading,error,activeTab]);
 
   useEffect(() => {

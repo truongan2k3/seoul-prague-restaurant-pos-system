@@ -1484,7 +1484,7 @@
   "haPreviousPeriod": "Kỳ liền trước cùng độ dài",
   "haWeekEarlier": "Cùng kỳ lùi 7 ngày",
   "haGross": "Subtotal trước giảm giá bill",
-  "haAccountingNote": "Doanh thu đã gồm VAT, không gồm tip. Voucher là nguồn thanh toán, không phải giảm giá doanh thu. Hủy/hoàn tiền cập nhật kỳ thanh toán gốc; hoa hồng lấy từ ledger đã ghi nhận, gồm điều chỉnh.",
+  "haAccountingNote": "Doanh thu đã gồm VAT, không gồm tip. Voucher là nguồn thanh toán, không phải giảm giá doanh thu. Hủy/hoàn tiền cập nhật kỳ thanh toán gốc.",
   "haOrderNote": "Mỗi lượt bàn hoàn tất được đếm một lần theo ngày thanh toán cuối; giá trị trung bình dùng cả bill. Phiếu cũ thiếu thời điểm bắt đầu lượt ngồi được đếm riêng.",
   "haCharts": "Biểu đồ phân tích",
   "haHourly": "Doanh thu theo giờ · Prague",

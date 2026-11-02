@@ -5,8 +5,7 @@ import { AlertTriangle, ChevronLeft, ChevronRight, Eye, Pencil, Percent, Ticket 
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { DateRangeInputs } from "@/components/date-range-inputs";
 import { HistoryAnalyticsDashboard } from "@/components/history-analytics-dashboard";
-import { HistoryReferralDetails } from "@/components/history-referral-details";
-import { historyDates, historyUtcRange, saleReferral, historyChangeMatches, publishHistoryFinancialChange, subscribeHistoryFinancialChanges, type HistoryAnalytics } from "@/lib/history-analytics";
+import { historyDates, historyUtcRange, historyChangeMatches, publishHistoryFinancialChange, subscribeHistoryFinancialChanges, type HistoryAnalytics } from "@/lib/history-analytics";
 import { todayIsoDateInVenue, venueWallTimeToUtc, formatInVenueTz } from "@/lib/venue-timezone";
 import { OrderHistoryModal } from "@/components/order-history-modal";
 import { useApp } from "@/contexts/app-context";
@@ -94,15 +93,12 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   const [page, setPage] = useState(1);
   const [selectedSale, setSelectedSale] = useState<SaleRecord | null>(null);
   const [openEditTip, setOpenEditTip] = useState(false);
-  const [referralCode, setReferralCode] = useState("");
-  const [referralPartner, setReferralPartner] = useState("");
   const [analytics, setAnalytics] = useState<HistoryAnalytics | null>(null);
   const [cancelSnapshots, setCancelSnapshots] = useState<SaleRecord[]>([]);
   const [cancelRefresh, setCancelRefresh] = useState(0);
   const requests = useRef(0);
   const cancelRequests = useRef(0);
   const listCache = useRef(new Map<string, { dates: {from:string;to:string}; rows: SaleRecord[]; expires: number }>());
-  const canViewCommission = ["admin","manager","cashier"].includes(currentStaffUser?.role ?? "");
 
 
   const canEditTip = Boolean(currentStaffUser);
@@ -115,7 +111,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
     if(!force && cached && cached.expires>Date.now()){setSales(cached.rows);setLoading(false);setError(null);return;}
     setLoading(true);setError(null);
     try {
-      const result=await fetchSales(activeRange.start,activeRange.end,{includeReferral:true});
+      const result=await fetchSales(activeRange.start,activeRange.end);
       if(request!==requests.current)return;
       if(result.error)throw new Error(result.error.message);
       const rows=mapSalesResponse(result.data);
@@ -148,16 +144,9 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
     }).catch(cause=>{if(request===cancelRequests.current)setError(cause instanceof Error?cause.message:"Cancellation logs unavailable");});
     return()=>{cancelRequests.current++;};
   },[listMode,activeRange,cancelRefresh]);
-  const filteredSales = useMemo(()=>sales.filter(sale=>{
-    const referral=saleReferral(sale,analytics?.attributions[sale.id]);
-    return sale.closedAt>=activeRange.start && sale.closedAt<=activeRange.end && !isCancelOnlyAuditSale(sale) && (paymentFilter==="all"||sale.paymentMethod===paymentFilter)
-      && (!referralCode || ((referral.codeId||referral.code) && (referral.code??"[unrecorded]")===referralCode))
-      && (!referralPartner || ((referral.codeId||referral.code) && (referral.partner??"[unrecorded]")===referralPartner));
-  }),[sales,paymentFilter,referralCode,referralPartner,analytics,activeRange]);
-  const referralOptions=useMemo(()=>({
-    codes:[...new Set([...sales.filter(sale=>sale.referralCodeId||sale.referralCode).map(sale=>sale.referralCode??"[unrecorded]"),...(analytics?.codes??[]),...(referralCode?[referralCode]:[])])].sort(),
-    partners:[...new Set([...sales.filter(sale=>sale.referralCodeId||sale.referralCode).map(sale=>sale.referralPartner??"[unrecorded]"),...(analytics?.partners??[]),...(referralPartner?[referralPartner]:[])])].sort(),
-  }),[sales,analytics,referralCode,referralPartner]);
+  const filteredSales = useMemo(()=>sales.filter(sale=>
+    sale.closedAt>=activeRange.start && sale.closedAt<=activeRange.end && !isCancelOnlyAuditSale(sale) && (paymentFilter==="all"||sale.paymentMethod===paymentFilter)
+  ),[sales,paymentFilter,activeRange]);
 
   const cancelledItems = useMemo(() => {
     const fromSales = collectCancelledItemsFromSales(cancelSnapshots.length ? cancelSnapshots : sales);
@@ -167,7 +156,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
 
   useEffect(() => {
     setPage(1);
-  }, [period, paymentFilter, selectedDates, listMode, referralCode, referralPartner]);
+  }, [period, paymentFilter, selectedDates, listMode]);
 
   const listLength = listMode === "cancelled" ? cancelledItems.length : filteredSales.length;
   const totalPages = Math.max(1, Math.ceil(listLength / HISTORY_PAGE_SIZE));
@@ -236,7 +225,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
     if(record)openSale(record);
   };
   const downloadHistory = async (excel:boolean) => {
-    try{const {exportHistory}=await import("@/lib/history-export");await exportHistory(filteredSales,analytics,`history-${selectedDates.from}-${selectedDates.to}`,excel,canViewCommission);}
+    try{const {exportHistory}=await import("@/lib/history-export");await exportHistory(filteredSales,analytics,`history-${selectedDates.from}-${selectedDates.to}`,excel);}
     catch(cause){setError(cause instanceof Error?cause.message:"Export failed");}
   };
 
@@ -265,7 +254,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
         <div className="mx-auto max-w-6xl space-y-6">
           <section className="rounded-xl border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:p-3">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">
+              <p className="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">
                 {translate("date")}
               </p>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -359,7 +348,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
             </div>
 
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">
+              <p className="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">
                 {translate("paymentMethod")}
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -377,18 +366,10 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
             </div>
           </section>
 
-          {!showingCancelled && <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#C9A88B]/15 bg-[#141416] p-3">
-            <label className="min-w-0 flex-1 text-[10px] uppercase tracking-wide text-white/45">{translate("notificationReferralCode")}
-              <select value={referralCode} onChange={event=>setReferralCode(event.target.value)} className="pos-input mt-1 min-h-11 text-xs normal-case tracking-normal">
-                <option value="">{translate("haAllCodes")}</option>{referralOptions.codes.map(code=><option key={code} value={code}>{code==="[unrecorded]"?translate("haUnrecorded"):code}</option>)}
-              </select></label>
-            <label className="min-w-0 flex-1 text-[10px] uppercase tracking-wide text-white/45">{translate("haPartner")}
-              <select value={referralPartner} onChange={event=>setReferralPartner(event.target.value)} className="pos-input mt-1 min-h-11 text-xs normal-case tracking-normal">
-                <option value="">{translate("haAllPartners")}</option>{referralOptions.partners.map(partner=><option key={partner} value={partner}>{partner==="[unrecorded]"?translate("haUnrecorded"):partner}</option>)}
-              </select></label>
-            <div className="flex gap-2 self-end"><button type="button" disabled={loading} className="min-h-11 rounded-lg border border-[#C9A88B]/30 px-3 text-xs text-[#DCC1A5] disabled:opacity-40" onClick={()=>void downloadHistory(false)}>CSV</button><button type="button" disabled={loading} className="min-h-11 rounded-lg border border-[#C9A88B]/30 px-3 text-xs text-[#DCC1A5] disabled:opacity-40" onClick={()=>void downloadHistory(true)}>Excel</button></div>
+          {!showingCancelled && <div className="flex justify-end gap-2">
+            <button type="button" disabled={loading} className="min-h-11 rounded-lg border border-[#C9A88B]/30 px-4 text-sm text-[#DCC1A5] disabled:opacity-40" onClick={()=>void downloadHistory(false)}>CSV</button><button type="button" disabled={loading} className="min-h-11 rounded-lg border border-[#C9A88B]/30 px-4 text-sm text-[#DCC1A5] disabled:opacity-40" onClick={()=>void downloadHistory(true)}>Excel</button>
           </div>}
-          {!showingCancelled && <HistoryAnalyticsDashboard dates={selectedDates} payment={paymentFilter} code={referralCode} partner={referralPartner} onData={setAnalytics} refreshVersion={0}/>}
+          {!showingCancelled && <HistoryAnalyticsDashboard dates={selectedDates} payment={paymentFilter} onData={setAnalytics}/>}
           {!showingCancelled ? (
           <section className="flex flex-wrap gap-x-5 gap-y-2 rounded-xl border border-white/10 bg-[#141416] px-4 py-3 text-xs text-white/55">
             <span>{translate("haPayments")}: {stats.orderCount}</span><span>{translate("cash")}: {formatCzk(stats.cash)}</span><span>{translate("card")}: {formatCzk(stats.card)}</span>
@@ -459,7 +440,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                           </td>
                           <td className="px-4 py-3">
                             <span
-                              className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
                                 row.source === "open"
                                   ? "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
                                   : row.source === "voided"
@@ -582,7 +563,6 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                               </span>
                             )}
                           </div>
-                          <HistoryReferralDetails sale={sale} attribution={analytics?.attributions[sale.id]} compact />
                           {sale.guestName && (
                             <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
                               {sale.guestName}
@@ -709,8 +689,6 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
       {selectedSale && (
         <OrderHistoryModal
           sale={selectedSale}
-          referralAttribution={analytics?.attributions[selectedSale.id]}
-          commissionAllowed={canViewCommission}
           menuItems={menuItems}
           initialEditTip={openEditTip}
           onClose={closeModal}

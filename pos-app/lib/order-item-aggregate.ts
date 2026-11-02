@@ -47,7 +47,7 @@ function mergeAggregateRow(
 
   if (existingIndex === undefined) {
     indexByKey.set(key, merged.length);
-    const unitIds = item.id ? [item.id] : [];
+    const unitIds = item.unitIds?.length ? [...item.unitIds] : item.id ? [item.id] : [];
     merged.push({
       ...item,
       quantity: item.quantity || 1,
@@ -58,8 +58,9 @@ function mergeAggregateRow(
 
   const match = merged[existingIndex]!;
   match.quantity += item.quantity || 1;
-  if (item.id) {
-    match.unitIds = [...(match.unitIds ?? []), item.id];
+  const incomingIds = item.unitIds?.length ? item.unitIds : item.id ? [item.id] : [];
+  if (incomingIds.length) {
+    match.unitIds = [...(match.unitIds ?? []), ...incomingIds];
   }
   if (item.createdAt && (!match.createdAt || item.createdAt < match.createdAt)) {
     match.createdAt = item.createdAt;

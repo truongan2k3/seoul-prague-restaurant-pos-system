@@ -216,7 +216,7 @@ export async function commitReferralSaleAction(sale:Record<string,unknown>,refer
     const quote=quoteResult.data;if(quoteResult.error||!quote)throw new Error(quoteResult.error??"Reservation referral changed. Reopen checkout.");
     if(sale.reservation_id!==quote.reservationId || (referral?.reservationId && referral.reservationId!==quote.reservationId))throw new Error("The bill reservation changed. Reopen checkout before paying.");
     if(!referral||referral.codeId!==quote.codeId||referral.version!==quote.version)throw new Error("Refresh checkout before applying this referral.");
-    const {data:allTableLines,error:le}=await db.from("order_items").select("id,name,price,quantity,menu_item_id,kitchen_status,status,is_cancelled,modifiers,selected_addons").eq("table_id",String(sale.table_id));
+    const {data:allTableLines,error:le}=await db.from("order_items").select("id,name,price,quantity,menu_item_id,kitchen_status,status,is_cancelled,is_printed_note,modifiers,selected_addons").eq("table_id",String(sale.table_id));
     if(le)throw new Error(le.message);
     const tableLines=(allTableLines??[]).filter(row=>!row.is_cancelled&&!["cancelled","archived"].includes(row.kitchen_status??row.status));
     const menuIds=[...new Set((tableLines??[]).map(row=>row.menu_item_id).filter(Boolean))];
@@ -229,10 +229,34 @@ export async function commitReferralSaleAction(sale:Record<string,unknown>,refer
     if(!Number.isFinite(percent)||percent<0||percent>100)throw new Error("Invalid referral discount.");
     if(quote.discountAllowed===false && percent>0)throw new Error("Referral discount applies to the primary bill only. Merge tables before payment.");
     if(percent!==expectedPercent){if(!["admin","cashier","manager"].includes(staff.role)||!referral.overrideReason?.trim())throw new Error("A manager and override reason are required to change the referral discount.");}
-    const items=sale.items as Array<{id?:string;name:string;price:number;quantity:number;taxGroup?:string;originalPrice?:number;commissionUnitPrice?:number}>;
-    if(!Array.isArray(items)||!items.length)throw new Error("No payable items.");
+    type PaidItem={id?:string;unitIds?:string[];name:string;price:number;quantity:number;taxGroup?:string;originalPrice?:number;commissionUnitPrice?:number};
+    const submitted=sale.items as PaidItem[];
+    if(!Array.isArray(submitted)||!submitted.length)throw new Error("No payable items.");
     const divisor=sale.split_mode==="equal"?Number(sale.split_count):1;
     if(!Number.isInteger(divisor)||divisor<1||divisor>20)throw new Error("Invalid split count.");
+    const rowsById=new Map(tableLines.map(row=>[row.id,row]));
+    const reserved=new Map<string,number>(),items:PaidItem[]=[];
+    // Accept consolidated receipts from existing POS clients, but validate real row IDs.
+    for(const item of submitted){
+      if(!Number.isFinite(item.price)||item.price<0||!Number.isFinite(item.quantity)||item.quantity<=0)throw new Error("Invalid order amounts.");
+      if(!Array.isArray(item.unitIds)||!item.unitIds.length){
+        items.push({...item});
+        if(item.id)reserved.set(item.id,(reserved.get(item.id)??0)+item.quantity);
+        continue;
+      }
+      if(new Set(item.unitIds).size!==item.unitIds.length)throw new Error("Duplicate order quantities.");
+      let remaining=item.quantity;
+      for(const id of item.unitIds){
+        if(remaining<=0.00001)break;
+        const row=rowsById.get(id);
+        if(!row||Number((Number(row.price)/divisor).toFixed(2))!==item.price)throw new Error("Order changed. Refresh checkout before paying.");
+        const quantity=Math.min(remaining,Math.max(0,Number(row.quantity)-(reserved.get(id)??0)));
+        if(quantity<=0)continue;
+        items.push({...item,id,unitIds:undefined,quantity});
+        reserved.set(id,(reserved.get(id)??0)+quantity);remaining-=quantity;
+      }
+      if(remaining>0.00001)throw new Error("Order changed. Refresh checkout before paying.");
+    }
     const usedQuantities=new Map<string,number>();
     for(const item of items){
       if(!Number.isFinite(item.price)||item.price<0||!Number.isFinite(item.quantity)||item.quantity<=0)throw new Error("Invalid order amounts.");
@@ -253,6 +277,10 @@ export async function commitReferralSaleAction(sale:Record<string,unknown>,refer
       item.originalPrice=original;
       item.commissionUnitPrice=original/divisor;
       item.taxGroup=menu?.tax_group==="A"||(!menu?.tax_group&&menu?.item_type==="drink")?"A":"B";
+    }
+    if(sale.split_mode!=="items"&&tableLines.some(row=>!row.is_printed_note&&!(row.modifiers as OrderLineModifiers|null)?.kitchenMessage
+      &&Math.abs((usedQuantities.get(row.id)??0)-Number(row.quantity))>0.00001)){
+      throw new Error("Order changed. Refresh checkout before paying.");
     }
     const subtotal=items.reduce((sum,item)=>sum+item.price*item.quantity,0);
     if(Math.abs(subtotal-Number(sale.subtotal))>1)throw new Error("Payment subtotal does not match the order.");

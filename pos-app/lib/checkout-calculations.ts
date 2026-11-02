@@ -139,12 +139,18 @@ export function expandCheckoutLines(orders: OrderItem[]): CheckoutLine[] {
 
   orders.forEach((item, orderIndex) => {
     const units = Math.max(1, Math.floor(item.quantity));
+    const slots = new Map<string, number>();
     for (let unitIndex = 0; unitIndex < units; unitIndex++) {
+      const unitId = item.unitIds?.[unitIndex] ?? item.id;
+      const slot = unitId ? (slots.get(unitId) ?? 0) : unitIndex;
+      if (unitId) slots.set(unitId, slot + 1);
       result.push({
         ...item,
+        id: unitId,
+        unitIds: undefined,
         quantity: 1,
-        lineId: item.id
-          ? `${item.id}::u${unitIndex}`
+        lineId: unitId
+          ? `${unitId}::u${slot}`
           : `line-${orderIndex}-${unitIndex}-${item.menuItemId ?? "x"}-${item.price}-${item.notes ?? ""}-${item.station ?? ""}`,
       });
     }

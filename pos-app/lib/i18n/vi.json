@@ -1487,6 +1487,8 @@
   "notificationReferralCode": "Mã referral",
   "haTitle": "Phân tích doanh thu",
   "haRevenue": "Tổng doanh thu",
+  "haCashWithoutTip": "Tiền mặt (không gồm tip)",
+  "haCardWithoutTip": "Thẻ (không gồm tip)",
   "haOrders": "Đơn đã hoàn tất",
   "haAverage": "Trung bình mỗi bàn",
   "haFoodRevenue": "Doanh thu món ăn",

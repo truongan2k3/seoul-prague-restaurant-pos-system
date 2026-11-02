@@ -6,7 +6,7 @@ import type { SaleRecord } from "@/lib/types";
 export type HistoryDates = { from: string; to: string };
 /** Actual cash/card collection, using each payment's stored charge after voucher credit. */
 export function historyCollectedPayments(sales: SaleRecord[]) {
-  let cash=0,card=0,cashTips=0,cardTips=0;
+  let cash=0,card=0,cashTips=0,cardTips=0,cashWithoutTips=0,cardWithoutTips=0;
   for(const sale of sales){
     if(sale.deletedAt||(sale.paymentMethod!=="cash"&&sale.paymentMethod!=="card"))continue;
     const recordedTip=Math.round((Number(sale.tip)||0)*100);
@@ -16,10 +16,10 @@ export function historyCollectedPayments(sales: SaleRecord[]) {
     const total=Math.max(0,Math.round((sale.grandTotal+Number.EPSILON)*100));
     const tip=Math.min(total,Math.max(0,recordedTip));
     const base=total-tip;
-    if(sale.paymentMethod==="cash")cash+=base;else card+=base;
+    if(sale.paymentMethod==="cash"){cash+=base;cashWithoutTips+=base;}else{card+=base;cardWithoutTips+=base;}
     if(tipMethod==="cash")cash+=tip;else card+=tip;
   }
-  return {cash:cash/100,card:card/100,total:(cash+card)/100,cashTips:cashTips/100,cardTips:cardTips/100};
+  return {cash:cash/100,card:card/100,total:(cash+card)/100,cashTips:cashTips/100,cardTips:cardTips/100,cashWithoutTips:cashWithoutTips/100,cardWithoutTips:cardWithoutTips/100};
 }
 export type HistoryDailyPoint = { date: string; revenue: number; orders: number; tips?: number; average?: number | null };
 export type HistoryMetric = { from: string; to: string; payments: number; orders: number; gross: number; revenue: number; average: number; averagePerPerson?: number | null; discounts: number; tips: number; referralRevenue: number; referralDiscounts: number; hourly: { hour: number; revenue: number; orders: number; tips?: number; average?: number | null }[]; timeline?: HistoryDailyPoint[] };

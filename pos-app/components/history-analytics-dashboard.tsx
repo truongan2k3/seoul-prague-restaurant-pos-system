@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Banknote, BarChart3, ChevronDown, CreditCard, TrendingDown, TrendingUp, X } from "lucide-react";
 import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { HistoryLineChart, type HistoryLineSeries } from "@/components/history-line-chart";
@@ -63,23 +63,18 @@ export function HistoryAnalyticsDashboard({dates,payment,monthComparison=false,s
   return <section aria-label={t("haTitle")} className="space-y-4" aria-busy={loading}>
     <div className="flex flex-wrap items-end justify-between gap-2"><h2 className="pos-serif text-xl text-[#F5F2EF]">{t("haTitle")}</h2><span className="text-xs text-white/60">{loading?t("loading"):rangeLabel(dates)}</span></div>
     {error&&<p role="alert" className="rounded-lg border border-amber-400/20 bg-amber-950/20 p-3 text-xs text-amber-200">{error}</p>}
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{fields.map(field=>{
-      const value=current?.[field.key];return <Fragment key={field.key}>
-      {field.key==="average"&&<div aria-label={t("totalCollected")} aria-busy={salesLoading} className="min-w-0 rounded-xl border border-[#C9A88B]/15 bg-gradient-to-br from-[#1B1918] to-[#121214] p-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-white/65">{t("totalCollected")}</p>
-        <p className="mt-2 break-words text-xl font-semibold tabular-nums text-[#E8D5C4] sm:text-2xl">{salesLoading?"—":formatCzk(collected.total)}</p>
-        <div className="mt-4 space-y-2 text-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2"><span className="inline-flex items-center gap-2 text-white/70"><Banknote className="h-4 w-4 text-[#C9A88B]" aria-hidden="true"/>{t("cash")}</span><span className="font-medium tabular-nums text-[#E8D5C4]">{salesLoading?"—":formatCzk(collected.cash)}</span></div>
-          <div className="flex flex-wrap items-center justify-between gap-2"><span className="inline-flex items-center gap-2 text-white/70"><CreditCard className="h-4 w-4 text-[#C9A88B]" aria-hidden="true"/>{t("card")}</span><span className="font-medium tabular-nums text-[#E8D5C4]">{salesLoading?"—":formatCzk(collected.card)}</span></div>
-        </div>
-      </div>}
-      <button type="button" disabled={!data} aria-haspopup="dialog" onClick={()=>setGraphMetric(field.key)} className="min-w-0 rounded-xl border border-[#C9A88B]/15 bg-gradient-to-br from-[#1B1918] to-[#121214] p-4 text-left transition-colors hover:border-[#C9A88B]/50 focus-visible:outline focus-visible:outline-[#C9A88B] disabled:cursor-wait motion-reduce:transition-none">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{fields.map(field=>{
+      const value=current?.[field.key];return <button key={field.key} type="button" disabled={!data} aria-haspopup="dialog" onClick={()=>setGraphMetric(field.key)} className="flex min-w-0 flex-col items-stretch rounded-xl border border-[#C9A88B]/15 bg-gradient-to-br from-[#1B1918] to-[#121214] p-4 text-left transition-colors hover:border-[#C9A88B]/50 focus-visible:outline focus-visible:outline-[#C9A88B] disabled:cursor-wait motion-reduce:transition-none">
         <p className="text-xs font-semibold uppercase tracking-wider text-white/65">{field.label}</p><p className="mt-2 break-words text-xl font-semibold tabular-nums text-[#E8D5C4] sm:text-2xl">{value==null?"—":field.money?formatCzk(value):value.toLocaleString()}</p>
+        {field.key==="revenue"&&<div className="mt-3 space-y-2 border-b border-white/10 pb-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2"><span className="inline-flex items-center gap-2 text-white/70"><Banknote className="h-4 w-4 text-[#C9A88B]" aria-hidden="true"/>{t("haCashWithoutTip")}</span><span className="font-medium tabular-nums text-[#E8D5C4]">{salesLoading?"—":formatCzk(collected.cashWithoutTips)}</span></div>
+          <div className="flex flex-wrap items-center justify-between gap-2"><span className="inline-flex items-center gap-2 text-white/70"><CreditCard className="h-4 w-4 text-[#C9A88B]" aria-hidden="true"/>{t("haCardWithoutTip")}</span><span className="font-medium tabular-nums text-[#E8D5C4]">{salesLoading?"—":formatCzk(collected.cardWithoutTips)}</span></div>
+        </div>}
         {field.key==="tips"&&<div className="mt-3 space-y-2 border-b border-white/10 pb-3 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-2"><span className="inline-flex items-center gap-2 text-white/70"><Banknote className="h-4 w-4 text-[#C9A88B]" aria-hidden="true"/>{t("tipsCash")}</span><span className="font-medium tabular-nums text-[#E8D5C4]">{salesLoading?"—":formatCzk(collected.cashTips)}</span></div>
           <div className="flex flex-wrap items-center justify-between gap-2"><span className="inline-flex items-center gap-2 text-white/70"><CreditCard className="h-4 w-4 text-[#C9A88B]" aria-hidden="true"/>{t("tipsCard")}</span><span className="font-medium tabular-nums text-[#E8D5C4]">{salesLoading?"—":formatCzk(collected.cardTips)}</span></div>
         </div>}
-        <div className="mt-4 space-y-2">{comparisonIndices.map((index)=>{
+        <div className="mt-auto space-y-2 pt-4">{comparisonIndices.map((index)=>{
           const baseline=data?.periods[index]?.[field.key];const delta=value!=null&&baseline!=null?value-baseline:null;
           const percent=delta!==null&&baseline!=null?(baseline===0?(value===0?0:null):delta/Math.abs(baseline)*100):null;
           const positive=delta!==null&&delta>0;
@@ -89,7 +84,7 @@ export function HistoryAnalyticsDashboard({dates,payment,monthComparison=false,s
               <span className="opacity-90">({percent===null?"—":`${percent>0?"+":""}${percent.toFixed(1)}%`})</span>
             </span></div>;
         })}</div>
-      </button></Fragment>;
+      </button>;
     })}</div>
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {revenueBreakdown.map(field=><button key={field.key} type="button" disabled={loading} aria-expanded={expandedCategory===field.key} aria-controls="history-item-details" onClick={()=>setExpandedCategory(value=>value===field.key?null:field.key)} className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-[#141416] px-4 py-3 text-left transition-colors focus-visible:outline focus-visible:outline-[#C9A88B] motion-reduce:transition-none ${expandedCategory===field.key?"border-[#C9A88B]/60":"border-[#C9A88B]/15 hover:border-[#C9A88B]/40"}`}>

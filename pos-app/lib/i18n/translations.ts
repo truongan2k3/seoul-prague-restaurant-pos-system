@@ -6,7 +6,7 @@ export const menuCategories = ["Hotpot", "Meat", "Drinks"] as const;
 
 const en = {
   haTitle: "Sales analytics",
-  haRevenue: "Total revenue · net sales",
+  haRevenue: "Total revenue",
   haOrders: "Completed orders",
   haAverage: "Average completed order",
   haDiscounts: "Total bill discounts",
@@ -22,7 +22,7 @@ const en = {
   haHourly: "Revenue by hour · Prague",
   haComparison: "Hourly revenue comparison",
   haOrdersTrend: "Completed orders trend",
-  haFoodDrink: "Food vs Drinks · net sales",
+  haFoodDrink: "Food vs Drinks",
   haDiscountPerformance: "Discounts & referral performance",
   haSelected: "Selected period",
   haUnclassified: "Unclassified",
@@ -1577,7 +1577,7 @@ const en = {
 
 const cs: Record<TranslationKey, string> = {
   haTitle: "Analýza tržeb",
-  haRevenue: "Celkové tržby po slevách",
+  haRevenue: "Celkové tržby",
   haOrders: "Dokončené objednávky",
   haAverage: "Průměr dokončené objednávky",
   haDiscounts: "Celkové slevy z účtů",
@@ -1593,7 +1593,7 @@ const cs: Record<TranslationKey, string> = {
   haHourly: "Tržby po hodinách · Praha",
   haComparison: "Porovnání hodinových tržeb",
   haOrdersTrend: "Vývoj dokončených objednávek",
-  haFoodDrink: "Jídlo a nápoje · tržby po slevách",
+  haFoodDrink: "Jídlo a nápoje",
   haDiscountPerformance: "Slevy a výsledky doporučení",
   haSelected: "Vybrané období",
   haUnclassified: "Nezařazeno",

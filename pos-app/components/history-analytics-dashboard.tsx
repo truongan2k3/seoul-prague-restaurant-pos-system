@@ -79,8 +79,7 @@ export function HistoryAnalyticsDashboard({dates,payment,onData}: {
         })}</div>
       </div>;
     })}</div>
-    <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs leading-relaxed text-white/60"><span>{t("haGross")}: {current?formatCzk(current.gross):"—"}</span>{previousNames.map((name,index)=><span key={name}>{name}: {rangeLabel(periods[index+1])}</span>)}</div>
-    <p className="max-w-4xl text-xs leading-relaxed text-white/60">{t("haAccountingNote")} {t("haOrderNote")}</p>
+    <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs leading-relaxed text-white/60">{previousNames.map((name,index)=><span key={name}>{name}: {rangeLabel(periods[index+1])}</span>)}</div>
     {data&&current&&<details className="rounded-xl border border-white/10 bg-[#101012] p-4">
       <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-[#DCC1A5]">{t("haCharts")}<ChevronDown className="h-4 w-4"/></summary>
       <div className="mt-4 grid gap-3 lg:grid-cols-2">

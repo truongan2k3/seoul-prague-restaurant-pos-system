@@ -12,6 +12,7 @@ import type {
   SoundConfigs,
 } from "@/lib/types";
 import { ALL_NAV_TABS } from "@/lib/staff-roles";
+import { DEFAULT_BUSINESS_NAME } from "@/lib/business-branding";
 import { DEFAULT_SIDEBAR_NAV_ORDER, normalizeSidebarNavOrder } from "@/lib/sidebar-navigation";
 import { DEFAULT_SOUND_CONFIGS, parseSoundConfigs, soundConfigsToDb } from "@/lib/auto-serve";
 import {
@@ -133,7 +134,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   kitchenPrintClipBottomMm: DEFAULT_KITCHEN_CLIP_BOTTOM_MM,
   kitchenPrintItemGapPx: DEFAULT_KITCHEN_ITEM_GAP_PX,
   receiptBrandingVisibility: { ...DEFAULT_RECEIPT_BRANDING_VISIBILITY },
-  receiptHeaderTitle: "JIN CHENG",
+  receiptHeaderTitle: DEFAULT_BUSINESS_NAME,
   receiptLegalName: "JING DE INTER.TRADE, s.r.o.",
   receiptAddress: "Václavské nám. 819, 110 00 Praha",
   receiptCompanyAddress: "Václavské náměstí 819/43, 110 00 Praha",

@@ -5,6 +5,7 @@ import { Providers } from "@/components/providers";
 import { ThemeScript } from "@/components/theme-script";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
+import { DEFAULT_BUSINESS_NAME } from "@/lib/business-branding";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -24,13 +25,13 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Restaurant POS",
+  title: DEFAULT_BUSINESS_NAME,
   description: "Multi-device restaurant POS — Windows, Server Tablet, KDS, Bar",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Restaurant POS",
+    title: DEFAULT_BUSINESS_NAME,
   },
 };
 

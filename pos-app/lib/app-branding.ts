@@ -11,7 +11,7 @@ export function buildBrandedManifest(business: { id: string; name: string; logoU
   const urls = appBrandingUrls(business.id, business.logoUrl);
   return {
     id: "/app",
-    name: `${business.name} POS`,
+    name: business.name,
     short_name: business.name,
     start_url: "/app",
     scope: "/",

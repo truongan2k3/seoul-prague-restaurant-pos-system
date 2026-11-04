@@ -10,8 +10,8 @@ import {
 } from "@/src/lib/auth/session";
 import { clearStaffSession } from "@/src/lib/auth/staff-session";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
+import { DEFAULT_BUSINESS_NAME, LEGACY_BUSINESS_NAMES } from "@/lib/business-branding";
 
-const DEFAULT_BUSINESS_NAME = "JING CHENG";
 const DEFAULT_BUSINESS_SLUG = "jing-cheng";
 const DEFAULT_ADMIN_USERNAME = "admin";
 const DEFAULT_ADMIN_PASSWORD = "1";
@@ -128,7 +128,7 @@ function assertSupabaseEnv() {
   }
 }
 
-/** Seed JING CHENG + admin/1 on first run (idempotent). */
+/** Seed the default restaurant and upgrade its legacy display name. */
 export async function ensureDefaultBusinessSeed() {
   assertSupabaseEnv();
   const supabase = createSupabaseAdmin();
@@ -154,6 +154,14 @@ export async function ensureDefaultBusinessSeed() {
     business = created as BusinessRow;
   }
 
+  // Keep the existing business identity, accounts and logo when renaming.
+  if (LEGACY_BUSINESS_NAMES.includes(business.name)) {
+    const { error } = await supabase.from("businesses")
+      .update({ name: DEFAULT_BUSINESS_NAME }).eq("id", business.id).eq("name", business.name);
+    if (error) throw error;
+    business = { ...business, name: DEFAULT_BUSINESS_NAME };
+  }
+
   const { data: existingAccount } = await supabase
     .from("business_accounts")
     .select("id")
@@ -174,6 +182,9 @@ export async function ensureDefaultBusinessSeed() {
   }
 
   await ensureSettingsForBusiness(business.id);
+  // Preserve customized receipt headers and the registered legal company name.
+  await supabase.from("settings").update({ receipt_header_title: DEFAULT_BUSINESS_NAME })
+    .eq("business_id", business.id).in("receipt_header_title", LEGACY_BUSINESS_NAMES);
 }
 
 function mapAuthError(error: unknown): "envNotConfigured" | "databaseNotReady" {
@@ -189,7 +200,20 @@ export async function getAuthSessionAction(): Promise<AuthSessionPayload | null>
   } catch {
     // Tables may not exist yet — login page will show migration hint.
   }
-  return readAuthSession();
+  const session = await readAuthSession();
+  if (!session) return null;
+  // Refresh existing browser sessions too, so a rename doesn't require logout.
+  try {
+    const branding = await fetchBusinessBrandingAction(session.businessId);
+    if (!branding.data) return session;
+    const updated = { ...session, businessName: branding.data.name, logoUrl: branding.data.logoUrl };
+    if (updated.businessName !== session.businessName || updated.logoUrl !== session.logoUrl) {
+      await writeAuthSession(updated);
+    }
+    return updated;
+  } catch {
+    return session;
+  }
 }
 
 export async function loginAction(username: string, password: string) {

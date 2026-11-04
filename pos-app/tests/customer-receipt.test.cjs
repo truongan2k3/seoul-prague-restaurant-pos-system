@@ -82,3 +82,74 @@ test('receipt guest lookup uses actual attendance and can retrieve email for a h
   await out.fetchReceiptGuest({ reservationId: 'past-reservation' }); assert.equal(lookedUp, 'past-reservation');
   assert.equal(Object.keys(await out.fetchReceiptGuest({})).length, 0);
 });
+
+function bitmapReceiptHarness() {
+  const lines = [];
+  const raster = {
+    ensureCjkPrintFont: async () => {},
+    RECEIPT_BITMAP_DPR: 1, RECEIPT_BITMAP_HORIZONTAL_PAD: 8,
+    textToPngDataUrl: (text, options) => { lines.push({ text, options }); return `png-${lines.length}`; },
+    textToPngSplitRowDataUrl: (left, right) => `${left} ${right}`,
+    textToPngItemRowDataUrl: (left, right) => `${left} ${right}`,
+    textToPngTwoColumnDataUrl: (left, right) => [...left, ...right].join(' '),
+    textToPngThreeColumnDataUrl: (left, mid, right) => `${left} ${mid} ${right}`,
+    ruleToPngDataUrl: () => 'rule',
+    bitmapImgHtml: (_url, alt) => `<img alt="${alt}" />`,
+  };
+  const out = {};
+  vm.runInNewContext(compile(path.join(root, 'src/lib/printReceiptBitmap.ts')), {
+    exports: out,
+    require: id => id === '@/src/lib/printTextBitmap' ? raster : require(id),
+  });
+  const typography = require('../lib/receipt-bitmap-typography.ts').receiptBitmapTypographyFromSettings({
+    receiptFontSize: 'medium', receiptFontFamily: 'courier', receiptFontWeight: 'normal',
+  });
+  return { lines, render: data => out.buildBitmapReceiptHtml(data, undefined, typography, 'courier', 'normal') };
+}
+
+test('bitmap receipts rasterize guest details with wrapping, including History-style reprints', async () => {
+  const bitmap = bitmapReceiptHarness();
+  const data = bill({ guest: { guestName: 'Anna Nováková', partySize: 4, guestEmail: 'long.guest.email.address@example.com' } });
+  const output = await bitmap.render(data);
+  for (const text of receiptGuestLines(data)) {
+    const line = bitmap.lines.find(entry => entry.text === text);
+    assert.ok(line, `Missing bitmap guest line: ${text}`);
+    assert.equal(line.options.wrap, true);
+    assert.ok(output.html.includes(text));
+  }
+  assert.ok(output.html.indexOf('Stůl č. A1') < output.html.indexOf('Zákazník: Anna'));
+  assert.ok(output.html.indexOf('E-mail:') < output.html.indexOf('Položka'));
+  const empty = await bitmap.render(bill({}));
+  assert.doesNotMatch(empty.html, /Zákazník:|Počet osob:|E-mail:/);
+});
+
+test('History guest snapshots and linked email survive the print provider into bitmap output', async () => {
+  const bitmap = bitmapReceiptHarness();
+  let printed, lookup;
+  const provider = {};
+  const actualReact = require('react');
+  const mocks = {
+    react: { ...actualReact, useState: initial => [initial, () => {}], useCallback: fn => fn },
+    '@/contexts/app-context': { useApp: () => ({ receiptShowUsd: false, usdRate: 23 }) },
+    '@/contexts/settings-context': { useSettings: () => ({ settings: {} }) },
+    '@/src/components/ReceiptPrint': { settingsToReceiptBusiness: () => undefined, settingsToReceiptTemplate: () => undefined },
+    '@/src/lib/receipt-guest': { fetchReceiptGuest: async input => {
+      lookup = input.reservationId;
+      return { guestName: 'Edited reservation name', partySize: 2, guestEmail: 'anna@example.com' };
+    } },
+    '@/src/lib/printReceipt': { printReceiptData: async data => { printed = await bitmap.render(data); } },
+  };
+  vm.runInNewContext(compile(path.join(root, 'contexts/receipt-print-context.tsx')), {
+    exports: provider,
+    require: id => mocks[id] || (['@/components/receipt-preview-modal', '@/src/lib/printKitchenTicket', '@/lib/pos-notifications', '@/lib/print-failed-alert', '@/src/lib/translate-actions'].includes(id) ? {} : require(id)),
+  });
+  const context = provider.ReceiptPrintProvider({ children: null }).props.value;
+  await context.printReceipt({ tableLabel: 'A1', orders: [dish], payment, menuItems: [],
+    reservationId: 'historical-reservation', guest: { guestName: 'Anna Nováková', partySize: 4 } });
+  for (let i = 0; i < 10 && !printed; i++) await Promise.resolve();
+  assert.equal(lookup, 'historical-reservation');
+  assert.ok(printed.html.includes('Zákazník: Anna Nováková'));
+  assert.ok(printed.html.includes('Počet osob: 4'));
+  assert.ok(printed.html.includes('E-mail: anna@example.com'));
+  assert.ok(!printed.html.includes('Edited reservation name'));
+});

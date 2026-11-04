@@ -19,14 +19,21 @@ import {
   buildReceiptData,
   buildTestReceiptData,
   type ReceiptData,
+  type ReceiptGuest,
 } from "@/lib/receipt-calculations";
 import type { CheckoutPaymentRecord } from "@/lib/checkout-calculations";
 import type { AppSettings, MenuItem, OrderItem } from "@/lib/types";
 import { broadcastKitchenPrintMessage } from "@/lib/pos-notifications";
 import { reportPrintFailed } from "@/lib/print-failed-alert";
 import { translateNoteToChineseAction } from "@/src/lib/translate-actions";
+import { fetchReceiptGuest } from "@/src/lib/receipt-guest";
 
 interface PrintReceiptInput {
+  tableId?: string;
+  reservationId?: string;
+  guest?: ReceiptGuest;
+  referralCode?: string;
+  referralPercent?: number;
   tableLabel: string;
   staffName?: string;
   orders: OrderItem[];
@@ -41,10 +48,10 @@ type ReceiptPreviewOptions = {
 };
 
 interface ReceiptPrintContextValue {
-  printReceipt: (input: PrintReceiptInput) => void;
+  printReceipt: (input: PrintReceiptInput) => Promise<void>;
   printProvisionalBill: (input: Omit<PrintReceiptInput, "payment"> & {
     payment: CheckoutPaymentRecord;
-  }) => void;
+  }) => Promise<void>;
   printTestReceipt: () => void;
   openTestReceiptPreview: () => void;
   openReceiptPreview: (data: ReceiptData, options?: ReceiptPreviewOptions) => void;
@@ -79,8 +86,16 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const printReceipt = useCallback(
-    (input: PrintReceiptInput) => {
+    async (input: PrintReceiptInput) => {
+      const loadedGuest = await fetchReceiptGuest(input);
       const data = buildReceiptData({
+        guest: {
+          guestName: input.guest?.guestName ?? loadedGuest.guestName,
+          guestEmail: input.guest?.guestEmail ?? loadedGuest.guestEmail,
+          partySize: input.guest?.partySize ?? loadedGuest.partySize,
+        },
+        referralCode: input.referralCode,
+        referralPercent: input.referralPercent,
         tableLabel: input.tableLabel,
         staffName: input.staffName,
         orders: input.orders,
@@ -127,8 +142,12 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
   );
 
   const printProvisionalBill = useCallback(
-    (input: PrintReceiptInput) => {
+    async (input: PrintReceiptInput) => {
+      const guest = input.guest ?? await fetchReceiptGuest(input);
       const data = buildReceiptData({
+        guest,
+        referralCode: input.referralCode,
+        referralPercent: input.referralPercent,
         tableLabel: input.tableLabel,
         staffName: input.staffName,
         orders: input.orders,

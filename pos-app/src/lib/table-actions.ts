@@ -977,7 +977,7 @@ export async function checkoutTable(
     reservation_id: activeReservation?.id ?? null,
     guest_name: activeReservation?.guestName ?? null,
     guest_phone: activeReservation?.guestPhone ?? null,
-    party_size: activeReservation?.partySize ?? null,
+    party_size: activeReservation?.actualPartySize ?? activeReservation?.partySize ?? null,
     visit_source: activeReservation?.source ?? null,
     service_channel: inferServiceChannel(tableLabel),
     seated_at: seatedAt,

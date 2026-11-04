@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_BUSINESS_NAME } from "@/lib/business-branding";
 import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
 import { formatEurFromCzk } from "@/lib/currency";
@@ -7,6 +8,7 @@ import {
   formatReceiptAmount,
   formatReceiptDate,
   formatReceiptTime,
+  receiptGuestLines,
   type ReceiptData,
 } from "@/lib/receipt-calculations";
 import { formatReceiptQtyTimesPrice } from "@/lib/receipt-line-format";
@@ -54,7 +56,7 @@ function resolveTemplate(data: ReceiptData, template?: ReceiptTemplate): Receipt
     };
   }
   return {
-    brandName: "JIN CHENG",
+    brandName: DEFAULT_BUSINESS_NAME,
     brandAddress: "Václavské nám. 819, 110 00 Praha",
     legalName: "JING DE INTER.TRADE, s.r.o.",
     companyAddress: "Václavské náměstí 819/43, 110 00 Praha",
@@ -205,6 +207,9 @@ export function ReceiptBodyContent({
             <span>Čas: {formatReceiptTime(data.closedAt)}</span>
           </div>
         </div>
+        {receiptGuestLines(data).map(line => (
+          <p key={line} style={{ overflowWrap: "anywhere" }}>{line}</p>
+        ))}
       </header>
 
       <p className="receipt-dash">{DASH_LINE}</p>

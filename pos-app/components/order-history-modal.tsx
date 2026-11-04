@@ -34,8 +34,8 @@ function saleToPaymentRecord(sale: SaleRecord): CheckoutPaymentRecord {
   return {
     paymentMethod: sale.paymentMethod,
     subtotal: sale.subtotal,
-    discountType: "fixed",
-    discountValue: sale.discountAmount,
+    discountType: sale.discountType ?? "fixed",
+    discountValue: sale.discountValue ?? sale.discountAmount,
     discountAmount: sale.discountAmount,
     tip: sale.tip,
     grandTotal: sale.grandTotal,
@@ -107,7 +107,11 @@ export function OrderHistoryModal({
   const guestSeatedAt = resolveGuestSeatedAt(sale);
 
   const handleReprint = () => {
-    printReceipt({
+    void printReceipt({
+      reservationId: sale.reservationId,
+      guest: { guestName: sale.guestName, partySize: sale.partySize },
+      referralCode: (sale.referralDiscountAmount ?? 0) > 0 ? sale.referralCode : undefined,
+      referralPercent: sale.referralDiscountPercent,
       tableLabel: sale.tableLabel,
       staffName: sale.staffName,
       orders: sale.items,

@@ -617,6 +617,8 @@ export interface ReservationRecord {
 }
 
 export interface SaleRecord {
+  discountType?: "percent" | "fixed";
+  discountValue?: number;
   referralCodeId?: string;
   referralCode?: string;
   referralPartner?: string;

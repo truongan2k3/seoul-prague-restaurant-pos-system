@@ -1,9 +1,11 @@
+import { DEFAULT_BUSINESS_NAME } from "@/lib/business-branding";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   formatReceiptAmount,
   formatReceiptDate,
   formatReceiptTime,
+  receiptGuestLines,
   type ReceiptData,
 } from "@/lib/receipt-calculations";
 import { formatEurFromCzk } from "@/lib/currency";
@@ -61,7 +63,7 @@ function resolveTemplate(data: ReceiptData, template?: ReceiptTemplate): Receipt
     };
   }
   return {
-    brandName: "JIN CHENG",
+    brandName: DEFAULT_BUSINESS_NAME,
     brandAddress: "Václavské nám. 819, 110 00 Praha",
     legalName: "JING DE INTER.TRADE, s.r.o.",
     companyAddress: "Václavské náměstí 819/43, 110 00 Praha",
@@ -244,6 +246,7 @@ export function buildReceiptEscPosLines(
     ),
   );
 
+  lines.push(...receiptGuestLines(data));
   lines.push("--------------------------------");
   if (data.provisional) {
     lines.push("ÚČTENKA PŘEDBĚŽNÁ / PROVISIONAL BILL");

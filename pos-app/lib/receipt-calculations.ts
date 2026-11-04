@@ -3,6 +3,9 @@ import { menuItemMatchesOrderName } from "@/lib/menu-display";
 import { RECEIPT_BUSINESS, VAT_RATES, type TaxGroup } from "@/lib/receipt-config";
 import { defaultTaxGroupForItemType } from "@/lib/tax-summary";
 import type { MenuItem, OrderItem, PaymentMethod } from "@/lib/types";
+import { grillGuestCountFromPrepOrder, isGrillGuestPrepOrder } from "@/lib/grill-guest-count";
+
+export type ReceiptGuest = { guestName?: string; guestEmail?: string; partySize?: number };
 
 export interface ReceiptLineItem {
   code: string;
@@ -21,7 +24,7 @@ export interface ReceiptTaxGroupSummary {
   vat: number;
 }
 
-export interface ReceiptData {
+export interface ReceiptData extends ReceiptGuest {
   orderNumber: string;
   tableLabel: string;
   staffName?: string;
@@ -86,6 +89,15 @@ export function formatReceiptDisplayIndex(orderNumber: string): string {
 export function generateOrderNumber(closedAt: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${closedAt.getFullYear()}${pad(closedAt.getMonth() + 1)}${pad(closedAt.getDate())}${pad(closedAt.getHours())}${pad(closedAt.getMinutes())}${pad(closedAt.getSeconds())}`;
+}
+
+export function receiptGuestLines(guest: ReceiptGuest): string[] {
+  const singleLine = (value: string) => value.trim().replace(/[\r\n\t]+/g, " ");
+  return [
+    guest.guestName?.trim() ? `Zákazník: ${singleLine(guest.guestName)}` : undefined,
+    guest.partySize && guest.partySize > 0 ? `Počet osob: ${guest.partySize}` : undefined,
+    guest.guestEmail?.trim() ? `E-mail: ${singleLine(guest.guestEmail)}` : undefined,
+  ].filter((line): line is string => Boolean(line));
 }
 
 function resolveTaxGroup(menuItem?: MenuItem, order?: OrderItem): TaxGroup {
@@ -197,6 +209,9 @@ export function calcReceiptTaxGroups(
 export function buildReceiptData(input: {
   tableLabel: string;
   staffName?: string;
+  guest?: ReceiptGuest;
+  referralCode?: string;
+  referralPercent?: number;
   orders: OrderItem[];
   payment: CheckoutPaymentRecord;
   menuItems: MenuItem[];
@@ -210,7 +225,14 @@ export function buildReceiptData(input: {
 }): ReceiptData {
   const closedAt = input.closedAt ?? new Date();
   const menuById = new Map(input.menuItems.map((m) => [m.id, m]));
-  const items = buildReceiptLines(input.orders, menuById);
+  const allItems = buildReceiptLines(input.orders, menuById);
+  const customerOrders = input.orders.filter(order => {
+    if (isGrillGuestPrepOrder(order)) return false;
+    const menu = order.menuItemId ? menuById.get(order.menuItemId) : undefined;
+    return ![order.name, menu?.nameEn, menu?.nameCz, menu?.nameZh, menu?.category]
+      .some(name => name && /\bbanchan\b/i.test(name));
+  });
+  const items = buildReceiptLines(customerOrders, menuById);
 
   // Payment payload is already one person's share for equal split (orders are scaled too).
   const subtotal = input.payment.subtotal;
@@ -218,24 +240,32 @@ export function buildReceiptData(input: {
   const tip = input.payment.tip;
   const grandTotal = input.payment.grandTotal;
 
-  const discountLabel =
-    input.payment.discountAmount > 0
-      ? input.payment.discountType === "percent"
-        ? `Sleva (${input.payment.discountValue}%):`
-        : "Sleva:"
-      : undefined;
+  const referralCode = (input.referralCode ?? input.payment.referral?.code)?.trim();
+  const referralPercent = input.referralPercent ?? input.payment.referral?.discountPercent ?? 0;
+  const manualValue = input.payment.discountValue;
+  const hasReferral = referralPercent > 0 || Boolean(referralCode);
+  const effectivePercent = subtotal > 0 ? discountAmount / subtotal * 100 : 0;
+  const discountPercent = discountAmount <= 0 ? undefined
+    : hasReferral && manualValue <= 0 && referralPercent > 0 ? referralPercent
+    : !hasReferral && input.payment.discountType === "percent" && manualValue > 0 ? manualValue
+    : hasReferral || input.payment.discountType === "percent" ? effectivePercent : undefined;
+  const percentLabel = discountPercent && discountPercent > 0
+    ? ` (${Number(discountPercent.toFixed(2))}%)` : "";
+  const discountLabel = discountAmount > 0
+    ? `Sleva${referralCode ? ` ${referralCode}` : ""}${percentLabel}:` : undefined;
 
-  const discountPercent =
-    input.payment.discountAmount > 0 && input.payment.discountType === "percent"
-      ? input.payment.discountValue
-      : undefined;
-
-  const taxGroups = calcReceiptTaxGroups(items, subtotal, discountAmount);
+  // Hidden customer rows still contribute to the paid totals and VAT.
+  const taxGroups = calcReceiptTaxGroups(allItems, subtotal, discountAmount);
+  const prepGuestCount = input.orders.filter(isGrillGuestPrepOrder)
+    .map(grillGuestCountFromPrepOrder).find(count => count != null && count > 0);
 
   return {
     orderNumber: generateOrderNumber(closedAt),
     tableLabel: input.tableLabel,
     staffName: input.staffName,
+    guestName: input.guest?.guestName?.trim() || undefined,
+    guestEmail: input.guest?.guestEmail?.trim() || undefined,
+    partySize: input.guest?.partySize ?? prepGuestCount ?? undefined,
     items,
     subtotal,
     discountAmount,

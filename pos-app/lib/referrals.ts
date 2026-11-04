@@ -22,6 +22,8 @@ export type ReferralQuote = {
   version: string; reservationId: string; visitSubtotal: number; lastInstallment: number;
 };
 export type ReferralPayment = {
+  /** Display-only code; financial validation always uses the server quote. */
+  code?: string;
   /** Bill owner captured when the quote was displayed; optional for older POS clients. */
   reservationId?: string;
   paymentKey: string; installment: number; codeId: string; version: string; discountPercent: number;

@@ -1281,15 +1281,11 @@ export function NewOrderModal({
     }
   };
 
-  const flushPendingKitchenMessage = async () => {
+  const printPendingKitchenMessage = async () => {
     if (!pendingKitchenMessage) return;
-    const messageOrder = buildKitchenMessageOrder({
-      message: pendingKitchenMessage.message,
-      messageZh: pendingKitchenMessage.messageZh,
-    });
-    // Always create a KDS card; print the staff ticket when printing is enabled.
-    await onSendToKitchen([messageOrder]);
-    if (shouldPrintKitchenOnSend(settings)) {
+    // Print Station handles the persisted message insert. Sending a second
+    // broadcast would duplicate that ticket; direct printing stays local.
+    if (shouldPrintKitchenOnSend(settings) && !settings.kitchenPrintViaStation) {
       await printKitchenStaffMessage({
         tableLabel,
         message: pendingKitchenMessage.message,
@@ -1429,8 +1425,13 @@ export function NewOrderModal({
       }
 
       setSubmittedLineError(null);
-      if (cart.length > 0) {
-        const orders = await buildCartOrdersFromLines();
+      const orders = cart.length > 0 ? await buildCartOrdersFromLines() : [];
+      if (pendingKitchenMessage) {
+        orders.push(buildKitchenMessageOrder(pendingKitchenMessage));
+      }
+      // Persist dishes and their table message in one send. The first send
+      // closes the order modal, so a second send would use stale table state.
+      if (orders.length > 0) {
         await onSendToKitchen(orders);
         setCart([]);
         setCartOpen(false);
@@ -1438,7 +1439,7 @@ export function NewOrderModal({
       }
 
       if (pendingKitchenMessage) {
-        await flushPendingKitchenMessage();
+        await printPendingKitchenMessage();
       }
 
       // Close after a successful Send. Save no print intentionally keeps the menu open.

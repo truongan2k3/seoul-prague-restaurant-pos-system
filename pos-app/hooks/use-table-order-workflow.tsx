@@ -257,7 +257,7 @@ export function useTableOrderWorkflow({
       logAction(isAppend ? "add items" : "new order", `Table ${selectedTable?.label}`);
 
       if (shouldPrintKitchenOnSend(settings) && selectedTable) {
-        const printable = preparedOrders.filter((o) => !isBillOnlyOrderLine(o) && !o.skipPrint);
+        const printable = preparedOrders.filter((o) => (!isBillOnlyOrderLine(o) && !o.skipPrint) || (settings.kitchenPrintViaStation && isKitchenMessageOrder(o)));
         if (printable.length > 0) {
           if (settings.kitchenPrintViaStation) {
             expectPrintStationAck({

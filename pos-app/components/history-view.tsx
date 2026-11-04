@@ -111,7 +111,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
     if(!force && cached && cached.expires>Date.now()){setSales(cached.rows);setLoading(false);setError(null);return;}
     setLoading(true);setError(null);
     try {
-      const result=await fetchSales(activeRange.start,activeRange.end);
+      const result=await fetchSales(activeRange.start,activeRange.end,{includeReferral:true});
       if(request!==requests.current)return;
       if(result.error)throw new Error(result.error.message);
       const rows=mapSalesResponse(result.data);

@@ -31,6 +31,7 @@ import {
 import { shouldPrintKitchenOnSend, applyFulfillmentModeToNewOrders } from "@/lib/kitchen-fulfillment-mode";
 import { reportPrintFailed } from "@/lib/print-failed-alert";
 import { expectPrintStationAck } from "@/lib/print-station-ack";
+import { isKitchenMessageOrder } from "@/lib/kitchen-message-order";
 import { isBillOnlyOrderLine } from "@/lib/menu-item-dispatch";
 import { appendOrdersToTable, occupyTable } from "@/src/lib/table-actions";
 
@@ -155,7 +156,7 @@ function ServerApp() {
       logAction(isAppend ? "server add items" : "server order", `Table ${orderModal.table.label}`);
 
       if (shouldPrintKitchenOnSend(settings)) {
-        const printable = prepared.filter((o) => !isBillOnlyOrderLine(o) && !o.skipPrint);
+        const printable = prepared.filter((o) => (!isBillOnlyOrderLine(o) && !o.skipPrint) || (settings.kitchenPrintViaStation && isKitchenMessageOrder(o)));
         if (printable.length > 0) {
           if (settings.kitchenPrintViaStation) {
             expectPrintStationAck({

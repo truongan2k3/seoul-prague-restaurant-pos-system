@@ -1,8 +1,10 @@
 import { formatEurFromCzk } from "@/lib/currency";
+import { DEFAULT_BUSINESS_NAME } from "@/lib/business-branding";
 import {
   formatReceiptAmount,
   formatReceiptDate,
   formatReceiptTime,
+  receiptGuestLines,
   type ReceiptData,
 } from "@/lib/receipt-calculations";
 import {
@@ -54,7 +56,7 @@ function resolveTemplate(data: ReceiptData, template?: ReceiptTemplate): Receipt
     };
   }
   return {
-    brandName: "JIN CHENG",
+    brandName: DEFAULT_BUSINESS_NAME,
     brandAddress: "Václavské nám. 819, 110 00 Praha",
     legalName: "JING DE INTER.TRADE, s.r.o.",
     companyAddress: "Václavské náměstí 819/43, 110 00 Praha",
@@ -262,6 +264,14 @@ export async function buildBitmapReceiptHtml(
     typography.metaPx,
     weights.secondary,
   );
+
+  for (const line of receiptGuestLines(data)) {
+    pushLine(line, {
+      size: typography.metaPx,
+      weight: weights.secondary,
+      wrap: true,
+    });
+  }
 
   pushDashedRule();
 

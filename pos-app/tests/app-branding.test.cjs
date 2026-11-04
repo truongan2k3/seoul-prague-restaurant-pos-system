@@ -3,7 +3,7 @@ const fs=require('fs'),vm=require('vm'),ts=require('typescript'),assert=require(
 function load(file,mocks={}){const moduleExports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,esModuleInterop:true,target:ts.ScriptTarget.ES2020}}).outputText,{exports:moduleExports,require:id=>mocks[id]||require(id),URL,URLSearchParams,Response,Request,AbortSignal,Buffer,process:{env:{NEXT_PUBLIC_SUPABASE_URL:"https://branding-test.supabase.co"}},console});return moduleExports;}
 (async()=>{
  const {buildBrandedManifest,appBrandingUrls}=load('lib/app-branding.ts');
- const business={id:'12345678-1234-1234-1234-123456789012',name:'Seoul Korean BBQ Prague - Vaclavske Namesti',logoUrl:'https://example.com/logo.svg?v=2&x=1'};
+ const business={id:'12345678-1234-1234-1234-123456789012',name:'Seoul Korean BBQ Prague - Václavské náměstí',logoUrl:'https://example.com/logo.svg?v=2&x=1'};
  const manifest=buildBrandedManifest(business);
  assert.equal(manifest.id,'/app');assert.equal(manifest.icons.length,4);
  for(const icon of manifest.icons){const url=new URL(icon.src,'https://pos.example');assert.equal(url.searchParams.get('v'),business.logoUrl);assert.equal(url.searchParams.get('business'),business.id);assert.equal(icon.type,'image/png');}

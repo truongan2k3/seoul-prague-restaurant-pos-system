@@ -1,5 +1,7 @@
 "use client";
 
+import { DEFAULT_BUSINESS_NAME } from "@/lib/business-branding";
+
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -80,7 +82,7 @@ export default function RegisterPage() {
             <input
               value={businessName}
               onChange={(event) => setBusinessName(event.target.value)}
-              placeholder="JING CHENG"
+              placeholder={DEFAULT_BUSINESS_NAME}
               className="pos-input mt-1"
               required
             />

@@ -60,7 +60,7 @@ export const CATEGORY_COLUMNS = "id, name, type, display_order, created_at";
 export const INVENTORY_COLUMNS = "id, name, category, quantity, unit, sold_out";
 
 export const SALES_COLUMNS =
-  "id, table_label, staff_name, subtotal, discount_amount, tip, tip_payment_method, grand_total, payment_method, amount_given, change_due, split_mode, split_count, voucher_discount_amount, voucher_codes, items, activity_log, closed_at, seated_at, deleted_at, reservation_id, guest_name, guest_phone, party_size, visit_source, service_channel";
+  "id, table_label, staff_name, subtotal, discount_amount, discount_type, discount_value, tip, tip_payment_method, grand_total, payment_method, amount_given, change_due, split_mode, split_count, voucher_discount_amount, voucher_codes, items, activity_log, closed_at, seated_at, deleted_at, reservation_id, guest_name, guest_phone, party_size, visit_source, service_channel";
 
 /** PostgREST/Supabase default max rows is 1000 — page past it. */
 const SALES_PAGE_SIZE = 1000;
@@ -644,6 +644,8 @@ export type SupabaseSaleRow = {
   staff_name: string | null;
   subtotal: number;
   discount_amount?: number | null;
+  discount_type?: "percent" | "fixed" | null;
+  discount_value?: number | null;
   tip: number;
   tip_payment_method?: "cash" | "card" | null;
   grand_total?: number | null;
@@ -816,6 +818,8 @@ export function mapSalesResponse(data: SupabaseSaleRow[] | null): SaleRecord[] {
     staffName: s.staff_name ?? "",
     subtotal: Number(s.subtotal),
     discountAmount: Number(s.discount_amount ?? 0),
+    discountType: s.discount_type ?? undefined,
+    discountValue: s.discount_value != null ? Number(s.discount_value) : undefined,
     tip: Number(s.tip),
     tipPaymentMethod: s.tip_payment_method === "cash" || s.tip_payment_method === "card"
       ? s.tip_payment_method

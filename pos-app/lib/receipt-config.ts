@@ -1,6 +1,8 @@
-/** JIN CHENG restaurant — receipt header constants */
+import { DEFAULT_BUSINESS_NAME } from "@/lib/business-branding";
+
+/** Default restaurant receipt header. */
 export const RECEIPT_BUSINESS = {
-  name: "JIN CHENG",
+  name: DEFAULT_BUSINESS_NAME,
   address: "Václavské nám. 819, 110 00 Praha",
   ico: "28765432",
   dic: "CZ28765432",

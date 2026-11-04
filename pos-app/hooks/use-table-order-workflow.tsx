@@ -33,6 +33,7 @@ import {
   updateTableOrders,
 } from "@/src/lib/table-actions";
 import { mapTableRow } from "@/src/lib/supabase-data";
+import { fetchReceiptGuest } from "@/src/lib/receipt-guest";
 
 export type AppliedVoucherLine = { code: string; denominationCzk: number };
 
@@ -476,6 +477,9 @@ export function useTableOrderWorkflow({
     if (!modal || modal.type !== "checkout" || !selectedTable) return false;
     setIsSaving(true);
     setActionError(null);
+    // Capture guest information while the reservation is still checked in.
+    const shouldPrint = payload.printReceipt ?? settings.autoPrintOnPayment;
+    const receiptGuest = shouldPrint ? await fetchReceiptGuest({ tableId: modal.tableId }) : undefined;
     const remainingOrders = payload.remainingLines
       ? ordersFromLines(payload.remainingLines)
       : undefined;
@@ -507,8 +511,9 @@ export function useTableOrderWorkflow({
       void redeemAppliedVouchers(modal.tableId, selectedTable.label);
     }
 
-    if (payload.printReceipt ?? settings.autoPrintOnPayment) {
-      printReceipt({
+    if (shouldPrint) {
+      void printReceipt({
+        guest: receiptGuest,
         tableLabel: selectedTable.label,
         staffName: staff?.name,
         orders: payload.paidOrders,

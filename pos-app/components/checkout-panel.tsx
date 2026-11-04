@@ -883,7 +883,7 @@ export function CheckoutPanel({
     const shareTip = totalTipWithKeep;
 
     const payment = {
-      ...(referralQuote ? {referral: {reservationId:referralQuote.reservationId,paymentKey:referralPaymentKey,installment:referralQuote.lastInstallment+successfulReferralPayments+1,codeId:referralQuote.codeId,version:referralQuote.version,discountPercent:referralPercent,discountAmount:totals.referralDiscountAmount,overrideReason:effectiveOverride?.reason},referralEqualScope:equalAdjustScope} : {}),
+      ...(referralQuote ? {referral: {code:referralPercent > 0 ? referralQuote.code : undefined,reservationId:referralQuote.reservationId,paymentKey:referralPaymentKey,installment:referralQuote.lastInstallment+successfulReferralPayments+1,codeId:referralQuote.codeId,version:referralQuote.version,discountPercent:referralPercent,discountAmount:totals.referralDiscountAmount,overrideReason:effectiveOverride?.reason},referralEqualScope:equalAdjustScope} : {}),
       paymentMethod: method,
       tipPaymentMethod: method,
       subtotal: totals.subtotal,
@@ -1566,7 +1566,10 @@ export function CheckoutPanel({
       enablePriceRounding: settings.enablePriceRounding,
     });
 
-    printProvisionalBill({
+    void printProvisionalBill({
+      tableId,
+      referralCode: referralPercent > 0 ? referralQuote?.code : undefined,
+      referralPercent,
       tableLabel,
       staffName: staff?.name,
       orders: orderSummary,

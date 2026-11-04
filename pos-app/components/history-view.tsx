@@ -8,6 +8,7 @@ import { HistoryAnalyticsDashboard } from "@/components/history-analytics-dashbo
 import { historyDates, historyUtcRange, historyChangeMatches, publishHistoryFinancialChange, subscribeHistoryFinancialChanges, type HistoryAnalytics } from "@/lib/history-analytics";
 import { todayIsoDateInVenue, venueWallTimeToUtc, formatInVenueTz } from "@/lib/venue-timezone";
 import { OrderHistoryModal } from "@/components/order-history-modal";
+import { SaleDiscountCodeBadges } from "@/components/sale-discount-code-badges";
 import { useApp } from "@/contexts/app-context";
 import { formatCzk } from "@/lib/currency";
 import { saleHasHistoryAlert } from "@/lib/order-activity";
@@ -526,10 +527,11 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                           }`}
                         >
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
                             <span className="inline-flex w-max shrink-0 items-center justify-center whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1 text-base font-bold leading-none text-white dark:bg-gray-100 dark:text-gray-900">
                               {sale.tableLabel}
                             </span>
+                            <SaleDiscountCodeBadges sale={sale} />
                             {saleHasHistoryAlert(sale) && (
                               <span
                                 title={translate("historyActivityAlert")}

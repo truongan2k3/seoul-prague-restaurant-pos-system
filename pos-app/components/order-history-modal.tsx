@@ -1,5 +1,7 @@
 "use client";
 
+import { SaleDiscountCodeBadges } from "@/components/sale-discount-code-badges";
+
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Printer, Trash2, X } from "lucide-react";
 import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
@@ -188,9 +190,10 @@ export function OrderHistoryModal({
             <h2 id="order-history-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">
               {translate("orderDetails")}
             </h2>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
               {translate("orderId")}: {generateOrderNumber(sale.closedAt)} · {translate("table")}{" "}
               {sale.tableLabel}
+              <SaleDiscountCodeBadges sale={sale} />
             </p>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600 dark:text-gray-300">
               <span>

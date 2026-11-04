@@ -1,6 +1,7 @@
 import { commitReferralSaleAction } from "@/src/lib/referral-actions";
 import {
   buildEqualSplitShareAmounts,
+  mergeCheckoutLines,
   type CheckoutPaymentRecord,
 } from "@/lib/checkout-calculations";
 import {
@@ -777,7 +778,10 @@ export async function updateTableOrders(
     }
   }
 
-  const unitsToUpdate = desiredUnits.filter((unit) => unit.id);
+  // Checkout expands legacy quantity rows into individual portions. Recombine
+  // portions sharing a DB row before writing, or parallel updates overwrite
+  // that row with quantity 1 and silently drop the other unpaid portions.
+  const unitsToUpdate = mergeCheckoutLines(desiredUnits.filter((unit) => unit.id));
   if (unitsToUpdate.length > 0) {
     const updateResults = await Promise.all(
       unitsToUpdate.map((unit) =>

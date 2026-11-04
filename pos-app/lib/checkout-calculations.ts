@@ -136,10 +136,12 @@ export function calcChangeDue(amountGiven: number, amountDue: number) {
 /** Expand merged lines so each quantity unit is individually selectable (split-by-item). */
 export function expandCheckoutLines(orders: OrderItem[]): CheckoutLine[] {
   const result: CheckoutLine[] = [];
+  // A physical row can appear as several quantity-one lines after a partial
+  // payment. Slots must be unique across the whole bill, not just each input.
+  const slots = new Map<string, number>();
 
   orders.forEach((item, orderIndex) => {
     const units = Math.max(1, Math.floor(item.quantity));
-    const slots = new Map<string, number>();
     for (let unitIndex = 0; unitIndex < units; unitIndex++) {
       const unitId = item.unitIds?.[unitIndex] ?? item.id;
       const slot = unitId ? (slots.get(unitId) ?? 0) : unitIndex;

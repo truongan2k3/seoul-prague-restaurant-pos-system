@@ -23,6 +23,7 @@ import {
 import type { CheckoutPaymentRecord } from "@/lib/checkout-calculations";
 import type { AppSettings, MenuItem, OrderItem } from "@/lib/types";
 import { broadcastKitchenPrintMessage } from "@/lib/pos-notifications";
+import { reportPrintFailed } from "@/lib/print-failed-alert";
 import { translateNoteToChineseAction } from "@/src/lib/translate-actions";
 
 interface PrintReceiptInput {
@@ -223,20 +224,33 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
       const messageZh =
         input.messageZh?.trim() || (await translateNoteToChineseAction(input.message));
       const tableLabel = input.tableLabel?.trim();
-      if (settings.kitchenPrintViaStation) {
-        await broadcastKitchenPrintMessage({
+      try {
+        if (settings.kitchenPrintViaStation) {
+          await broadcastKitchenPrintMessage({
+            tableLabel,
+            message: input.message,
+            messageZh,
+          });
+          return;
+        }
+        await printKitchenMessage({
           tableLabel,
           message: input.message,
           messageZh,
+          settings,
         });
-        return;
+      } catch (error) {
+        // Sending a table message can close its order modal before printing.
+        // Keep failures visible on the POS even when that modal has unmounted.
+        const detail = error instanceof Error ? error.message : "Kitchen message print failed";
+        reportPrintFailed({
+          tableLabel,
+          detail,
+          source: !settings.kitchenPrintViaStation ? "direct"
+            : /did not confirm|Realtime|send failed/.test(detail) ? "station-offline" : "station",
+        });
+        throw error;
       }
-      await printKitchenMessage({
-        tableLabel,
-        message: input.message,
-        messageZh,
-        settings,
-      });
     },
     [settings],
   );

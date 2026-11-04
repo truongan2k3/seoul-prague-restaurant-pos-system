@@ -5,12 +5,13 @@ import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
 import { LanguageSelector } from "@/components/language-selector";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
+import { isKitchenMessageOrder } from "@/lib/kitchen-message-order";
 import { shouldPrintKitchenOnSend } from "@/lib/kitchen-fulfillment-mode";
 import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
 import { applyTableRealtimeEvent } from "@/lib/realtime-pos-sync";
 import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
 import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
-import { subscribeToKitchenPrintMessage, broadcastPrintFailed, broadcastPrintOk } from "@/lib/pos-notifications";
+import { subscribeToKitchenPrintMessage, broadcastPrintFailed, broadcastPrintOk, type KitchenPrintMessagePayload } from "@/lib/pos-notifications";
 import {
   loadPendingKitchenPrints,
   removePendingKitchenPrint,
@@ -227,6 +228,53 @@ export function PrintStationView() {
     [enqueuePrint, pushLog, rememberFailedJob, translate],
   );
 
+  const queueKitchenMessage = useCallback((payload: KitchenPrintMessagePayload, acknowledge: (error?: string) => void = () => {}) => {
+    const cfg = settingsRef.current;
+    if (!shouldPrintKitchenOnSend(cfg) || !cfg.kitchenPrintViaStation) return;
+    enqueuePrint(async () => {
+      try {
+        await printKitchenMessage({
+          tableLabel: payload.tableLabel,
+          message: payload.message,
+          messageZh: payload.messageZh,
+          settings: cfg,
+        });
+        acknowledge();
+        if (payload.tableId) {
+          await broadcastPrintOk({ tableId: payload.tableId, tableLabel: payload.tableLabel }).catch(() => {});
+        }
+        pushLog({
+          label: payload.tableLabel?.trim()
+            ? `${translate("table")} ${payload.tableLabel}`
+            : translate("kitchenMessageGeneral"),
+          ok: true,
+          detail: translate("printStationMessageJob"),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Print failed";
+        acknowledge(message);
+        const pendingId = `msg-${Date.now()}`;
+        await rememberFailedJob({
+          id: pendingId,
+          kind: "message",
+          tableId: payload.tableId,
+          tableLabel: payload.tableLabel?.trim() || translate("kitchenMessageGeneral"),
+          message: payload.message,
+          messageZh: payload.messageZh,
+          error: message,
+          failedAt: new Date().toISOString(),
+        });
+        pushLog({
+          label: payload.tableLabel?.trim()
+            ? `${translate("table")} ${payload.tableLabel}`
+            : translate("kitchenMessageGeneral"),
+          ok: false,
+          detail: message,
+        });
+      }
+    });
+  }, [enqueuePrint, pushLog, rememberFailedJob, translate]);
+
   const queueInsert = useCallback(
     (row: SupabaseOrderItemRow) => {
       const cfg = settingsRef.current;
@@ -240,7 +288,7 @@ export function PrintStationView() {
         (paperMode && status === "served");
       if (!printableStatus) return;
       if (row.is_cancelled) return;
-      if (row.skip_print) return;
+      if (row.skip_print && !row.modifiers?.kitchenMessage) return;
       if (seenIdsRef.current.has(row.id)) return;
 
       seenIdsRef.current.add(row.id);
@@ -250,6 +298,16 @@ export function PrintStationView() {
       }
 
       const item = mapOrderItemRow(row);
+      if (isKitchenMessageOrder(item)) {
+        queueKitchenMessage({
+          tableId: row.table_id,
+          tableLabel: tablesRef.current.find(table => table.id === row.table_id)?.label ?? row.table_id.slice(0, 6),
+          message: item.notes ?? item.name,
+          messageZh: item.notesTranslated ?? item.name,
+          at: item.createdAt ?? new Date().toISOString(),
+        });
+        return;
+      }
       const existing = batchesRef.current.get(row.table_id);
       if (existing) {
         window.clearTimeout(existing.timer);
@@ -263,7 +321,7 @@ export function PrintStationView() {
         timer: window.setTimeout(() => flushTableBatch(row.table_id), BATCH_MS),
       });
     },
-    [flushTableBatch],
+    [flushTableBatch, queueKitchenMessage],
   );
 
   useEffect(() => {
@@ -318,47 +376,7 @@ export function PrintStationView() {
       queueInsert,
       `print-station-inserts-${Date.now()}`,
     );
-    const unsubMessages = subscribeToKitchenPrintMessage((payload) => {
-      const cfg = settingsRef.current;
-      if (!shouldPrintKitchenOnSend(cfg) || !cfg.kitchenPrintViaStation) return;
-      enqueuePrint(async () => {
-        try {
-          await printKitchenMessage({
-            tableLabel: payload.tableLabel,
-            message: payload.message,
-            messageZh: payload.messageZh,
-            settings: cfg,
-          });
-          pushLog({
-            label: payload.tableLabel?.trim()
-              ? `${translate("table")} ${payload.tableLabel}`
-              : translate("kitchenMessageGeneral"),
-            ok: true,
-            detail: translate("printStationMessageJob"),
-          });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Print failed";
-          const pendingId = `msg-${Date.now()}`;
-          await rememberFailedJob({
-            id: pendingId,
-            kind: "message",
-            tableId: payload.tableId,
-            tableLabel: payload.tableLabel?.trim() || translate("kitchenMessageGeneral"),
-            message: payload.message,
-            messageZh: payload.messageZh,
-            error: message,
-            failedAt: new Date().toISOString(),
-          });
-          pushLog({
-            label: payload.tableLabel?.trim()
-              ? `${translate("table")} ${payload.tableLabel}`
-              : translate("kitchenMessageGeneral"),
-            ok: false,
-            detail: message,
-          });
-        }
-      });
-    });
+    const unsubMessages = subscribeToKitchenPrintMessage(queueKitchenMessage);
 
     return () => {
       setListening(false);
@@ -374,10 +392,7 @@ export function PrintStationView() {
     settings.kitchenPrintEnabled,
     settings.kitchenPrintViaStation,
     queueInsert,
-    enqueuePrint,
-    pushLog,
-    rememberFailedJob,
-    translate,
+    queueKitchenMessage,
   ]);
 
   const statusReady =

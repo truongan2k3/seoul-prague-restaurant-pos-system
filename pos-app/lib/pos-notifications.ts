@@ -69,6 +69,7 @@ export function subscribeToCallWaiter(
 }
 
 export type KitchenPrintMessagePayload = {
+  jobId?: string;
   tableId?: string;
   tableLabel?: string;
   message: string;
@@ -83,25 +84,13 @@ export async function broadcastKitchenPrintMessage(input: {
   message: string;
   messageZh: string;
 }) {
+  const jobId = crypto.randomUUID();
   const channel = supabase.channel(KITCHEN_PRINT_CHANNEL, {
-    config: { broadcast: { self: true } },
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    const timeout = window.setTimeout(() => reject(new Error("Realtime subscribe timeout")), 4000);
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        window.clearTimeout(timeout);
-        resolve();
-      }
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        window.clearTimeout(timeout);
-        reject(new Error(`Realtime ${status}`));
-      }
-    });
+    config: { broadcast: { self: true, ack: true } },
   });
 
   const payload: KitchenPrintMessagePayload = {
+    jobId,
     tableId: input.tableId,
     tableLabel: input.tableLabel?.trim() || undefined,
     message: input.message,
@@ -109,23 +98,53 @@ export async function broadcastKitchenPrintMessage(input: {
     at: new Date().toISOString(),
   };
 
-  const result = await channel.send({
-    type: "broadcast",
-    event: "kitchen_print_message",
-    payload,
-  });
-
-  void supabase.removeChannel(channel);
-  return result;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      let sent = false;
+      timeout = setTimeout(() => reject(new Error("Realtime subscribe timeout")), 4000);
+      channel.on("broadcast", { event: "kitchen_print_message_result" }, ({ payload: result }) => {
+        if (result?.jobId !== jobId) return;
+        if (result.error) reject(new Error(String(result.error)));
+        else resolve();
+      });
+      channel.subscribe((status) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          reject(new Error(`Realtime ${status}`));
+        }
+        if (status !== "SUBSCRIBED" || sent) return;
+        sent = true;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => reject(new Error(
+          "Print Station did not confirm printing. Check the station and printer before retrying to avoid duplicate tickets.",
+        )), 30000);
+        void channel.send({ type: "broadcast", event: "kitchen_print_message", payload })
+          .then(result => {
+            if (result !== "ok") reject(new Error(`Kitchen message send failed: ${result}`));
+          })
+          .catch(reject);
+      });
+    });
+  } finally {
+    clearTimeout(timeout);
+    void supabase.removeChannel(channel);
+  }
 }
 
 export function subscribeToKitchenPrintMessage(
-  onEvent: (payload: KitchenPrintMessagePayload) => void,
+  onEvent: (payload: KitchenPrintMessagePayload, acknowledge: (error?: string) => void) => void,
 ): () => void {
   const channel = supabase
     .channel(KITCHEN_PRINT_CHANNEL)
     .on("broadcast", { event: "kitchen_print_message" }, ({ payload }) => {
-      onEvent(payload as KitchenPrintMessagePayload);
+      onEvent(payload as KitchenPrintMessagePayload, (error) => {
+        if (!payload.jobId) return;
+        void channel.send({
+          type: "broadcast",
+          event: "kitchen_print_message_result",
+          payload: { jobId: payload.jobId, error },
+        }).catch(() => { /* Sender will surface the confirmation timeout. */ });
+      });
     })
     .subscribe();
 

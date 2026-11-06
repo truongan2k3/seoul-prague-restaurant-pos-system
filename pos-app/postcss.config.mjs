@@ -1,7 +1,9 @@
+import { resolve } from "node:path";
+
 const config = {
   plugins: {
     "@tailwindcss/postcss": {},
-    "./postcss.legacy-browser.cjs": {},
+    [resolve(process.cwd(), "postcss.legacy-browser.cjs")]: {},
   },
 };
 

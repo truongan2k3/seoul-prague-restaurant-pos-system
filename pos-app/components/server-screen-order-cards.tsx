@@ -343,16 +343,21 @@ export function ServerScreenOrderCards({
       if (card) ticket.style.gridRowEnd = `span ${Math.ceil(card.offsetHeight) + 12}`;
     };
     tickets.forEach(measure);
-    const observer = new ResizeObserver((entries) => {
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver((entries) => {
       for (const entry of entries) {
         const ticket = entry.target.parentElement;
         if (ticket) measure(ticket);
       }
-    });
+    }) : null;
     tickets.forEach(ticket => {
-      if (ticket.firstElementChild) observer.observe(ticket.firstElementChild);
+      if (ticket.firstElementChild) observer?.observe(ticket.firstElementChild);
     });
-    return () => observer.disconnect();
+    const measureAll = () => tickets.forEach(measure);
+    window.addEventListener("resize", measureAll);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measureAll);
+    };
   }, [cards]);
 
   if (cards.length === 0) {

@@ -273,8 +273,9 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
   return (
     <aside
       className={`landing-theme absolute inset-0 z-40 flex w-full flex-col border-r-0 bg-[#0B0B0C] shadow-none transition-[transform,opacity] motion-reduce:transition-none duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-        open ? "translate-x-0 opacity-100" : "-translate-x-full opacity-0 pointer-events-none"
+        open ? "opacity-100" : "opacity-0 pointer-events-none"
       }`}
+      style={{ transform: open ? "translateX(0)" : "translateX(-100%)" }}
       aria-hidden={!open}
       aria-label={translate("mapResTickerTitle")}
     >

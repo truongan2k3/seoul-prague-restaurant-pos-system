@@ -113,8 +113,9 @@ export function ServerScreenReservationPanel({
     <aside
       data-server-interactive
       className={`absolute inset-0 z-30 flex w-full flex-col bg-[#0B0B0C] transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-        open ? "translate-x-0" : "-translate-x-full pointer-events-none"
+        open ? "" : "pointer-events-none"
       }`}
+      style={{ transform: open ? "translateX(0)" : "translateX(-100%)" }}
       aria-hidden={!open}
       aria-label={title}
     >

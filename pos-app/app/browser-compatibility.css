@@ -1,0 +1,29 @@
+/* Older Android browsers drop dvh declarations entirely, collapsing flex screens.
+   Keep these fallbacks outside Tailwind's layers and leave native dvh in charge
+   on current browsers. The JS variable tracks browser chrome/fullscreen changes. */
+@supports not (height: 100dvh) {
+  [class~="h-[100dvh]"] {
+    height: 100vh;
+    height: var(--legacy-viewport-height, 100vh);
+  }
+  [class~="max-h-[100dvh]"] {
+    max-height: 100vh;
+    max-height: var(--legacy-viewport-height, 100vh);
+  }
+  [class~="min-h-dvh"], [class~="min-h-[100svh]"] {
+    min-height: 100vh;
+    min-height: var(--legacy-viewport-height, 100vh);
+  }
+  [class~="max-h-[90dvh]"] { max-height: calc(var(--legacy-viewport-height, 100vh) * 0.9); }
+  [class~="max-h-[92dvh]"] { max-height: calc(var(--legacy-viewport-height, 100vh) * 0.92); }
+  [class~="max-h-[70dvh]"] { max-height: calc(var(--legacy-viewport-height, 100vh) * 0.7); }
+  [class~="max-h-[50dvh]"] { max-height: calc(var(--legacy-viewport-height, 100vh) * 0.5); }
+  [class~="h-[min(70dvh,560px)]"] {
+    height: 70vh;
+    height: min(calc(var(--legacy-viewport-height, 100vh) * 0.7), 560px);
+  }
+  @media (min-width: 640px) {
+    [class~="sm:h-[min(94vh,920px)]"] { height: min(94vh, 920px); }
+    [class~="sm:max-h-[min(94vh,920px)]"] { max-height: min(94vh, 920px); }
+  }
+}

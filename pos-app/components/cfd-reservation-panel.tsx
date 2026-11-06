@@ -339,7 +339,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
               <p className="px-2 py-10 text-center text-sm text-[#E8D5C4]/80">{error}</p>
             ) : rows.length === 0 ? (
               <div className="px-2 py-10 text-center">
-                <p className="text-sm text-white/45">{translate("prepStatsReservationsEmpty")}</p>
+                <p className="text-sm text-white/45">{translate("noReservationsToday")}</p>
                 <button
                   type="button"
                   onClick={() => setShowCreate(true)}

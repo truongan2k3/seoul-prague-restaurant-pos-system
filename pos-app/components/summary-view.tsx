@@ -20,7 +20,6 @@ import { computeTaxSummaryReport } from "@/lib/tax-summary";
 import { printTaxSummaryPdf, printTaxSummaryReport } from "@/src/lib/printTaxSummary";
 import { filterButtonClass } from "@/lib/theme-classes";
 import type { MenuItem, SaleRecord } from "@/lib/types";
-import { SummaryPrepTimeSection } from "@/components/summary-prep-time-section";
 
 const PERIOD_OPTIONS = ["today", "yesterday", "week", "month", "custom"] as const;
 
@@ -270,7 +269,6 @@ export function SummaryView({
           </section>
           </>}
 
-          <SummaryPrepTimeSection />
         </div>
       </div>
     </div>

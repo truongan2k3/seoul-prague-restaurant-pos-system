@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./browser-compatibility.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 

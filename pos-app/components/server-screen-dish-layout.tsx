@@ -6,6 +6,7 @@ import { ArrowRight, Check, Loader2, Minus, Plus, TriangleAlert } from "lucide-r
 import { formatPreparationMinutes, preparationAgeMinutes, preparationHighlightTone } from "@/lib/server-screen";
 import { DISH_SELECTION_MS, type DishEntry, type DishSelection } from "@/lib/dish-preparation";
 import type { LanguageCode } from "@/lib/types";
+import { listenMediaQueryChange } from "@/lib/browser-compatibility";
 
 type TableEntry = {key:string;entries:DishEntry[];external:boolean};
 
@@ -49,25 +50,27 @@ function useDishColumns(hasDishes: boolean) {
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(measure);
     };
-    const resize = new ResizeObserver(schedule);
-    resize.observe(viewport);
-    resize.observe(list);
+    const resize = typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null;
+    resize?.observe(viewport);
+    resize?.observe(list);
     const observeRows = () => {
-      resize.disconnect();
-      resize.observe(viewport);
-      resize.observe(list);
-      Array.from(list.children).forEach(row => resize.observe(row));
+      resize?.disconnect();
+      resize?.observe(viewport);
+      resize?.observe(list);
+      Array.from(list.children).forEach(row => resize?.observe(row));
       schedule();
     };
     const changes = new MutationObserver(observeRows);
     changes.observe(list, {childList:true, subtree:true});
-    landscape.addEventListener("change", schedule);
+    const stopMediaListener = listenMediaQueryChange(landscape, schedule);
+    window.addEventListener("resize", schedule);
     measure();
     observeRows();
     return () => {
-      resize.disconnect();
+      resize?.disconnect();
       changes.disconnect();
-      landscape.removeEventListener("change", schedule);
+      stopMediaListener();
+      window.removeEventListener("resize", schedule);
       cancelAnimationFrame(frame);
     };
   }, [hasDishes]);

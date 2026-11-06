@@ -18,6 +18,7 @@ import { PagePresenceTracker } from "@/components/page-presence-tracker";
 import { ConnectionStatusProvider } from "@/contexts/connection-status-context";
 import { LuxuryPreloader } from "@/components/luxury-preloader";
 import { AppBrandingIcons } from "@/components/app-branding-icons";
+import { BrowserCompatibility } from "@/components/browser-compatibility";
 
 function PinGateWrapper({ children }: { children: React.ReactNode }) {
   const { settings } = useSettings();
@@ -47,6 +48,7 @@ function PinGateWrapper({ children }: { children: React.ReactNode }) {
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
+      <BrowserCompatibility />
       <AppBrandingIcons />
       <AppProvider>
         <SettingsProvider>

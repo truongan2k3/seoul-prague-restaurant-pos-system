@@ -12,7 +12,6 @@ import {
 } from "react";
 import {
   ArrowLeft,
-  BarChart3,
   History,
   LayoutGrid,
   RefreshCw,
@@ -26,7 +25,6 @@ import { useDishPreparation } from "@/hooks/use-dish-preparation";
 import { useSharedGrillCompanions } from "@/hooks/use-shared-grill-companions";
 import { DISH_DONE_VISIBLE_MS, type DishEntry, type DishCompletion } from "@/lib/dish-preparation";
 import { ServerScreenPaymentOverlay } from "@/components/server-screen-payment-overlay";
-import { ServerScreenPrepStatsPanel } from "@/components/server-screen-prep-stats";
 import { ServerScreenReservationPanel } from "@/components/server-screen-reservation-panel";
 import { useDeviceNotificationSound } from "@/hooks/use-device-notification-sound";
 import { claimNotificationEvent } from "@/lib/notification-preferences";
@@ -49,12 +47,6 @@ import {
   playNotificationCategory,
   unlockNotificationAudio,
 } from "@/lib/notification-sound";
-import {
-  computePrepTimeStats,
-  emptyPrepTimeStats,
-  venueTodayRange,
-  type PrepTimeStats,
-} from "@/lib/prep-time-stats";
 import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
 import {
   applyStationOrderItemRealtimeEvent,
@@ -111,7 +103,6 @@ import {
   fetchStationHistoryItems,
   fetchStationOrderItems,
   fetchTableSummaries,
-  fetchPrepTimeSamples,
   loadMenuItemsResolved,
   mapOrderItemRow,
   mapTablesResponse,
@@ -298,12 +289,9 @@ function FloatingToolbar({
   onHistory,
   onLayout,
   onRefresh,
-  onPrepStats,
   historyLabel,
   layoutLabel,
   refreshLabel,
-  prepStatsLabel,
-  showPrepStats = false,
   historyBack = false,
   layoutActive = false,
   inHeader = false,
@@ -312,12 +300,9 @@ function FloatingToolbar({
   onHistory: () => void;
   onLayout?: () => void;
   onRefresh: () => void;
-  onPrepStats?: () => void;
   historyLabel: string;
   layoutLabel?: string;
   refreshLabel: string;
-  prepStatsLabel?: string;
-  showPrepStats?: boolean;
   historyBack?: boolean;
   layoutActive?: boolean;
   inHeader?: boolean;
@@ -346,17 +331,6 @@ function FloatingToolbar({
           {historyBack ? <ArrowLeft className="h-4 w-4" /> : <History className="h-4 w-4" />}
           <span className={labelClass}>{historyLabel}</span>
         </button>
-        {showPrepStats && onPrepStats ? (
-          <button
-            type="button"
-            onClick={onPrepStats}
-            aria-label={prepStatsLabel ?? "Stats"}
-            title={prepStatsLabel}
-            className={inHeader ? btnBase : `${btnBase} min-w-12 shrink-0`}
-          >
-            <BarChart3 className="h-4 w-4" />
-          </button>
-        ) : null}
         {onLayout ? (
           <button
             type="button"
@@ -423,9 +397,6 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const [animatingOut, setAnimatingOut] = useState<Set<string>>(new Set());
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [bootstrapped, setBootstrapped] = useState(false);
-  const [prepStats, setPrepStats] = useState<PrepTimeStats>(() => emptyPrepTimeStats());
-  const [prepStatsLoading, setPrepStatsLoading] = useState(false);
-  const [prepStatsOpen, setPrepStatsOpen] = useState(false);
   const [reservationsOpen, setReservationsOpen] = useState(false);
   /** Fully-done cards stay visible until this timestamp (ms). */
   const [lingerUntilByCardId, setLingerUntilByCardId] = useState<Map<string, number>>(
@@ -440,11 +411,9 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const languageRef = useRef(language);
   const languagesRef = useRef(languages);
   const playNewOrderAlertRef = useRef<() => void>(() => {});
-  const prepStatsCacheRef = useRef<{ key: string; stats: PrepTimeStats; at: number } | null>(null);
   const tableLabelByIdRef = useRef(new Map<string, string>());
   const menuItemsRef = useRef<MenuItem[]>([]);
   const touchRef = useRef<{ x: number; y: number; tracking: boolean } | null>(null);
-  const prepStatsOpenRef = useRef(false);
   const reservationsOpenRef = useRef(false);
   const stationReloadGenRef = useRef(0);
   const autoDoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -453,7 +422,6 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const tableTagTapRef = useRef<{ key: string; at: number } | null>(null);
   const orderCardsRef = useRef<ServerScreenOrderCard[]>([]);
   const preparingRowsRef = useRef<BoardRow[]>([]);
-  prepStatsOpenRef.current = prepStatsOpen;
   reservationsOpenRef.current = reservationsOpen;
   languageRef.current = language;
   languagesRef.current = languages;
@@ -1049,58 +1017,9 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     return result.sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
   }, [historyRows, orderCards]);
 
-  const loadTodayPrepStats = useCallback(async () => {
-    const { dateIso, startIso, endExclusiveIso } = venueTodayRange();
-    const cacheKey = `${station}:${dateIso}`;
-    const cached = prepStatsCacheRef.current;
-    if (cached && cached.key === cacheKey && Date.now() - cached.at < 90_000) {
-      setPrepStats(cached.stats);
-      return cached.stats;
-    }
-
-    setPrepStatsLoading(true);
-    try {
-      const { data, error } = await fetchPrepTimeSamples({
-        startIso,
-        endExclusiveIso,
-        station,
-        tableLabelById: tableLabelByIdRef.current,
-      });
-      if (error) {
-        console.warn("[PrepStats] Failed:", error.message);
-        const empty = emptyPrepTimeStats();
-        setPrepStats(empty);
-        return empty;
-      }
-      const next = computePrepTimeStats(data);
-      prepStatsCacheRef.current = { key: cacheKey, stats: next, at: Date.now() };
-      setPrepStats(next);
-      return next;
-    } finally {
-      setPrepStatsLoading(false);
-    }
-  }, [station]);
-
-  const openPrepStats = useCallback(() => {
-    setReservationsOpen(false);
-    setPrepStatsOpen(true);
-    void loadTodayPrepStats();
-  }, [loadTodayPrepStats]);
-
   const openReservations = useCallback(() => {
-    setPrepStatsOpen(false);
     setReservationsOpen(true);
   }, []);
-
-  // New preparing tickets dismiss stats so they never cover live orders.
-  useEffect(() => {
-    const pendingCount =
-      layoutMode === "cards"
-        ? orderCards.length
-        : preparingRows.filter((row) => row.kind === "item").length;
-    if (pendingCount === 0) return;
-    if (prepStatsOpen) setPrepStatsOpen(false);
-  }, [preparingRows, orderCards.length, layoutMode, prepStatsOpen]);
 
   useEffect(() => {
     const valid = new Set<string>();
@@ -1886,14 +1805,13 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   }, [setLanguage]);
 
   // Hidden gesture (like Client Screen): swipe right from left edge → reservations.
-  // Prep stats open from the toolbar button instead.
   const onTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
     unlockNotificationAudio();
     if (historyOpen) return;
     const touch = event.touches[0];
     if (!touch) return;
     const fromLeftEdge = touch.clientX <= SWIPE_EDGE_PX;
-    const anyPanelOpen = prepStatsOpenRef.current || reservationsOpenRef.current;
+    const anyPanelOpen = reservationsOpenRef.current;
     if (!anyPanelOpen && !fromLeftEdge) {
       touchRef.current = null;
       return;
@@ -1915,11 +1833,6 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       if (dx <= -SWIPE_CLOSE_PX) setReservationsOpen(false);
       return;
     }
-    if (prepStatsOpenRef.current) {
-      if (dx <= -SWIPE_CLOSE_PX || dx >= SWIPE_CLOSE_PX) setPrepStatsOpen(false);
-      return;
-    }
-
     if (dx >= SWIPE_OPEN_PX && start.x <= SWIPE_EDGE_PX) {
       openReservations();
     }
@@ -1932,7 +1845,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     // Don't steal taps from buttons / toolbar / list rows.
     if (target.closest("[data-server-interactive]")) return;
     if (target.closest("button, a, input, select, textarea, [role='button']")) return;
-    if (prepStatsOpen || reservationsOpen) return;
+    if (reservationsOpen) return;
     cycleLanguage();
   };
 
@@ -2109,7 +2022,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
           onPointerDown={(event) => {
             // Tapping the title area cycles language (manual override).
             event.stopPropagation();
-            if (prepStatsOpen || reservationsOpen) return;
+            if (reservationsOpen) return;
             cycleLanguage();
           }}
         >
@@ -2139,13 +2052,10 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         onHistory={() => setHistoryOpen(true)}
         onLayout={toggleLayoutMode}
         onRefresh={() => void handleRefresh()}
-        onPrepStats={openPrepStats}
         historyLabel={translate("history")}
         layoutLabel={translate("serverScreenLayout")}
         refreshLabel={translate("serverScreenRefresh")}
-        prepStatsLabel={translate("prepStatsTodayTitle")}
         inHeader
-        showPrepStats
         layoutActive={layoutMode === "cards"}
       />
         </header>
@@ -2193,25 +2103,11 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             open={reservationsOpen}
             onClose={() => setReservationsOpen(false)}
             language={language}
-            title={translate("prepStatsReservationsTitle")}
-            emptyLabel={translate("prepStatsReservationsEmpty")}
+            title={translate("reservations")}
+            emptyLabel={translate("noReservationsToday")}
           />
 
-          <ServerScreenPrepStatsPanel
-            stats={prepStats}
-            loading={prepStatsLoading}
-            open={prepStatsOpen}
-            onClose={() => setPrepStatsOpen(false)}
-            title={translate("prepStatsTodayTitle")}
-            averageLabel={translate("prepStatsAverage")}
-            fastestLabel={translate("prepStatsFastest")}
-            slowestLabel={translate("prepStatsSlowest")}
-            fastestItemsLabel={translate("prepStatsFastestItems")}
-            slowestItemsLabel={translate("prepStatsSlowestItems")}
-            emptyLabel={translate("prepStatsNoData")}
-            sampleCountLabel={translate("prepStatsSampleCount")}
-            minLabel={minLabel}
-          />
+
         </div>
       </section>
 

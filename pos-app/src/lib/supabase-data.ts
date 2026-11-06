@@ -17,12 +17,6 @@ import type {
 } from "@/lib/types";
 import { applyOptionGroupLibraryToItems } from "@/lib/menu-customization";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
-import {
-  collectPrepSamplesFromSales,
-  mergePrepSamples,
-  toPrepTimeSample,
-  type PrepTimeSample,
-} from "@/lib/prep-time-stats";
 import { gridToPosition } from "@/lib/table-layout";
 import { deriveItemType, resolveStation } from "@/lib/order-routing";
 import { defaultTaxGroupForItemType } from "@/lib/tax-summary";
@@ -64,13 +58,6 @@ export const SALES_COLUMNS =
 
 /** PostgREST/Supabase default max rows is 1000 — page past it. */
 const SALES_PAGE_SIZE = 1000;
-
-/** Lean sales payload for prep-time stats (items JSON + labels only). */
-export const SALES_PREP_COLUMNS = "id, table_label, items, closed_at, deleted_at";
-
-/** Lean order_items columns for prep-time duration math. */
-export const ORDER_ITEM_PREP_COLUMNS =
-  "id, name, station, table_id, created_at, ready_at, kitchen_status, is_cancelled, hide_on_kds";
 
 export interface SupabaseTableRow {
   id: string;
@@ -512,121 +499,6 @@ export async function fetchStationHistoryItems(station: Station, sinceIso: strin
     .gte("ready_at", sinceIso)
     .in("status", ["ready", "served"])
     .order("ready_at", { ascending: false });
-}
-
-export async function fetchPrepTimeSamples(options: {
-  startIso: string;
-  endExclusiveIso: string;
-  station?: Station;
-  tableLabelById?: Map<string, string>;
-}): Promise<{ data: PrepTimeSample[]; error: Error | null }> {
-  const startIso = options.startIso;
-  const endExclusiveIso = options.endExclusiveIso;
-  // Widen sales closed_at window slightly so late checkouts still contribute.
-  const salesSince = new Date(new Date(startIso).getTime() - 12 * 60 * 60 * 1000).toISOString();
-  const salesUntil = new Date(new Date(endExclusiveIso).getTime() + 12 * 60 * 60 * 1000).toISOString();
-
-  let liveQuery = supabase
-    .from("order_items")
-    .select(ORDER_ITEM_PREP_COLUMNS)
-    .not("ready_at", "is", null)
-    .gte("ready_at", startIso)
-    .lt("ready_at", endExclusiveIso)
-    .in("kitchen_status", ["ready", "served"]);
-
-  if (options.station) liveQuery = liveQuery.eq("station", options.station);
-
-  const fetchSalesPrepPages = async () => {
-    const salesRows: Array<{
-      id: string;
-      table_label: string | null;
-      items: unknown;
-      closed_at: string;
-      deleted_at?: string | null;
-    }> = [];
-    let salesFrom = 0;
-    for (;;) {
-      const pageRes = await supabase
-        .from("sales")
-        .select(SALES_PREP_COLUMNS)
-        .is("deleted_at", null)
-        .gte("closed_at", salesSince)
-        .lt("closed_at", salesUntil)
-        .order("closed_at", { ascending: false })
-        .range(salesFrom, salesFrom + SALES_PAGE_SIZE - 1);
-      if (pageRes.error) return { data: salesRows, error: pageRes.error };
-      const page = (pageRes.data as typeof salesRows | null) ?? [];
-      salesRows.push(...page);
-      if (page.length < SALES_PAGE_SIZE) break;
-      salesFrom += SALES_PAGE_SIZE;
-    }
-    return { data: salesRows, error: null };
-  };
-
-  const [liveRes, salesRes] = await Promise.all([liveQuery, fetchSalesPrepPages()]);
-
-  if (liveRes.error && salesRes.error) {
-    return { data: [], error: new Error(liveRes.error.message || salesRes.error.message) };
-  }
-
-  const liveSamples = ((liveRes.data as Array<{
-    id: string;
-    name: string;
-    station: Station | null;
-    table_id: string | null;
-    created_at: string;
-    ready_at: string | null;
-    kitchen_status: string | null;
-    is_cancelled?: boolean | null;
-    hide_on_kds?: boolean | null;
-  }> | null) ?? [])
-    .map((row) =>
-      toPrepTimeSample(
-        {
-          id: row.id,
-          name: row.name,
-          station: row.station ?? undefined,
-          tableId: row.table_id,
-          createdAt: row.created_at,
-          readyAt: row.ready_at ?? undefined,
-          kitchenStatus: (row.kitchen_status as OrderItem["kitchenStatus"]) ?? undefined,
-          isCancelled: Boolean(row.is_cancelled) || row.kitchen_status === "cancelled",
-          hideOnKds: Boolean(row.hide_on_kds),
-        },
-        { tableLabelById: options.tableLabelById },
-      ),
-    )
-    .filter((sample): sample is PrepTimeSample => Boolean(sample));
-
-  const salesMapped = ((salesRes.data as Array<{
-    id: string;
-    table_label: string | null;
-    items: OrderItem[] | null;
-    closed_at: string;
-    deleted_at?: string | null;
-  }> | null) ?? []).map((row) => ({
-    id: row.id,
-    tableLabel: row.table_label ?? "",
-    staffName: "",
-    subtotal: 0,
-    tip: 0,
-    grandTotal: 0,
-    paymentMethod: "cash" as const,
-    items: Array.isArray(row.items) ? row.items : [],
-    closedAt: new Date(row.closed_at),
-    deletedAt: row.deleted_at ? new Date(row.deleted_at) : undefined,
-  }));
-
-  const saleSamples = collectPrepSamplesFromSales(salesMapped, {
-    station: options.station,
-    startIso,
-    endExclusiveIso,
-  });
-
-  return {
-    data: mergePrepSamples([...liveSamples, ...saleSamples]),
-    error: null,
-  };
 }
 
 export async function fetchStaff() {

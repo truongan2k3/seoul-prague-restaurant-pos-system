@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { BookingCta } from "@/components/landing/booking-cta";
+import { TypewriterText } from "@/components/landing/typewriter-text";
 import { LandingImage } from "@/lib/website/landing-image";
 import type { WebsiteContent } from "@/lib/website/types";
 
@@ -152,7 +153,7 @@ export function LandingHero({ content }: LandingHeroProps) {
           transition={{ duration: reduceMotion ? 0 : 0.4, delay: reduceMotion ? 0 : 0.08 }}
           className="mt-5 max-w-xl text-lg text-white/80 lg:text-xl"
         >
-          {settings.heroTagline}
+          <TypewriterText />
         </motion.p>
         <motion.p
           initial={reduceMotion ? false : { opacity: 0 }}

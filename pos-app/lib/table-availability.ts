@@ -15,6 +15,8 @@ export type LiveTableAvailability = AvailabilityTable & {
   earliestSeatingAt: number | null; nextReservationAt: number | null;
   /** Next allocated booking, including bookings without an explicitly assigned table. */
   availableUntil: number | null;
+  /** Physical free window now; unlike status, does not require a full dining duration. */
+  availableNow: boolean;
   upcomingReservations: { reservedAt: number; partySize: number }[];
   overEstimatedTime: boolean;
 };
@@ -46,8 +48,9 @@ export function calculateTableAvailability(source: TableAvailabilitySource, now 
       .filter((r) => r.reservedAt + duration > now).sort((a, b) => a.reservedAt - b.reservedAt);
     const nextReservation = upcomingReservations[0]?.reservedAt ?? null;
     const availableUntil = spans.find((span) => span.startMs > now)?.startMs ?? null;
+    const availableNow = !occupied && !table.blocked && !spans.some((span) => span.startMs <= now && span.endMs > now);
     return { ...table, occupied, status, estimatedReleaseAt: release, earliestSeatingAt: earliest,
-      nextReservationAt: nextReservation, availableUntil, upcomingReservations, overEstimatedTime: occupied && release !== null && release <= now };
+      nextReservationAt: nextReservation, availableUntil, availableNow, upcomingReservations, overEstimatedTime: occupied && release !== null && release <= now };
   });
   const available = tables.filter((t) => t.status === "available");
   const future = tables.filter((t) => t.status !== "available").map((t) => t.earliestSeatingAt)

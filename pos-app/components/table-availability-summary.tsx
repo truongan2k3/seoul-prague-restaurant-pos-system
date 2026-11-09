@@ -7,13 +7,13 @@ const LONG_FREE_WINDOW_MS = 150 * 60_000;
 const COPY = {
   en: {
     loading: "Updating table availability…", offline: "Live availability unavailable — ask staff.",
-    all: "All tables are available.", available: "Available tables", until: "until",
+    all: "All tables are available.", available: "Available tables", until: "available until",
     noBbq: "No table available for BBQ.", none: "No tables available now.", seated: "Time seated",
     minutes: "min", hours: "h",
   },
   cs: {
     loading: "Aktualizuji dostupnost stolů…", offline: "Živá dostupnost není k dispozici — zeptejte se obsluhy.",
-    all: "Všechny stoly jsou volné.", available: "Volné stoly", until: "do",
+    all: "Všechny stoly jsou volné.", available: "Volné stoly", until: "volný do",
     noBbq: "Žádný stůl pro BBQ není volný.", none: "Momentálně není žádný stůl volný.", seated: "Doba u stolu",
     minutes: "min", hours: "h",
   },
@@ -41,7 +41,7 @@ export function TableAvailabilitySummary({ source, tables, now, language, live, 
   error: boolean;
 }) {
   const copy = COPY[language];
-  const available = tables.filter(table => table.status === "available")
+  const available = tables.filter(table => table.availableNow)
     .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
   const formatTime = (at: number) => {
     const sameDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Prague" });
@@ -60,13 +60,14 @@ export function TableAvailabilitySummary({ source, tables, now, language, live, 
   else if (live && source) {
     const noBbq = available.length > 0 && !available.some(table => table.grill);
     if (available.length) {
-      const labels = available.map(table => table.label).join(", ");
+      const labels = available.map(table => `${table.label}${table.availableUntil !== null
+        ? ` ${copy.until} ${formatTime(table.availableUntil)}` : ""}`).join(" · ");
       const deadlines = available.map(table => table.availableUntil).filter((at): at is number => at !== null);
       const until = deadlines.length ? Math.min(...deadlines) : null;
       const allReady = RESERVATION_FLOOR_TABLES.every(def => available.some(table => table.label === def.label));
       if (allReady && (until === null || until - now > LONG_FREE_WINDOW_MS)) text = `${copy.all} ${labels}.`;
       else {
-        text = `${copy.available} ${labels}${until !== null ? ` ${copy.until} ${formatTime(until)}` : language === "vi" ? " khả dụng" : ""}.`;
+        text = `${copy.available}: ${labels}.`;
       }
       if (noBbq) text = `${copy.noBbq} ${text}`;
     } else {

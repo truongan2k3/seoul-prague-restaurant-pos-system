@@ -33,6 +33,7 @@ export interface PushNotificationInput {
   staffName?: string;
   playSound?: false | "ready" | "newOrder" | "mainNewOrder";
   variant?: "success" | "error";
+  durationMs?: number;
 }
 
 interface NotificationContextValue {
@@ -242,6 +243,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       staffName,
       playSound = false,
       variant = "success",
+      durationMs = TOAST_DURATION_MS,
     }: PushNotificationInput) => {
       const notificationId = id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -270,7 +272,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       if (existingTimer) clearTimeout(existingTimer);
       timersRef.current.set(
         notificationId,
-        setTimeout(() => dismissToast(notificationId), TOAST_DURATION_MS),
+        setTimeout(() => dismissToast(notificationId), durationMs),
       );
 
       if (playSound === false) return;

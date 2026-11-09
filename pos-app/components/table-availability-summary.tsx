@@ -92,8 +92,8 @@ export function TableAvailabilitySummary({ source, tables, now, language, live, 
   }
 
   return <div role="status" aria-live="polite" aria-atomic="true"
-    className="mb-3 flex items-start gap-2 rounded-xl border border-[#C9A88B]/20 bg-[#171719] px-3 py-2.5 text-xs leading-relaxed text-[#E8D5C4]">
-    <Clock3 className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${live && available.some(table => table.grill) ? "text-emerald-300" : "text-[#C9A88B]"}`} aria-hidden />
+    className="mb-3 flex items-start gap-2 rounded-xl border border-[#C9A88B]/20 bg-[#171719] px-3 py-2.5 text-sm leading-relaxed text-[#E8D5C4] sm:text-[15px]">
+    <Clock3 className={`mt-0.5 h-4 w-4 shrink-0 ${live && available.some(table => table.grill) ? "text-emerald-300" : "text-[#C9A88B]"}`} aria-hidden />
     <p>{text}</p>
   </div>;
 }

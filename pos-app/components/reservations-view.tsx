@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, Eye, MapPin, ChevronLeft, ChevronRight, Pencil, Plus } from "lucide-react";
+import { Activity, Eye, LayoutGrid, MapPin, ChevronLeft, ChevronRight, Pencil, Plus, Users } from "lucide-react";
 import { GuestReturningBadge } from "@/components/guest-returning-badge";
 import { ReservationChangeTimeline } from "@/components/reservation-change-timeline";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
@@ -681,6 +681,34 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       ? "rounded-2xl border border-orange-400/60 bg-orange-50 p-4 shadow-sm dark:bg-orange-950/20 sm:p-5"
       : "rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm transition-colors hover:border-[#C9A88B]/40 sm:p-5";
 
+  const bookingCapacityControls = (
+    <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#C9A88B]/25 bg-[var(--card)] px-4 py-3 sm:px-5">
+      <div className="min-w-0 flex-1">
+        <h2 className="text-sm font-semibold">{translate("resBookingLimits")}</h2>
+        <p id="booking-limits-hint" className="mt-1 text-xs leading-relaxed text-[var(--muted-foreground)]">
+          {translate(settings.reservationCapacityLimitsEnabled ? "resBookingLimitsEnabledHint" : "resBookingLimitsDisabledHint")}
+        </p>
+        {settingsError && <p role="alert" className="mt-1 text-xs text-red-500">{settingsError}</p>}
+      </div>
+      <button type="button" role="switch" aria-checked={settings.reservationCapacityLimitsEnabled}
+        aria-label={translate("resBookingLimits")} aria-describedby="booking-limits-hint"
+        disabled={savingSettings || loadingSettings}
+        onClick={async () => {
+          if (await saveSettings({ reservationCapacityLimitsEnabled: !settings.reservationCapacityLimitsEnabled })) {
+            setCapacityRefreshKey((key) => key + 1);
+          }
+        }}
+        className="inline-flex min-h-11 shrink-0 items-center gap-3 rounded-xl border border-[#C9A88B]/25 px-3 py-2 text-xs font-semibold transition-colors hover:bg-[#C9A88B]/10 disabled:cursor-wait disabled:opacity-50">
+        <span className={settings.reservationCapacityLimitsEnabled ? "text-emerald-500" : "text-amber-500"}>
+          {translate(settings.reservationCapacityLimitsEnabled ? "resBookingLimitsEnabled" : "resBookingLimitsDisabled")}
+        </span>
+        <span aria-hidden className={`relative h-6 w-11 rounded-full transition-colors ${settings.reservationCapacityLimitsEnabled ? "bg-emerald-600" : "bg-stone-500/60"}`}>
+          <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform motion-reduce:transition-none ${settings.reservationCapacityLimitsEnabled ? "translate-x-5" : "translate-x-0"}`} />
+        </span>
+      </button>
+    </section>
+  );
+
   return (
     <div className="flex h-full flex-col bg-background text-[var(--foreground)]">
       <header className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--pos-raised)] px-2 py-1.5 sm:gap-3 sm:px-4 sm:py-2 lg:px-6">
@@ -714,33 +742,9 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
       <div className="flex-1 overflow-auto p-2.5 sm:p-4 lg:p-6">
         <div className="mx-auto max-w-6xl space-y-3 sm:space-y-4 lg:space-y-6">
-          <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#C9A88B]/25 bg-[var(--card)] px-4 py-3 sm:px-5">
-            <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-semibold">{translate("resBookingLimits")}</h2>
-              <p id="booking-limits-hint" className="mt-1 text-xs leading-relaxed text-[var(--muted-foreground)]">
-                {translate(settings.reservationCapacityLimitsEnabled ? "resBookingLimitsEnabledHint" : "resBookingLimitsDisabledHint")}
-              </p>
-              {settingsError && <p role="alert" className="mt-1 text-xs text-red-500">{settingsError}</p>}
-            </div>
-            <button type="button" role="switch" aria-checked={settings.reservationCapacityLimitsEnabled}
-              aria-label={translate("resBookingLimits")} aria-describedby="booking-limits-hint"
-              disabled={savingSettings || loadingSettings}
-              onClick={async () => {
-                if (await saveSettings({ reservationCapacityLimitsEnabled: !settings.reservationCapacityLimitsEnabled })) {
-                  setCapacityRefreshKey((key) => key + 1);
-                }
-              }}
-              className="inline-flex min-h-11 shrink-0 items-center gap-3 rounded-xl border border-[#C9A88B]/25 px-3 py-2 text-xs font-semibold transition-colors hover:bg-[#C9A88B]/10 disabled:cursor-wait disabled:opacity-50">
-              <span className={settings.reservationCapacityLimitsEnabled ? "text-emerald-500" : "text-amber-500"}>
-                {translate(settings.reservationCapacityLimitsEnabled ? "resBookingLimitsEnabled" : "resBookingLimitsDisabled")}
-              </span>
-              <span aria-hidden className={`relative h-6 w-11 rounded-full transition-colors ${settings.reservationCapacityLimitsEnabled ? "bg-emerald-600" : "bg-stone-500/60"}`}>
-                <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform motion-reduce:transition-none ${settings.reservationCapacityLimitsEnabled ? "translate-x-5" : "translate-x-0"}`} />
-              </span>
-            </button>
-          </section>
           <TableAvailabilityDashboard tables={tables} reservations={reservations} language={language} staff
             compact detailsOpen={showCapacityModal} onCloseDetails={() => setShowCapacityModal(false)}
+            detailsHeader={bookingCapacityControls}
             realtimeConnected={reservationsConnected} refreshKey={capacityRefreshKey} />
           <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 sm:px-5">
             <div className="flex flex-wrap items-center gap-2">
@@ -834,25 +838,24 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                 </button>
               ))}
             </div>
-          </section>
-
-          <section className="grid grid-cols-2 gap-3">
-            {(
-              [
-                { label: "resTotalGuests" as const, value: stats.totalGuests },
-                { label: "resTotalTables" as const, value: stats.totalBookings },
-              ] as const
-            ).map(({ label, value }) => (
-              <div
-                key={label}
-                className="rounded-xl border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:p-3"
-              >
-                <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--muted)] sm:text-xs">
-                  {translate(label)}
-                </p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-[var(--foreground)] sm:text-3xl">{value}</p>
-              </div>
-            ))}
+            <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-[var(--border)] pt-4">
+              {[
+                { label: "resTotalGuests" as const, value: stats.totalGuests, icon: Users },
+                { label: "resTotalTables" as const, value: stats.totalBookings, icon: LayoutGrid },
+              ].map(({ label, value, icon: Icon }) => (
+                <div key={label} className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#C9A88B]/20 bg-[#C9A88B]/10 text-[#C9A88B]">
+                    <Icon className="h-4 w-4" aria-hidden />
+                  </span>
+                  <div className="min-w-0">
+                    <dt className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)] sm:text-xs">
+                      {translate(label)}
+                    </dt>
+                    <dd className="mt-0.5 text-xl font-semibold tabular-nums leading-tight text-[var(--foreground)] sm:text-2xl">{value}</dd>
+                  </div>
+                </div>
+              ))}
+            </dl>
           </section>
 
           {error && (

@@ -100,8 +100,6 @@ export function ReservationChangeTimeline({ reservation }: { reservation: Reserv
     assigned: "assignTable", checked_in: "checkIn", completed: "resStatusCompleted", cancelled: "resStatusCancelled",
     tables_changed: "resTimelineTablesChanged", status_changed: "resTimelineStatusChanged", staff_updated: "resTimelineStaffUpdated",
   };
-  const notes = parseReservationBbqNotes(reservation.notes);
-  const bbq = reservation.wantsGrill ?? notes.bbq;
 
   return <section>
     <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]"><History className="h-4 w-4 text-[#C9A88B]" aria-hidden />{translate("resTimelineTitle")}</h4>
@@ -141,27 +139,6 @@ export function ReservationChangeTimeline({ reservation }: { reservation: Reserv
           </div>
         </li>;
       })}
-      <li>
-        <div className="space-y-3 bg-[#C9A88B]/[0.04] p-4">
-          <p className="text-sm font-semibold">{translate("resTimelineCurrent")}</p>
-          <dl className="grid gap-3 text-xs sm:grid-cols-2">
-            {[
-              [translate("reservationSource"), translate(({ reservation: "resSourceReservation", online: "resSourceOnline", phone_call: "resSourcePhoneCall", walk_in: "resSourceWalkIn" } as const)[reservation.source])],
-              [translate("resEventType"), valueLabel("event_type", reservation.eventType ?? null)],
-              [translate("resReferralCode"), reservation.referralCode || "—"],
-              [translate("staff"), reservation.staffName || "—"],
-            ].map(([label, value]) => <div key={label}><dt className="text-[var(--muted)]">{label}</dt><dd className="mt-1 break-words font-medium">{value}</dd></div>)}
-          </dl>
-          {bbq && <p className="text-xs font-semibold text-[#C9A88B]">{translate(bbq === "yes" ? "mapResTickerBbqYes" : bbq === "no" ? "mapResTickerBbqNo" : "resBbqUndecided")}</p>}
-          <div className="border-t border-[var(--border)] pt-3"><p className="text-[11px] text-[var(--muted)]">{translate("resNotes")}</p><p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">{notes.noteText || "—"}</p></div>
-          {reservation.status === "cancelled" && !timeline.some(event => ["cancelled", "guest_cancelled"].includes(event.event_kind ?? "") || event.changes.status?.after === "cancelled") && <div className="space-y-1 border-t border-red-400/20 pt-3 text-xs text-red-700 dark:text-red-200">
-            <p className="font-semibold">{translate("resStatusCancelled")}</p>
-            {reservation.cancelledBy && <p>{reservation.cancelledBy}</p>}
-            {reservation.cancellationReason && <p>{reservation.cancellationReason}</p>}
-            {reservation.cancellationNote && <p className="whitespace-pre-wrap break-words">{reservation.cancellationNote}</p>}
-          </div>}
-        </div>
-      </li>
     </ol>
     {hasMore && <button type="button" disabled={loading} onClick={() => void load(events.length)} className="mt-4 min-h-11 w-full rounded-lg border border-[#C9A88B]/30 text-xs font-medium disabled:opacity-40">{translate("resTimelineMore")}</button>}
   </section>;

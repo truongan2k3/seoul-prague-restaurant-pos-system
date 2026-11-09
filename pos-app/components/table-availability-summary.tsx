@@ -60,16 +60,24 @@ export function TableAvailabilitySummary({ source, tables, now, language, live, 
   else if (live && source) {
     const noBbq = available.length > 0 && !available.some(table => table.grill);
     if (available.length) {
-      const labels = available.map(table => `${table.label}${table.availableUntil !== null
-        ? ` ${copy.until} ${formatTime(table.availableUntil)}` : ""}`).join(" · ");
+      const groups = new Map<number | null, string[]>();
+      for (const table of available) {
+        const until = table.availableUntil === null ? null : Math.floor(table.availableUntil / 60_000) * 60_000;
+        const labels = groups.get(until) ?? [];
+        labels.push(table.label);
+        groups.set(until, labels);
+      }
+      const rows = [...groups].sort(([left], [right]) => left === null ? (right === null ? 0 : 1)
+        : right === null ? -1 : left - right)
+        .map(([until, labels]) => `${labels.join(", ")}${until !== null ? ` ${copy.until} ${formatTime(until)}` : ""}`);
       const deadlines = available.map(table => table.availableUntil).filter((at): at is number => at !== null);
       const until = deadlines.length ? Math.min(...deadlines) : null;
       const allReady = RESERVATION_FLOOR_TABLES.every(def => available.some(table => table.label === def.label));
-      if (allReady && (until === null || until - now > LONG_FREE_WINDOW_MS)) text = `${copy.all} ${labels}.`;
+      if (allReady && (until === null || until - now > LONG_FREE_WINDOW_MS)) text = `${copy.all}\n${rows.join("\n")}`;
       else {
-        text = `${copy.available}: ${labels}.`;
+        text = `${copy.available}:\n${rows.join("\n")}`;
       }
-      if (noBbq) text = `${copy.noBbq} ${text}`;
+      if (noBbq) text = `${copy.noBbq}\n${text}`;
     } else {
       text = copy.none;
     }
@@ -87,14 +95,14 @@ export function TableAvailabilitySummary({ source, tables, now, language, live, 
         }
         return Number.isFinite(since) && since <= now ? [{ label: table.label, since }] : [];
       }).sort((a, b) => a.since - b.since || a.label.localeCompare(b.label, undefined, { numeric: true })).slice(0, 3);
-      const seated = occupied.map(table => `${table.label} ${duration(Math.floor((now - table.since) / 60_000))}`).join(" · ");
-      if (seated) text += ` ${copy.seated}: ${seated}.`;
+      const seated = occupied.map(table => `${table.label} ${duration(Math.floor((now - table.since) / 60_000))}`).join("\n");
+      if (seated) text += `\n${copy.seated}:\n${seated}`;
     }
   }
 
   return <div role="status" aria-live="polite" aria-atomic="true"
     className="mb-3 flex items-start gap-2 rounded-xl border border-[#C9A88B]/20 bg-[#171719] px-3 py-2.5 text-sm leading-relaxed text-[#E8D5C4] sm:text-[15px]">
     <Clock3 className={`mt-0.5 h-4 w-4 shrink-0 ${live && available.some(table => table.grill) ? "text-emerald-300" : "text-[#C9A88B]"}`} aria-hidden />
-    <p>{text}</p>
+    <p className="whitespace-pre-line">{text}</p>
   </div>;
 }

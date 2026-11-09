@@ -745,6 +745,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
           <TableAvailabilityDashboard tables={tables} reservations={reservations} language={language} staff
             compact detailsOpen={showCapacityModal} onCloseDetails={() => setShowCapacityModal(false)}
             detailsHeader={bookingCapacityControls}
+            capacityDateIso={showDayNav && anchorDate ? anchorDate : toDateInputValue(new Date())}
             realtimeConnected={reservationsConnected} refreshKey={capacityRefreshKey} />
           <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 sm:px-5">
             <div className="flex flex-wrap items-center gap-2">

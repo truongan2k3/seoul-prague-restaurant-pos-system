@@ -94,7 +94,7 @@ export function ReservationChangeTimeline({ reservation }: { reservation: Reserv
     if (reservation.guestChangedAt && !hasKind("guest_updated") && !hasKind("guest_cancelled")
       && reservation.guestChangedAt.getTime() !== reservation.cancelledAt?.getTime()) timeline.push({ id: "legacy-update", event_kind: "guest_updated", changed_at: reservation.guestChangedAt.toISOString(), changes: {}, legacy: true });
   }
-  timeline.sort((a, b) => new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime());
+  timeline.sort((a, b) => new Date(b.changed_at).getTime() - new Date(a.changed_at).getTime());
   const eventTitles: Record<string, TranslationKey> = {
     created: "resTimelineCreated", guest_updated: "resTimelineGuestUpdated", guest_cancelled: "resTimelineGuestCancelled",
     assigned: "assignTable", checked_in: "checkIn", completed: "resStatusCompleted", cancelled: "resStatusCancelled",
@@ -110,24 +110,23 @@ export function ReservationChangeTimeline({ reservation }: { reservation: Reserv
       {translate(error === "setup" ? "resTimelineSetup" : "resTimelineError")}
       {error === "load" && <button type="button" onClick={() => void load()} className="ml-2 min-h-10 underline">{translate("resCapacityRefresh")}</button>}
     </div>}
-    <ol className="relative ml-2 mt-5 space-y-4 border-l border-[#C9A88B]/25 pl-6">
+    <ol className="mt-5 divide-y divide-[var(--border)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--accent)]/20">
       {timeline.map(event => {
         const kind = event.event_kind ?? "guest_updated";
         const completed = kind === "completed";
         const cancelled = kind === "cancelled" || kind === "guest_cancelled" || event.changes.status?.after === "cancelled";
         const title = kind === "guest_updated" && event.changes.status?.after === "cancelled" ? "resTimelineGuestCancelled" : eventTitles[kind] ?? "resTimelineStaffUpdated";
-        return <li key={event.id} className="relative">
-          <span aria-hidden className={`absolute -left-[29px] top-5 h-2.5 w-2.5 rounded-full ring-4 ring-[var(--background)] ${completed ? "bg-emerald-400" : cancelled ? "bg-red-400" : "bg-[#C9A88B]"}`} />
-          <div className={`rounded-2xl border p-4 ${completed ? "border-emerald-400/25 bg-emerald-400/[0.06]" : cancelled ? "border-red-400/20 bg-red-400/[0.04]" : "border-[var(--border)] bg-[var(--accent)]/20"}`}>
+        return <li key={event.id}>
+          <div className={`p-4 ${completed ? "bg-emerald-400/[0.06]" : cancelled ? "bg-red-400/[0.04]" : ""}`}>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <p className={`text-sm font-semibold ${completed ? "text-emerald-700 dark:text-emerald-300" : ""}`}>{translate(title)}</p>
               <time dateTime={event.changed_at} className="text-[11px] tabular-nums text-[var(--muted)]">{formatTime(event.changed_at)}</time>
             </div>
             {event.legacy && <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">{translate("resTimelineLegacy")}</p>}
             {Object.keys(event.changes).length > 0 && <dl className="mt-3 space-y-2">
-              {Object.entries(event.changes).map(([field, change]) => <div key={field} className="text-xs leading-relaxed">
-                <dt className="mb-1 font-medium text-[var(--muted)]">{fieldLabels[field] ? translate(fieldLabels[field]) : field}</dt>
-                <dd className="flex flex-wrap items-start gap-x-2 gap-y-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+              {Object.entries(event.changes).map(([field, change]) => <div key={field} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs leading-relaxed">
+                <dt className="font-medium text-[var(--muted)]">{fieldLabels[field] ? translate(fieldLabels[field]) : field}</dt>
+                <dd className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                   {kind !== "created" && <><span aria-label={translate("resTimelineBefore")} className="text-[var(--muted)]">{valueLabel(field, change.before)}</span><span aria-hidden className="text-[#C9A88B]">→</span></>}
                   <span aria-label={translate("resTimelineAfter")} className="font-semibold">{valueLabel(field, change.after)}</span>
                 </dd>
@@ -142,9 +141,8 @@ export function ReservationChangeTimeline({ reservation }: { reservation: Reserv
           </div>
         </li>;
       })}
-      <li className="relative">
-        <span aria-hidden className="absolute -left-[29px] top-5 h-2.5 w-2.5 rounded-full border border-[#C9A88B] bg-[var(--background)] ring-4 ring-[var(--background)]" />
-        <div className="space-y-3 rounded-2xl border border-[#C9A88B]/25 bg-[#C9A88B]/[0.04] p-4">
+      <li>
+        <div className="space-y-3 bg-[#C9A88B]/[0.04] p-4">
           <p className="text-sm font-semibold">{translate("resTimelineCurrent")}</p>
           <dl className="grid gap-3 text-xs sm:grid-cols-2">
             {[

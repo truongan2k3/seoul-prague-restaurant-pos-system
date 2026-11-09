@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ChevronDown, Clock3, LockKeyhole, RefreshCw, UnlockKeyhole, Wifi, WifiOff } from "lucide-react";
 import { Modal } from "@/components/modal";
@@ -33,11 +33,12 @@ const DETAIL_COPY = {
 } as const;
 
 export function TableAvailabilityDashboard({ tables, reservations, language, staff = false, enabled = true, realtimeConnected, refreshKey = 0,
-  compact = false, detailsOpen = false, onCloseDetails,
+  compact = false, detailsOpen = false, onCloseDetails, detailsHeader,
 }: {
   tables: RestaurantTable[]; reservations: ReservationRecord[]; language: LanguageCode;
   staff?: boolean; enabled?: boolean; realtimeConnected: boolean;
   refreshKey?: number; compact?: boolean; detailsOpen?: boolean; onCloseDetails?: () => void;
+  detailsHeader?: ReactNode;
 }) {
   const copy = COPY[language === "zh" ? "vi" : language];
   const detail = DETAIL_COPY[language === "zh" ? "vi" : language];
@@ -214,7 +215,10 @@ export function TableAvailabilityDashboard({ tables, reservations, language, sta
       language={language} live={live} error={error} />
     {detailsOpen && onCloseDetails && <Modal open onClose={onCloseDetails} title={copy.title} size="xl"
       bodyClassName="px-4 py-4 sm:px-6">
-      {renderDetails()}
+      <div className="space-y-4">
+        {detailsHeader}
+        {renderDetails()}
+      </div>
     </Modal>}
   </>;
 }

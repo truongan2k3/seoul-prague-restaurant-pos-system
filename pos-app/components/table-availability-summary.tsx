@@ -8,25 +8,25 @@ const COPY = {
   en: {
     loading: "Updating table availability…", offline: "Live availability unavailable — ask staff.",
     all: "All tables are available.", available: "Available tables", until: "until",
-    more: "more", none: "No tables available now.", seated: "Time seated",
+    noBbq: "No table available for BBQ.", none: "No tables available now.", seated: "Time seated",
     minutes: "min", hours: "h",
   },
   cs: {
     loading: "Aktualizuji dostupnost stolů…", offline: "Živá dostupnost není k dispozici — zeptejte se obsluhy.",
     all: "Všechny stoly jsou volné.", available: "Volné stoly", until: "do",
-    more: "dalších", none: "Momentálně není žádný stůl volný.", seated: "Doba u stolu",
+    noBbq: "Žádný stůl pro BBQ není volný.", none: "Momentálně není žádný stůl volný.", seated: "Doba u stolu",
     minutes: "min", hours: "h",
   },
   vi: {
     loading: "Đang cập nhật tình trạng bàn…", offline: "Chưa thể cập nhật tình trạng bàn — vui lòng hỏi nhân viên.",
     all: "Tất cả các bàn đều đang khả dụng.", available: "Đang có bàn", until: "khả dụng tới",
-    more: "bàn khác", none: "Hiện không có bàn khả dụng.", seated: "Đã ngồi",
+    noBbq: "Hiện không có bàn BBQ khả dụng.", none: "Hiện không có bàn khả dụng.", seated: "Đã ngồi",
     minutes: "phút", hours: "h",
   },
   zh: {
     loading: "正在更新餐桌状态…", offline: "暂时无法获取实时餐桌状态，请询问工作人员。",
     all: "所有餐桌均可使用。", available: "可用餐桌", until: "可用至",
-    more: "张其他桌", none: "目前没有可用餐桌。", seated: "已入座",
+    noBbq: "目前没有可用的烧烤桌。", none: "目前没有可用餐桌。", seated: "已入座",
     minutes: "分钟", hours: "小时",
   },
 } as const;
@@ -58,18 +58,23 @@ export function TableAvailabilitySummary({ source, tables, now, language, live, 
   let text: string = copy.loading;
   if (error || (source && !live)) text = copy.offline;
   else if (live && source) {
+    const noBbq = available.length > 0 && !available.some(table => table.grill);
     if (available.length) {
+      const labels = available.map(table => table.label).join(", ");
       const deadlines = available.map(table => table.availableUntil).filter((at): at is number => at !== null);
       const until = deadlines.length ? Math.min(...deadlines) : null;
       const allReady = RESERVATION_FLOOR_TABLES.every(def => available.some(table => table.label === def.label));
-      if (allReady && (until === null || until - now > LONG_FREE_WINDOW_MS)) text = copy.all;
+      if (allReady && (until === null || until - now > LONG_FREE_WINDOW_MS)) text = `${copy.all} ${labels}.`;
       else {
-        const labels = available.slice(0, 3).map(table => table.label).join(", ");
-        const more = available.length > 3 ? ` (+${available.length - 3} ${copy.more})` : "";
-        text = `${copy.available} ${labels}${more}${until !== null ? ` ${copy.until} ${formatTime(until)}` : language === "vi" ? " khả dụng" : ""}.`;
+        text = `${copy.available} ${labels}${until !== null ? ` ${copy.until} ${formatTime(until)}` : language === "vi" ? " khả dụng" : ""}.`;
       }
+      if (noBbq) text = `${copy.noBbq} ${text}`;
     } else {
-      const occupied = tables.filter(table => table.occupied).flatMap(table => {
+      text = copy.none;
+    }
+    if (!available.length || noBbq) {
+      // When BBQ is unavailable, rank BBQ tables so their elapsed times are useful.
+      const occupied = tables.filter(table => table.occupied && (!noBbq || table.grill)).flatMap(table => {
         let since = table.occupiedAt ? new Date(table.occupiedAt).getTime() : NaN;
         if (!Number.isFinite(since) || since > now) {
           const checkIns = source.reservations.filter(booking => booking.status === "checked_in"
@@ -82,13 +87,13 @@ export function TableAvailabilitySummary({ source, tables, now, language, live, 
         return Number.isFinite(since) && since <= now ? [{ label: table.label, since }] : [];
       }).sort((a, b) => a.since - b.since || a.label.localeCompare(b.label, undefined, { numeric: true })).slice(0, 3);
       const seated = occupied.map(table => `${table.label} ${duration(Math.floor((now - table.since) / 60_000))}`).join(" · ");
-      text = `${copy.none}${seated ? ` ${copy.seated}: ${seated}.` : ""}`;
+      if (seated) text += ` ${copy.seated}: ${seated}.`;
     }
   }
 
   return <div role="status" aria-live="polite" aria-atomic="true"
     className="mb-3 flex items-start gap-2 rounded-xl border border-[#C9A88B]/20 bg-[#171719] px-3 py-2.5 text-xs leading-relaxed text-[#E8D5C4]">
-    <Clock3 className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${live && available.length ? "text-emerald-300" : "text-[#C9A88B]"}`} aria-hidden />
+    <Clock3 className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${live && available.some(table => table.grill) ? "text-emerald-300" : "text-[#C9A88B]"}`} aria-hidden />
     <p>{text}</p>
   </div>;
 }

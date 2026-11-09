@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { MapReservationTicker } from "@/components/map-reservation-ticker";
 import { NotificationBell } from "@/components/notification-bell";
+import { GeneralKitchenMessageButton } from "@/components/general-kitchen-message-button";
 import { FloorTableIndicatorProvider } from "@/components/floor-table-indicator";
 import { TableCard } from "@/components/table-card";
 import { TableEditModal } from "@/components/table-edit-modal";
@@ -288,6 +289,7 @@ export function MapView({
           )}
         </div>
         <div className="flex shrink-0 flex-nowrap items-center gap-1 sm:gap-2">
+          <GeneralKitchenMessageButton compact />
           <NotificationBell />
           <HeaderClockWithStatus />
         </div>

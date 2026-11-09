@@ -25,6 +25,7 @@ import { useDishPreparation } from "@/hooks/use-dish-preparation";
 import { useSharedGrillCompanions } from "@/hooks/use-shared-grill-companions";
 import { DISH_DONE_VISIBLE_MS, type DishEntry, type DishCompletion } from "@/lib/dish-preparation";
 import { ServerScreenPaymentOverlay } from "@/components/server-screen-payment-overlay";
+import { OverflowPanText } from "@/components/overflow-pan-text";
 import { ServerScreenReservationPanel } from "@/components/server-screen-reservation-panel";
 import { useDeviceNotificationSound } from "@/hooks/use-device-notification-sound";
 import { claimNotificationEvent } from "@/lib/notification-preferences";
@@ -2029,11 +2030,11 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
           <h1
             title={translate("preparing")}
-            className="min-w-0 truncate font-serif text-xl font-semibold tracking-tight text-white sm:text-2xl"
+            className="min-w-0 overflow-hidden font-serif text-xl font-semibold tracking-tight text-white sm:text-2xl"
           >
-            {translate("preparing")}
+            <OverflowPanText text={translate("preparing")} />
           </h1>
-          <span className="text-sm tabular-nums text-white/40">
+          <span className="shrink-0 text-sm tabular-nums text-white/40">
             {layoutMode === "cards"
               ? orderCards.length
               : dishPreparation.entries.filter(entry=>!entry.completedAt).reduce((sum,entry)=>sum+entry.quantity,0)}

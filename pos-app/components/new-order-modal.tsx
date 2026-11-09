@@ -8,6 +8,7 @@ import { GrillGuestCountModal } from "@/components/grill-guest-count-modal";
 import { LinePriceEditor } from "@/components/line-price-editor";
 import { Modal } from "@/components/modal";
 import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
+import { TableInteractionConfirmation } from "@/components/table-interaction-confirmation";
 import { OnScreenKeyboard } from "@/components/on-screen-keyboard";
 import { OrderLineToolbar } from "@/components/order-line-toolbar";
 import { VoucherScanFab } from "@/components/voucher-scan-fab";
@@ -131,6 +132,8 @@ type KitchenMessageMode = "table" | "general";
 interface NewOrderModalProps {
   open: boolean;
   tableLabel: string;
+  /** Active table identity for callers that only provide its label and orders. */
+  tableId?: string;
   table?: RestaurantTable;
   menuItems: MenuItem[];
   categories?: MenuCategoryRecord[];
@@ -336,6 +339,7 @@ function MenuOrderItemButton({
 export function NewOrderModal({
   open,
   tableLabel,
+  tableId,
   table,
   menuItems,
   categories = [],
@@ -2012,6 +2016,12 @@ export function NewOrderModal({
 
   return (
     <>
+      {open && (table?.id ?? tableId) && (
+        <TableInteractionConfirmation
+          key={table?.id ?? tableId}
+          tableLabel={table?.label ?? tableLabel}
+        />
+      )}
       <ModalOverlay
         open={open}
         className="flex flex-col sm:items-center sm:justify-center sm:p-4"

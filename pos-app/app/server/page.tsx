@@ -241,6 +241,7 @@ function ServerApp() {
       {orderModal && (
         <NewOrderModal
           open
+          tableId={orderModal.table.id}
           tableLabel={orderModal.table.label}
           menuItems={menuItems.filter((m) => m.isAvailable)}
           categories={categories}

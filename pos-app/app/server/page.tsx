@@ -11,6 +11,7 @@ import { useSettings } from "@/contexts/settings-context";
 import { NewOrderModal } from "@/components/new-order-modal";
 import { PrintFailedListener } from "@/components/print-failed-listener";
 import { LanguageSelector } from "@/components/language-selector";
+import { GeneralKitchenMessageButton } from "@/components/general-kitchen-message-button";
 import { POS_EGRESS } from "@/lib/egress-config";
 import { filterItemsForBoard } from "@/lib/order-board";
 import { applyOrderItemRealtimeEvent, applyTableRealtimeEvent } from "@/lib/realtime-pos-sync";
@@ -201,6 +202,7 @@ function ServerApp() {
           <p className="truncate font-semibold text-zinc-900 dark:text-zinc-100">{staff?.name}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <GeneralKitchenMessageButton />
           <Link href="/server/voucher" title={translate("voucherScanFab")} aria-label={translate("voucherScanFab")}
             className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl border border-[#C9A88B]/45 bg-[#C9A88B]/10 px-3 text-sm font-semibold text-zinc-800 transition hover:bg-[#C9A88B]/20 dark:text-[#E8D5C4]">
             <QrCode className="h-5 w-5" aria-hidden /><span className="hidden sm:inline">{translate("voucherScanFab")}</span>

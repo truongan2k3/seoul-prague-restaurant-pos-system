@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 
 /** Reveal overflowing text end-to-end, then return, without duplicating its accessible text. */
-export function OverflowPanText({ text }: { text: string }) {
+export function OverflowPanText({ text, respectReducedMotion = true }: { text: string; respectReducedMotion?: boolean }) {
   const viewportRef = useRef<HTMLSpanElement>(null);
   const textRef = useRef<HTMLSpanElement>(null);
 
@@ -21,7 +21,7 @@ export function OverflowPanText({ text }: { text: string }) {
       frame = null;
       if (disposed) return;
       const distance = Math.max(0, content.scrollWidth - viewport.clientWidth);
-      if (distance <= 1 || preference.matches || typeof content.animate !== "function") {
+      if (distance <= 1 || (respectReducedMotion && preference.matches) || typeof content.animate !== "function") {
         animation?.cancel();
         animation = null;
         previousDistance = distance;
@@ -82,7 +82,7 @@ export function OverflowPanText({ text }: { text: string }) {
       preference.removeEventListener("change", onPreference);
       fonts?.removeEventListener("loadingdone", schedule);
     };
-  }, [text]);
+  }, [text, respectReducedMotion]);
 
   return <span ref={viewportRef} className="block min-w-0 overflow-hidden whitespace-nowrap">
     <span ref={textRef} className="inline-block w-max max-w-none align-top">{text}</span>

@@ -2030,9 +2030,9 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
           <h1
             title={translate("preparing")}
-            className="min-w-0 overflow-hidden font-serif text-xl font-semibold tracking-tight text-white sm:text-2xl"
+            className="min-w-0 flex-1 overflow-hidden font-serif text-xl font-semibold tracking-tight text-white sm:text-2xl"
           >
-            <OverflowPanText text={translate("preparing")} />
+            <OverflowPanText text={translate("preparing")} respectReducedMotion={false} />
           </h1>
           <span className="shrink-0 text-sm tabular-nums text-white/40">
             {layoutMode === "cards"

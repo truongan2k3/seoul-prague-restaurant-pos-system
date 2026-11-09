@@ -117,9 +117,15 @@ const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const CACHE_MAX_ENTRIES = 500;
 const CACHE_MAX_KEY_LENGTH = 4000;
 
+export type NoteTranslationResult = {
+  text: string;
+  provider: "google" | "mymemory" | "local" | "original" | "unavailable";
+  cached: boolean;
+};
+
 // Best-effort, per server instance: cold starts clear this cache. No note persistence.
-const translationCache = new Map<string, { text: string; expiresAt: number }>();
-const pendingTranslations = new Map<string, Promise<string>>();
+const translationCache = new Map<string, { result: NoteTranslationResult; expiresAt: number }>();
+const pendingTranslations = new Map<string, Promise<NoteTranslationResult>>();
 
 type SourceLanguage = "en" | "cs" | "vi";
 
@@ -209,14 +215,15 @@ async function translateViaGoogle(text: string): Promise<string | null> {
   return isUsableChineseTranslation(translated, text) ? translated.trim() : null;
 }
 
-async function translateWithApis(text: string): Promise<string | null> {
+async function translateWithApis(text: string): Promise<NoteTranslationResult | null> {
   const google = await translateViaGoogle(text);
-  if (google) return google;
+  if (google) return { text: google, provider: "google", cached: false };
   // Use the detected source directly; never force English ahead of Czech/Vietnamese.
-  return translateViaMyMemory(text, detectSourceLang(text));
+  const memory = await translateViaMyMemory(text, detectSourceLang(text));
+  return memory ? { text: memory, provider: "mymemory", cached: false } : null;
 }
 
-function cacheTranslation(key: string, text: string) {
+function cacheTranslation(key: string, result: NoteTranslationResult) {
   const now = Date.now();
   for (const [entryKey, entry] of translationCache) {
     if (entry.expiresAt <= now) translationCache.delete(entryKey);
@@ -226,25 +233,29 @@ function cacheTranslation(key: string, text: string) {
     const oldest = translationCache.keys().next().value;
     if (oldest !== undefined) translationCache.delete(oldest);
   }
-  translationCache.set(key, { text, expiresAt: now + CACHE_TTL_MS });
+  translationCache.set(key, { result, expiresAt: now + CACHE_TTL_MS });
 }
 
 /** Translate notes only; callers retain the original in the separate notes field. */
-export async function translateNoteToChinese(text: string): Promise<string> {
+export async function translateNoteToChineseWithSource(text: string): Promise<NoteTranslationResult> {
   const trimmed = text.normalize("NFC").trim();
-  if (!trimmed) return "";
+  if (!trimmed) return { text: "", provider: "original", cached: false };
 
   const localMatch = localTranslation(trimmed);
-  if (localMatch) return localMatch;
+  if (localMatch) return { text: localMatch, provider: "local", cached: false };
 
-  if (hasChinese(trimmed) && !/\p{Script=Latin}/u.test(trimmed)) return trimmed;
+  if (hasChinese(trimmed) && !/\p{Script=Latin}/u.test(trimmed)) {
+    return { text: trimmed, provider: "original", cached: false };
+  }
 
   // Compose only fully known phrases locally. Send other notes as a whole so commas,
   // fractions, and ingredient relationships keep their meaning and context.
   const segments = trimmed.split(/[,;|\n]+/).map(part => part.trim()).filter(Boolean);
   if (segments.length > 1) {
     const localSegments = segments.map(localTranslation);
-    if (localSegments.every((part): part is string => Boolean(part))) return localSegments.join("，");
+    if (localSegments.every((part): part is string => Boolean(part))) {
+      return { text: localSegments.join("，"), provider: "local", cached: false };
+    }
   }
 
   // Preserve case and punctuation in cache keys; they can carry meaning in notes.
@@ -255,7 +266,7 @@ export async function translateNoteToChinese(text: string): Promise<string> {
     if (cached && cached.expiresAt > Date.now()) {
       translationCache.delete(key);
       translationCache.set(key, cached);
-      return cached.text;
+      return { ...cached.result, cached: true };
     }
     if (cached) translationCache.delete(key);
     const pending = pendingTranslations.get(key);
@@ -265,7 +276,7 @@ export async function translateNoteToChinese(text: string): Promise<string> {
   const pending = translateWithApis(trimmed).catch(() => null).then(translated => {
     // Never cache failures, warnings, or untranslated source text.
     if (translated && cacheable) cacheTranslation(key, translated);
-    return translated ?? trimmed;
+    return translated ?? { text: trimmed, provider: "unavailable" as const, cached: false };
   });
   const tracked = cacheable && pendingTranslations.size < CACHE_MAX_ENTRIES;
   if (tracked) pendingTranslations.set(key, pending);
@@ -274,4 +285,9 @@ export async function translateNoteToChinese(text: string): Promise<string> {
   } finally {
     if (tracked && pendingTranslations.get(key) === pending) pendingTranslations.delete(key);
   }
+}
+
+/** Compatibility entry point for order saving and printing: text only, never attribution. */
+export async function translateNoteToChinese(text: string): Promise<string> {
+  return (await translateNoteToChineseWithSource(text)).text;
 }

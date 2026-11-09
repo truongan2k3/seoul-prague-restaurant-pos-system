@@ -329,7 +329,7 @@ export function CfdReservationPanel({ open, onClose, language, onWelcome, websit
       ) : (
         <>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
-            <TableAvailabilityDashboard tables={tables} reservations={rows} language={language}
+            <TableAvailabilityDashboard tables={tables} reservations={rows} language={language} compact
               enabled={open && !showCreate} realtimeConnected={reservationsConnected && tablesConnected} refreshKey={availabilityRevision} />
             {loading && rows.length === 0 ? (
               <div className="flex items-center justify-center gap-2 py-16 text-sm text-white/50">

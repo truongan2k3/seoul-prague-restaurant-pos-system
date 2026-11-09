@@ -13,6 +13,8 @@ export type TableAvailabilitySource = {
 export type LiveTableAvailability = AvailabilityTable & {
   status: LiveTableStatus; estimatedReleaseAt: number | null;
   earliestSeatingAt: number | null; nextReservationAt: number | null;
+  /** Next allocated booking, including bookings without an explicitly assigned table. */
+  availableUntil: number | null;
   upcomingReservations: { reservedAt: number; partySize: number }[];
   overEstimatedTime: boolean;
 };
@@ -43,8 +45,9 @@ export function calculateTableAvailability(source: TableAvailabilitySource, now 
       .map((r) => ({ reservedAt: new Date(r.reservedAt).getTime(), partySize: r.actualPartySize ?? r.partySize }))
       .filter((r) => r.reservedAt + duration > now).sort((a, b) => a.reservedAt - b.reservedAt);
     const nextReservation = upcomingReservations[0]?.reservedAt ?? null;
+    const availableUntil = spans.find((span) => span.startMs > now)?.startMs ?? null;
     return { ...table, occupied, status, estimatedReleaseAt: release, earliestSeatingAt: earliest,
-      nextReservationAt: nextReservation, upcomingReservations, overEstimatedTime: occupied && release !== null && release <= now };
+      nextReservationAt: nextReservation, availableUntil, upcomingReservations, overEstimatedTime: occupied && release !== null && release <= now };
   });
   const available = tables.filter((t) => t.status === "available");
   const future = tables.filter((t) => t.status !== "available").map((t) => t.earliestSeatingAt)

@@ -1,5 +1,5 @@
 /**
- * Kitchen-note EN→ZH translator for Seoul Prague POS.
+ * Kitchen-note EN/CS/VI→ZH translator for Seoul Prague POS.
  * Staff notes are primarily English; Czech/Vietnamese are secondary.
  */
 
@@ -26,7 +26,7 @@ const LOCAL_DICT: Record<string, string> = {
   "no garlic": "不要蒜",
   "no coriander": "不要香菜",
   "no cilantro": "不要香菜",
-  "no parsley": "不要香菜",
+  "no parsley": "不要欧芹",
   "less ice": "少冰",
   "no ice": "去冰",
   "extra ice": "多冰",
@@ -55,7 +55,6 @@ const LOCAL_DICT: Record<string, string> = {
   "seafood allergy": "海鲜过敏",
   "gluten free": "无麸质",
   "no gluten": "无麸质",
-  "no MSG": "不要味精",
   "no msg": "不要味精",
   "less salt": "少盐",
   "no salt": "无盐",
@@ -64,7 +63,7 @@ const LOCAL_DICT: Record<string, string> = {
   "cut in half": "一切两半",
   "happy birthday": "生日快乐",
   "separate bill": "分开结账",
-  "no oil": "少油",
+  "no oil": "不要油",
   "less oil": "少油",
   "extra egg": "加蛋",
   "no egg": "不要蛋",
@@ -85,10 +84,19 @@ const LOCAL_DICT: Record<string, string> = {
   "it da": "少冰",
   "mang về": "打包",
   "mang ve": "打包",
+  "không dầu": "不要油",
+  "khong dau": "不要油",
+  "ít dầu": "少油",
+  "it dau": "少油",
   // Czech — occasional
   "bez cibule": "不要洋葱",
   "bez česneku": "不要蒜",
   "bez koriandru": "不要香菜",
+  "bez petržele": "不要欧芹",
+  "bez petrzele": "不要欧芹",
+  "bez oleje": "不要油",
+  "méně oleje": "少油",
+  "mene oleje": "少油",
   "bez pálivého": "不要辣",
   "bez paliveho": "不要辣",
   "nechci pálivé": "不要辣",
@@ -102,12 +110,26 @@ const LOCAL_DICT: Record<string, string> = {
 };
 
 const MYMEMORY_URL = "https://api.mymemory.translated.net/get";
-/** Chrome dictionary endpoint — works as EN→ZH fallback when MyMemory quotas out. */
+/** Existing keyless Chrome endpoint; unofficial, so keep a separate fallback. */
 const GOOGLE_DICT_URL = "https://clients5.google.com/translate_a/t";
 const API_TIMEOUT_MS = 6000;
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const CACHE_MAX_ENTRIES = 500;
+const CACHE_MAX_KEY_LENGTH = 4000;
+
+// Best-effort, per server instance: cold starts clear this cache. No note persistence.
+const translationCache = new Map<string, { text: string; expiresAt: number }>();
+const pendingTranslations = new Map<string, Promise<string>>();
+
+type SourceLanguage = "en" | "cs" | "vi";
 
 function cleanNoteText(text: string): string {
-  return text.trim().toLowerCase().replace(/\s+/g, " ");
+  return text.normalize("NFC").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function localTranslation(text: string): string | undefined {
+  const key = cleanNoteText(text);
+  return Object.prototype.hasOwnProperty.call(LOCAL_DICT, key) ? LOCAL_DICT[key] : undefined;
 }
 
 interface MyMemoryResponse {
@@ -122,47 +144,38 @@ function hasChinese(text: string): boolean {
   return /[\u4e00-\u9fff]/.test(text);
 }
 
-function isUsableChineseTranslation(translated: string): boolean {
+function isUsableChineseTranslation(translated: string, original: string): boolean {
   const trimmed = translated.trim();
-  if (!trimmed) return false;
-  if (/MYMEMORY WARNING/i.test(trimmed)) return false;
-  return hasChinese(trimmed);
+  return Boolean(trimmed && trimmed !== original.trim()
+    && !/MYMEMORY WARNING/i.test(trimmed) && hasChinese(trimmed));
 }
 
-/**
- * Staff notes are primarily English. Only flip to VI/CS when distinctive
- * characters appear (avoid treating English as Czech).
- */
-function detectSourceLang(text: string): "en" | "cs" | "vi" {
-  if (
-    /[ạảãâầấậẩẫăằắặẳẵẹẻẽêềếệểễịỉĩọỏõôồốộổỗơờớợởỡụủũưừứựửữỳýỵỷỹđ]/i.test(
-      text,
-    )
-  ) {
+/** Google auto-detects; these conservative hints select the MyMemory fallback pair. */
+function detectSourceLang(text: string): SourceLanguage {
+  const normalized = text.normalize("NFC");
+  // Do not classify ý as Vietnamese: it also occurs frequently in Czech.
+  if (/[ạảãâầấậẩẫăằắặẳẵẹẻẽêềếệểễịỉĩọỏõôồốộổỗơờớợởỡụủũưừứựửữỳỵỷỹđ]/i.test(normalized)) {
     return "vi";
   }
-  // Distinctive Czech letters only (not á/é/í shared with many langs — English-first POS).
-  if (/[ěščřžýůďťň]/i.test(text)) {
-    return "cs";
-  }
+  if (/[ěščřžůďťň]/i.test(normalized)) return "cs";
+  // Recognize common kitchen terms even when staff omit accents.
+  const words = cleanNoteText(normalized);
+  if (/\b(khong|nhieu|nuoc|thit|dau|hanh)\b/.test(words)) return "vi";
+  if (/\b(bez|mene|prosim|cibule|cesneku|palive|omacku|sebou|oleje)\b/.test(words)) return "cs";
   return "en";
 }
 
-function langPairsFor(source: "en" | "cs" | "vi"): string[] {
-  // English first always — primary staff language.
-  if (source === "cs") return ["en|zh-CN", "cs|zh-CN"];
-  if (source === "vi") return ["en|zh-CN", "vi|zh-CN"];
-  return ["en|zh-CN"];
-}
-
-async function fetchWithTimeout(url: string): Promise<Response | null> {
+/** Include response-body parsing in the timeout, not just response headers. */
+async function fetchJsonWithTimeout(url: string): Promise<unknown> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
   try {
-    return await fetch(url, {
+    const response = await fetch(url, {
       signal: controller.signal,
+      cache: "no-store",
       headers: { "User-Agent": "SeoulPraguePOS/1.0" },
     });
+    return response.ok ? await response.json() : null;
   } catch {
     return null;
   } finally {
@@ -170,104 +183,95 @@ async function fetchWithTimeout(url: string): Promise<Response | null> {
   }
 }
 
-async function translateViaMyMemory(text: string, langpair: string): Promise<string | null> {
-  const url = `${MYMEMORY_URL}?q=${encodeURIComponent(text.trim())}&langpair=${encodeURIComponent(langpair)}`;
-  const response = await fetchWithTimeout(url);
-  if (!response?.ok) return null;
-  try {
-    const payload = (await response.json()) as MyMemoryResponse;
-    if (payload.quotaFinished) return null;
-    const status = Number(payload.responseStatus);
-    if (Number.isFinite(status) && status !== 200) return null;
-    const translated = payload.responseData?.translatedText?.trim();
-    if (!translated || /MYMEMORY WARNING/i.test(translated)) return null;
-    return translated;
-  } catch {
-    return null;
-  }
+async function translateViaMyMemory(text: string, source: SourceLanguage): Promise<string | null> {
+  // MyMemory's query limit is 500 UTF-8 bytes. Longer notes still get the Google attempt.
+  if (new TextEncoder().encode(text).length > 500) return null;
+  const url = `${MYMEMORY_URL}?q=${encodeURIComponent(text)}&langpair=${encodeURIComponent(`${source}|zh-CN`)}`;
+  const payload = await fetchJsonWithTimeout(url) as MyMemoryResponse | null;
+  if (!payload || payload.quotaFinished) return null;
+  const status = Number(payload.responseStatus);
+  if (Number.isFinite(status) && status !== 200) return null;
+  const translated = payload.responseData?.translatedText;
+  return typeof translated === "string" && isUsableChineseTranslation(translated, text)
+    ? translated.trim() : null;
 }
 
-/** Google dictionary translate — reliable EN→ZH backup. */
-async function translateViaGoogleDict(
-  text: string,
-  sourceLang: "en" | "cs" | "vi" | "auto" = "en",
-): Promise<string | null> {
-  const sl = sourceLang === "cs" ? "cs" : sourceLang === "vi" ? "vi" : sourceLang === "auto" ? "auto" : "en";
-  const url =
-    `${GOOGLE_DICT_URL}?client=dict-chrome-ex` +
-    `&sl=${encodeURIComponent(sl)}&tl=zh-CN&q=${encodeURIComponent(text.trim())}`;
-  const response = await fetchWithTimeout(url);
-  if (!response?.ok) return null;
-  try {
-    const payload = (await response.json()) as unknown;
-    // Shape: ["中文"] or [["中文","src",...], ...] depending on client.
-    if (Array.isArray(payload)) {
-      const first = payload[0];
-      if (typeof first === "string" && first.trim()) return first.trim();
-      if (Array.isArray(first) && typeof first[0] === "string" && first[0].trim()) {
-        return first[0].trim();
-      }
-    }
-    return null;
-  } catch {
-    return null;
-  }
+async function translateViaGoogle(text: string): Promise<string | null> {
+  // Auto detection handles English, Czech, Vietnamese, and mixed-language staff notes.
+  const url = `${GOOGLE_DICT_URL}?client=dict-chrome-ex&sl=auto&tl=zh-CN&q=${encodeURIComponent(text)}`;
+  const payload = await fetchJsonWithTimeout(url);
+  if (!Array.isArray(payload)) return null;
+
+  // The existing endpoint returns either ["translation"] or [["translation", ...], ...].
+  const translated = typeof payload[0] === "string"
+    ? payload[0]
+    : payload.filter(Array.isArray).map(part => typeof part[0] === "string" ? part[0] : "").join("");
+  return isUsableChineseTranslation(translated, text) ? translated.trim() : null;
 }
 
-async function translateWithApis(
-  text: string,
-  source: "en" | "cs" | "vi",
-): Promise<string | null> {
-  for (const pair of langPairsFor(source)) {
-    const translated = await translateViaMyMemory(text, pair);
-    if (translated && isUsableChineseTranslation(translated)) return translated;
-  }
-
-  const google = await translateViaGoogleDict(text, source === "en" ? "en" : source);
-  if (google && isUsableChineseTranslation(google)) return google;
-
-  if (source !== "en") {
-    const googleEn = await translateViaGoogleDict(text, "en");
-    if (googleEn && isUsableChineseTranslation(googleEn)) return googleEn;
-  }
-
-  const googleAuto = await translateViaGoogleDict(text, "auto");
-  if (googleAuto && isUsableChineseTranslation(googleAuto)) return googleAuto;
-
-  return null;
+async function translateWithApis(text: string): Promise<string | null> {
+  const google = await translateViaGoogle(text);
+  if (google) return google;
+  // Use the detected source directly; never force English ahead of Czech/Vietnamese.
+  return translateViaMyMemory(text, detectSourceLang(text));
 }
 
-/** Translate free-text notes / kitchen messages to Simplified Chinese. */
+function cacheTranslation(key: string, text: string) {
+  const now = Date.now();
+  for (const [entryKey, entry] of translationCache) {
+    if (entry.expiresAt <= now) translationCache.delete(entryKey);
+  }
+  translationCache.delete(key);
+  if (translationCache.size >= CACHE_MAX_ENTRIES) {
+    const oldest = translationCache.keys().next().value;
+    if (oldest !== undefined) translationCache.delete(oldest);
+  }
+  translationCache.set(key, { text, expiresAt: now + CACHE_TTL_MS });
+}
+
+/** Translate notes only; callers retain the original in the separate notes field. */
 export async function translateNoteToChinese(text: string): Promise<string> {
-  const trimmed = text.trim();
+  const trimmed = text.normalize("NFC").trim();
   if (!trimmed) return "";
 
-  const cleaned = cleanNoteText(trimmed);
-  const localMatch = LOCAL_DICT[cleaned];
+  const localMatch = localTranslation(trimmed);
   if (localMatch) return localMatch;
 
-  // Already Chinese-looking (no Latin letters mixed in)
-  if (hasChinese(trimmed) && !/[a-zàáạảãâầấěščřžý]/i.test(trimmed)) {
-    return trimmed;
-  }
+  if (hasChinese(trimmed) && !/\p{Script=Latin}/u.test(trimmed)) return trimmed;
 
-  // Translate comma/semicolon segments independently (preset + free text mixes).
-  const segments = trimmed
-    .split(/[,;|/]+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
+  // Compose only fully known phrases locally. Send other notes as a whole so commas,
+  // fractions, and ingredient relationships keep their meaning and context.
+  const segments = trimmed.split(/[,;|\n]+/).map(part => part.trim()).filter(Boolean);
   if (segments.length > 1) {
-    const translatedSegments = await Promise.all(
-      segments.map((segment) => translateNoteToChinese(segment)),
-    );
-    if (translatedSegments.some((part) => hasChinese(part))) {
-      return translatedSegments.join("，");
-    }
+    const localSegments = segments.map(localTranslation);
+    if (localSegments.every((part): part is string => Boolean(part))) return localSegments.join("，");
   }
 
-  const source = detectSourceLang(trimmed);
-  const translated = await translateWithApis(trimmed, source);
-  if (translated) return translated;
+  // Preserve case and punctuation in cache keys; they can carry meaning in notes.
+  const key = trimmed;
+  const cacheable = key.length <= CACHE_MAX_KEY_LENGTH;
+  if (cacheable) {
+    const cached = translationCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) {
+      translationCache.delete(key);
+      translationCache.set(key, cached);
+      return cached.text;
+    }
+    if (cached) translationCache.delete(key);
+    const pending = pendingTranslations.get(key);
+    if (pending) return pending;
+  }
 
-  return trimmed;
+  const pending = translateWithApis(trimmed).catch(() => null).then(translated => {
+    // Never cache failures, warnings, or untranslated source text.
+    if (translated && cacheable) cacheTranslation(key, translated);
+    return translated ?? trimmed;
+  });
+  const tracked = cacheable && pendingTranslations.size < CACHE_MAX_ENTRIES;
+  if (tracked) pendingTranslations.set(key, pending);
+  try {
+    return await pending;
+  } finally {
+    if (tracked && pendingTranslations.get(key) === pending) pendingTranslations.delete(key);
+  }
 }

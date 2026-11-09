@@ -74,7 +74,6 @@ import {
   RESERVATION_CANCEL_REASONS,
   type ReservationCancelReasonId,
 } from "@/lib/reservation-cancel-reasons";
-import { ReservationCapacityOverview } from "@/components/reservation-capacity-overview";
 import { TableAvailabilityDashboard } from "@/components/table-availability-dashboard";
 
 async function confirmReservationWithEmail(reservationId: string) {
@@ -358,15 +357,9 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
 
   const showDayNav = period === "day";
   const isTodayAnchor = anchorDate === toDateInputValue(new Date());
-  const capacityDateIso = showDayNav ? anchorDate : toDateInputValue(new Date());
 
   const emptyTables = useMemo(
     () => tables.filter((table) => table.status === "empty"),
-    [tables],
-  );
-
-  const floorOccupiedCount = useMemo(
-    () => tables.filter((table) => table.status === "waiting" || table.status === "ready").length,
     [tables],
   );
 
@@ -719,24 +712,6 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
         </div>
       </header>
 
-      <Modal
-        open={showCapacityModal}
-        onClose={() => setShowCapacityModal(false)}
-        title={translate("resCapacityOverviewTitle")}
-        size="xl"
-        bodyClassName="px-4 py-4 sm:px-6"
-      >
-        {showCapacityModal ? (
-          <ReservationCapacityOverview
-            dateIso={capacityDateIso}
-            refreshKey={capacityRefreshKey}
-            floorOccupiedCount={floorOccupiedCount}
-            active={showCapacityModal}
-            inModal
-          />
-        ) : null}
-      </Modal>
-
       <div className="flex-1 overflow-auto p-2.5 sm:p-4 lg:p-6">
         <div className="mx-auto max-w-6xl space-y-3 sm:space-y-4 lg:space-y-6">
           <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#C9A88B]/25 bg-[var(--card)] px-4 py-3 sm:px-5">
@@ -764,7 +739,9 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
               </span>
             </button>
           </section>
-          <TableAvailabilityDashboard tables={tables} reservations={reservations} language={language} staff realtimeConnected={reservationsConnected} refreshKey={capacityRefreshKey} />
+          <TableAvailabilityDashboard tables={tables} reservations={reservations} language={language} staff
+            compact detailsOpen={showCapacityModal} onCloseDetails={() => setShowCapacityModal(false)}
+            realtimeConnected={reservationsConnected} refreshKey={capacityRefreshKey} />
           <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 sm:px-5">
             <div className="flex flex-wrap items-center gap-2">
               <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">

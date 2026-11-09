@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronRight, Gift, MessageSquare, Minus, Plus, Search, X } from "lucide-react";
+import { Check, ChevronRight, CreditCard, Gift, MessageSquare, Minus, Plus, Save, Search, X } from "lucide-react";
 import { CancelReasonModal } from "@/components/cancel-reason-modal";
 import { ItemCustomizeModal, type CustomizeResult } from "@/components/item-customize-modal";
 import { GrillGuestCountModal } from "@/components/grill-guest-count-modal";
@@ -2012,32 +2012,19 @@ export function NewOrderModal({
           )}
         </div>
 
-        <div
-          className={`mb-2 grid gap-1.5 ${
-            applyVoucherCode && table?.id ? "grid-cols-3" : "grid-cols-2"
-          }`}
-        >
+        <div className={`mb-2 grid gap-2 ${applyVoucherCode && table?.id ? "grid-cols-3" : "grid-cols-2"}`}>
           <button
             type="button"
             onClick={() => openKitchenMessageModal("table")}
             title={translate("kitchenMessageTable")}
-            className="inline-flex min-h-[40px] items-center justify-center gap-1 rounded-lg border border-orange-200 bg-orange-50 px-1.5 py-1.5 text-[11px] font-semibold leading-tight text-orange-800 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-200 sm:min-h-[44px] sm:gap-1.5 sm:px-2 sm:text-xs"
+            className="flex min-h-[52px] min-w-0 flex-col items-center justify-center gap-1 rounded-xl border border-orange-200 bg-orange-50/80 px-1.5 py-2 text-[11px] font-semibold leading-tight text-orange-800 transition-colors hover:bg-orange-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-200 dark:hover:bg-orange-900/50"
           >
-            <MessageSquare className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
-            <span className="truncate">{translate("kitchenMessageTable")}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => openKitchenMessageModal("general")}
-            title={translate("kitchenMessageGeneral")}
-            className="inline-flex min-h-[40px] items-center justify-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-1.5 py-1.5 text-[11px] font-semibold leading-tight text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200 sm:min-h-[44px] sm:gap-1.5 sm:px-2 sm:text-xs"
-          >
-            <MessageSquare className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
-            <span className="truncate">{translate("kitchenMessageGeneral")}</span>
+            <MessageSquare className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="text-center">{translate("kitchenMessageTable")}</span>
           </button>
           {applyVoucherCode && table?.id ? (
             <VoucherScanFab
-              variant="inline"
+              variant="toolbar"
               activeTableId={table.id}
               tableLabel={tableLabel}
               applyVoucherCode={applyVoucherCode}
@@ -2045,37 +2032,37 @@ export function NewOrderModal({
               onOpenVouchersTab={onOpenVouchersTab}
             />
           ) : null}
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div className="col-span-2">
-            <SlideToSendOrder
-              key={orderingTableId ?? "no-table"}
-              contextId={orderingTableId ?? ""}
-              disabled={!open || !hasPendingSend || isBusy || !orderingTableId}
-              onSend={handleSend}
-              errorMessage={submittedLineError}
-            />
-          </div>
           <button
             type="button"
             disabled={!canSaveNoPrint}
             onClick={() => void handleSaveNoPrint()}
-            className="min-h-[52px] rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm font-semibold text-gray-800 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+            title={translate("saveNoPrint")}
+            className="flex min-h-[52px] min-w-0 flex-col items-center justify-center gap-1 rounded-xl border border-gray-200 bg-gray-50 px-1.5 py-2 text-[11px] font-semibold leading-tight text-gray-700 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:bg-gray-800/70 dark:text-gray-200 dark:hover:bg-gray-800"
           >
-            {isBusy ? "…" : translate("saveNoPrint")}
+            <Save className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="text-center">{isBusy ? "…" : translate("saveNoPrint")}</span>
           </button>
-          {onCheckout ? (
+        </div>
+
+        <div className={`grid items-start gap-2 ${onCheckout ? "grid-cols-[minmax(0,7fr)_minmax(0,3fr)]" : "grid-cols-1"}`}>
+          <SlideToSendOrder
+            key={orderingTableId ?? "no-table"}
+            contextId={orderingTableId ?? ""}
+            disabled={!open || !hasPendingSend || isBusy || !orderingTableId}
+            onSend={handleSend}
+            errorMessage={submittedLineError}
+          />
+          {onCheckout && (
             <button
               type="button"
               disabled={!canCheckout || isBusy}
               onClick={() => void onCheckout(submittedOrdersRaw)}
-              className="min-h-[52px] rounded-lg bg-emerald-600 px-2 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+              title={translate("payButton")}
+              className="flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl border border-emerald-500/40 bg-emerald-600 px-1.5 py-2 text-xs font-bold leading-tight text-white shadow-sm transition-colors hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40 dark:focus-visible:ring-offset-gray-900"
             >
-              {translate("payButton")}
+              <CreditCard className="h-[18px] w-[18px] shrink-0" aria-hidden />
+              <span className="text-center">{translate("payButton")}</span>
             </button>
-          ) : (
-            <span />
           )}
         </div>
       </div>

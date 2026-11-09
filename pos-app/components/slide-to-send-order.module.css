@@ -3,7 +3,7 @@
 .track {
   --swipe-progress: 0;
   position: relative;
-  height: 60px;
+  height: 56px;
   overflow: hidden;
   border: 1px solid #3b82f6;
   border-radius: 12px;
@@ -33,9 +33,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 58px;
+  padding: 0 8px 0 54px;
   text-align: center;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.25;
   pointer-events: none;
@@ -44,13 +44,13 @@
 
 .handle {
   position: absolute;
-  top: 3px;
-  left: calc(4px + var(--swipe-progress) * (100% - 60px));
+  top: 5px;
+  left: calc(4px + var(--swipe-progress) * (100% - 52px));
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
+  width: 44px;
+  height: 44px;
   border-radius: 9px;
   background: #fff;
   color: #1d4ed8;
@@ -66,6 +66,7 @@
 .handle:focus-visible { outline: 2px solid #c9a88b; outline-offset: -4px; }
 .track[data-motion="drag"] .handle, .track[data-motion="drag"] .fill { transition: none; }
 .track[data-motion="complete"] .handle, .track[data-motion="complete"] .fill { transition-duration: 150ms; }
+.track[data-motion="complete"] .label { padding: 0 54px 0 8px; }
 .handle svg { width: 24px; height: 24px; pointer-events: none; }
 .spinner { animation: sending-spin 800ms linear infinite; }
 .error { margin: 6px 0 0; font-size: 12px; line-height: 1.4; }

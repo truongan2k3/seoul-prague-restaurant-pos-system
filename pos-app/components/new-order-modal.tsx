@@ -9,6 +9,7 @@ import { LinePriceEditor } from "@/components/line-price-editor";
 import { Modal } from "@/components/modal";
 import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { TableInteractionConfirmation } from "@/components/table-interaction-confirmation";
+import { NoteTranslationSource } from "@/components/note-translation-source";
 import { OnScreenKeyboard } from "@/components/on-screen-keyboard";
 import { OrderLineToolbar } from "@/components/order-line-toolbar";
 import { VoucherScanFab } from "@/components/voucher-scan-fab";
@@ -97,7 +98,10 @@ import {
   fetchNotePresets,
   mapNotePresetsResponse,
 } from "@/src/lib/note-preset-actions";
-import { translateNoteToChineseAction } from "@/src/lib/translate-actions";
+import { translateNoteToChineseAction, translateNoteToChineseWithSourceAction } from "@/src/lib/translate-actions";
+import type { NoteTranslationResult } from "@/src/lib/translator";
+
+type NoteTranslationPreview = { input: string; result: NoteTranslationResult };
 
 interface CartLine {
   lineId: string;
@@ -380,6 +384,7 @@ export function NewOrderModal({
   const [submittedNoteLineId, setSubmittedNoteLineId] = useState<string | null>(null);
   const [submittedNoteDraft, setSubmittedNoteDraft] = useState("");
   const [submittedNoteDraftTranslated, setSubmittedNoteDraftTranslated] = useState("");
+  const [submittedNoteTranslation, setSubmittedNoteTranslation] = useState<NoteTranslationPreview | null>(null);
   const [submittedNotePresetIds, setSubmittedNotePresetIds] = useState<string[]>([]);
   const [submittedNoteTranslating, setSubmittedNoteTranslating] = useState(false);
   const [submittedNoteTranslateEnabled, setSubmittedNoteTranslateEnabled] = useState(false);
@@ -395,6 +400,7 @@ export function NewOrderModal({
   const [noteLineId, setNoteLineId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteDraftTranslated, setNoteDraftTranslated] = useState("");
+  const [noteTranslation, setNoteTranslation] = useState<NoteTranslationPreview | null>(null);
   const [noteTranslating, setNoteTranslating] = useState(false);
   const [noteTranslateEnabled, setNoteTranslateEnabled] = useState(false);
   const [notePrintOnReceipt, setNotePrintOnReceipt] = useState(false);
@@ -417,6 +423,7 @@ export function NewOrderModal({
   const [kitchenMessageMode, setKitchenMessageMode] = useState<KitchenMessageMode>("table");
   const [kitchenMessageDraft, setKitchenMessageDraft] = useState("");
   const [kitchenMessageTranslated, setKitchenMessageTranslated] = useState("");
+  const [kitchenMessageTranslation, setKitchenMessageTranslation] = useState<NoteTranslationPreview | null>(null);
   const [kitchenMessageTranslating, setKitchenMessageTranslating] = useState(false);
   const [kitchenMessageTranslateEnabled, setKitchenMessageTranslateEnabled] = useState(false);
   const [kitchenMessageBusy, setKitchenMessageBusy] = useState(false);
@@ -487,16 +494,22 @@ export function NewOrderModal({
     const note = noteDraft.trim();
     if (!note || !noteTranslateEnabled) {
       setNoteDraftTranslated("");
+      setNoteTranslation(null);
       setNoteTranslating(false);
       return;
     }
 
+    setNoteDraftTranslated("");
+    setNoteTranslation(null);
     setNoteTranslating(true);
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      void translateNoteToChineseAction(note).then((translated) => {
+      void translateNoteToChineseWithSourceAction(note).catch((): NoteTranslationResult => ({
+        text: note, provider: "unavailable", cached: false,
+      })).then((result) => {
         if (!cancelled) {
-          setNoteDraftTranslated(translated);
+          setNoteDraftTranslated(result.text);
+          setNoteTranslation({ input: note, result });
           setNoteTranslating(false);
         }
       });
@@ -512,16 +525,22 @@ export function NewOrderModal({
     const message = kitchenMessageDraft.trim();
     if (!message || !kitchenMessageTranslateEnabled) {
       setKitchenMessageTranslated("");
+      setKitchenMessageTranslation(null);
       setKitchenMessageTranslating(false);
       return;
     }
 
+    setKitchenMessageTranslated("");
+    setKitchenMessageTranslation(null);
     setKitchenMessageTranslating(true);
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      void translateNoteToChineseAction(message).then((translated) => {
+      void translateNoteToChineseWithSourceAction(message).catch((): NoteTranslationResult => ({
+        text: message, provider: "unavailable", cached: false,
+      })).then((result) => {
         if (!cancelled) {
-          setKitchenMessageTranslated(translated);
+          setKitchenMessageTranslated(result.text);
+          setKitchenMessageTranslation({ input: message, result });
           setKitchenMessageTranslating(false);
         }
       });
@@ -537,16 +556,22 @@ export function NewOrderModal({
     const note = submittedNoteDraft.trim();
     if (!note || !submittedNoteTranslateEnabled) {
       setSubmittedNoteDraftTranslated("");
+      setSubmittedNoteTranslation(null);
       setSubmittedNoteTranslating(false);
       return;
     }
 
+    setSubmittedNoteDraftTranslated("");
+    setSubmittedNoteTranslation(null);
     setSubmittedNoteTranslating(true);
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      void translateNoteToChineseAction(note).then((translated) => {
+      void translateNoteToChineseWithSourceAction(note).catch((): NoteTranslationResult => ({
+        text: note, provider: "unavailable", cached: false,
+      })).then((result) => {
         if (!cancelled) {
-          setSubmittedNoteDraftTranslated(translated);
+          setSubmittedNoteDraftTranslated(result.text);
+          setSubmittedNoteTranslation({ input: note, result });
           setSubmittedNoteTranslating(false);
         }
       });
@@ -1231,7 +1256,9 @@ export function NewOrderModal({
 
   const resolveKitchenMessageZh = async (message: string) => {
     if (!kitchenMessageTranslateEnabled) return message;
-    return kitchenMessageTranslated.trim() || (await translateNoteToChineseAction(message));
+    return kitchenMessageTranslation?.input === message
+      ? kitchenMessageTranslation.result.text
+      : await translateNoteToChineseAction(message);
   };
 
   const handleQueueKitchenMessage = async () => {
@@ -2333,7 +2360,7 @@ export function NewOrderModal({
                       {translate("kitchenMessagePreview")}
                     </p>
                     <p className="mt-1 text-sm font-bold text-orange-700 dark:text-orange-300">
-                      {noteTranslating && !noteDraftTranslated
+                      {noteTranslating || (noteDraft.trim() && noteTranslation?.input !== noteDraft.trim())
                         ? translate("noteTranslating")
                         : [
                             ...notePresetIds
@@ -2344,6 +2371,11 @@ export function NewOrderModal({
                             .filter(Boolean)
                             .join(", ")}
                     </p>
+                    <NoteTranslationSource
+                      result={noteTranslation?.input === noteDraft.trim() ? noteTranslation.result : undefined}
+                      pending={Boolean(noteDraft.trim()) && (noteTranslating || noteTranslation?.input !== noteDraft.trim())}
+                      hasPresets={notePresetIds.some(id => notePresets.find(preset => preset.id === id)?.labelZh.trim())}
+                    />
                   </div>
                 )}
               </label>
@@ -2461,7 +2493,7 @@ export function NewOrderModal({
                         {translate("kitchenMessagePreview")}
                       </p>
                       <p className="mt-1 text-sm font-bold text-orange-700 dark:text-orange-300">
-                        {submittedNoteTranslating && !submittedNoteDraftTranslated
+                        {submittedNoteTranslating || (submittedNoteDraft.trim() && submittedNoteTranslation?.input !== submittedNoteDraft.trim())
                           ? translate("noteTranslating")
                           : [
                               ...submittedNotePresetIds
@@ -2472,6 +2504,11 @@ export function NewOrderModal({
                               .filter(Boolean)
                               .join(", ")}
                       </p>
+                      <NoteTranslationSource
+                        result={submittedNoteTranslation?.input === submittedNoteDraft.trim() ? submittedNoteTranslation.result : undefined}
+                        pending={Boolean(submittedNoteDraft.trim()) && (submittedNoteTranslating || submittedNoteTranslation?.input !== submittedNoteDraft.trim())}
+                        hasPresets={submittedNotePresetIds.some(id => notePresets.find(preset => preset.id === id)?.labelZh.trim())}
+                      />
                     </div>
                   )}
               </label>
@@ -2567,10 +2604,14 @@ export function NewOrderModal({
                   {translate("kitchenMessagePreview")}
                 </p>
                 <p className="mt-1 text-sm font-bold text-orange-700 dark:text-orange-300">
-                  {kitchenMessageTranslating && !kitchenMessageTranslated
+                  {kitchenMessageTranslating || kitchenMessageTranslation?.input !== kitchenMessageDraft.trim()
                     ? translate("noteTranslating")
                     : kitchenMessageTranslated || kitchenMessageDraft.trim()}
                 </p>
+                <NoteTranslationSource
+                  result={kitchenMessageTranslation?.input === kitchenMessageDraft.trim() ? kitchenMessageTranslation.result : undefined}
+                  pending={Boolean(kitchenMessageDraft.trim()) && (kitchenMessageTranslating || kitchenMessageTranslation?.input !== kitchenMessageDraft.trim())}
+                />
               </div>
             )}
 

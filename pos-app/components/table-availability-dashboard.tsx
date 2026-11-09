@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ChevronDown, Clock3, LockKeyhole, RefreshCw, UnlockKeyhole, Wifi, WifiOff } from "lucide-react";
+import { Modal } from "@/components/modal";
+import { TableAvailabilitySummary } from "@/components/table-availability-summary";
 import { useSettings } from "@/contexts/settings-context";
 import { useConnectionStatus } from "@/contexts/connection-status-context";
 import { calculateTableAvailability, type TableAvailabilitySource } from "@/lib/table-availability";
@@ -30,10 +32,12 @@ const DETAIL_COPY = {
   vi: { guests: "khách", suggest: "Bàn đang trống", bookings: "Lượt đặt bàn tiếp theo", seating: "Lượt đón khách tiếp theo", noReady: "Chưa có bàn trống", seats: "chỗ" },
 } as const;
 
-export function TableAvailabilityDashboard({ tables, reservations, language, staff = false, enabled = true, realtimeConnected, refreshKey = 0 }: {
+export function TableAvailabilityDashboard({ tables, reservations, language, staff = false, enabled = true, realtimeConnected, refreshKey = 0,
+  compact = false, detailsOpen = false, onCloseDetails,
+}: {
   tables: RestaurantTable[]; reservations: ReservationRecord[]; language: LanguageCode;
   staff?: boolean; enabled?: boolean; realtimeConnected: boolean;
-  refreshKey?: number;
+  refreshKey?: number; compact?: boolean; detailsOpen?: boolean; onCloseDetails?: () => void;
 }) {
   const copy = COPY[language === "zh" ? "vi" : language];
   const detail = DETAIL_COPY[language === "zh" ? "vi" : language];
@@ -47,7 +51,7 @@ export function TableAvailabilityDashboard({ tables, reservations, language, sta
   const [error, setError] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(compact);
   const refresh = useCallback(() => setRevision((value) => value + 1), []);
   const tableVersion = useMemo(() => JSON.stringify(tables.map((table) => [table.id, table.label,
     table.status === "empty", table.occupiedAt?.getTime(), table.availabilityBlocked])), [tables]);
@@ -130,7 +134,7 @@ export function TableAvailabilityDashboard({ tables, reservations, language, sta
   };
 
   if (!enabled) return null;
-  return (
+  const renderDetails = () => (
     <section className="mb-3 overflow-hidden rounded-2xl border border-[#C9A88B]/25 bg-gradient-to-br from-[#262321]/95 via-[#171719]/95 to-[#111214]/95 px-3.5 py-3 text-[#F3EDE5] shadow-[0_8px_28px_rgba(0,0,0,0.12),inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-md sm:px-5 sm:py-4" aria-label={copy.title}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#D7BDA5] sm:text-xs">{copy.title}</h2>
@@ -203,4 +207,14 @@ export function TableAvailabilityDashboard({ tables, reservations, language, sta
       </AnimatePresence>
     </section>
   );
+
+  if (!compact) return renderDetails();
+  return <>
+    <TableAvailabilitySummary source={source} tables={view?.tables ?? []} now={now}
+      language={language} live={live} error={error} />
+    {detailsOpen && onCloseDetails && <Modal open onClose={onCloseDetails} title={copy.title} size="xl"
+      bodyClassName="px-4 py-4 sm:px-6">
+      {renderDetails()}
+    </Modal>}
+  </>;
 }

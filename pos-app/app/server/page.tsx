@@ -150,7 +150,7 @@ function ServerApp() {
 
       if (error) {
         console.error(error.message);
-        return;
+        throw new Error(error.message);
       }
 
       logAction(isAppend ? "server add items" : "server order", `Table ${orderModal.table.label}`);

@@ -1,0 +1,77 @@
+.root { width: 100%; min-width: 0; }
+
+.track {
+  --swipe-progress: 0;
+  position: relative;
+  height: 60px;
+  overflow: hidden;
+  border: 1px solid #3b82f6;
+  border-radius: 12px;
+  background: #1e40af;
+  color: #fff;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.track[data-disabled="true"] { opacity: 0.5; }
+.track[aria-busy="true"] { opacity: 1; }
+.track[data-ready="true"] { border-color: #c9a88b; }
+
+.fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #2563eb, #3b82f6);
+  transform-origin: left;
+  transform: scaleX(var(--swipe-progress));
+  transition: transform 200ms ease-out;
+  pointer-events: none;
+}
+
+.label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 58px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 25%);
+}
+
+.handle {
+  position: absolute;
+  top: 3px;
+  left: calc(4px + var(--swipe-progress) * (100% - 60px));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 9px;
+  background: #fff;
+  color: #1d4ed8;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+  cursor: grab;
+  touch-action: none;
+  transition: left 200ms ease-out;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.handle:active { cursor: grabbing; }
+.handle:disabled { cursor: not-allowed; }
+.handle:focus-visible { outline: 2px solid #c9a88b; outline-offset: -4px; }
+.track[data-motion="drag"] .handle, .track[data-motion="drag"] .fill { transition: none; }
+.track[data-motion="complete"] .handle, .track[data-motion="complete"] .fill { transition-duration: 150ms; }
+.handle svg { width: 24px; height: 24px; pointer-events: none; }
+.spinner { animation: sending-spin 800ms linear infinite; }
+.error { margin: 6px 0 0; font-size: 12px; line-height: 1.4; }
+
+@keyframes sending-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .handle, .fill { transition: none !important; }
+  .spinner { animation: none; }
+}

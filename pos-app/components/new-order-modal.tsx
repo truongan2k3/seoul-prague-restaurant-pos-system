@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronRight, Gift, MessageSquare, Minus, Plus, Search, X } from "lucide-react";
 import { CancelReasonModal } from "@/components/cancel-reason-modal";
 import { ItemCustomizeModal, type CustomizeResult } from "@/components/item-customize-modal";
@@ -10,6 +10,7 @@ import { Modal } from "@/components/modal";
 import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { TableInteractionConfirmation } from "@/components/table-interaction-confirmation";
 import { NoteTranslationSource } from "@/components/note-translation-source";
+import { SlideToSendOrder } from "@/components/slide-to-send-order";
 import { OnScreenKeyboard } from "@/components/on-screen-keyboard";
 import { OrderLineToolbar } from "@/components/order-line-toolbar";
 import { VoucherScanFab } from "@/components/voucher-scan-fab";
@@ -20,6 +21,7 @@ import { useApp } from "@/contexts/app-context";
 import { usePinGate } from "@/contexts/pin-gate-context";
 import { useReceiptPrint } from "@/contexts/receipt-print-context";
 import { useSettings } from "@/contexts/settings-context";
+import { useNotifications } from "@/contexts/notification-context";
 import { useRegisterUnsavedWork } from "@/contexts/unsaved-work-context";
 import { shouldPrintKitchenOnSend } from "@/lib/kitchen-fulfillment-mode";
 import { buildKitchenMessageOrder, isKitchenMessageOrder } from "@/lib/kitchen-message-order";
@@ -368,6 +370,7 @@ export function NewOrderModal({
   const { translate, language, currentStaffUser } = useApp();
   const { requestPin } = usePinGate();
   const { settings } = useSettings();
+  const { pushNotification } = useNotifications();
   const { printKitchenStaffMessage } = useReceiptPrint();
   const priceOptions = menuPriceDisplayOptionsFromSettings(settings);
   const formatOrderPrice = (amount: number) => formatPosPrice(amount, priceOptions);
@@ -419,6 +422,14 @@ export function NewOrderModal({
   const actionLockRef = useRef(false);
   const [isSending, setIsSending] = useState(false);
   const isBusy = isSaving || isSending;
+  const activeOrderingContext = useRef<string | null>(null);
+  const orderingSession = useRef(0);
+  const orderingTableId = table?.id ?? tableId ?? null;
+  useLayoutEffect(() => {
+    ++orderingSession.current;
+    activeOrderingContext.current = open ? orderingTableId : null;
+    return () => { ++orderingSession.current; activeOrderingContext.current = null; };
+  }, [open, orderingTableId]);
   const [kitchenMessageOpen, setKitchenMessageOpen] = useState(false);
   const [kitchenMessageMode, setKitchenMessageMode] = useState<KitchenMessageMode>("table");
   const [kitchenMessageDraft, setKitchenMessageDraft] = useState("");
@@ -1312,7 +1323,7 @@ export function NewOrderModal({
     }
   };
 
-  const printPendingKitchenMessage = async () => {
+  const printPendingKitchenMessage = async (expectedTableId: string, expectedSession: number) => {
     if (!pendingKitchenMessage) return;
     // Print Station handles the persisted message insert. Sending a second
     // broadcast would duplicate that ticket; direct printing stays local.
@@ -1323,7 +1334,9 @@ export function NewOrderModal({
         messageZh: pendingKitchenMessage.messageZh,
       });
     }
-    setPendingKitchenMessage(null);
+    if (activeOrderingContext.current === expectedTableId && orderingSession.current === expectedSession) {
+      setPendingKitchenMessage(null);
+    }
   };
 
   const updateCartQty = (lineId: string, delta: number) => {
@@ -1444,39 +1457,66 @@ export function NewOrderModal({
     setSubmittedPriceEditLineId(null);
   };
 
-  const handleSend = async () => {
-    if (!hasPendingSend || isBusy || actionLockRef.current) return;
+  const handleSend = async (expectedTableId = orderingTableId): Promise<boolean> => {
+    if (!open || !expectedTableId || activeOrderingContext.current !== expectedTableId
+      || !hasPendingSend || isBusy || actionLockRef.current) return false;
 
+    const sendingSession = orderingSession.current;
+    const sameContext = () => activeOrderingContext.current === expectedTableId
+      && orderingSession.current === sendingSession;
     actionLockRef.current = true;
     setIsSending(true);
+    let committed = false;
+    const announceSent = () => pushNotification({
+      message: `Order Sent ✓ · ${tableLabel}`, variant: "success", playSound: false, durationMs: 2200,
+    });
     try {
       if (hasSubmittedChanges) {
         const saved = await handleSaveSubmittedChanges({ silent: false });
-        if (!saved) return;
+        if (!saved) return false;
       }
 
+      if (!sameContext()) return false;
       setSubmittedLineError(null);
       const orders = cart.length > 0 ? await buildCartOrdersFromLines() : [];
       if (pendingKitchenMessage) {
         orders.push(buildKitchenMessageOrder(pendingKitchenMessage));
       }
+      // Revalidate after asynchronous preparation, immediately before the existing send.
+      if (!sameContext()) return false;
       // Persist dishes and their table message in one send. The first send
       // closes the order modal, so a second send would use stale table state.
       if (orders.length > 0) {
         await onSendToKitchen(orders);
-        setCart([]);
-        setCartOpen(false);
-        setGrillGuestCount(null);
+        committed = true;
+        if (sameContext()) {
+          setCart([]);
+          setCartOpen(false);
+          setGrillGuestCount(null);
+          // The message was persisted with the order; a printer error must not resend it.
+          if (pendingKitchenMessage) setPendingKitchenMessage(null);
+        }
       }
 
       if (pendingKitchenMessage) {
-        await printPendingKitchenMessage();
+        await printPendingKitchenMessage(expectedTableId, sendingSession);
       }
 
       // Close after a successful Send. Save no print intentionally keeps the menu open.
-      onClose();
+      announceSent();
+      if (sameContext()) onClose();
+      return true;
     } catch (error) {
-      setSubmittedLineError(error instanceof Error ? error.message : "Failed to send.");
+      if (sameContext()) setSubmittedLineError(error instanceof Error ? error.message : "Failed to send.");
+      if (committed) {
+        announceSent();
+        pushNotification({
+          message: error instanceof Error ? error.message : "Kitchen print failed.",
+          variant: "error", playSound: false,
+        });
+        if (sameContext()) onClose();
+      }
+      return committed;
     } finally {
       actionLockRef.current = false;
       setIsSending(false);
@@ -1552,7 +1592,7 @@ export function NewOrderModal({
     }
     if (mode === "close") {
       if (cart.length > 0 || pendingKitchenMessage) {
-        await handleSend();
+        if (!await handleSend()) return;
       }
       handleClose();
     }
@@ -1564,7 +1604,7 @@ export function NewOrderModal({
       if (!saved) return false;
     }
     if (cart.length > 0 || pendingKitchenMessage) {
-      await handleSend();
+      return handleSend();
     }
     return true;
   }, [
@@ -2007,7 +2047,16 @@ export function NewOrderModal({
           ) : null}
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="col-span-2">
+            <SlideToSendOrder
+              key={orderingTableId ?? "no-table"}
+              contextId={orderingTableId ?? ""}
+              disabled={!open || !hasPendingSend || isBusy || !orderingTableId}
+              onSend={handleSend}
+              errorMessage={submittedLineError}
+            />
+          </div>
           <button
             type="button"
             disabled={!canSaveNoPrint}
@@ -2015,14 +2064,6 @@ export function NewOrderModal({
             className="min-h-[52px] rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm font-semibold text-gray-800 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
           >
             {isBusy ? "…" : translate("saveNoPrint")}
-          </button>
-          <button
-            type="button"
-            disabled={!hasPendingSend || isBusy}
-            onClick={() => void handleSend()}
-            className="min-h-[52px] rounded-lg bg-blue-600 px-2 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {isBusy ? "…" : translate("sendToKitchen")}
           </button>
           {onCheckout ? (
             <button

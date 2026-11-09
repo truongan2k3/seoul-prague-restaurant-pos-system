@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, Gift, X } from "lucide-react";
+import { Camera, Gift, ScanLine, X } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { useApp } from "@/contexts/app-context";
 import { formatVoucherAmount, type VoucherCode } from "@/lib/voucher";
@@ -18,9 +18,9 @@ export interface VoucherScanFabProps {
     tableLabel?: string,
   ) => Promise<{ error: string | null; code?: VoucherCode }>;
   /**
-   * `inline` only — never a floating corner FAB (that covered Pay / the Windows taskbar).
+   * Both variants stay in the action row; toolbar matches the compact ordering controls.
    */
-  variant?: "inline";
+  variant?: "inline" | "toolbar";
   className?: string;
 }
 
@@ -31,7 +31,7 @@ export function VoucherScanFab({
   onApplied,
   onOpenVouchersTab,
   applyVoucherCode,
-  variant: _variant = "inline",
+  variant = "inline",
   className = "",
 }: VoucherScanFabProps) {
   const { translate } = useApp();
@@ -159,10 +159,13 @@ export function VoucherScanFab({
       onClick={() => setOpen(true)}
       title={translate("voucherScanFab")}
       aria-label={translate("voucherScanFab")}
-      className={`inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-700/90 px-2 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-600 sm:min-h-[44px] sm:gap-2 sm:text-sm ${className}`}
+      className={`${variant === "toolbar"
+        ? "flex min-h-[52px] min-w-0 w-full flex-col items-center justify-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50/80 px-1.5 py-2 text-[11px] font-semibold leading-tight text-emerald-800 transition-colors hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200 dark:hover:bg-emerald-900/50"
+        : "inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-700/90 px-2 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-600 sm:min-h-[44px] sm:gap-2 sm:text-sm"} ${className}`}
     >
-      <Gift className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
-      <span className="truncate">{translate("voucherScanFab")}</span>
+      {variant === "toolbar" ? <ScanLine className="h-4 w-4 shrink-0" aria-hidden />
+        : <Gift className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" aria-hidden />}
+      <span className={variant === "toolbar" ? "text-center" : "truncate"}>{translate("voucherScanFab")}</span>
     </button>
   );
 

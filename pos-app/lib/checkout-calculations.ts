@@ -13,6 +13,7 @@ export interface CheckoutLine extends OrderItem {
 }
 
 export interface CheckoutPaymentRecord {
+  eetIntent?: import("@/src/lib/eet/types").EetPaymentIntent;
   referral?: import("@/lib/referrals").ReferralPayment;
   referralEqualScope?: EqualAdjustScope;
   paymentMethod: "cash" | "card";

@@ -9,6 +9,8 @@ import type { CheckoutLine } from "@/lib/checkout-calculations";
 import { computeCustomizedPrice } from "@/lib/menu-customization";
 import type { OrderLineModifiers, SelectedAddon } from "@/lib/types";
 import { inferServiceChannel } from "@/lib/tax-summary";
+import { commitValidatedEetSale, verifyEetReferralAuthorization } from "@/src/lib/eet/payment-service";
+import type { EetPaymentIntent } from "@/src/lib/eet/types";
 
 function adminClient() {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("Referral setup requires SUPABASE_SERVICE_ROLE_KEY in server environment settings.");
@@ -199,8 +201,9 @@ export async function removeCheckoutReferralAction(input: { tableId: string; res
   } catch (error) { return { error: message(error) }; }
 }
 
-export async function commitReferralSaleAction(sale:Record<string,unknown>,referral:ReferralPayment|undefined) {
+export async function commitReferralSaleAction(sale:Record<string,unknown>,referral:ReferralPayment|undefined,eetIntent?:EetPaymentIntent,eetProof?:string) {
   try{
+    if (process.env.EET_CHECKOUT_ENABLED === "true") verifyEetReferralAuthorization(sale, eetIntent, eetProof);
     const context=await actor();
     const {db,businessId,staff}=context;
     if (referral?.paymentKey) {
@@ -298,6 +301,10 @@ export async function commitReferralSaleAction(sale:Record<string,unknown>,refer
     delete payload.referral_equal_scope;
     payload.staff_id=staff.id;payload.staff_name=staff.name;
     payload.referral_code_version=quote.version;payload.referral_actor_id=staff.id;payload.referral_actor_name=staff.name;
+    if (eetIntent && process.env.EET_CHECKOUT_ENABLED === "true") {
+      const saved = await commitValidatedEetSale(context, payload, eetIntent);
+      return { id: saved.id, error: null, skipSettlement: saved.skipSettlement };
+    }
     const {data,error}=await db.from("sales").insert(payload).select("id").single();
     if(error){
       const {data:existing}=await db.from("sales").select("id").eq("referral_payment_key",referral.paymentKey).eq("referral_snapshot->>business_id",businessId).maybeSingle();

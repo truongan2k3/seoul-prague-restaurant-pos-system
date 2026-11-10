@@ -11,10 +11,14 @@ function secret(name: string) {
 }
 export async function loadCredentials(environment: EetEnvironment, eic: string, options?: { verification?: boolean }) {
   assertProductionAllowed(environment);
-  if (process.env.EET_PROTOCOL_REVIEWED !== "true" && !(environment === "playground" && options?.verification)) throw new Error("Review and pin the official WSDL/XSD before submission.");
+  // Official v4 interface §2.2.1 Table 1 and §3.5: verification returns an unsigned
+  // Chyba kod="0", never a sale acknowledgment. Only this Playground check can
+  // run without response signing pins; all operational submissions still require them.
+  const playgroundVerification = environment === "playground" && options?.verification === true;
+  if (process.env.EET_PROTOCOL_REVIEWED !== "true" && !playgroundVerification) throw new Error("Review and pin the official WSDL/XSD before submission.");
   const prefix = `EET_${environment.toUpperCase()}`;
   const [protocolRecord, signerRecord, responseRecord] = await Promise.all([
-    getStoredMaterial("shared", "protocol"), getStoredMaterial(environment, "signer"), getStoredMaterial(environment, "response"),
+    getStoredMaterial("shared", "protocol"), getStoredMaterial(environment, "signer"), playgroundVerification ? null : getStoredMaterial(environment, "response"),
   ]);
   const signer = signerRecord ? decryptStoredMaterial<SignerMaterial>(signerRecord) : null;
   const protocol = protocolRecord ? decryptStoredMaterial<ProtocolMaterial>(protocolRecord) : null;
@@ -22,8 +26,8 @@ export async function loadCredentials(environment: EetEnvironment, eic: string, 
   const certificate = signer ? signer.certificate : secret(`${prefix}_CERT_PEM_BASE64`);
   assertCertificate(certificate, eic);
   const privateKey = signer ? signer.privateKey : secret(`${prefix}_KEY_PEM_BASE64`);
-  const trustedCertificates = response ? response.certificates : secret(`${prefix}_RESPONSE_CERTS_PEM_BASE64`).match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g) ?? [];
-  if (!trustedCertificates.length) throw new Error("Install trusted tax-authority response signing certificates.");
+  const trustedCertificates = playgroundVerification ? [] : response ? response.certificates : secret(`${prefix}_RESPONSE_CERTS_PEM_BASE64`).match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g) ?? [];
+  if (!playgroundVerification && !trustedCertificates.length) throw new Error("Install trusted tax-authority response signing certificates.");
   for (const pem of trustedCertificates) assertCertificate(pem);
   const wsdl = protocol ? protocol.wsdl : secret("EET_OFFICIAL_WSDL_BASE64");
   const xsd = protocol ? protocol.xsd : secret("EET_OFFICIAL_XSD_BASE64");

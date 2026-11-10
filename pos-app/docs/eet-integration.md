@@ -19,6 +19,17 @@ response signing leaf certificates. It also displays copyable read-only prefligh
 business/admin-ID queries and Vercel bootstrap instructions even before EET setup is ready.
 This does not execute SQL or edit Vercel settings automatically.
 
+Playground connection verification requires only the official WSDL/XSD, a valid matching
+Playground register certificate/private key, and saved unit/register IDs. Keep reporting
+Disabled and submissions Paused, then use **Test Playground connection**. The action sends
+a signed zero-value request with `overeni="true"` and uses the imported test certificate's
+EIČ. Official interface v1.2 §2.2.1 Table 1 and §3.5 specify an unsigned `Chyba kod="0"`
+response for a successful verification, so this Playground-only credential path does not
+load or require acknowledgment signing pins. HTTPS certificate validation remains enabled.
+Operational acknowledgments still require separately trusted signing certificates, and
+Production approval gates remain unchanged. This check neither queues nor reports payments
+and does not establish operational or Production acceptance.
+
 For first-time encryption setup, use **Generate key on this device** in the setup guide.
 No Node.js installation is needed: Web Crypto generates 32 random bytes in the browser,
 encoded as base64. Copy the value into Vercel's `EET_SETTINGS_ENCRYPTION_KEY`, back it up

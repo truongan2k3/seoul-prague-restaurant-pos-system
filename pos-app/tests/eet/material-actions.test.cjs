@@ -6,13 +6,25 @@ const { execFileSync } = require("node:child_process");
 const { randomBytes } = require("node:crypto");
 const Module = require("node:module"), ts = require("typescript");
 const root = path.resolve(__dirname, "../.."), resolve = Module._resolveFilename, load = Module._load;
-const names = ["EET_SETTINGS_ENCRYPTION_KEY", "EET_PROTOCOL_REVIEWED", "EET_PRODUCTION_APPROVED", "EET_COMPLIANCE_REVIEW_APPROVED"];
+const names = ["EET_SETTINGS_ENCRYPTION_KEY", "EET_PROTOCOL_REVIEWED", "EET_PRODUCTION_APPROVED", "EET_COMPLIANCE_REVIEW_APPROVED", "EET_PLAYGROUND_RESPONSE_CERTS_PEM_BASE64", "EET_PRODUCTION_RESPONSE_CERTS_PEM_BASE64"];
 const previousEnv = Object.fromEntries(names.map(name => [name, process.env[name]]));
 const businessId = "10000000-0000-4000-a000-000000000001";
 let state, dir, certificate, privateKey, bundle, responseCertificate;
 Module._resolveFilename = function (request, ...args) { return resolve.call(this, request.startsWith("@/") ? path.join(root, request.slice(2)) : request, ...args); };
 Module._load = function (request, parent, isMain) {
   if (request === "server-only") return {};
+  if (request === "./db" && parent.filename.endsWith("eet/worker.ts")) return {
+    eetDb: () => { throw new Error("Connection verification must not access the payment queue."); },
+    requireEetBusinessId: () => businessId,
+  };
+  if (request === "./transport" && parent.filename.endsWith("eet/worker.ts")) return { postEet: async (environment, xml, action) => {
+    assert.equal(environment, "playground"); assert.equal(action, "fixture-only");
+    assert.match(xml, /overeni="true"/); assert.match(xml, /celk_trzba="0.00"/);
+    assert.match(xml, /eic_popl="CZ00000019"/);
+    state.requests++;
+    const id = xml.match(/uuid_zpravy="([^"]+)"/)[1];
+    return { xml: `<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" xmlns:e="${EET_NAMESPACE}"><s:Body><e:Odpoved><e:Hlavicka uuid_zpravy="${id}"/><e:Chyba kod="0" test="true">Fixture verification success</e:Chyba></e:Odpoved></s:Body></s:Envelope>`, httpStatus: 200, trace: "fixture-trace" };
+  } };
   if (request === "./auth" && parent.filename.endsWith("eet/material-actions.ts")) return { eetActor: async admin => {
     if (!state.authorized || !admin) throw new Error("EET administrator permission required.");
     return { businessId, staff: { id: "admin-id" }, db: {
@@ -36,6 +48,7 @@ const crypto = require("../../src/lib/eet/material-crypto.ts");
 const actions = require("../../src/lib/eet/material-actions.ts");
 const { loadCredentials, certificateStatus } = require("../../src/lib/eet/credentials.ts");
 const { EET_NAMESPACE } = require("../../src/lib/eet/policy.ts");
+const { testEetConnection } = require("../../src/lib/eet/worker.ts");
 const wsdl = `<definitions xmlns="http://schemas.xmlsoap.org/wsdl/" xmlns:s="http://schemas.xmlsoap.org/wsdl/soap/" targetNamespace="${EET_NAMESPACE}"><binding><operation><s:operation soapAction="fixture-only"/></operation></binding></definitions>`;
 const xsd = `<x:schema xmlns:x="http://www.w3.org/2001/XMLSchema" targetNamespace="${EET_NAMESPACE}"/>`;
 function form(values) { const data = new FormData(); for (const [name, value] of Object.entries(values)) data.set(name, value); return data; }
@@ -50,9 +63,10 @@ before(() => {
   responseCertificate = fs.readFileSync(path.join(dir, "response.crt"), "utf8"); bundle = fs.readFileSync(path.join(dir, "register.p12"));
 });
 beforeEach(() => {
-  state = { authorized: true, writes: 0, saved: {}, stale: false, settings: { mode: "disabled", capture_environment: null, eic: "" } };
+  state = { authorized: true, writes: 0, requests: 0, saved: {}, stale: false, settings: { mode: "disabled", capture_environment: null, eic: "" } };
   process.env.EET_SETTINGS_ENCRYPTION_KEY = randomBytes(32).toString("base64"); process.env.EET_PROTOCOL_REVIEWED = "true";
   process.env.EET_PRODUCTION_APPROVED = "false"; process.env.EET_COMPLIANCE_REVIEW_APPROVED = "false";
+  delete process.env.EET_PLAYGROUND_RESPONSE_CERTS_PEM_BASE64; delete process.env.EET_PRODUCTION_RESPONSE_CERTS_PEM_BASE64;
 });
 after(() => {
   fs.rmSync(dir, { recursive: true, force: true }); Module._resolveFilename = resolve; Module._load = load;
@@ -109,6 +123,31 @@ test("Production material can be prepared without activating live reporting; loa
   await actions.importEetSignerAction(signer("production"));
   assert.equal(state.settings.mode, "disabled"); assert.ok(state.saved["production:signer"]); assert.equal(state.saved["playground:signer"], undefined);
   await assert.rejects(() => loadCredentials("production", "CZ00000019"), /Production is locked/);
+});
+test("Playground verification succeeds without step 3, never queues a payment, and leaves operational reporting locked", async () => {
+  await actions.importEetProtocolAction(form({ wsdl, xsd, sourceReviewed: "on", version: "0" }));
+  await actions.importEetSignerAction(signer());
+  const writes = state.writes;
+  process.env.EET_PROTOCOL_REVIEWED = "false";
+  const credentials = await loadCredentials("playground", "CZ00000019", { verification: true });
+  assert.deepEqual(credentials.trustedCertificates, []);
+  const result = await testEetConnection({ mode: "playground", eic: "CZ00000019", unit_id: "24", register_id: "SEOUL-TEST-01" });
+  assert.equal(result.ok, true); assert.equal(result.result.kind, "verified");
+  assert.equal(state.requests, 1); assert.equal(state.writes, writes);
+  assert.equal(result.result.acknowledgment, undefined);
+  await assert.rejects(() => loadCredentials("playground", "CZ00000019"), /Review and pin/);
+  process.env.EET_PROTOCOL_REVIEWED = "true";
+  await assert.rejects(() => loadCredentials("playground", "CZ00000019"), /RESPONSE_CERTS/);
+  await assert.rejects(() => loadCredentials("production", "CZ00000019", { verification: true }), /Production is locked/);
+  await actions.importEetSignerAction(signer("production"));
+  process.env.EET_PRODUCTION_APPROVED = "true"; process.env.EET_COMPLIANCE_REVIEW_APPROVED = "true";
+  await assert.rejects(() => loadCredentials("production", "CZ00000019", { verification: true }), /EET_PRODUCTION_RESPONSE_CERTS/);
+  assert.equal(state.settings.mode, "disabled");
+});
+test("verification still requires the matching register certificate and official protocol artifacts", async () => {
+  await actions.importEetSignerAction(signer());
+  await assert.rejects(() => loadCredentials("playground", "CZ99999999", { verification: true }), /does not match/);
+  await assert.rejects(() => loadCredentials("playground", "CZ00000019", { verification: true }), /WSDL/);
 });
 test("missing encryption key and stale versions do not overwrite saved material", async () => {
   delete process.env.EET_SETTINGS_ENCRYPTION_KEY;

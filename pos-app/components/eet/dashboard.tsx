@@ -16,6 +16,30 @@ type Detail = Awaited<ReturnType<typeof getEetDetailsAction>>;
 function Badge({ row }: { row: EetTransaction }) {
   return <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${row.status === "accepted" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : ["blocked", "failed", "uncertain"].includes(row.status) ? "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200"}`}>{row.status}</span>;
 }
+
+function FiscalDataDetails({ transaction }: { transaction: EetTransaction }) {
+  const { data, acknowledgment } = transaction;
+  const accepted = transaction.status === "accepted" && Boolean(acknowledgment);
+  const fields: [string, string | undefined][] = [
+    ["Taxpayer EIČ · eic_popl", data.eic_popl],
+    ["Unit ID · id_jednotky", data.id_jednotky],
+    ["POS/register · id_pokl", data.id_pokl],
+    ["Transaction number · porad_cis", data.porad_cis],
+    ["Sale time · dat_trzby", data.dat_trzby],
+    ["Reported total · celk_trzba", money(data.celk_trzba)],
+    ["Designated for later use · urceno_cerp_zuct", data.urceno_cerp_zuct === undefined ? undefined : money(data.urceno_cerp_zuct)],
+    ["Amount drawn · cerp_zuct", data.cerp_zuct === undefined ? undefined : money(data.cerp_zuct)],
+  ];
+  return <div className="mt-4 space-y-4">
+    <div className="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+      <h3 className="text-sm font-semibold">Fiscal data used for reporting · {transaction.environment}</h3>
+      <p className={`mt-2 text-sm ${accepted ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-300"}`}>{accepted ? "Tax authority acceptance verified." : "No verified acceptance recorded. A queued record or submission attempt does not prove receipt by the tax authority."}</p>
+      <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{fields.filter(([, value]) => value !== undefined).map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-xs text-gray-500">{label}</dt><dd className="mt-1 break-words text-sm font-semibold">{value}</dd></div>)}</dl>
+      <p className="mt-4 text-xs leading-relaxed text-gray-500">These are the saved fiscal Data fields used for the request. Each submission also includes a message UUID, sending time, first/repeat flag and public signing certificate. Customer names, phone numbers and itemized dishes are not fields of this EET payload.</p>
+    </div>
+    {acknowledgment && <div className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"><h3 className="text-sm font-semibold">Verified acknowledgment</h3><dl className="mt-3 grid gap-3 sm:grid-cols-2"><div className="min-w-0"><dt className="text-xs text-gray-500">POK</dt><dd className="mt-1 break-all font-mono text-xs">{acknowledgment.pok}</dd></div><div><dt className="text-xs text-gray-500">Received by tax authority</dt><dd className="mt-1 text-sm">{acknowledgment.receivedAt}</dd></div><div className="min-w-0"><dt className="text-xs text-gray-500">Message UUID</dt><dd className="mt-1 break-all font-mono text-xs">{acknowledgment.messageId}</dd></div><div><dt className="text-xs text-gray-500">Environment</dt><dd className="mt-1 text-sm">{acknowledgment.test ? "Playground test" : "Production"}</dd></div></dl></div>}
+  </div>;
+}
 export function EetDashboard({ initial, initialSettings, initialFilters, onShowSettings }: { initial: Data; initialSettings: Settings; initialFilters: EetFilters; onShowSettings?: () => void }) {
   const [data, setData] = useState(initial);
   const [settings, setSettings] = useState(initialSettings);
@@ -78,7 +102,8 @@ export function EetDashboard({ initial, initialSettings, initialFilters, onShowS
       <div className="mt-4 flex items-center justify-between text-sm"><span>{data.count} records · Page {data.page + 1}</span><div className="flex gap-2"><button disabled={data.page === 0} className={input} onClick={() => setFilters(f => ({ ...f, page: data.page - 1 }))}>Previous</button><button disabled={(data.page + 1) * 50 >= data.count} className={input} onClick={() => setFilters(f => ({ ...f, page: data.page + 1 }))}>Next</button></div></div>
     </section>
     {detail && <section className={card} aria-label="Transaction details"><div className="flex justify-between gap-3"><h2 className="font-semibold">{detail.transaction.data.porad_cis} · Transaction details</h2><button onClick={() => setDetail(null)} className="text-sm underline">Close</button></div><p className="mt-2 break-all text-xs text-gray-500">Payment {detail.transaction.sale_id} · Parent correction link: {detail.transaction.parent_id ?? "—"}</p><p className="mt-3 text-sm text-amber-700 dark:text-amber-300">{detail.transaction.last_error ?? detail.transaction.block_reason}</p>
-      <pre className="mt-3 max-h-72 overflow-auto rounded-xl bg-gray-50 p-3 text-xs dark:bg-gray-950">{JSON.stringify({ fiscalData: detail.transaction.data, acknowledgment: detail.transaction.acknowledgment, attempts: detail.attempts, audit: detail.audit }, null, 2)}</pre>
+      <FiscalDataDetails transaction={detail.transaction}/>
+      <details className="mt-4 rounded-xl border border-gray-200 p-4 dark:border-gray-800"><summary className="cursor-pointer text-sm font-semibold">Fiscal data, submission attempts and audit · JSON</summary><p className="mt-2 text-xs text-gray-500">Saved fiscal data and metadata, not a copy of the complete signed SOAP envelope. Request/response hashes and attempt UUIDs are available below for comparison.</p><pre className="mt-3 max-h-72 overflow-auto rounded-xl bg-gray-50 p-3 text-xs dark:bg-gray-950">{JSON.stringify({ fiscalData: detail.transaction.data, acknowledgment: detail.transaction.acknowledgment, attempts: detail.attempts, audit: detail.audit }, null, 2)}</pre></details>
       {detail.transaction.status !== "accepted" && <div className="mt-4 flex flex-wrap gap-2"><input aria-label="Reconciliation audit reason" placeholder="Audit reason for retry / reconciliation" maxLength={500} value={reason} onChange={e => setReason(e.target.value)} className={`${input} min-w-52 flex-1`}/><button disabled={busy || reason.trim().length < 5} className={input} onClick={() => void action(async () => { await retryEetTransactionAction(detail.transaction.id, reason); setDetail(await getEetDetailsAction(detail.transaction.id)); setMessage("Retry queued. Fiscal Data is unchanged; the next attempt gets a new message UUID."); })}>Queue retry / reconcile</button></div>}
     </section>}
   </div>;

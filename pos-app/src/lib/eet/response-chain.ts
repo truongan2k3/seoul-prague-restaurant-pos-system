@@ -26,6 +26,12 @@ export function verifyResponseCertificateChain(leafPem: string, rootPem: string,
   return leaf;
 }
 
+export function approvedIcaCrlUrl(value: string, base?: string) {
+  const url = new URL(value, base);
+  if (!["http:", "https:"].includes(url.protocol) || !url.hostname.endsWith(".ica.cz") || url.username || url.password || url.port || url.search || url.hash || !url.pathname.endsWith(".crl")) throw new Error("Unapproved I.CA revocation URL.");
+  return url.href;
+}
+
 export function certificateCrlUrls(certificate: X509Certificate) {
   const parsed = forge.pki.certificateFromPem(certificate.toString());
   const extension = parsed.getExtension("cRLDistributionPoints") as { value?: string } | null;
@@ -33,9 +39,7 @@ export function certificateCrlUrls(certificate: X509Certificate) {
   const urls: string[] = [];
   const visit = (node: forge.asn1.Asn1) => {
     if (node.tagClass === forge.asn1.Class.CONTEXT_SPECIFIC && node.type === 6 && typeof node.value === "string") {
-      const url = new URL(node.value);
-      if (!["http:", "https:"].includes(url.protocol) || !url.hostname.endsWith(".ica.cz") || url.username || url.password || url.port || url.search || url.hash || !url.pathname.endsWith(".crl")) throw new Error("Unapproved I.CA revocation URL.");
-      urls.push(url.href);
+      urls.push(approvedIcaCrlUrl(node.value));
     }
     if (Array.isArray(node.value)) node.value.forEach(visit);
   };

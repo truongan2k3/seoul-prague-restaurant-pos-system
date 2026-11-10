@@ -2,7 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { eetDb, requireEetBusinessId } from "./db";
 import { loadCredentials } from "./credentials";
-import { retryDelayMs } from "./policy";
+import { retryDelayMs, PLAYGROUND_EICS } from "./policy";
 import { parseEetResponse, sha256, signSaleXml } from "./xml";
 import { postEet, type TransportResponse } from "./transport";
 import type { EetTransaction, EetResult, EetSettings } from "./types";
@@ -70,4 +70,19 @@ export async function testEetConnection(settings: EetSettings) {
   const trusted = await responseVerificationCertificates(response.xml, credentials.trustedCertificates);
   const result = parseEetResponse(response.xml, messageId, settings.mode, trusted, true);
   return { ok: result.kind === "verified", result, trace: response.trace };
+}
+
+/** Explicit operator probe: fixed Playground endpoint, reserved test identity and
+ * zero amount. No database/payment/queue access and no Production activation. */
+export async function testSignedPlaygroundResponse(settings: EetSettings) {
+  if (!PLAYGROUND_EICS.some(eic => eic === settings.eic)) throw new Error("Use an official reserved Playground certificate for the signed response test.");
+  const credentials = await loadCredentials("playground", settings.eic, { playgroundAcceptance: true });
+  const messageId = randomUUID(), sentAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+  const xml = signSaleXml({ data: { eic_popl: settings.eic, id_jednotky: settings.unit_id, id_pokl: settings.register_id,
+    porad_cis: `PG-${randomUUID().replaceAll("-", "").slice(0, 20)}`, dat_trzby: sentAt, celk_trzba: "0.00" },
+    messageId, sentAt, first: true, ...credentials });
+  const response = await postEet("playground", xml, credentials.soapAction);
+  const trusted = await responseVerificationCertificates(response.xml, credentials.trustedCertificates);
+  const result = parseEetResponse(response.xml, messageId, "playground", trusted);
+  return { ok: result.kind === "accepted", result, trace: response.trace };
 }

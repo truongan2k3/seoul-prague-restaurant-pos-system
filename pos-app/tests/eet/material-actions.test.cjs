@@ -3,13 +3,14 @@ const assert = require("node:assert/strict");
 const { before, beforeEach, after, test } = require("node:test");
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os");
 const { execFileSync } = require("node:child_process");
-const { randomBytes } = require("node:crypto");
+const { randomBytes, randomUUID } = require("node:crypto");
+const { SignedXml } = require("xml-crypto");
 const Module = require("node:module"), ts = require("typescript");
 const root = path.resolve(__dirname, "../.."), resolve = Module._resolveFilename, load = Module._load;
 const names = ["EET_SETTINGS_ENCRYPTION_KEY", "EET_PROTOCOL_REVIEWED", "EET_PRODUCTION_APPROVED", "EET_COMPLIANCE_REVIEW_APPROVED", "EET_PLAYGROUND_RESPONSE_CERTS_PEM_BASE64", "EET_PRODUCTION_RESPONSE_CERTS_PEM_BASE64"];
 const previousEnv = Object.fromEntries(names.map(name => [name, process.env[name]]));
 const businessId = "10000000-0000-4000-a000-000000000001";
-let state, dir, certificate, privateKey, bundle, responseCertificate;
+let state, dir, certificate, privateKey, bundle, responseCertificate, responsePrivateKey;
 Module._resolveFilename = function (request, ...args) { return resolve.call(this, request.startsWith("@/") ? path.join(root, request.slice(2)) : request, ...args); };
 Module._load = function (request, parent, isMain) {
   if (request === "server-only") return {};
@@ -19,10 +20,19 @@ Module._load = function (request, parent, isMain) {
   };
   if (request === "./transport" && parent.filename.endsWith("eet/worker.ts")) return { postEet: async (environment, xml, action) => {
     assert.equal(environment, "playground"); assert.equal(action, "fixture-only");
-    assert.match(xml, /overeni="true"/); assert.match(xml, /celk_trzba="0.00"/);
+    if (state.signedProbe) assert.doesNotMatch(xml, /overeni="true"/); else assert.match(xml, /overeni="true"/);
+    assert.match(xml, /celk_trzba="0.00"/);
     assert.match(xml, /eic_popl="CZ00000019"/);
     state.requests++;
     const id = xml.match(/uuid_zpravy="([^"]+)"/)[1];
+    if (state.signedProbe) {
+      const soap = "http://schemas.xmlsoap.org/soap/envelope/", wsse = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd", wsu = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd";
+      const response = `<s:Envelope xmlns:s="${soap}" xmlns:e="${EET_NAMESPACE}" xmlns:wsse="${wsse}" xmlns:wsu="${wsu}"><s:Header><wsse:Security/></s:Header><s:Body wsu:Id="response"><e:Odpoved><e:Hlavicka uuid_zpravy="${id}" dat_prij="${new Date().toISOString()}"/><e:Potvrzeni pok="${randomUUID()}-ff" test="true"/></e:Odpoved></s:Body></s:Envelope>`;
+      const signature = new SignedXml({ idMode: "wssecurity", privateKey: responsePrivateKey, publicCert: responseCertificate, signatureAlgorithm: "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256", canonicalizationAlgorithm: "http://www.w3.org/2001/10/xml-exc-c14n#" });
+      signature.addReference({ xpath: `//*[local-name()='Body' and namespace-uri()='${soap}']`, transforms: ["http://www.w3.org/2001/10/xml-exc-c14n#"], digestAlgorithm: "http://www.w3.org/2001/04/xmlenc#sha256" });
+      signature.computeSignature(response, { prefix: "ds", location: { reference: "//*[local-name()='Security']", action: "append" } });
+      return { xml: signature.getSignedXml(), httpStatus: 200, trace: "signed-fixture-trace" };
+    }
     return { xml: `<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" xmlns:e="${EET_NAMESPACE}"><s:Body><e:Odpoved><e:Hlavicka uuid_zpravy="${id}"/><e:Chyba kod="0" test="true">Fixture verification success</e:Chyba></e:Odpoved></s:Body></s:Envelope>`, httpStatus: 200, trace: "fixture-trace" };
   } };
   if (request === "./auth" && parent.filename.endsWith("eet/material-actions.ts")) return { eetActor: async admin => {
@@ -48,7 +58,7 @@ const crypto = require("../../src/lib/eet/material-crypto.ts");
 const actions = require("../../src/lib/eet/material-actions.ts");
 const { loadCredentials, certificateStatus } = require("../../src/lib/eet/credentials.ts");
 const { EET_NAMESPACE } = require("../../src/lib/eet/policy.ts");
-const { testEetConnection } = require("../../src/lib/eet/worker.ts");
+const { testEetConnection, testSignedPlaygroundResponse } = require("../../src/lib/eet/worker.ts");
 const wsdl = `<definitions xmlns="http://schemas.xmlsoap.org/wsdl/" xmlns:s="http://schemas.xmlsoap.org/wsdl/soap/" targetNamespace="${EET_NAMESPACE}"><binding><operation><s:operation soapAction="fixture-only"/></operation></binding></definitions>`;
 const xsd = `<x:schema xmlns:x="http://www.w3.org/2001/XMLSchema" targetNamespace="${EET_NAMESPACE}"/>`;
 function form(values) { const data = new FormData(); for (const [name, value] of Object.entries(values)) data.set(name, value); return data; }
@@ -61,6 +71,7 @@ before(() => {
   execFileSync("openssl", ["pkcs12", "-export", "-inkey", path.join(dir, "register.key"), "-in", path.join(dir, "register.crt"), "-out", path.join(dir, "register.p12"), "-passout", "pass:fixture-password"], { stdio: "ignore" });
   certificate = fs.readFileSync(path.join(dir, "register.crt"), "utf8"); privateKey = fs.readFileSync(path.join(dir, "register.key"), "utf8");
   responseCertificate = fs.readFileSync(path.join(dir, "response.crt"), "utf8"); bundle = fs.readFileSync(path.join(dir, "register.p12"));
+  responsePrivateKey = fs.readFileSync(path.join(dir, "response.key"), "utf8");
 });
 beforeEach(() => {
   state = { authorized: true, writes: 0, requests: 0, saved: {}, stale: false, settings: { mode: "disabled", capture_environment: null, eic: "" } };
@@ -148,6 +159,23 @@ test("verification still requires the matching register certificate and official
   await actions.importEetSignerAction(signer());
   await assert.rejects(() => loadCredentials("playground", "CZ99999999", { verification: true }), /does not match/);
   await assert.rejects(() => loadCredentials("playground", "CZ00000019", { verification: true }), /WSDL/);
+});
+test("explicit signed Playground probe requires response trust, verifies its test POK, and never captures a payment or unlocks reporting", async () => {
+  await actions.importEetProtocolAction(form({ wsdl, xsd, sourceReviewed: "on", version: "0" }));
+  await actions.importEetSignerAction(signer());
+  process.env.EET_PROTOCOL_REVIEWED = "false";
+  state.signedProbe = true;
+  const settings = { mode: "disabled", eic: "CZ00000019", unit_id: "24", register_id: "SEOUL-TEST-01" };
+  await assert.rejects(() => testSignedPlaygroundResponse(settings), /RESPONSE_CERTS/); assert.equal(state.requests, 0);
+  await actions.importEetResponseCertificatesAction(form({ environment: "playground", version: "0", responseCertificates: responseCertificate, trustReviewed: "on" }));
+  const writes = state.writes;
+  const result = await testSignedPlaygroundResponse(settings);
+  assert.equal(result.ok, true); assert.equal(result.result.kind, "accepted");
+  assert.equal(result.result.acknowledgment.test, true); assert.match(result.result.acknowledgment.pok, /-ff$/);
+  assert.equal(state.requests, 1); assert.equal(state.writes, writes); assert.equal(state.settings.mode, "disabled");
+  assert.equal(state.settings.capture_environment, null); assert.equal(process.env.EET_PROTOCOL_REVIEWED, "false");
+  assert.equal(process.env.EET_PRODUCTION_APPROVED, "false");
+  await assert.rejects(() => testSignedPlaygroundResponse({ ...settings, eic: "CZ12345678" }), /reserved Playground certificate/);
 });
 test("missing encryption key and stale versions do not overwrite saved material", async () => {
   delete process.env.EET_SETTINGS_ENCRYPTION_KEY;

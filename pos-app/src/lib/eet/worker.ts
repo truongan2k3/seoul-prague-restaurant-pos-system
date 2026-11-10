@@ -6,8 +6,9 @@ import { retryDelayMs } from "./policy";
 import { parseEetResponse, sha256, signSaleXml } from "./xml";
 import { postEet, type TransportResponse } from "./transport";
 import type { EetTransaction, EetResult, EetSettings } from "./types";
+import { responseVerificationCertificates } from "./response-trust";
 
-/** An invocation processes one job (<=4s network + DB). A durable scheduler invokes again.
+/** An invocation processes one job (bounded SOAP/CRL network calls + DB). A durable scheduler invokes again.
  * No detached promises, in-memory queues, or work continuing beyond Vercel's lifetime. */
 export async function runEetWorker() {
   if (process.env.EET_WORKER_ENABLED !== "true") return { processed: 0, state: "disabled" };
@@ -35,7 +36,8 @@ export async function runEetWorker() {
     if (hashError) throw new Error("Attempt persistence failed before sending.");
     stage = "sending";
     response = await postEet(job.environment, xml, credentials.soapAction);
-    result = parseEetResponse(response.xml, attempt.message_id, job.environment, credentials.trustedCertificates);
+    const trusted = await responseVerificationCertificates(response.xml, credentials.trustedCertificates);
+    result = parseEetResponse(response.xml, attempt.message_id, job.environment, trusted);
     if (result.kind === "accepted") status = "accepted";
     else if (result.kind === "rejected") { status = result.retryable ? "retrying" : "failed"; safeError = `EET ${result.code}: ${result.message}`; }
     else throw new Error("Operational payment was not acknowledged.");
@@ -65,6 +67,7 @@ export async function testEetConnection(settings: EetSettings) {
     porad_cis: `TEST-${Date.now()}`, dat_trzby: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), celk_trzba: "0.00" },
     messageId, sentAt: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), first: true, verification: true, ...credentials });
   const response = await postEet(settings.mode, xml, credentials.soapAction);
-  const result = parseEetResponse(response.xml, messageId, settings.mode, credentials.trustedCertificates, true);
+  const trusted = await responseVerificationCertificates(response.xml, credentials.trustedCertificates);
+  const result = parseEetResponse(response.xml, messageId, settings.mode, trusted, true);
   return { ok: result.kind === "verified", result, trace: response.trace };
 }

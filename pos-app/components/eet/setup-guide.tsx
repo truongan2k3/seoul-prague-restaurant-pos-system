@@ -25,7 +25,7 @@ EET_PRODUCTION_APPROVED=false
 const idsSql = `-- IDs only; no passwords or customer/payment data.
 SELECT b.id AS business_id, s.id AS admin_staff_id, b.name AS business_name
 FROM public.businesses b JOIN public.staff s ON s.business_id=b.id
-WHERE s.active=true AND s.role IN ('admin','cashier')
+WHERE s.active=true AND s.role IN ('admin','cashier','manager')
 ORDER BY b.id,s.id;`;
 
 function CopyBlock({ title, text }: { title: string; text: string }) {

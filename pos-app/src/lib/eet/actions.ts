@@ -2,7 +2,7 @@
 
 import { eetActor } from "./auth";
 import { certificateStatus, loadCredentials } from "./credentials";
-import { assertProductionAllowed, csvCell, validateData } from "./policy";
+import { assertProductionAllowed, assertProductionIdentity, csvCell, validateData } from "./policy";
 import { runEetWorker, testEetConnection } from "./worker";
 import type { EetSettings, EetStatus, EetTransaction } from "./types";
 import { getMaterialOverview } from "./material-store";
@@ -34,7 +34,7 @@ export async function getEetSettingsAction() {
   const [{ data: queue, error: queueError }, audit] = await Promise.all([
     db.rpc("eet_queue_health", { p_business: businessId }),
     db.from("eet_audit_logs").select("id,actor_id,action,details,created_at").eq("business_id", businessId)
-      .in("action", ["settings_changed", "connection_test", "material_imported"]).order("created_at", { ascending: false }).limit(20),
+      .in("action", ["settings_changed", "connection_test", "material_imported", "manager_unlocked", "manager_unlock_attempt"]).order("created_at", { ascending: false }).limit(20),
   ]);
   if (queueError) throw new Error("EET queue health query unavailable.");
   if (audit.error) throw new Error("EET audit query unavailable.");
@@ -50,6 +50,7 @@ export async function saveEetSettingsAction(value: EetSettingsInput, version: nu
   if (!["disabled", "playground", "production"].includes(value.mode) || !["automatic", "paused"].includes(value.submission_control) || !["review_required", "employee_income", "business_income"].includes(value.tip_policy)) throw new Error("Invalid EET configuration.");
   if (value.business_name.length > 200 || value.establishment_address.length > 500) throw new Error("Business information is too long.");
   assertProductionAllowed(value.mode);
+  assertProductionIdentity(value.mode, value.eic);
   if (value.mode !== "disabled") {
     validateData({ eic_popl: value.eic, id_jednotky: value.unit_id, id_pokl: value.register_id, porad_cis: "CHECK", dat_trzby: "2027-01-01T00:00:00Z", celk_trzba: "0.00" });
     if (value.tip_policy === "review_required" || !value.business_name.trim() || !value.establishment_address.trim()) throw new Error("Complete business information and confirm the tip policy before enabling capture.");

@@ -3,6 +3,12 @@ export interface EetSetupIssue { code: string; title: string; action: string }
 // Only static, allowlisted descriptions reach the browser. Never display arbitrary
 // exception messages: SDK/network errors may contain credentials or query details.
 const issues: Record<string, EetSetupIssue> = {
+  "Enter the manager code to unlock EET settings.": {
+    code: "EET_MANAGER_LOCKED", title: "Manager access is locked or expired.", action: "Open POS Settings → EET Integration and enter the manager code again. The server requires a new authorization after 10 minutes or a staff/code change.",
+  },
+  "Configure a manager code in POS Settings → Security before unlocking EET.": {
+    code: "EET_MANAGER_CODE", title: "A configured manager code could not be loaded.", action: "Configure your existing manager code in POS Settings → Security. Check this deployment's settings table connection. EET never falls back to a default code.",
+  },
   "EET requires a strong AUTH_SECRET (at least 32 characters).": {
     code: "EET_AUTH_SECRET", title: "The server authentication secret is missing or too short.",
     action: "Check AUTH_SECRET on this Vercel deployment (at least 32 characters), then redeploy. Preserve the existing working secret; if it was changed, sign in again.",
@@ -29,7 +35,7 @@ const issues: Record<string, EetSetupIssue> = {
   },
   "EET administrator permission required.": {
     code: "EET_ADMIN_PERMISSION", title: "The signed-in staff account is not authorized to administer EET.",
-    action: "EET_ADMIN_STAFF_IDS must contain the exact staff UUID of the admin/cashier currently signed in, not the business ID or a Supabase Auth user ID. Check Find business/admin IDs below; after correcting Vercel settings, redeploy and sign in again.",
+    action: "EET_ADMIN_STAFF_IDS must contain the exact staff UUID of the admin, cashier or manager currently signed in, not the business ID or a Supabase Auth user ID. After correcting Vercel settings, redeploy and sign in again, then unlock EET with the manager code.",
   },
   "EET schema unavailable. Apply the additive migration after the database preflight.": {
     code: "EET_SETTINGS_DATABASE", title: "The server could not read the EET settings table.",

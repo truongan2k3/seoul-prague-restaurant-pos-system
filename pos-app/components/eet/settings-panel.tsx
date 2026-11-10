@@ -17,7 +17,7 @@ function inputFrom(snapshot: Snapshot): EetSettingsInput {
     eic: s.eic, unit_id: s.unit_id, register_id: s.register_id, tip_policy: s.tip_policy };
 }
 
-export function EetSettingsPanel({ initial, scripts }: { initial: Snapshot; scripts: EetSetupScript[] }) {
+export function EetSettingsPanel({ initial, scripts, onShowDashboard }: { initial: Snapshot; scripts: EetSetupScript[]; onShowDashboard?: () => void }) {
   const [snapshot, setSnapshot] = useState(initial);
   const [value, setValue] = useState(() => inputFrom(initial));
   const [confirmation, setConfirmation] = useState("");
@@ -38,7 +38,7 @@ export function EetSettingsPanel({ initial, scripts }: { initial: Snapshot; scri
   return <div className="space-y-5">
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><h1 className="flex items-center gap-2 text-2xl font-semibold"><ShieldCheck size={24}/>EET Integration</h1><p className="mt-2 text-sm text-gray-500">Server-managed reporting · fiscal interface v4 · Production locked until approved.</p></div>
-      <Link href="/admin/eet" className="rounded-xl border border-gray-300 px-4 py-2 text-sm dark:border-gray-700">EET Dashboard →</Link>
+      {onShowDashboard ? <button type="button" onClick={onShowDashboard} className="rounded-xl border border-gray-300 px-4 py-2 text-sm dark:border-gray-700">EET Dashboard →</button> : <Link href="/app/eet" className="rounded-xl border border-gray-300 px-4 py-2 text-sm dark:border-gray-700">EET Dashboard →</Link>}
     </header>
     {message && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">{message}</p>}
     <div className="grid gap-3 sm:grid-cols-3">{[["Pending", snapshot.health.pending], ["Errors / review", snapshot.health.errors], ["Overdue", snapshot.health.overdue]].map(([label, count]) =>
@@ -48,6 +48,18 @@ export function EetSettingsPanel({ initial, scripts }: { initial: Snapshot; scri
       const next = await getEetSettingsAction(); setSnapshot(next); setValue(inputFrom(next)); setConfirmation("");
       return "EET settings saved. All queued transactions are preserved.";
     }); }} className="space-y-5">
+      <section className={cardClass}>
+        <h2 className="font-semibold">Go-live readiness</h2>
+        <p className="mt-2 text-sm text-gray-500">A successful connection test does not approve operational reporting. Complete an operational Playground acceptance test, configure the supervised worker, and obtain explicit approval before activating Production.</p>
+        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+          <div><dt className="text-gray-500">Encrypted certificate storage</dt><dd>{snapshot.materials.storageReady && snapshot.readiness.encryption ? "Ready" : "Setup required"}</dd></div>
+          <div><dt className="text-gray-500">Production register certificate</dt><dd>{snapshot.certificates.production.valid ? "Installed — verify DIS+ identity" : "Not ready"}</dd></div>
+          <div><dt className="text-gray-500">Production response trust</dt><dd>{snapshot.materials.items.some(item => item.kind === "response" && item.environment === "production") ? "Imported — operational validation required" : "Import required (or server-managed pins)"}</dd></div>
+          <div><dt className="text-gray-500">Secure payment capture</dt><dd>{snapshot.readiness.checkout ? "Enabled" : "Off"}</dd></div>
+          <div><dt className="text-gray-500">Background worker</dt><dd>{snapshot.readiness.worker ? snapshot.readiness.workerHealthy ? "Recent heartbeat" : "No recent heartbeat — check runner" : "Off"}</dd></div>
+          <div><dt className="text-gray-500">Protocol / live approval</dt><dd>{snapshot.readiness.protocol ? "Protocol reviewed" : "Protocol acceptance pending"} · {snapshot.readiness.productionApproved ? "Live approval configured" : "Production locked"}</dd></div>
+        </dl>
+      </section>
       <section className={cardClass}>
         <h2 className="font-semibold">Reporting controls</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">

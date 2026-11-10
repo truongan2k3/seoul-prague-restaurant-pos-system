@@ -4,6 +4,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { FileCode2, KeyRound, LockKeyhole, Upload } from "lucide-react";
 import { importEetProtocolAction, importEetResponseCertificatesAction, importEetSignerAction } from "@/src/lib/eet/material-actions";
 import type { MaterialSummary } from "@/src/lib/eet/material-store";
+import { EET_RESPONSE_AUTHORITIES } from "@/src/lib/eet/response-authorities";
 
 const official = "https://eet.gov.cz/cs/pro-vyvojare/dokumenty-ke-stazeni";
 const card = "rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900";
@@ -15,6 +16,7 @@ function Saved({ item }: { item?: MaterialSummary }) {
   if (!item) return <p className="mt-2 text-xs text-gray-500">Not imported in POS yet.</p>;
   return <div className="mt-3 space-y-1 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
     <p>Saved · version {item.version} · {item.updated_at}</p>
+    {item.metadata.source && <p className="break-all">Source: {item.metadata.source}</p>}
     {item.metadata.eic && <p>Certificate EIČ: <strong>{item.metadata.eic}</strong></p>}
     {item.metadata.expiresAt && <p>Expires: {item.metadata.expiresAt}</p>}
     {item.metadata.certificateCount && <p>{item.metadata.certificateCount} response signing certificate(s)</p>}
@@ -104,13 +106,15 @@ export function EetMaterialsPanel({ overview, encryptionReady, onSaved, setupBlo
     <form key={`response-${environment}`} className={card} onSubmit={event => void submit(event, importEetResponseCertificatesAction)}>
       <h3 className="font-semibold">3. Tax-authority response signing certificates</h3>
       <p className="mt-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">{environment === "playground" ? "Not needed for Test Playground connection. Required before operational test submissions: those return a signed acknowledgment." : "Required before live reporting. Playground connection verification does not complete Production acceptance."}</p>
-      <p className="mt-2 text-sm text-gray-500">These verify the tax authority’s acknowledgment signature. Obtain the signing leaf certificates identified in the <a href={official} target="_blank" rel="noreferrer" className="underline">official access/operational documentation</a>. They differ from your register certificate and taxpayer/TLS CA roots.</p>
+      <p className="mt-2 text-sm text-gray-500">The official operational documentation §3.3 identifies I.CA as the response-signing issuer. Download the two public CA files below, then upload both. The server matches their published fingerprints, verifies the response signer chain and checks current signed revocation lists. No certificate purchase or private key is needed here.</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">{EET_RESPONSE_AUTHORITIES.map(authority => <a key={authority.serial} href={authority.url} target="_blank" rel="noreferrer" className="min-w-0 rounded-xl border border-gray-200 p-3 text-sm underline dark:border-gray-700"><strong>{authority.name}</strong><span className="mt-1 block text-xs">I.CA official PEM · serial {authority.serial}</span><span className="mt-2 block break-all font-mono text-[10px]">DER SHA-256: {authority.sha256}</span></a>)}</div>
+      <p className="mt-2 text-xs text-gray-500">Sources: <a href={official} target="_blank" rel="noreferrer" className="underline">EET operational documentation §3.3</a> · <a href="https://www.ica.cz/korenove-certifikaty" target="_blank" rel="noreferrer" className="underline">I.CA certificate list and fingerprints</a>. Operational reporting stops for review if trust or revocation checks fail.</p>
       <Saved item={response}/>
       <fieldset disabled={!ready || busy} className="mt-4 space-y-4">
         <input type="hidden" name="environment" value={environment}/><input type="hidden" name="version" value={response?.version ?? 0}/>
-        <label className="block text-sm">Signing certificate file<input name="responseFile" type="file" accept=".pem,.crt,.cer" className={input}/></label>
-        <label className="block text-sm">Or paste signing certificate PEM(s)<textarea name="responseCertificates" maxLength={65536} spellCheck={false} className={textarea} placeholder="One or more independently verified signing leaf certificates"/></label>
-        <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="trustReviewed" required className="mt-1"/>I verified the source and environment of these tax-authority response signing leaf certificates.</label>
+        <div className="grid gap-4 sm:grid-cols-2"><label className="block text-sm">I.CA Root RSA 05/2022 file<input name="responseRootFile" type="file" accept=".pem,.crt,.cer" className={input}/></label><label className="block text-sm">I.CA Public RSA 06/2022 file<input name="responseIssuerFile" type="file" accept=".pem,.crt,.cer" className={input}/></label></div>
+        <details><summary className="cursor-pointer text-sm">Alternative: paste both CA PEMs or import independently verified signing leaf certificates</summary><label className="mt-3 block text-sm">Single signing leaf file<input name="responseFile" type="file" accept=".pem,.crt,.cer" className={input}/></label><label className="mt-3 block text-sm">Or paste certificate PEM(s)<textarea name="responseCertificates" maxLength={65536} spellCheck={false} className={textarea} placeholder="Paste both official I.CA CA PEM blocks, or independently verified signing leaf PEMs"/></label></details>
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="trustReviewed" required className="mt-1"/>I downloaded these certificates from the official source for this environment and checked the published fingerprints.</label>
         <button type="submit" className={button}><Upload size={16}/>{busy ? "Working…" : response ? "Replace response signing certificates" : "Save response signing certificates"}</button>
       </fieldset>
     </form>

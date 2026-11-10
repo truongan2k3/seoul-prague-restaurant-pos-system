@@ -52,7 +52,7 @@ async function finish(job: { id: string; lease_token: string }, attemptId: strin
 }
 
 describe("EET migration on an isolated PostgreSQL engine (no live Supabase data)", () => {
-  before(async () => { migration = await readFile("supabase/migrations/202611100001_eet_integration.sql", "utf8"); db = new PGlite(); await db.exec(fixture); await db.exec(migration); await db.exec(await readFile("supabase/migrations/202611100002_eet_setup_materials.sql", "utf8")); });
+  before(async () => { migration = await readFile("supabase/migrations/202611100001_eet_integration.sql", "utf8"); db = new PGlite(); await db.exec(fixture); await db.exec(migration); await db.exec(await readFile("supabase/migrations/202611100002_eet_setup_materials.sql", "utf8")); const manager = await readFile("supabase/migrations/202611100003_eet_manager_access.sql", "utf8"); await db.exec(manager); await db.exec(manager); });
   after(async () => { await db.close(); });
   beforeEach(async () => {
     await db.exec(`RESET ROLE; SELECT set_config('request.jwt.claim.role','service_role',false);
@@ -64,6 +64,25 @@ describe("EET migration on an isolated PostgreSQL engine (no live Supabase data)
   test("fresh disabled integration does not create fiscal records or rewrite historical payments", async () => {
     await commit();
     assert.equal((await sql("SELECT * FROM sales")).length, 1);
+    assert.equal((await sql("SELECT * FROM eet_transactions")).length, 0);
+  });
+  test("manager unlock limits are persistent and concurrent attempts cannot exceed five per staff", async () => {
+    const attempts = await Promise.all(Array.from({ length: 8 }, () => sql<{ ok: boolean }>("SELECT eet_manager_unlock_attempt($1,$2) AS ok", [BUSINESS, STAFF])));
+    assert.equal(attempts.filter(rows => rows[0].ok).length, 5);
+    assert.equal((await sql("SELECT * FROM eet_audit_logs WHERE action='manager_unlock_attempt'")).length, 5);
+    await sql("UPDATE eet_audit_logs SET created_at=now()-interval '16 minutes'");
+    assert.equal((await sql<{ ok: boolean }>("SELECT eet_manager_unlock_attempt($1,$2) AS ok", [BUSINESS, STAFF]))[0].ok, true);
+  });
+  test("unauthenticated callers cannot execute the manager unlock limiter", async () => {
+    await db.exec("SET ROLE anon");
+    await assert.rejects(() => sql("SELECT eet_manager_unlock_attempt($1,$2)", [BUSINESS, STAFF]), /permission denied/);
+    await db.exec("RESET ROLE");
+  });
+  test("explicitly authorized managers can import encrypted material without changing reporting mode", async () => {
+    await sql("UPDATE staff SET role='manager' WHERE id=$1", [STAFF]);
+    const envelope = { v: 1, keyId: "id", iv: "iv", tag: "tag", ciphertext: "ciphertext" };
+    await sql("SELECT eet_save_material($1,$2,'playground','signer',0,$3,$4)", [BUSINESS, STAFF, envelope, {}]);
+    assert.equal((await sql("SELECT * FROM eet_materials")).length, 1);
     assert.equal((await sql("SELECT * FROM eet_transactions")).length, 0);
   });
   test("encrypted imports are versioned and audited atomically without secret envelopes in audit", async () => {

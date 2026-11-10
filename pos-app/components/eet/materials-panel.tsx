@@ -103,6 +103,7 @@ export function EetMaterialsPanel({ overview, encryptionReady, onSaved, setupBlo
     </form>
     <form key={`response-${environment}`} className={card} onSubmit={event => void submit(event, importEetResponseCertificatesAction)}>
       <h3 className="font-semibold">3. Tax-authority response signing certificates</h3>
+      <p className="mt-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">{environment === "playground" ? "Not needed for Test Playground connection. Required before operational test submissions: those return a signed acknowledgment." : "Required before live reporting. Playground connection verification does not complete Production acceptance."}</p>
       <p className="mt-2 text-sm text-gray-500">These verify the tax authority’s acknowledgment signature. Obtain the signing leaf certificates identified in the <a href={official} target="_blank" rel="noreferrer" className="underline">official access/operational documentation</a>. They differ from your register certificate and taxpayer/TLS CA roots.</p>
       <Saved item={response}/>
       <fieldset disabled={!ready || busy} className="mt-4 space-y-4">

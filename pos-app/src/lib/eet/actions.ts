@@ -7,6 +7,8 @@ import { runEetWorker, testEetConnection, testSignedPlaygroundResponse } from ".
 import type { EetSettings, EetStatus, EetTransaction } from "./types";
 import { getMaterialOverview } from "./material-store";
 import { materialEncryptionReady } from "./material-crypto";
+import { EetProbeError } from "./probe-errors";
+import { describeEetSetupFailure } from "./setup-diagnostics";
 
 const SETTINGS_FIELDS = ["mode", "submission_control", "business_name", "establishment_address", "eic", "unit_id", "register_id", "tip_policy"] as const;
 export type EetSettingsInput = Pick<EetSettings, typeof SETTINGS_FIELDS[number]>;
@@ -64,39 +66,60 @@ export async function saveEetSettingsAction(value: EetSettingsInput, version: nu
   if (error) throw new Error(error.message);
 }
 
-export async function testEetConnectionAction() {
-  const { db, businessId, staff } = await eetActor(true);
-  const { data, error } = await db.from("eet_settings").select("*").eq("business_id", businessId).maybeSingle();
-  if (error) throw new Error("EET settings are unavailable.");
-  const settings = (data as EetSettings | null) ?? defaultSettings(businessId);
-  const target = settings.mode === "disabled" ? "playground" : settings.mode;
-  const overview = await getMaterialOverview(businessId);
-  const testEic = target === "playground" ? overview.items.find(item => item.environment === "playground" && item.kind === "signer")?.metadata.eic : undefined;
-  if (!settings.unit_id || !settings.register_id) throw new Error("Save the unit and register identifiers above before testing the connection.");
-  let result: Awaited<ReturnType<typeof testEetConnection>>;
-  try { result = await testEetConnection({ ...settings, mode: target, eic: testEic ?? settings.eic }); }
-  catch { throw new Error("EET connection test failed. Check server-only certificate, official artifacts, network and approval configuration."); }
-  const { error: auditError } = await db.from("eet_audit_logs").insert({ business_id: businessId, actor_id: staff.id, action: "connection_test", details: { environment: target, verification_only: true, ...result } });
-  if (auditError) throw new Error("Connection test completed but audit persistence failed.");
-  return result;
+export interface EetProbeActionResult { ok: boolean; message: string; errorCode?: string }
+function probeFailure(code: string, message: string): EetProbeActionResult {
+  return { ok: false, errorCode: code, message: `${code}: ${message}` };
 }
 
-export async function testSignedPlaygroundResponseAction() {
-  const { db, businessId, staff } = await eetActor(true);
-  const { data, error } = await db.from("eet_settings").select("*").eq("business_id", businessId).maybeSingle();
-  if (error) throw new Error("EET settings are unavailable.");
-  const settings = (data as EetSettings | null) ?? defaultSettings(businessId);
-  const overview = await getMaterialOverview(businessId);
-  const eic = overview.items.find(item => item.environment === "playground" && item.kind === "signer")?.metadata.eic ?? settings.eic;
-  if (!settings.unit_id || !settings.register_id) throw new Error("Save the unit and register identifiers before testing.");
-  let result: Awaited<ReturnType<typeof testSignedPlaygroundResponse>>;
-  try { result = await testSignedPlaygroundResponse({ ...settings, eic }); }
-  catch { throw new Error("Signed Playground test failed. Check the official WSDL/XSD, reserved Playground certificate, step 3 response trust, and access to EET/I.CA revocation endpoints. Reporting mode is unchanged."); }
-  const { error: auditError } = await db.from("eet_audit_logs").insert({ business_id: businessId, actor_id: staff.id, action: "connection_test", details: {
-    environment: "playground", purpose: "signed_acknowledgment_acceptance", verification_only: false, test_only: true, accounting_payment_created: false, ...result,
-  } });
-  if (auditError) throw new Error("Signed Playground test completed but its audit could not be saved. Check storage before proceeding.");
-  return result;
+// Expected failures must be serializable results: Next.js masks thrown server
+// errors in production. Only allowlisted descriptions cross this boundary.
+async function performEetProbe(signed: boolean): Promise<EetProbeActionResult> {
+  let stage: "authorization" | "settings" | "materials" | "probe" | "audit" = "authorization";
+  try {
+    const { db, businessId, staff } = await eetActor(true);
+    stage = "settings";
+    const { data, error } = await db.from("eet_settings").select("*").eq("business_id", businessId).maybeSingle();
+    if (error) return probeFailure("EET_TEST_SETTINGS", "Saved EET settings could not be read. Recheck setup and the server database connection.");
+    const settings = (data as EetSettings | null) ?? defaultSettings(businessId);
+    const target = signed || settings.mode === "disabled" ? "playground" : settings.mode;
+    if (!settings.unit_id || !settings.register_id) return probeFailure("EET_TEST_REGISTER_FIELDS", "Save the Unit ID and POS/register identifier in Business and register before testing.");
+    stage = "materials";
+    const overview = await getMaterialOverview(businessId);
+    const testEic = target === "playground" ? overview.items.find(item => item.environment === "playground" && item.kind === "signer")?.metadata.eic : undefined;
+    const input = { ...settings, mode: target, eic: testEic ?? settings.eic };
+    stage = "probe";
+    const result = await (signed ? testSignedPlaygroundResponse(input) : testEetConnection(input));
+    stage = "audit";
+    const { error: auditError } = await db.from("eet_audit_logs").insert({ business_id: businessId, actor_id: staff.id, action: "connection_test", details: {
+      environment: target, verification_only: !signed,
+      ...(signed ? { purpose: "signed_acknowledgment_acceptance", test_only: true, accounting_payment_created: false } : {}), ...result,
+    } });
+    if (auditError) return probeFailure("EET_TEST_AUDIT", "The endpoint returned a result, but the connection audit could not be saved. Check EET audit storage before proceeding; reporting mode is unchanged.");
+    if (!result.ok) {
+      const code = result.result.kind === "rejected" && /^-?\d{1,3}$/.test(result.result.code) ? result.result.code : "unknown";
+      return probeFailure("EET_TEST_REJECTED", `EET rejected the test (official code ${code}). Review the official error in Configuration and connection audit. Reporting mode is unchanged.`);
+    }
+    return { ok: true, message: signed
+      ? "Signed Playground acknowledgment verified. This was a zero-value test; no POS payment was created and Production remains unchanged."
+      : "Verification succeeded (official code 0). No sale was reported; reporting mode is unchanged." };
+  } catch (error) {
+    if (error instanceof EetProbeError) return probeFailure(error.code, error.message);
+    const issue = describeEetSetupFailure(error);
+    if (issue.code !== "EET_SETUP_UNAVAILABLE") return probeFailure(issue.code, `${issue.title} ${issue.action}`);
+    if (stage === "authorization") return probeFailure("EET_TEST_ACCESS", "The server could not verify manager access. Recheck setup, then unlock EET with the manager code again.");
+    if (stage === "settings") return probeFailure("EET_TEST_SETTINGS", "Saved settings could not be loaded. Recheck setup and the database connection.");
+    if (stage === "materials") return probeFailure("EET_TEST_MATERIALS", "Saved certificate metadata could not be loaded. Recheck encrypted storage and keep the existing encryption key.");
+    if (stage === "audit") return probeFailure("EET_TEST_AUDIT", "The test returned a result, but its audit could not be saved. Check EET audit storage before proceeding.");
+    return probeFailure("EET_TEST_UNAVAILABLE", "The EET check could not finish. Recheck setup and retry. No reporting settings were changed.");
+  }
+}
+
+export async function testEetConnectionAction(): Promise<EetProbeActionResult> {
+  return performEetProbe(false);
+}
+
+export async function testSignedPlaygroundResponseAction(): Promise<EetProbeActionResult> {
+  return performEetProbe(true);
 }
 
 export async function retryEetTransactionAction(id: string, reason: string) {

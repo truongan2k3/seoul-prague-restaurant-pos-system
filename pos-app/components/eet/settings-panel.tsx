@@ -107,11 +107,14 @@ export function EetSettingsPanel({ initial, scripts, onShowDashboard }: { initia
       </section>
       <div className="flex flex-wrap gap-3">
         <button type="submit" disabled={busy || Boolean(phrase && confirmation !== phrase)} className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40"><Save size={16}/>{busy ? "Working…" : "Save EET settings"}</button>
-        <button type="button" disabled={busy} onClick={() => void perform(async () => { const result = await testEetConnectionAction(); return result.ok ? "Verification succeeded (official code 0). No sale was reported; reporting mode is unchanged." : "Verification rejected; review the official error in the audit record."; })} className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2 text-sm dark:border-gray-700"><PlugZap size={16}/>{snapshot.settings.mode === "production" ? "Test saved Production connection" : "Test Playground connection"}</button>
+        <button type="button" disabled={busy} onClick={() => void perform(async () => (await testEetConnectionAction()).message)} className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2 text-sm dark:border-gray-700"><PlugZap size={16}/>{snapshot.settings.mode === "production" ? "Test saved Production connection" : "Test Playground connection"}</button>
         <button type="button" disabled={busy} onClick={() => void perform(async () => {
           const result = await testSignedPlaygroundResponseAction();
-          setSnapshot(await getEetSettingsAction());
-          return result.ok ? "Signed Playground acknowledgment verified. This was a zero-value test; no POS payment was created and Production remains unchanged." : "Playground rejected the test. Review the official error in the connection audit.";
+          if (result.ok) {
+            try { setSnapshot(await getEetSettingsAction()); }
+            catch { return `${result.message} Use Recheck setup to refresh the audit display.`; }
+          }
+          return result.message;
         })} className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2 text-sm dark:border-gray-700"><ShieldCheck size={16}/>Test signed Playground response</button>
       </div>
     </form>

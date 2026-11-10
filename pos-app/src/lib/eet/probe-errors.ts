@@ -1,3 +1,5 @@
+import { EetCrlError } from "./crl-errors";
+
 export type ProbeStage = "credentials" | "signing" | "network" | "response_trust" | "response";
 const defaults: Record<ProbeStage, { code: string; message: string }> = {
   credentials: { code: "EET_TEST_CREDENTIALS", message: "Certificate/protocol setup could not be loaded. Check the saved WSDL/XSD and certificate for the selected environment." },
@@ -15,6 +17,7 @@ export class EetProbeError extends Error {
 // exact known messages or static stage descriptions can cross the action boundary.
 function describe(stage: ProbeStage, error: unknown) {
   if (error instanceof EetProbeError) return error;
+  if (error instanceof EetCrlError) return new EetProbeError(`EET_TEST_REVOCATION_${error.reason}`, `${error.message}${error.certificateRole ? ` Certificate: ${error.certificateRole}.` : ""}${error.endpoint ? ` CRL endpoint: ${error.endpoint}` : ""} Signature/revocation protection remains enabled.`);
   const message = error instanceof Error ? error.message : "";
   if (/^Configure server-only EET_(PLAYGROUND|PRODUCTION)_RESPONSE_CERTS_PEM_BASE64\.$/.test(message) || message === "Install trusted tax-authority response signing certificates.") {
     return new EetProbeError("EET_TEST_STEP_3_MISSING", "Step 3 is not saved for the selected environment. In Tax-office files & certificates, select the environment used by this test, upload both official I.CA files and click Save response signing certificates. The signed Playground test uses Playground; Production imports are separate.");

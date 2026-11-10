@@ -1,7 +1,8 @@
 import "server-only";
 import { X509Certificate, verify } from "node:crypto";
 import forge from "node-forge";
-import { certificateCrlUrls } from "./response-chain";
+import { approvedIcaCrlUrl, certificateCrlUrls } from "./response-chain";
+import { EetCrlError, crlValidationFailure } from "./crl-errors";
 
 const algorithms: Record<string, string> = { "1.2.840.113549.1.1.11": "RSA-SHA256", "1.2.840.113549.1.1.12": "RSA-SHA384", "1.2.840.113549.1.1.13": "RSA-SHA512" };
 const der = (node: forge.asn1.Asn1) => Buffer.from(forge.asn1.toDer(node).getBytes(), "binary");
@@ -55,27 +56,77 @@ export function verifyCertificateRevocation(bytes: Uint8Array, certificate: X509
 }
 
 const cache = new Map<string, { bytes: Uint8Array; expiresAt: number }>();
+
+async function downloadCrl(url: string, timeoutMs: number) {
+  const signal = AbortSignal.timeout(timeoutMs);
+  let current = url;
+  try {
+    for (let redirects = 0; ; redirects++) {
+      const response = await fetch(current, { redirect: "manual", signal, cache: "no-store" });
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        await response.body?.cancel();
+        const location = response.headers.get("location");
+        if (!location || redirects >= 2) throw new EetCrlError("REDIRECT");
+        let next: string;
+        try { next = approvedIcaCrlUrl(location, current); }
+        catch { throw new EetCrlError("REDIRECT"); }
+        if (current.startsWith("https:") && !next.startsWith("https:")) throw new EetCrlError("REDIRECT");
+        current = next;
+        continue;
+      }
+      if (!response.ok || !response.body) {
+        await response.body?.cancel();
+        throw new EetCrlError("HTTP");
+      }
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = []; let size = 0;
+      try {
+        for (;;) {
+          const part = await reader.read();
+          if (part.done) break;
+          size += part.value.length;
+          if (size > 4 * 1024 * 1024) throw new EetCrlError("SIZE");
+          chunks.push(part.value);
+        }
+      } finally { await reader.cancel().catch(() => {}); }
+      return Buffer.concat(chunks);
+    }
+  } catch (error) {
+    if (error instanceof EetCrlError) throw error;
+    throw new EetCrlError(signal.aborted ? "TIMEOUT" : "NETWORK");
+  }
+}
+
 export async function checkCertificateRevocation(certificate: X509Certificate, issuer: X509Certificate) {
+  const deadline = Date.now() + 12_000;
+  const role = certificate.ca ? "issuer" : "response signer";
+  let failure = new EetCrlError("NETWORK");
   for (const url of certificateCrlUrls(certificate)) {
     const key = `${issuer.fingerprint256}:${url}`;
     try {
       let cached = cache.get(key);
       if (!cached || cached.expiresAt <= Date.now()) {
-        const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(3000), cache: "no-store" });
-        if (!response.ok || !response.body) throw new Error("CRL unavailable.");
-        const reader = response.body.getReader();
-        const chunks: Uint8Array[] = []; let size = 0;
-        try { for (;;) { const part = await reader.read(); if (part.done) break; size += part.value.length; if (size > 4 * 1024 * 1024) throw new Error("CRL is too large."); chunks.push(part.value); } }
-        finally { await reader.cancel(); }
-        const bytes = Buffer.concat(chunks);
-        const expiresAt = Math.min(verifyCertificateRevocation(bytes, certificate, issuer), Date.now() + 15 * 60_000);
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) throw new EetCrlError("TIMEOUT");
+        const bytes = await downloadCrl(url, Math.min(6000, remaining));
+        let nextUpdate: number;
+        try { nextUpdate = verifyCertificateRevocation(bytes, certificate, issuer); }
+        catch (error) { throw new EetCrlError(crlValidationFailure(error)); }
+        const expiresAt = Math.min(nextUpdate, Date.now() + 15 * 60_000);
         cached = { bytes, expiresAt };
         if (cache.size >= 8) cache.delete(cache.keys().next().value!);
         cache.set(key, cached);
       }
-      verifyCertificateRevocation(cached.bytes, certificate, issuer);
+      try { verifyCertificateRevocation(cached.bytes, certificate, issuer); }
+      catch (error) { throw new EetCrlError(crlValidationFailure(error)); }
       return;
-    } catch { cache.delete(key); }
+    } catch (error) {
+      cache.delete(key);
+      failure = new EetCrlError(error instanceof EetCrlError ? error.reason : "FORMAT", url, role);
+      // A verified revocation must never be overridden by another mirror.
+      if (failure.reason === "REVOKED") throw failure;
+      if (Date.now() >= deadline) break;
+    }
   }
-  throw new Error("Current signed I.CA revocation data could not be verified. Reporting remains pending.");
+  throw failure;
 }

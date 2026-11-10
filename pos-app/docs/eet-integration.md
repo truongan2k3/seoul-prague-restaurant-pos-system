@@ -45,14 +45,30 @@ CA imports must match both published fingerprints; arbitrary roots and mixed cha
 rejected. The acknowledgment's referenced WS-Security signer is validated through that
 chain (RSA strength, validity, basic constraints/path length, key usage, issuer signatures),
 then checked against current issuer-signed CRLs before the existing XML body signature,
-attempt UUID and environment checks. CRL retrieval is restricted to `.ica.cz` hosts, refuses
-redirects, has size/time limits, verifies issuer/signature/freshness and fails closed on
+attempt UUID and environment checks. CRL retrieval is restricted to `.ica.cz` CRL URLs,
+allows at most two manually validated redirects (no HTTPS downgrade), has a six-second
+download deadline within a twelve-second per-certificate mirror budget and a 4 MB size
+limit, verifies issuer/signature/freshness and fails closed on
 revocation or unavailable evidence. No AIA certificate fetching or trust-on-first-use occurs.
 Unsupported critical/indirect/delta CRLs remain blocked for review. Verified CRLs are cached
 for at most fifteen minutes and never beyond nextUpdate; each signer serial is rechecked.
 Legacy explicit leaf pins retain their existing separate provisioning/review requirements.
 The CA path still needs a real signed Playground round trip and deployment network review;
 synthetic chain/CRL tests are not official acceptance.
+
+The POS probe reports bounded `EET_TEST_REVOCATION_*` diagnostics, distinguishing network,
+timeout, HTTP, redirect, size, format, signature, issuer, stale, revoked and unsupported
+CRL failures. Only a public validated certificate CRL endpoint and certificate role are
+included; raw fetch/parser/crypto exception messages are never returned. A verified
+revocation is terminal and cannot be overridden by a later mirror. These diagnostics
+do not bypass revocation validation or establish that deployment networking is healthy.
+
+In **EET Dashboard → View**, managers can inspect the saved immutable fiscal Data fields,
+verified acknowledgment, and attempt/audit metadata. The readable view distinguishes a
+queued/attempted request from confirmed acceptance. Expanded JSON includes request/response
+hashes and attempt UUIDs; it is not an archived complete signed SOAP envelope. Payment method
+and internal sale references remain POS metadata; customer names, phone numbers and itemized
+dishes are not fields of the current fiscal Data payload.
 
 Playground connection verification requires only the official WSDL/XSD, a valid matching
 Playground register certificate/private key, and saved unit/register IDs. Keep reporting

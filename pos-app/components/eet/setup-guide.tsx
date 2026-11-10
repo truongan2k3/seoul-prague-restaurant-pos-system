@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Check, Copy, ExternalLink } from "lucide-react";
+import { EetEncryptionKeyGenerator } from "./encryption-key-generator";
 
 export type EetSetupScript = { id: string; title: string; path: string; code: string };
 const envTemplate = `# Vercel server Environment Variables — keep existing working values.
@@ -26,7 +27,6 @@ SELECT b.id AS business_id, s.id AS admin_staff_id, b.name AS business_name
 FROM public.businesses b JOIN public.staff s ON s.business_id=b.id
 WHERE s.active=true AND s.role IN ('admin','cashier')
 ORDER BY b.id,s.id;`;
-const keyCommand = `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`;
 
 function CopyBlock({ title, text }: { title: string; text: string }) {
   const [copied, setCopied] = useState(false);
@@ -41,7 +41,12 @@ function CopyBlock({ title, text }: { title: string; text: string }) {
     <pre tabIndex={0} className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-gray-50 p-3 text-xs dark:bg-gray-950">{text || "Script unavailable in this deployment. Use the matching file in the EET pull request."}</pre>
   </details>;
 }
-export function EetSetupGuide({ scripts, initialOpen = false }: { scripts: EetSetupScript[]; initialOpen?: boolean }) {
+export function EetSetupGuide({ scripts, initialOpen = false, encryptionConfigured = false, hasStoredMaterials = false }: {
+  scripts: EetSetupScript[];
+  initialOpen?: boolean;
+  encryptionConfigured?: boolean;
+  hasStoredMaterials?: boolean;
+}) {
   return <details open={initialOpen || undefined} className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
     <summary className="cursor-pointer font-semibold">One-time setup · tasks you can do yourself</summary>
     <p className="mt-3 text-sm text-gray-500">Use your current Supabase and Vercel projects. Start with the read-only check and confirm a recoverable backup. Installation scripts run once; if an EET object already exists, compare the schema before running that migration. Nothing on this page executes SQL against your database.</p>
@@ -54,7 +59,7 @@ export function EetSetupGuide({ scripts, initialOpen = false }: { scripts: EetSe
       {scripts.map(script => <CopyBlock key={script.id} title={`${script.title} · ${script.path}`} text={script.code}/>)}
       <CopyBlock title="Find business/admin IDs — paste in Supabase SQL Editor" text={idsSql}/>
       <CopyBlock title="Server environment template — use Vercel, not POS certificate inputs" text={envTemplate}/>
-      <CopyBlock title="Generate the encryption key — run on a trusted workstation" text={keyCommand}/>
+      <EetEncryptionKeyGenerator alreadyConfigured={encryptionConfigured} hasStoredMaterials={hasStoredMaterials}/>
     </div>
     <p className="mt-3 text-xs text-gray-500">Keep a secure backup of the encryption key. Rotating or losing it without re-encrypting stored material prevents decryption. Uploads and database setup do not approve legal reporting or activate Production.</p>
     <a href="https://eet.gov.cz/cs/pro-vyvojare/dokumenty-ke-stazeni" target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 text-sm text-emerald-700 underline dark:text-emerald-400">Official EET files and instructions<ExternalLink size={14}/></a>

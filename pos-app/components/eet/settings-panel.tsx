@@ -100,7 +100,7 @@ export function EetSettingsPanel({ initial, scripts }: { initial: Snapshot; scri
     </form>
     <p className="text-xs text-gray-500">Save the unit/register identifiers before testing. When reporting is Disabled, this button verifies Playground using the imported test certificate’s EIČ and a zero-value verification message; it does not queue or report restaurant payments.</p>
     <EetMaterialsPanel overview={snapshot.materials} encryptionReady={snapshot.readiness.encryption} onSaved={async () => { setSnapshot(await getEetSettingsAction()); }}/>
-    <EetSetupGuide scripts={scripts}/>
+    <EetSetupGuide scripts={scripts} encryptionConfigured={snapshot.readiness.encryption} hasStoredMaterials={snapshot.materials.items.length > 0}/>
     <details className={cardClass}><summary className="cursor-pointer text-sm font-semibold">Configuration and connection audit</summary><pre className="mt-3 max-h-72 overflow-auto text-xs">{JSON.stringify(snapshot.audit, null, 2)}</pre></details>
     <p className="text-xs text-gray-500">Protocol and legal source: <a href="https://eet.gov.cz/cs/pro-vyvojare" target="_blank" rel="noreferrer" className="underline">Czech Financial Administration — EET 2.0 developer documentation</a>.</p>
   </div>;

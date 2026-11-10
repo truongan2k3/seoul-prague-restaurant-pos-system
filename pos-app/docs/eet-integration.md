@@ -19,6 +19,15 @@ response signing leaf certificates. It also displays copyable read-only prefligh
 business/admin-ID queries and Vercel bootstrap instructions even before EET setup is ready.
 This does not execute SQL or edit Vercel settings automatically.
 
+For first-time encryption setup, use **Generate key on this device** in the setup guide.
+No Node.js installation is needed: Web Crypto generates 32 random bytes in the browser,
+encoded as base64. Copy the value into Vercel's `EET_SETTINGS_ENCRYPTION_KEY`, back it up
+securely, then redeploy. The helper keeps the value only in component memory, masked by
+default; it does not send it to the server or persist it in browser storage. It requires
+HTTPS (or localhost). Deployments sharing encrypted material must use the same key.
+Generation is unavailable when this deployment already has a valid key or known stored
+material; restore the original key rather than generating a replacement in that case.
+
 The additional migration `202611100002_eet_setup_materials.sql` stores authenticated-encrypted
 material in a separate RLS-protected server-only table. A server-only
 `EET_SETTINGS_ENCRYPTION_KEY` holds 32 random bytes encoded as base64. AES-256-GCM uses a new

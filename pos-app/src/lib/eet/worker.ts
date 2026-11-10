@@ -7,6 +7,7 @@ import { parseEetResponse, sha256, signSaleXml } from "./xml";
 import { postEet, type TransportResponse } from "./transport";
 import type { EetTransaction, EetResult, EetSettings } from "./types";
 import { responseVerificationCertificates } from "./response-trust";
+import { probeStep } from "./probe-errors";
 
 /** An invocation processes one job (bounded SOAP/CRL network calls + DB). A durable scheduler invokes again.
  * No detached promises, in-memory queues, or work continuing beyond Vercel's lifetime. */
@@ -61,28 +62,31 @@ export async function runEetWorker() {
 
 export async function testEetConnection(settings: EetSettings) {
   if (settings.mode === "disabled") throw new Error("Select Playground and save settings before testing.");
-  const credentials = await loadCredentials(settings.mode, settings.eic, { verification: true });
+  const environment = settings.mode;
+  const credentials = await probeStep("credentials", () => loadCredentials(environment, settings.eic, { verification: true }));
   const messageId = randomUUID();
-  const xml = signSaleXml({ data: { eic_popl: settings.eic, id_jednotky: settings.unit_id, id_pokl: settings.register_id,
+  const xml = await probeStep("signing", () => signSaleXml({ data: { eic_popl: settings.eic, id_jednotky: settings.unit_id, id_pokl: settings.register_id,
     porad_cis: `TEST-${Date.now()}`, dat_trzby: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), celk_trzba: "0.00" },
-    messageId, sentAt: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), first: true, verification: true, ...credentials });
-  const response = await postEet(settings.mode, xml, credentials.soapAction);
-  const trusted = await responseVerificationCertificates(response.xml, credentials.trustedCertificates);
-  const result = parseEetResponse(response.xml, messageId, settings.mode, trusted, true);
+    messageId, sentAt: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), first: true, verification: true, ...credentials }));
+  const response = await probeStep("network", () => postEet(environment, xml, credentials.soapAction));
+  const trusted = await probeStep("response_trust", () => responseVerificationCertificates(response.xml, credentials.trustedCertificates));
+  const result = await probeStep("response", () => parseEetResponse(response.xml, messageId, environment, trusted, true));
   return { ok: result.kind === "verified", result, trace: response.trace };
 }
 
 /** Explicit operator probe: fixed Playground endpoint, reserved test identity and
  * zero amount. No database/payment/queue access and no Production activation. */
 export async function testSignedPlaygroundResponse(settings: EetSettings) {
-  if (!PLAYGROUND_EICS.some(eic => eic === settings.eic)) throw new Error("Use an official reserved Playground certificate for the signed response test.");
-  const credentials = await loadCredentials("playground", settings.eic, { playgroundAcceptance: true });
+  const credentials = await probeStep("credentials", () => {
+    if (!PLAYGROUND_EICS.some(eic => eic === settings.eic)) throw new Error("Use an official reserved Playground certificate for the signed response test.");
+    return loadCredentials("playground", settings.eic, { playgroundAcceptance: true });
+  });
   const messageId = randomUUID(), sentAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-  const xml = signSaleXml({ data: { eic_popl: settings.eic, id_jednotky: settings.unit_id, id_pokl: settings.register_id,
+  const xml = await probeStep("signing", () => signSaleXml({ data: { eic_popl: settings.eic, id_jednotky: settings.unit_id, id_pokl: settings.register_id,
     porad_cis: `PG-${randomUUID().replaceAll("-", "").slice(0, 20)}`, dat_trzby: sentAt, celk_trzba: "0.00" },
-    messageId, sentAt, first: true, ...credentials });
-  const response = await postEet("playground", xml, credentials.soapAction);
-  const trusted = await responseVerificationCertificates(response.xml, credentials.trustedCertificates);
-  const result = parseEetResponse(response.xml, messageId, "playground", trusted);
+    messageId, sentAt, first: true, ...credentials }));
+  const response = await probeStep("network", () => postEet("playground", xml, credentials.soapAction));
+  const trusted = await probeStep("response_trust", () => responseVerificationCertificates(response.xml, credentials.trustedCertificates));
+  const result = await probeStep("response", () => parseEetResponse(response.xml, messageId, "playground", trusted));
   return { ok: result.kind === "accepted", result, trace: response.trace };
 }

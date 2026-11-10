@@ -1,5 +1,6 @@
 import { planReservationAllocations, type CapacityReservationInput } from "@/lib/reservation-capacity-engine";
 import { RESERVATION_FLOOR_TABLES } from "@/lib/reservation-floor-plan";
+import { todayIsoDateInVenue } from "@/lib/venue-timezone";
 
 export type LiveTableStatus = "available" | "occupied" | "reserved" | "blocked";
 export type AvailabilityTable = {
@@ -13,7 +14,7 @@ export type TableAvailabilitySource = {
 export type LiveTableAvailability = AvailabilityTable & {
   status: LiveTableStatus; estimatedReleaseAt: number | null;
   earliestSeatingAt: number | null; nextReservationAt: number | null;
-  /** Next allocated booking, including bookings without an explicitly assigned table. */
+  /** Next allocated booking today, including bookings without an assigned table. */
   availableUntil: number | null;
   /** Physical free window now; unlike status, does not require a full dining duration. */
   availableNow: boolean;
@@ -24,8 +25,14 @@ export type LiveTableAvailability = AvailabilityTable & {
 /** Same allocation engine on the server and for local, network-free countdowns. */
 export function calculateTableAvailability(source: TableAvailabilitySource, now = new Date(source.serverNow).getTime()) {
   const duration = source.durationMinutes * 60_000;
+  const today = todayIsoDateInVenue(new Date(now));
+  const reservationsToday = source.reservations.filter((reservation) => {
+    if (reservation.status === "checked_in") return true;
+    const at = new Date(reservation.reservedAt);
+    return Number.isFinite(at.getTime()) && todayIsoDateInVenue(at) === today;
+  });
   const occupiedTables = availabilityOccupancyInputs(source);
-  const allocations = planReservationAllocations({ reservations: source.reservations, occupiedTables,
+  const allocations = planReservationAllocations({ reservations: reservationsToday, occupiedTables,
     durationMinutes: source.durationMinutes, bufferMinutes: source.bufferMinutes, nowMs: now });
   const tables: LiveTableAvailability[] = source.tables.map((table) => {
     const occupied = table.occupied || source.reservations.some((r) => r.status === "checked_in"
@@ -45,7 +52,8 @@ export function calculateTableAvailability(source: TableAvailabilitySource, now 
     const upcomingReservations = source.reservations.filter((r) => ["pending", "confirmed", "late"].includes(r.status)
       && [r.tableLabel, r.secondaryTableLabel, r.tertiaryTableLabel].some((label) => label?.trim().toUpperCase() === table.label))
       .map((r) => ({ reservedAt: new Date(r.reservedAt).getTime(), partySize: r.actualPartySize ?? r.partySize }))
-      .filter((r) => r.reservedAt + duration > now).sort((a, b) => a.reservedAt - b.reservedAt);
+      .filter((r) => Number.isFinite(r.reservedAt) && todayIsoDateInVenue(new Date(r.reservedAt)) === today
+        && r.reservedAt + duration > now).sort((a, b) => a.reservedAt - b.reservedAt);
     const nextReservation = upcomingReservations[0]?.reservedAt ?? null;
     const availableUntil = spans.find((span) => span.startMs > now)?.startMs ?? null;
     const availableNow = !occupied && !table.blocked && !spans.some((span) => span.startMs <= now && span.endMs > now);

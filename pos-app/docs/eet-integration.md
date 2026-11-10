@@ -91,6 +91,18 @@ and enabling normal reporting. The ordinary worker still requires protocol appro
 the configured operational credentials. A real successful signed test remains required;
 the workspace network restriction prevents running it here.
 
+**Saving reporting controls:** Playground capture requires the existing secure-checkout
+acceptance gate. Automatic additionally requires the configured worker, protocol review
+and operational credentials. The POS displays these blockers before saving and returns
+static `EET_SETTINGS_*` errors rather than production-masked exceptions. Failed saves keep
+the draft; saved configuration is labelled separately. Use **Save EET settings** inside the
+EET form (the unrelated general Settings save button is hidden on this tab). Successful
+writes return the authoritative settings/version and update the workspace snapshot, so
+Dashboard → Settings does not restore a stale configuration. A readback failure after a
+committed write is reported separately and requires Recheck setup before another save.
+No reporting/certificate gates, environment variables, queue rules or Production approvals
+are enabled or bypassed by this UI fix.
+
 For first-time encryption setup, use **Generate key on this device** in the setup guide.
 No Node.js installation is needed: Web Crypto generates 32 random bytes in the browser,
 encoded as base64. Copy the value into Vercel's `EET_SETTINGS_ENCRYPTION_KEY`, back it up

@@ -80,6 +80,6 @@ export function EetPosWorkspace() {
       <section role="alert" className="space-y-3 rounded-2xl border border-amber-300 p-5"><p className="font-mono text-xs">{workspace.issue.code}</p><h2 className="font-semibold">{workspace.issue.title}</h2><p className="text-sm">{workspace.issue.action}</p><p className="text-sm">Encryption key: {workspace.encryptionReady ? "Configured — keep the existing value" : "Missing or invalid"}</p></section>
       {!!workspace.scripts.length && <EetSetupGuide scripts={workspace.scripts} encryptionConfigured={workspace.encryptionReady}/>}
     </>}
-    {workspace?.state === "ready" && (dashboard ? <Dashboard workspace={workspace} onSettings={() => setDashboard(false)}/> : <EetSettingsPanel initial={workspace.settings} scripts={workspace.scripts} onShowDashboard={() => setDashboard(true)}/>)}
+    {workspace?.state === "ready" && (dashboard ? <Dashboard workspace={workspace} onSettings={() => setDashboard(false)}/> : <EetSettingsPanel initial={workspace.settings} scripts={workspace.scripts} onSnapshotChange={settings => setWorkspace(current => current?.state === "ready" ? { ...current, settings } : current)} onShowDashboard={() => setDashboard(true)}/>)}
   </div>;
 }

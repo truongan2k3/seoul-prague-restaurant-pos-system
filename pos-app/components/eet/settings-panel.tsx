@@ -17,9 +17,8 @@ function inputFrom(snapshot: Snapshot): EetSettingsInput {
     eic: s.eic, unit_id: s.unit_id, register_id: s.register_id, tip_policy: s.tip_policy };
 }
 
-export function EetSettingsPanel({ initial, scripts, onShowDashboard }: { initial: Snapshot; scripts: EetSetupScript[]; onShowDashboard?: () => void }) {
-  const [snapshot, setSnapshot] = useState(initial);
-  const [value, setValue] = useState(() => inputFrom(initial));
+export function EetSettingsPanel({ initial: snapshot, scripts, onSnapshotChange, onShowDashboard }: { initial: Snapshot; scripts: EetSetupScript[]; onSnapshotChange: (next: Snapshot) => void; onShowDashboard?: () => void }) {
+  const [value, setValue] = useState(() => inputFrom(snapshot));
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -27,6 +26,12 @@ export function EetSettingsPanel({ initial, scripts, onShowDashboard }: { initia
   const phrase = wasLive && (value.mode !== "production" || value.submission_control === "paused") ? "STOP LIVE SUBMISSIONS"
     : value.mode === "production" && !wasLive ? "ACTIVATE PRODUCTION" : null;
   const frozen = snapshot.settings.capture_environment !== null;
+  const dirty = (Object.keys(value) as (keyof EetSettingsInput)[]).some(key => value[key] !== snapshot.settings[key]);
+  const blockers = value.mode === "disabled" ? [] : [
+    ...(!snapshot.readiness.checkout ? ["Secure payment capture is off (EET_CHECKOUT_ENABLED)."] : []),
+    ...(value.submission_control === "automatic" && !snapshot.readiness.worker ? ["Automatic submission requires a configured durable worker (EET_WORKER_ENABLED)."] : []),
+    ...(value.submission_control === "automatic" && !snapshot.readiness.protocol ? ["Operational protocol acceptance/review is pending (EET_PROTOCOL_REVIEWED)."] : []),
+  ];
   const change = <K extends keyof EetSettingsInput>(key: K, next: EetSettingsInput[K]) => setValue(v => ({ ...v, [key]: next }));
   const perform = async (action: () => Promise<string>) => {
     if (busy) return;
@@ -38,16 +43,20 @@ export function EetSettingsPanel({ initial, scripts, onShowDashboard }: { initia
   return <div className="space-y-5">
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><h1 className="flex items-center gap-2 text-2xl font-semibold"><ShieldCheck size={24}/>EET Integration</h1><p className="mt-2 text-sm text-gray-500">Server-managed reporting · fiscal interface v4 · Production locked until approved.</p></div>
-      {onShowDashboard ? <button type="button" onClick={onShowDashboard} className="rounded-xl border border-gray-300 px-4 py-2 text-sm dark:border-gray-700">EET Dashboard →</button> : <Link href="/app/eet" className="rounded-xl border border-gray-300 px-4 py-2 text-sm dark:border-gray-700">EET Dashboard →</Link>}
+      {onShowDashboard ? <button type="button" disabled={busy} onClick={onShowDashboard} className="rounded-xl border border-gray-300 px-4 py-2 text-sm disabled:opacity-40 dark:border-gray-700">EET Dashboard →</button> : <Link href="/app/eet" className="rounded-xl border border-gray-300 px-4 py-2 text-sm dark:border-gray-700">EET Dashboard →</Link>}
     </header>
     {message && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">{message}</p>}
     <div className="grid gap-3 sm:grid-cols-3">{[["Pending", snapshot.health.pending], ["Errors / review", snapshot.health.errors], ["Overdue", snapshot.health.overdue]].map(([label, count]) =>
       <div key={label} className={cardClass}><p className="text-xs uppercase tracking-wide text-gray-500">{label}</p><p className="mt-2 text-3xl font-semibold tabular-nums">{count}</p></div>)}</div>
     <form onSubmit={event => { event.preventDefault(); void perform(async () => {
-      await saveEetSettingsAction(value, snapshot.settings.version, confirmation);
-      const next = await getEetSettingsAction(); setSnapshot(next); setValue(inputFrom(next)); setConfirmation("");
-      return "EET settings saved. All queued transactions are preserved.";
+      const result = await saveEetSettingsAction(value, snapshot.settings.version, confirmation);
+      if (result.ok && result.settings) {
+        const next = { ...snapshot, settings: result.settings };
+        onSnapshotChange(next); setValue(inputFrom(next)); setConfirmation("");
+      }
+      return result.message;
     }); }} className="space-y-5">
+      <fieldset disabled={busy} className="min-w-0 space-y-5">
       <section className={cardClass}>
         <h2 className="font-semibold">Go-live readiness</h2>
         <p className="mt-2 text-sm text-gray-500">A successful connection test does not approve operational reporting. Complete an operational Playground acceptance test, configure the supervised worker, and obtain explicit approval before activating Production.</p>
@@ -62,6 +71,7 @@ export function EetSettingsPanel({ initial, scripts, onShowDashboard }: { initia
       </section>
       <section className={cardClass}>
         <h2 className="font-semibold">Reporting controls</h2>
+        <p className="mt-2 text-sm"><span className="text-gray-500">Saved configuration:</span> <strong className="capitalize">{snapshot.settings.mode} · {snapshot.settings.submission_control}</strong>{dirty && <span className="ml-2 text-amber-700 dark:text-amber-300">Unsaved changes</span>}</p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label className="text-sm">Integration mode<select className={fieldClass} value={value.mode} onChange={e => change("mode", e.target.value as EetSettingsInput["mode"])}>
             <option value="disabled">Disabled</option><option value="playground" disabled={Boolean(snapshot.settings.live_reporting_started_at)}>Playground — test only</option>
@@ -71,6 +81,7 @@ export function EetSettingsPanel({ initial, scripts, onShowDashboard }: { initia
             <option value="paused">Paused — preserve queue</option><option value="automatic">Automatic</option>
           </select></label>
         </div>
+        {blockers.length > 0 && <div className="mt-4 rounded-xl border border-amber-300 p-3 text-sm text-amber-800 dark:border-amber-800 dark:text-amber-200"><p className="font-semibold">This selection cannot be saved yet:</p><ul className="mt-2 list-disc space-y-1 pl-5">{blockers.map(blocker => <li key={blocker}>{blocker}</li>)}</ul><p className="mt-2">You can use the connection test buttons with Disabled + Paused while completing setup. Use Save EET settings below for this form.</p></div>}
         <p className="mt-3 text-sm text-gray-500">Playground acknowledgments do not satisfy legal reporting. Pause and Disabled stop sending; after capture starts, new payments continue to be queued. Neither setting removes reporting obligations. In-flight requests may finish.</p>
         {phrase && <label className="mt-4 block text-sm text-amber-700 dark:text-amber-300">Type <strong>{phrase}</strong> to confirm this change.<input autoComplete="off" value={confirmation} onChange={e => setConfirmation(e.target.value)} className={fieldClass}/></label>}
       </section>
@@ -111,16 +122,17 @@ export function EetSettingsPanel({ initial, scripts, onShowDashboard }: { initia
         <button type="button" disabled={busy} onClick={() => void perform(async () => {
           const result = await testSignedPlaygroundResponseAction();
           if (result.ok) {
-            try { setSnapshot(await getEetSettingsAction()); }
+            try { onSnapshotChange(await getEetSettingsAction()); }
             catch { return `${result.message} Use Recheck setup to refresh the audit display.`; }
           }
           return result.message;
         })} className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2 text-sm dark:border-gray-700"><ShieldCheck size={16}/>Test signed Playground response</button>
       </div>
+      </fieldset>
     </form>
     <p className="text-xs text-gray-500">Save the unit/register identifiers before testing. Keep Disabled + Paused for the first Playground check. This check needs the official WSDL/XSD and a Playground register certificate; step 3 response signing certificates are not required. It uses the imported test certificate’s EIČ and a zero-value verification message, without queuing or reporting restaurant payments. Success is official code 0, not a signed sale acknowledgment or Production approval.</p>
     <p className="text-xs text-gray-500">After step 3, use Test signed Playground response to verify a signed test acknowledgment, including I.CA chain/revocation checks when CA trust is configured. This sends a zero-value operational test only to Playground using a reserved test certificate; it does not capture a POS payment, freeze the business identity or approve Production.</p>
-    <EetMaterialsPanel overview={snapshot.materials} encryptionReady={snapshot.readiness.encryption} onSaved={async () => { setSnapshot(await getEetSettingsAction()); }}/>
+    <EetMaterialsPanel overview={snapshot.materials} encryptionReady={snapshot.readiness.encryption} onSaved={async () => { onSnapshotChange(await getEetSettingsAction()); }}/>
     <EetSetupGuide scripts={scripts} encryptionConfigured={snapshot.readiness.encryption} hasStoredMaterials={snapshot.materials.items.length > 0}/>
     <details className={cardClass}><summary className="cursor-pointer text-sm font-semibold">Configuration and connection audit</summary><pre className="mt-3 max-h-72 overflow-auto text-xs">{JSON.stringify(snapshot.audit, null, 2)}</pre></details>
     <p className="text-xs text-gray-500">Protocol and legal source: <a href="https://eet.gov.cz/cs/pro-vyvojare" target="_blank" rel="noreferrer" className="underline">Czech Financial Administration — EET 2.0 developer documentation</a>.</p>

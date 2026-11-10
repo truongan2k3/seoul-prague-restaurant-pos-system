@@ -13,6 +13,9 @@ function supabaseHostname(): string | null {
 const supabaseHost = supabaseHostname();
 
 const nextConfig: NextConfig = {
+  outputFileTracingIncludes: {
+    "/admin/settings/eet": ["./supabase/eet-preflight-readonly.sql", "./supabase/migrations/202611100001_eet_integration.sql", "./supabase/migrations/202611100002_eet_setup_materials.sql"],
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: "100mb",

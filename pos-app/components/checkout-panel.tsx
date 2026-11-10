@@ -1,5 +1,7 @@
 "use client";
 
+import { useEetCheckout } from "@/hooks/use-eet-checkout";
+
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import { ArrowLeft, ArrowRight, Calculator, Printer } from "lucide-react";
 import { FloatingCalculator } from "@/components/floating-calculator";
@@ -163,6 +165,7 @@ export function CheckoutPanel({
   const { translate, staff, currentStaffUser } = useApp();
   const { printProvisionalBill } = useReceiptPrint();
   const { settings } = useSettings();
+  const eet = useEetCheckout(tableId, sessionResetKey);
   const priceOptions = useMemo(
     () => priceDisplayOptionsFromSettings(settings),
     [settings],
@@ -939,8 +942,10 @@ export function CheckoutPanel({
     paymentInFlight.current = true;
     setSubmitting(true);
     try {
+      payload.payment.eetIntent = await eet.prepare();
       const result = await onCheckout(payload);
       if (result === false) return;
+      eet.completed();
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : "Payment failed. Please try again.");
       return;
@@ -1753,6 +1758,7 @@ export function CheckoutPanel({
 
   return (
     <div className={`flex min-h-0 flex-1 flex-col bg-inherit text-gray-800 dark:text-gray-200 ${className}`}>
+      {eet.indicator}
       {localError && (
         <p className="shrink-0 border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
           {localError}

@@ -378,6 +378,10 @@ export function SettingsView({
                   {translate(group.labelKey)}
                 </p>
                 <div className="flex gap-1 md:flex-col md:gap-0.5">
+                  {group.id === "admin" && canManageStaff(currentStaffUser?.role) && <Link
+                    href="/admin/settings/eet"
+                    className="shrink-0 rounded-lg px-3 py-2 text-left text-sm font-semibold text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800"
+                  >EET Integration ↗</Link>}
                   {group.tabs.map((tab) => {
                     const active = activeSettingsTab === tab.id;
                     return (

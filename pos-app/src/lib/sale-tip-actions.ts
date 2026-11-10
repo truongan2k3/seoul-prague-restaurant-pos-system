@@ -5,6 +5,7 @@ import type { PaymentMethod } from "@/lib/types";
 import { readAuthSession } from "@/src/lib/auth/session";
 import { readStaffSession } from "@/src/lib/auth/staff-session";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
+import { eetActor } from "@/src/lib/eet/auth";
 
 type SaleRowForTipEdit = {
   id: string;
@@ -17,6 +18,8 @@ type SaleRowForTipEdit = {
   payment_method: PaymentMethod;
   amount_given: number | null;
   activity_log: unknown;
+  staff_id?: string | null;
+  eet_business_id?: string | null;
 };
 
 /** Update tip and/or bill payment method on a completed sale; append audit to activity_log. */
@@ -37,21 +40,35 @@ export async function updateSaleTipRecord(
     return { data: null, error: new Error("Enter a valid tip and payment method.") };
   }
 
-  const admin = createSupabaseAdmin();
+  let eetContext: Awaited<ReturnType<typeof eetActor>> | null = null;
+  if (process.env.EET_CHECKOUT_ENABLED === "true") {
+    try { eetContext = await eetActor(); }
+    catch { return { data: null, error: new Error("Authorized staff login required for fiscal tip adjustments.") }; }
+  }
+  const admin = eetContext?.db ?? createSupabaseAdmin();
   const { data: row, error: lookupError } = await admin
     .from("sales")
     .select(
-      "id, subtotal, discount_amount, tip, tip_payment_method, payment_method, grand_total, voucher_discount_amount, amount_given, activity_log",
+      eetContext
+        ? "id, subtotal, discount_amount, tip, tip_payment_method, payment_method, grand_total, voucher_discount_amount, amount_given, activity_log,staff_id,eet_business_id"
+        : "id, subtotal, discount_amount, tip, tip_payment_method, payment_method, grand_total, voucher_discount_amount, amount_given, activity_log",
     )
     .eq("id", saleId)
     .is("deleted_at", null)
-    .maybeSingle();
+    .maybeSingle()
+    .overrideTypes<SaleRowForTipEdit | null, { merge: false }>();
 
   if (lookupError || !row) {
     return { data: null, error: lookupError ?? new Error("Sale not found.") };
   }
 
-  const sale = row as SaleRowForTipEdit;
+  const sale = row;
+  if (eetContext && sale.eet_business_id !== eetContext.businessId) {
+    const { data: owner } = sale.eet_business_id == null && sale.staff_id
+      ? await admin.from("staff").select("id").eq("id", sale.staff_id).eq("business_id", eetContext.businessId).maybeSingle()
+      : { data: null };
+    if (!owner) return { data: null, error: new Error("Payment access denied for this business.") };
+  }
   const previousTip = Number(sale.tip ?? 0);
   const previousTipPaymentMethod = (sale.tip_payment_method ?? sale.payment_method) as PaymentMethod;
   const previousPaymentMethod = sale.payment_method as PaymentMethod;

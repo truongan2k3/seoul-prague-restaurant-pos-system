@@ -1,4 +1,5 @@
 import { commitReferralSaleAction } from "@/src/lib/referral-actions";
+import { commitEetCheckoutAction } from "@/src/lib/eet/payment-actions";
 import {
   buildEqualSplitShareAmounts,
   mergeCheckoutLines,
@@ -983,6 +984,13 @@ export async function checkoutTable(
     seated_at: seatedAt,
   };
   const referred = Boolean(payment.referral || activeReservation?.referralCodeId);
+  const eetResult = await commitEetCheckoutAction(
+    {...salePayload, ...(referred ? {referral_equal_scope:payment.referralEqualScope} : {})},
+    payment.referral, payment.eetIntent, options ?? {},
+  );
+  if (eetResult.handled) {
+    return { data: eetResult.data, error: eetResult.error ? new Error(eetResult.error) : null };
+  }
   const saleResult = referred
     ? await commitReferralSaleAction({...salePayload,referral_equal_scope:payment.referralEqualScope},payment.referral)
     : await supabase.from("sales").insert(salePayload);
@@ -991,8 +999,18 @@ export async function checkoutTable(
   if (saleError) return { data: null, error: saleError };
   if ("skipSettlement" in saleResult && saleResult.skipSettlement) return {data:null,error:null};
 
+  return settleConfirmedCheckout(tableId, activeReservation?.id, options);
+}
+
+/** Shared existing settlement only: called after a confirmed sale, including durable recovery. */
+export async function settleConfirmedCheckout(
+  tableId: string,
+  reservationId?: string,
+  options?: { remainingOrders?: OrderItem[]; closeTable?: boolean },
+) {
+
   if (options?.closeTable !== false) {
-    await completeReservationForTable(tableId, activeReservation?.id);
+    await completeReservationForTable(tableId, reservationId);
   }
 
   // Partial item-split: unpaid lines remain on the bill (no cancel-log / KDS alert).

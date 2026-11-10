@@ -1,4 +1,5 @@
 import { adjustReferralSalesAction } from "@/src/lib/referral-actions";
+import { adjustEetHistoryAction } from "@/src/lib/eet/history-actions";
 import type { OrderItem, PaymentMethod } from "@/lib/types";
 import { resolveEqualSplitProgress } from "@/lib/checkout-calculations";
 import { supabase } from "@/src/lib/supabase";
@@ -19,6 +20,8 @@ function localMonthRange(yearMonth: string): { start: string; end: string } {
 /** Preserve the existing void flow; referred payments require a manager-backed server action. */
 async function voidSales(scope:{ids?:string[];start?:string;end?:string}) {
   if(scope.ids?.length===0)return {data:[],error:null};
+  const eet = await adjustEetHistoryAction(scope, {deleted_at:new Date().toISOString()});
+  if (eet.handled) return {data:eet.data,error:eet.error ? new Error(eet.error) : null};
   const ids:string[]=[];
   for(let offset=0;;offset+=500){
     let q=supabase.from("sales").select("id,referral_code_id").is("deleted_at",null).not("referral_code_id","is",null).order("id").range(offset,offset+499);
@@ -97,6 +100,8 @@ export async function updateSaleRecord(
     payload.card_brand = null;
   }
 
+  const eet = await adjustEetHistoryAction({ids:[saleId]}, payload);
+  if (eet.handled) return {data:eet.data,error:eet.error ? new Error(eet.error) : null};
   const {data:sale,error:lookupError}=await supabase.from("sales").select("referral_code_id").eq("id",saleId).single();
   if(lookupError){
     if(lookupError.code==="42703" || (/referral_code_id/i.test(lookupError.message)&&/column|schema cache/i.test(lookupError.message)))return supabase.from("sales").update(payload).eq("id",saleId).is("deleted_at",null);

@@ -1,0 +1,38 @@
+# SERVER ONLY. Do not prefix any EET variable with NEXT_PUBLIC_. No credentials are included.
+EET_BUSINESS_ID=<existing-business-uuid>
+EET_ADMIN_STAFF_IDS=<comma-separated-existing-admin-staff-uuids>
+AUTH_SECRET=<strong-random-secret-at-least-32-characters>
+SUPABASE_SERVICE_ROLE_KEY=<server-service-role-key>
+# One-time key for files/private keys imported through POS Settings. Generate 32 random bytes,
+# base64 encode them, and keep an independent secure backup. Never paste this into POS forms.
+EET_SETTINGS_ENCRYPTION_KEY=<base64-of-32-random-bytes>
+
+# Defaults MUST remain false until staging acceptance is complete.
+EET_CHECKOUT_ENABLED=false
+EET_WORKER_ENABLED=false
+EET_PROTOCOL_REVIEWED=false
+EET_COMPLIANCE_REVIEW_APPROVED=false
+EET_PRODUCTION_APPROVED=false
+EET_WORKER_SECRET=<strong-random-secret-at-least-32-characters>
+EET_WORKER_URL=https://<staging-host>/api/eet/worker
+
+# OPTIONAL legacy environment-managed materials below. POS imports can replace these.
+# In POS: upload/paste WSDL + XSD; upload .p12/.pfx + password (or PEM); import response pins.
+# Checksums are computed automatically. Existing imports take priority and fail closed if unreadable.
+# Download, review and pin the exact official protocol bytes. No guessed SOAPAction.
+EET_OFFICIAL_WSDL_BASE64=<base64-of-reviewed-official-wsdl>
+EET_OFFICIAL_WSDL_SHA256=<sha256-of-the-decoded-wsdl-bytes>
+EET_OFFICIAL_XSD_BASE64=<base64-of-reviewed-official-xsd>
+EET_OFFICIAL_XSD_SHA256=<sha256-of-the-decoded-xsd-bytes>
+
+# Environment-separated PEM material. PKCS#12 conversion happens on a trusted workstation.
+EET_PLAYGROUND_CERT_PEM_BASE64=<base64-of-test-leaf-certificate-pem>
+EET_PLAYGROUND_KEY_PEM_BASE64=<base64-of-test-private-key-pem>
+EET_PLAYGROUND_KEY_PASSPHRASE=<optional-encrypted-pem-passphrase>
+EET_PLAYGROUND_RESPONSE_CERTS_PEM_BASE64=<base64-of-reviewed-tax-authority-signing-leaf-pems>
+
+# Leave production values unset during development and Playground testing.
+# EET_PRODUCTION_CERT_PEM_BASE64=
+# EET_PRODUCTION_KEY_PEM_BASE64=
+# EET_PRODUCTION_KEY_PASSPHRASE=
+# EET_PRODUCTION_RESPONSE_CERTS_PEM_BASE64=

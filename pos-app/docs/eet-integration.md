@@ -4,6 +4,15 @@ Status: implementation prepared on an isolated branch. Nothing applied to live S
 no Production deployment, and no reporting mode activated. The operator requested code and
 migrations only. This is **not a certificate of legal compliance or a completed Playground acceptance**.
 
+Operator update: using the existing live Supabase database is authorized; a separate staging
+project is optional. First run `supabase/eet-preflight-readonly.sql`, inspect existing triggers
+and confirm a recoverable backup. Keep all activation flags false and EET Disabled/Paused
+while preparing the additive schema. Do not create test payments, edit historical payments
+or send real restaurant transactions to Playground. The authorization to use live data does
+not activate Production reporting or establish the unresolved compliance gates below.
+Current workspace access is limited to the public/anon client configuration; SQL administration
+and backup access have not been granted, so no live database inspection/migration is claimed.
+
 ## Repository/database audit
 
 - Next.js 16.2.12, React 19, TypeScript, Supabase JS, Vercel. Read the installed Next.js
@@ -94,7 +103,9 @@ Policy changes and voucher mappings require a reviewed, audited migration, not s
 See `docs/eet-environment.example` for every server-only variable. Do not commit `.env` files,
 PEM keys, PKCS#12 archives or passphrases. Never use `NEXT_PUBLIC_` for EET material.
 
-1. Snapshot the existing database and restore a staging clone. Inspect actual schemas/triggers
+1. Snapshot the existing database. Use a staging clone if available; the operator has also
+   authorized working on the existing database with activation flags off. Run the read-only
+   preflight and inspect actual schemas/triggers
    against the audit above, especially staff business ownership, referral columns, sale totals,
    soft deletion, and table occupancy. Existing patches are prerequisites; EET does not seed or
    rewrite restaurant records. The migration is versioned and intended to run once.

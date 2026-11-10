@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ShieldCheck, Save, PlugZap, Activity } from "lucide-react";
-import { getEetSettingsAction, saveEetSettingsAction, testEetConnectionAction, type EetSettingsInput } from "@/src/lib/eet/actions";
+import { getEetSettingsAction, saveEetSettingsAction, testEetConnectionAction, testSignedPlaygroundResponseAction, type EetSettingsInput } from "@/src/lib/eet/actions";
 import { EetMaterialsPanel } from "./materials-panel";
 import { EetSetupGuide, type EetSetupScript } from "./setup-guide";
 
@@ -108,9 +108,15 @@ export function EetSettingsPanel({ initial, scripts, onShowDashboard }: { initia
       <div className="flex flex-wrap gap-3">
         <button type="submit" disabled={busy || Boolean(phrase && confirmation !== phrase)} className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40"><Save size={16}/>{busy ? "Working…" : "Save EET settings"}</button>
         <button type="button" disabled={busy} onClick={() => void perform(async () => { const result = await testEetConnectionAction(); return result.ok ? "Verification succeeded (official code 0). No sale was reported; reporting mode is unchanged." : "Verification rejected; review the official error in the audit record."; })} className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2 text-sm dark:border-gray-700"><PlugZap size={16}/>{snapshot.settings.mode === "production" ? "Test saved Production connection" : "Test Playground connection"}</button>
+        <button type="button" disabled={busy} onClick={() => void perform(async () => {
+          const result = await testSignedPlaygroundResponseAction();
+          setSnapshot(await getEetSettingsAction());
+          return result.ok ? "Signed Playground acknowledgment verified. This was a zero-value test; no POS payment was created and Production remains unchanged." : "Playground rejected the test. Review the official error in the connection audit.";
+        })} className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2 text-sm dark:border-gray-700"><ShieldCheck size={16}/>Test signed Playground response</button>
       </div>
     </form>
     <p className="text-xs text-gray-500">Save the unit/register identifiers before testing. Keep Disabled + Paused for the first Playground check. This check needs the official WSDL/XSD and a Playground register certificate; step 3 response signing certificates are not required. It uses the imported test certificate’s EIČ and a zero-value verification message, without queuing or reporting restaurant payments. Success is official code 0, not a signed sale acknowledgment or Production approval.</p>
+    <p className="text-xs text-gray-500">After step 3, use Test signed Playground response to verify a signed test acknowledgment, including I.CA chain/revocation checks when CA trust is configured. This sends a zero-value operational test only to Playground using a reserved test certificate; it does not capture a POS payment, freeze the business identity or approve Production.</p>
     <EetMaterialsPanel overview={snapshot.materials} encryptionReady={snapshot.readiness.encryption} onSaved={async () => { setSnapshot(await getEetSettingsAction()); }}/>
     <EetSetupGuide scripts={scripts} encryptionConfigured={snapshot.readiness.encryption} hasStoredMaterials={snapshot.materials.items.length > 0}/>
     <details className={cardClass}><summary className="cursor-pointer text-sm font-semibold">Configuration and connection audit</summary><pre className="mt-3 max-h-72 overflow-auto text-xs">{JSON.stringify(snapshot.audit, null, 2)}</pre></details>

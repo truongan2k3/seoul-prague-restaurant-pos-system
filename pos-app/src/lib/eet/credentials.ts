@@ -9,14 +9,15 @@ function secret(name: string) {
   if (!value) throw new Error(`Configure server-only ${name}.`);
   return Buffer.from(value, "base64").toString("utf8");
 }
-export async function loadCredentials(environment: EetEnvironment, eic: string, options?: { verification?: boolean }) {
+export async function loadCredentials(environment: EetEnvironment, eic: string, options?: { verification?: boolean; playgroundAcceptance?: boolean }) {
   assertProductionAllowed(environment);
   assertProductionIdentity(environment, eic);
   // Official v4 interface §2.2.1 Table 1 and §3.5: verification returns an unsigned
   // Chyba kod="0", never a sale acknowledgment. Only this Playground check can
   // run without response signing pins; all operational submissions still require them.
   const playgroundVerification = environment === "playground" && options?.verification === true;
-  if (process.env.EET_PROTOCOL_REVIEWED !== "true" && !playgroundVerification) throw new Error("Review and pin the official WSDL/XSD before submission.");
+  const playgroundProbe = playgroundVerification || (environment === "playground" && options?.playgroundAcceptance === true);
+  if (process.env.EET_PROTOCOL_REVIEWED !== "true" && !playgroundProbe) throw new Error("Review and pin the official WSDL/XSD before submission.");
   const prefix = `EET_${environment.toUpperCase()}`;
   const [protocolRecord, signerRecord, responseRecord] = await Promise.all([
     getStoredMaterial("shared", "protocol"), getStoredMaterial(environment, "signer"), playgroundVerification ? null : getStoredMaterial(environment, "response"),

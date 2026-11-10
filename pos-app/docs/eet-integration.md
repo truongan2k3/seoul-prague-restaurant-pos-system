@@ -65,6 +65,16 @@ Operational acknowledgments still require separately trusted signing certificate
 Production approval gates remain unchanged. This check neither queues nor reports payments
 and does not establish operational or Production acceptance.
 
+After importing response trust, **Test signed Playground response** performs a separate,
+zero-value operational probe fixed to the Playground endpoint and one of its reserved test
+EIČ values. It requires step 3, verifies the signed test POK using the configured trust path,
+and audits the bounded result. It creates no POS sale/outbox row, changes no reporting mode
+or capture identity, and cannot approve Production. This explicit test is available before
+setting EET_PROTOCOL_REVIEWED so the operator can obtain acceptance evidence before reviewing
+and enabling normal reporting. The ordinary worker still requires protocol approval and
+the configured operational credentials. A real successful signed test remains required;
+the workspace network restriction prevents running it here.
+
 For first-time encryption setup, use **Generate key on this device** in the setup guide.
 No Node.js installation is needed: Web Crypto generates 32 random bytes in the browser,
 encoded as base64. Copy the value into Vercel's `EET_SETTINGS_ENCRYPTION_KEY`, back it up

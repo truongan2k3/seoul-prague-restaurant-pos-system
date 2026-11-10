@@ -3,7 +3,7 @@
 import { eetActor } from "./auth";
 import { certificateStatus, loadCredentials } from "./credentials";
 import { assertProductionAllowed, assertProductionIdentity, csvCell, validateData } from "./policy";
-import { runEetWorker, testEetConnection } from "./worker";
+import { runEetWorker, testEetConnection, testSignedPlaygroundResponse } from "./worker";
 import type { EetSettings, EetStatus, EetTransaction } from "./types";
 import { getMaterialOverview } from "./material-store";
 import { materialEncryptionReady } from "./material-crypto";
@@ -78,6 +78,24 @@ export async function testEetConnectionAction() {
   catch { throw new Error("EET connection test failed. Check server-only certificate, official artifacts, network and approval configuration."); }
   const { error: auditError } = await db.from("eet_audit_logs").insert({ business_id: businessId, actor_id: staff.id, action: "connection_test", details: { environment: target, verification_only: true, ...result } });
   if (auditError) throw new Error("Connection test completed but audit persistence failed.");
+  return result;
+}
+
+export async function testSignedPlaygroundResponseAction() {
+  const { db, businessId, staff } = await eetActor(true);
+  const { data, error } = await db.from("eet_settings").select("*").eq("business_id", businessId).maybeSingle();
+  if (error) throw new Error("EET settings are unavailable.");
+  const settings = (data as EetSettings | null) ?? defaultSettings(businessId);
+  const overview = await getMaterialOverview(businessId);
+  const eic = overview.items.find(item => item.environment === "playground" && item.kind === "signer")?.metadata.eic ?? settings.eic;
+  if (!settings.unit_id || !settings.register_id) throw new Error("Save the unit and register identifiers before testing.");
+  let result: Awaited<ReturnType<typeof testSignedPlaygroundResponse>>;
+  try { result = await testSignedPlaygroundResponse({ ...settings, eic }); }
+  catch { throw new Error("Signed Playground test failed. Check the official WSDL/XSD, reserved Playground certificate, step 3 response trust, and access to EET/I.CA revocation endpoints. Reporting mode is unchanged."); }
+  const { error: auditError } = await db.from("eet_audit_logs").insert({ business_id: businessId, actor_id: staff.id, action: "connection_test", details: {
+    environment: "playground", purpose: "signed_acknowledgment_acceptance", verification_only: false, test_only: true, accounting_payment_created: false, ...result,
+  } });
+  if (auditError) throw new Error("Signed Playground test completed but its audit could not be saved. Check storage before proceeding.");
   return result;
 }
 

@@ -359,7 +359,7 @@ export function SettingsView({
           {saving && (
             <span className="text-xs text-gray-500 dark:text-gray-400">{translate("settingsSaving")}</span>
           )}
-          <button
+          {activeSettingsTab !== "eet" && <button
             type="button"
             disabled={saving || !dirty}
             onClick={() => void handleSaveSettings()}
@@ -367,7 +367,7 @@ export function SettingsView({
           >
             <Save className="h-4 w-4" />
             {translate("settingsSaveChanges")}
-          </button>
+          </button>}
           <HeaderClockWithStatus />
         </div>
       </header>

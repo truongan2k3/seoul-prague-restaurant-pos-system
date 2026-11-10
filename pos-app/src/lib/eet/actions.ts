@@ -7,8 +7,9 @@ import { runEetWorker, testEetConnection, testSignedPlaygroundResponse } from ".
 import type { EetSettings, EetStatus, EetTransaction } from "./types";
 import { getMaterialOverview } from "./material-store";
 import { materialEncryptionReady } from "./material-crypto";
-import { EetProbeError } from "./probe-errors";
+import { EetProbeError, probeStep } from "./probe-errors";
 import { describeEetSetupFailure } from "./setup-diagnostics";
+import { settingsSaveFailure } from "./settings-errors";
 
 const SETTINGS_FIELDS = ["mode", "submission_control", "business_name", "establishment_address", "eic", "unit_id", "register_id", "tip_policy"] as const;
 export type EetSettingsInput = Pick<EetSettings, typeof SETTINGS_FIELDS[number]>;
@@ -46,24 +47,42 @@ export async function getEetSettingsAction() {
     readiness: { encryption: materialEncryptionReady(), workerHealthy: Boolean(data?.worker_seen_at && Date.now() - Date.parse(data.worker_seen_at) <= 120_000), checkout: process.env.EET_CHECKOUT_ENABLED === "true", worker: process.env.EET_WORKER_ENABLED === "true", protocol: process.env.EET_PROTOCOL_REVIEWED === "true", productionApproved: process.env.EET_PRODUCTION_APPROVED === "true" && process.env.EET_COMPLIANCE_REVIEW_APPROVED === "true" } };
 }
 
-export async function saveEetSettingsAction(value: EetSettingsInput, version: number, confirmation: string) {
-  const { db, businessId, staff } = await eetActor(true);
-  if (!value || Object.keys(value).some(k => !SETTINGS_FIELDS.includes(k as typeof SETTINGS_FIELDS[number])) || SETTINGS_FIELDS.some(k => typeof value[k] !== "string") || !Number.isInteger(version)) throw new Error("Invalid EET settings.");
-  if (!["disabled", "playground", "production"].includes(value.mode) || !["automatic", "paused"].includes(value.submission_control) || !["review_required", "employee_income", "business_income"].includes(value.tip_policy)) throw new Error("Invalid EET configuration.");
-  if (value.business_name.length > 200 || value.establishment_address.length > 500) throw new Error("Business information is too long.");
-  assertProductionAllowed(value.mode);
-  assertProductionIdentity(value.mode, value.eic);
-  if (value.mode !== "disabled") {
-    validateData({ eic_popl: value.eic, id_jednotky: value.unit_id, id_pokl: value.register_id, porad_cis: "CHECK", dat_trzby: "2027-01-01T00:00:00Z", celk_trzba: "0.00" });
-    if (value.tip_policy === "review_required" || !value.business_name.trim() || !value.establishment_address.trim()) throw new Error("Complete business information and confirm the tip policy before enabling capture.");
-    if (process.env.EET_CHECKOUT_ENABLED !== "true") throw new Error("Deploy and verify secure EET checkout before enabling capture.");
-    if (value.submission_control === "automatic") {
-      if (process.env.EET_WORKER_ENABLED !== "true") throw new Error("Configure the durable worker before automatic submission.");
-      try { await loadCredentials(value.mode, value.eic); } catch { throw new Error("Certificate/protocol setup is incomplete. Automatic submissions remain locked."); }
+export type EetSettingsSaveResult = ReturnType<typeof settingsSaveFailure> | { ok: true; settings: EetSettings | null; message: string };
+
+export async function saveEetSettingsAction(value: EetSettingsInput, version: number, confirmation: string): Promise<EetSettingsSaveResult> {
+  try {
+    const { db, businessId, staff } = await eetActor(true);
+    if (!value || Object.keys(value).some(k => !SETTINGS_FIELDS.includes(k as typeof SETTINGS_FIELDS[number])) || SETTINGS_FIELDS.some(k => typeof value[k] !== "string") || !Number.isInteger(version)) throw new Error("Invalid EET settings.");
+    if (!["disabled", "playground", "production"].includes(value.mode) || !["automatic", "paused"].includes(value.submission_control) || !["review_required", "employee_income", "business_income"].includes(value.tip_policy)) throw new Error("Invalid EET configuration.");
+    if (value.business_name.length > 200 || value.establishment_address.length > 500) throw new Error("Business information is too long.");
+    assertProductionAllowed(value.mode);
+    assertProductionIdentity(value.mode, value.eic);
+    if (value.mode !== "disabled") {
+      validateData({ eic_popl: value.eic, id_jednotky: value.unit_id, id_pokl: value.register_id, porad_cis: "CHECK", dat_trzby: "2027-01-01T00:00:00Z", celk_trzba: "0.00" });
+      if (value.tip_policy === "review_required" || !value.business_name.trim() || !value.establishment_address.trim()) throw new Error("Complete business information and confirm the tip policy before enabling capture.");
+      if (process.env.EET_CHECKOUT_ENABLED !== "true") throw new Error("Deploy and verify secure EET checkout before enabling capture.");
+      if (value.submission_control === "automatic") {
+        if (process.env.EET_WORKER_ENABLED !== "true") throw new Error("Configure the durable worker before automatic submission.");
+        if (process.env.EET_PROTOCOL_REVIEWED !== "true") throw new Error("Review and pin the official WSDL/XSD before submission.");
+        const environment = value.mode;
+        await probeStep("credentials", () => loadCredentials(environment, value.eic));
+      }
     }
-  }
-  const { error } = await db.rpc("eet_save_settings", { p_business: businessId, p_actor: staff.id, p_version: version, p_value: value, p_confirmation: confirmation });
-  if (error) throw new Error(error.message);
+    const { error } = await db.rpc("eet_save_settings", { p_business: businessId, p_actor: staff.id, p_version: version, p_value: value, p_confirmation: confirmation });
+    if (error) throw new Error(error.message);
+    // The write has committed. A later read/health failure must not turn this into
+    // a failed-save message or reset the form from an old parent snapshot.
+    const unconfirmed = { ok: true as const, settings: null, message: "EET settings were saved, but the stored values could not be reloaded. Use Recheck setup before saving again. All queued transactions are preserved." };
+    try {
+      const { data: saved, error: readError } = await db.from("eet_settings").select("*").eq("business_id", businessId).single();
+      if (readError || !saved) return unconfirmed;
+      const settings = saved as EetSettings;
+      const matches = SETTINGS_FIELDS.every(key => settings[key] === value[key]);
+      return { ok: true, settings, message: matches
+        ? `EET settings saved: ${settings.mode} · ${settings.submission_control}. All queued transactions are preserved.`
+        : "Your changes were saved, but another save changed them again. Showing the current stored configuration; review it before continuing." };
+    } catch { return unconfirmed; }
+  } catch (error) { return settingsSaveFailure(error); }
 }
 
 export interface EetProbeActionResult { ok: boolean; message: string; errorCode?: string }

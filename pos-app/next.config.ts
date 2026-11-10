@@ -14,7 +14,8 @@ const supabaseHost = supabaseHostname();
 
 const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
-    "/admin/settings/eet": ["./supabase/eet-preflight-readonly.sql", "./supabase/migrations/202611100001_eet_integration.sql", "./supabase/migrations/202611100002_eet_setup_materials.sql"],
+    "/app": ["./supabase/eet-preflight-readonly.sql", "./supabase/migrations/20261110000*_eet_*.sql"],
+    "/app/eet": ["./supabase/eet-preflight-readonly.sql", "./supabase/migrations/20261110000*_eet_*.sql"],
   },
   experimental: {
     serverActions: {

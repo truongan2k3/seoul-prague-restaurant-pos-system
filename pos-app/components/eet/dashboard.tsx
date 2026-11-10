@@ -16,7 +16,7 @@ type Detail = Awaited<ReturnType<typeof getEetDetailsAction>>;
 function Badge({ row }: { row: EetTransaction }) {
   return <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${row.status === "accepted" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : ["blocked", "failed", "uncertain"].includes(row.status) ? "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200"}`}>{row.status}</span>;
 }
-export function EetDashboard({ initial, initialSettings, initialFilters }: { initial: Data; initialSettings: Settings; initialFilters: EetFilters }) {
+export function EetDashboard({ initial, initialSettings, initialFilters, onShowSettings }: { initial: Data; initialSettings: Settings; initialFilters: EetFilters; onShowSettings?: () => void }) {
   const [data, setData] = useState(initial);
   const [settings, setSettings] = useState(initialSettings);
   const [draft, setDraft] = useState(initialFilters);
@@ -48,7 +48,7 @@ export function EetDashboard({ initial, initialSettings, initialFilters }: { ini
   };
   const stale = !settings.readiness.workerHealthy;
   return <div className="space-y-5">
-    <header className="flex flex-wrap justify-between gap-4"><div><h1 className="text-2xl font-semibold">EET Dashboard</h1><p className="mt-2 text-sm text-gray-500">{settings.settings.mode} · {settings.settings.submission_control} · Payment status is independent of reporting status.</p></div><Link href="/admin/settings/eet" className={`${input} inline-flex items-center gap-2`}><Settings2 size={16}/>EET settings</Link></header>
+    <header className="flex flex-wrap justify-between gap-4"><div><h1 className="text-2xl font-semibold">EET Dashboard</h1><p className="mt-2 text-sm text-gray-500">{settings.settings.mode} · {settings.settings.submission_control} · Payment status is independent of reporting status.</p></div>{onShowSettings ? <button type="button" onClick={onShowSettings} className={`${input} inline-flex items-center gap-2`}><Settings2 size={16}/>EET settings</button> : <Link href="/app/eet" className={`${input} inline-flex items-center gap-2`}><Settings2 size={16}/>EET settings</Link>}</header>
     {message && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-200">{message}</p>}
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[["Accepted", data.stats.accepted], ["Pending / processing", data.stats.pending + data.stats.processing], ["Retrying / uncertain", data.stats.retrying + data.stats.uncertain], ["Failed / review", data.stats.failed + data.stats.blocked]].map(([label, count]) => <div key={label} className={card}><p className="text-xs uppercase tracking-wide text-gray-500">{label}</p><p className="mt-2 text-3xl font-semibold tabular-nums">{count}</p></div>)}</div>
     <section className={`${card} flex flex-wrap items-center justify-between gap-4`}>

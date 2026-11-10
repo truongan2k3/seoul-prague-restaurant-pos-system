@@ -17,8 +17,6 @@ import {
 } from "lucide-react";
 
 const LINKS = [
-  { href: "/admin/eet", label: "EET Dashboard", icon: LayoutDashboard },
-  { href: "/admin/settings/eet", label: "EET Integration", icon: Building2 },
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/sections", label: "Sections", icon: LayoutList },
   { href: "/admin/signature", label: "Signature dishes", icon: Flame },

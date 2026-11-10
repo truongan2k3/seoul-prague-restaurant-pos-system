@@ -96,10 +96,16 @@ export async function importEetResponseCertificatesAction(form: FormData) {
   const env = environment(form), expectedVersion = version(form);
   if (form.get("trustReviewed") !== "on") throw new Error("Confirm the tax-authority response signing certificate source.");
   let material: ReturnType<typeof validateResponseCertificates>;
-  try { material = validateResponseCertificates(await textOrFile(form, "responseCertificates", "responseFile", 64 * 1024, true)); }
-  catch { throw new Error("Provide valid tax-authority response signing leaf certificates in PEM or a single DER .crt/.cer file. Taxpayer certificates, CA roots and scripts do not establish response trust."); }
+  try {
+    const root = upload(form, "responseRootFile", 16 * 1024), issuer = upload(form, "responseIssuerFile", 16 * 1024);
+    const direct = await textOrFile(form, "responseCertificates", "responseFile", 64 * 1024, true);
+    if ((root || issuer) && (direct.trim() || !root || !issuer)) throw new Error("Choose both I.CA files or paste PEM, not both.");
+    const readCertificate = async (file: File) => new X509Certificate(Buffer.from(await file.arrayBuffer())).toString();
+    material = validateResponseCertificates(root && issuer ? `${await readCertificate(root)}\n${await readCertificate(issuer)}` : direct);
+  }
+  catch { throw new Error("Upload both official I.CA RSA root/intermediate certificates with matching published fingerprints, or independently verified signing leaf PEMs. Unapproved CA certificates, taxpayer certificates and scripts are rejected."); }
   const certificates = material.certificates.map(pem => new X509Certificate(pem));
   const expiresAt = new Date(Math.min(...certificates.map(c => new Date(c.validTo).getTime()))).toISOString();
-  await save(context, env, "response", expectedVersion, material, { source: SOURCE, certificateCount: certificates.length, expiresAt, fingerprint: certificates[0].fingerprint256 });
-  return { message: "Response signing certificates stored. Connection verification and independent trust review are still required." };
+  await save(context, env, "response", expectedVersion, material, { source: certificates[0].ca ? "https://www.ica.cz/korenove-certifikaty" : SOURCE, certificateCount: certificates.length, expiresAt, fingerprint: certificates[0].fingerprint256 });
+  return { message: "Response trust stored. I.CA chain mode checks issuer signatures, validity, key usage and current signed revocation lists. Operational Playground acceptance is still required before live reporting." };
 }

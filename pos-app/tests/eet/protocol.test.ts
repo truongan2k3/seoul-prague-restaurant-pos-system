@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { SignedXml } from "xml-crypto";
 import { DOMParser } from "@xmldom/xmldom";
-import { EET_NAMESPACE, assertAdminGrant, assertProductionAllowed, retryDelayMs, csvCell } from "../../src/lib/eet/policy";
+import { EET_NAMESPACE, assertAdminGrant, assertProductionAllowed, assertProductionIdentity, retryDelayMs, csvCell } from "../../src/lib/eet/policy";
 import { assertCertificate, signSaleXml, parseEetResponse, parseXml, soapActionFromWsdl, SOAP_NS, DS_NS, WSSE_NS, WSU_NS, EXCLUSIVE, RSA_SHA256, SHA256 } from "../../src/lib/eet/xml";
 import type { EetData } from "../../src/lib/eet/types";
 import { eetReferralAuthorization, verifyEetReferralAuthorization } from "../../src/lib/eet/payment-service";
@@ -89,6 +89,9 @@ test("strict EET admin allowlist and explicit Production approval", () => {
   assert.throws(() => assertAdminGrant("server", "a", "a"), /permission/);
   assert.throws(() => assertAdminGrant("admin", "a", undefined), /permission/);
   assert.doesNotThrow(() => assertAdminGrant("admin", "a", "b,a"));
+  assert.doesNotThrow(() => assertAdminGrant("manager", "a", "b,a"));
+  assert.throws(() => assertAdminGrant("manager", "a", "different"), /permission/);
+  for (const eic of ["CZ00000019", "CZ8551015704", "CZ683555118"]) assert.throws(() => assertProductionIdentity("production", eic), /Playground test identity/);
   assert.throws(() => assertProductionAllowed("production", {}), /locked/);
   assert.doesNotThrow(() => assertProductionAllowed("playground", {}));
   assert.doesNotThrow(() => assertProductionAllowed("production", { EET_PRODUCTION_APPROVED: "true", EET_COMPLIANCE_REVIEW_APPROVED: "true" }));

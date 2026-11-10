@@ -1,0 +1,7 @@
+**
+!scripts/
+!scripts/eet-worker.mjs
+!ops/
+!ops/eet-worker/
+!ops/eet-worker/Dockerfile
+!ops/eet-worker/Dockerfile.dockerignore

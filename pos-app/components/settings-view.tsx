@@ -53,6 +53,7 @@ import { pingPrintBridge } from "@/src/lib/print-bridge-client";
 import type { NetworkPrinter, PrinterRole, ReceiptFontFamily, WeekdayKey } from "@/lib/types";
 import { formatPrinterEndpoint } from "@/lib/print-dispatch";
 import { CfdSlideshowManager } from "@/components/cfd-slideshow-manager";
+import { EetPosWorkspace } from "@/components/eet/pos-workspace";
 import {
   clearBusinessLogoAction,
   uploadBusinessLogoAction,
@@ -84,16 +85,19 @@ type SettingsTabId =
   | "devices"
   | "general"
   | "staff"
-  | "security";
+  | "security"
+  | "eet";
 
 export function SettingsView({
   menuItems = [],
   categories = [],
   onMenuChange,
+  initialEet = false,
 }: {
   menuItems?: import("@/lib/types").MenuItem[];
   categories?: import("@/lib/types").MenuCategoryRecord[];
   onMenuChange?: () => void;
+  initialEet?: boolean;
 }) {
   const {
     translate,
@@ -120,7 +124,7 @@ export function SettingsView({
   const [bridgeTestMessage, setBridgeTestMessage] = useState<string | null>(null);
   const [bridgeTesting, setBridgeTesting] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
-  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTabId>("branding");
+  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTabId>(initialEet ? "eet" : "branding");
 
   const settingsTabGroups: {
     id: string;
@@ -164,6 +168,7 @@ export function SettingsView({
         { id: "general", labelKey: "settingsTabGeneral" },
         { id: "staff", labelKey: "settingsTabStaff" },
         { id: "security", labelKey: "settingsTabSecurity" },
+        { id: "eet", labelKey: "settings" },
       ],
     },
   ];
@@ -172,6 +177,7 @@ export function SettingsView({
     .map((group) => ({
       ...group,
       tabs: group.tabs.filter((tab) => {
+        if (tab.id === "eet") return currentStaffUser?.role === "admin" || currentStaffUser?.role === "manager";
         if (tab.id === "security" || tab.id === "staff") {
           return canManageStaff(currentStaffUser?.role);
         }
@@ -378,10 +384,6 @@ export function SettingsView({
                   {translate(group.labelKey)}
                 </p>
                 <div className="flex gap-1 md:flex-col md:gap-0.5">
-                  {group.id === "admin" && canManageStaff(currentStaffUser?.role) && <Link
-                    href="/admin/settings/eet"
-                    className="shrink-0 rounded-lg px-3 py-2 text-left text-sm font-semibold text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800"
-                  >EET Integration ↗</Link>}
                   {group.tabs.map((tab) => {
                     const active = activeSettingsTab === tab.id;
                     return (
@@ -395,7 +397,7 @@ export function SettingsView({
                             : "text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
                         }`}
                       >
-                        {translate(tab.labelKey)}
+                        {tab.id === "eet" ? "EET Integration" : translate(tab.labelKey)}
                       </button>
                     );
                   })}
@@ -412,6 +414,7 @@ export function SettingsView({
           </p>
         )}
 
+        {activeSettingsTab === "eet" && <EetPosWorkspace key={currentStaffUser?.id}/>}
         {activeSettingsTab === "branding" && (
         <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6">
           <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:p-6">

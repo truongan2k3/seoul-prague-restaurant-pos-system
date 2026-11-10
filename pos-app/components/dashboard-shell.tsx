@@ -212,9 +212,9 @@ function LoadingShell({
   );
 }
 
-export function DashboardShell() {
+export function DashboardShell({ initialEet = false }: { initialEet?: boolean }) {
   const { currentStaffUser, refreshStaffList, translate } = useApp();
-  const [activeTab, setActiveTab] = useState<NavId>("map");
+  const [activeTab, setActiveTab] = useState<NavId>(initialEet ? "settings" : "map");
   const [voucherFocusOrderId, setVoucherFocusOrderId] = useState<string | null>(null);
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -682,6 +682,7 @@ export function DashboardShell() {
       case "settings":
         return (
           <SettingsView
+            initialEet={initialEet}
             menuItems={menuItems}
             categories={categories}
             onMenuChange={() => {

@@ -1,0 +1,4 @@
+# Copy to .env.eet-worker on the worker host. Keep it out of source control.
+# Set this same secret in Vercel; it must differ from the encryption/auth keys.
+EET_WORKER_URL=https://www.seoulprague.com/api/eet/worker
+EET_WORKER_SECRET=<a-separate-strong-random-secret-at-least-32-characters>

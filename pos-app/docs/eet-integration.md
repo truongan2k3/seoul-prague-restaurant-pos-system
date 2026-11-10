@@ -13,11 +13,46 @@ not activate Production reporting or establish the unresolved compliance gates b
 Current workspace access is limited to the public/anon client configuration; SQL administration
 and backup access have not been granted, so no live database inspection/migration is claimed.
 
-Operator self-service update: `/admin/settings/eet` now includes file/paste forms for official
+Operator self-service update: **POS → Settings → EET Integration** (`/app/eet`) includes file/paste forms for official
 WSDL/XSD, PKCS#12 `.p12/.pfx` plus password (or separate PEM key/certificate), and tax-authority
 response signing leaf certificates. It also displays copyable read-only preflight/install SQL,
 business/admin-ID queries and Vercel bootstrap instructions even before EET setup is ready.
 This does not execute SQL or edit Vercel settings automatically.
+
+EET settings and dashboard now live inside POS Settings. Legacy Admin URLs redirect to
+`/app/eet`; the website Admin navigation no longer includes EET. Every EET settings,
+material, dashboard/export and manual worker action requires both an active allowlisted
+admin/cashier/manager account and a server-verified POS manager code. Payments do not
+require an EET manager unlock. The authorization is an HttpOnly, SameSite=Strict signed
+cookie (Secure in production), bound to business, staff session and the current manager
+code, expiring after 10 minutes. Staff-session changes, code rotation and explicit lock
+invalidate it. No default manager code is used by EET. Existing POS settings/code storage
+and permissions should be included in the deployment security review.
+
+After the first two migrations, apply `202611100003_eet_manager_access.sql` from step 4
+in the POS setup guide. This additive rerunnable migration creates a service-role-only
+rate-limit RPC (five attempts per staff and thirty per business within fifteen minutes,
+serialized under a transaction advisory lock) and extends encrypted imports to explicitly
+authorized managers. It does not change payments, modes, pending jobs or encrypted data.
+Manager unlocks/attempts are audited without code values. Set `EET_ADMIN_STAFF_IDS` to the
+authorized staff UUIDs and keep your existing manager code in POS Settings → Security.
+
+For acknowledgment trust, the import accepts either existing independently verified leaf
+pins or the exact two I.CA CA certificates published by the official EET §3.3 source:
+`I.CA Root CA/RSA 05/2022` (serial 100000002) and `I.CA Public CA/RSA 06/2022`
+(serial 100001063). POS displays their official download links and DER SHA-256 fingerprints.
+CA imports must match both published fingerprints; arbitrary roots and mixed chains are
+rejected. The acknowledgment's referenced WS-Security signer is validated through that
+chain (RSA strength, validity, basic constraints/path length, key usage, issuer signatures),
+then checked against current issuer-signed CRLs before the existing XML body signature,
+attempt UUID and environment checks. CRL retrieval is restricted to `.ica.cz` hosts, refuses
+redirects, has size/time limits, verifies issuer/signature/freshness and fails closed on
+revocation or unavailable evidence. No AIA certificate fetching or trust-on-first-use occurs.
+Unsupported critical/indirect/delta CRLs remain blocked for review. Verified CRLs are cached
+for at most fifteen minutes and never beyond nextUpdate; each signer serial is rechecked.
+Legacy explicit leaf pins retain their existing separate provisioning/review requirements.
+The CA path still needs a real signed Playground round trip and deployment network review;
+synthetic chain/CRL tests are not official acceptance.
 
 Playground connection verification requires only the official WSDL/XSD, a valid matching
 Playground register certificate/private key, and saved unit/register IDs. Keep reporting
@@ -113,9 +148,9 @@ preserved. Blocked cases are visible and must be resolved, not silently skipped.
   sales outbox trigger, payment idempotency/revision RPC, settings audit and worker lease RPCs.
 - `src/lib/eet`: authorization, policy, protocol/signing, environment credentials, transport,
   durable worker, payment/history actions and administration. No private material in React.
-- `/admin/settings/eet`: modes, submission control, business/unit/register details, tip policy,
+- `/app/eet` → Settings: modes, submission control, business/unit/register details, tip policy,
   confirmation phrases, certificate expiry metadata and verification test.
-- `/admin/eet`: counts, amounts, history, filters/search, pagination, CSV, errors, attempts,
+- `/app/eet` → Dashboard: counts, amounts, history, filters/search, pagination, CSV, errors, attempts,
   acknowledgments, certificate/worker health and authorized retry/reconciliation.
 - `hooks/use-eet-checkout.tsx`: small POS indicator, durable browser retry intent, revision/visit
   validation, recovery of a recorded payment without charging again. Checkout controls unchanged.
@@ -212,6 +247,34 @@ worker Bearer credential. It returns 503 with bounded operational reasons for fa
 records, stale heartbeat and certificate warnings; it never submits payments. Dashboard visibility
 alone is not unattended monitoring. Never
 discard overdue records: the official methodology says the obligation persists after 48 hours.
+
+A Docker deployment package is provided under `ops/eet-worker/` (Node 22, non-root,
+read-only filesystem, restart policy, bounded logs and an endpoint-heartbeat health check).
+On an always-on host with Docker Compose:
+
+```sh
+cp ops/eet-worker/environment.example ops/eet-worker/.env.eet-worker
+# Edit this private file on the host; never paste its secret into chat or source control.
+# Set the same EET_WORKER_SECRET in Vercel and use the deployed HTTPS /api/eet/worker URL.
+docker compose -f ops/eet-worker/compose.yaml up -d --build
+docker compose -f ops/eet-worker/compose.yaml ps
+```
+
+Keep EET_WORKER_ENABLED=false while preparing the runner. Enable it only as part of
+reviewed Playground/Production rollout, with approved capture configuration. Prove a
+container/host restart, scheduler outage and queue recovery before relying on the runner.
+Configure an external monitor for container health and `/api/eet/health`; Docker health
+status alone does not send staff alerts or automatically restart an unhealthy running process.
+The worker container needs only EET_WORKER_URL/SECRET; private certificates and database
+service keys remain on the POS server. Roll back the UI/server deployment without removing
+the additive migration, queue, audit history or encryption key; keep/recover the supervised
+worker for outstanding reporting obligations.
+
+The current workspace has no live Vercel/Supabase server credentials and the operator chose
+to add outbound domains later. No migration was applied to the real database and no worker
+was started on a live host. Official CA download/CRL endpoints and actual signed Playground
+acceptance remain operator/deployment prerequisites. The reported successful verification
+test from the operator is a connection check, not a full operational acceptance test.
 
 ## Required acceptance and unresolved Production gates
 

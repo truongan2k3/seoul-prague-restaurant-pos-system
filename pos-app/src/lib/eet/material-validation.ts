@@ -4,6 +4,7 @@ import { createPrivateKey, createPublicKey, timingSafeEqual } from "node:crypto"
 import { EET_NAMESPACE } from "./policy";
 import { assertCertificate, parseXml, sha256, soapActionFromWsdl } from "./xml";
 import type { ProtocolMaterial, SignerMaterial, ResponseMaterial } from "./material-store";
+import { validateIcaAuthorities } from "./response-chain";
 
 export function validateProtocol(wsdl: string, xsd: string): ProtocolMaterial {
   if (Buffer.byteLength(wsdl) > 64 * 1024 || Buffer.byteLength(xsd) > 64 * 1024 || !wsdl || !xsd) throw new Error("Provide both WSDL and XSD, at most 64 KB each.");
@@ -45,6 +46,7 @@ export function validateResponseCertificates(pem: string): ResponseMaterial {
   if (!pem || Buffer.byteLength(pem) > 64 * 1024) throw new Error("Provide response signing leaf certificates (maximum 64 KB).");
   const certificates = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g) ?? [];
   if (!certificates.length || certificates.length > 8 || pem.replace(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g, "").trim()) throw new Error("Provide PEM response signing certificates only.");
+  if (certificates.some(pem => assertCertificate(pem).ca)) return { certificates: validateIcaAuthorities(certificates) };
   for (const pem of certificates) {
     const certificate = assertCertificate(pem);
     if (certificate.ca || certificate.subject.split("\n").some(s => /^CN=CZ\d{8,10}$/.test(s))) throw new Error("Response pins must be tax-authority signing leaf certificates, not taxpayer certificates or root CAs.");

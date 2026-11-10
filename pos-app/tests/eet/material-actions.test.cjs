@@ -141,7 +141,7 @@ test("Playground verification succeeds without step 3, never queues a payment, a
   await assert.rejects(() => loadCredentials("production", "CZ00000019", { verification: true }), /Production is locked/);
   await actions.importEetSignerAction(signer("production"));
   process.env.EET_PRODUCTION_APPROVED = "true"; process.env.EET_COMPLIANCE_REVIEW_APPROVED = "true";
-  await assert.rejects(() => loadCredentials("production", "CZ00000019", { verification: true }), /EET_PRODUCTION_RESPONSE_CERTS/);
+  await assert.rejects(() => loadCredentials("production", "CZ00000019", { verification: true }), /Playground test identity/);
   assert.equal(state.settings.mode, "disabled");
 });
 test("verification still requires the matching register certificate and official protocol artifacts", async () => {

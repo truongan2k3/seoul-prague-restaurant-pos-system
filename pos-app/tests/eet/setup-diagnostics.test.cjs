@@ -3,8 +3,6 @@ const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const fs = require("node:fs"), path = require("node:path"), Module = require("node:module"), ts = require("typescript");
 const root = path.resolve(__dirname, "../..");
-let failure = null, snapshot = null, encryptionReady = true;
-const SettingsPanel = () => null, SetupGuide = () => null, MaterialsPanel = () => null;
 function compile(relative, overrides = {}) {
   const file = path.join(root, relative);
   const mod = new Module(file, module);
@@ -16,16 +14,6 @@ function compile(relative, overrides = {}) {
 }
 const diagnostics = compile("src/lib/eet/setup-diagnostics.ts");
 const { describeEetSetupFailure } = diagnostics;
-const Page = compile("app/admin/settings/eet/page.tsx", {
-  "@/components/eet/settings-panel": { EetSettingsPanel: SettingsPanel },
-  "@/components/eet/setup-guide": { EetSetupGuide: SetupGuide },
-  "@/components/eet/materials-panel": { EetMaterialsPanel: MaterialsPanel },
-  "@/src/lib/eet/actions": { getEetSettingsAction: async () => { if (failure) throw failure; return snapshot; } },
-  "@/src/lib/eet/setup-guide": { getEetSetupScripts: async () => [] },
-  "@/src/lib/eet/material-crypto": { materialEncryptionReady: () => encryptionReady },
-  "@/src/lib/eet/setup-diagnostics": diagnostics,
-}).default;
-
 test("unknown errors never expose raw server or credential details", () => {
   for (const error of [new Error("https://secret:password@example.test?token=private"), "private-key", null, new Error("__proto__")]) {
     const result = describeEetSetupFailure(error);
@@ -34,29 +22,14 @@ test("unknown errors never expose raw server or credential details", () => {
     assert.ok(!JSON.stringify(result).includes("private-key"));
   }
 });
-test("fallback preserves accepted encryption status while keeping uploads locked for an admin failure", async () => {
-  failure = new Error("EET administrator permission required."); encryptionReady = true;
-  const element = await Page();
-  const children = element.props.children;
-  const materials = children.find(child => child.type === MaterialsPanel);
-  assert.equal(materials.props.encryptionReady, true);
-  assert.equal(materials.props.overview.storageReady, false);
-  assert.match(materials.props.setupBlockedReason, /EET_ADMIN_PERMISSION/);
-  assert.match(JSON.stringify(children[1].props), /Configured — keep the existing value/);
-  assert.equal(children.find(child => child.type === SetupGuide).props.encryptionConfigured, true);
-});
-test("database failures identify their stage separately from encryption readiness", async () => {
-  for (const [message, code] of [["EET queue health query unavailable.", "EET_QUEUE_HEALTH"], ["EET audit query unavailable.", "EET_AUDIT_DATABASE"], ["EET material status unavailable.", "EET_MATERIAL_DATABASE"]]) {
-    failure = new Error(message); encryptionReady = false;
-    const element = await Page();
-    const materials = element.props.children.find(child => child.type === MaterialsPanel);
-    assert.equal(materials.props.encryptionReady, false);
-    assert.match(materials.props.setupBlockedReason, new RegExp(code));
+test("database and manager failures produce distinct static recovery instructions", () => {
+  for (const [message, code] of [["EET queue health query unavailable.", "EET_QUEUE_HEALTH"], ["EET audit query unavailable.", "EET_AUDIT_DATABASE"], ["Enter the manager code to unlock EET settings.", "EET_MANAGER_LOCKED"]]) {
+    assert.equal(describeEetSetupFailure(new Error(message)).code, code);
   }
 });
-test("successful settings checks retain the existing settings workflow", async () => {
-  failure = null; snapshot = { fixture: "authorized-settings" };
-  const element = await Page();
-  assert.equal(element.type, SettingsPanel);
-  assert.equal(element.props.initial, snapshot);
+test("legacy Admin routes redirect into the POS manager gate", () => {
+  for (const relative of ["app/admin/eet/page.tsx", "app/admin/settings/eet/page.tsx"]) {
+    const Page = compile(relative, { "next/navigation": { redirect: destination => { throw new Error(destination); } } }).default;
+    assert.throws(() => Page(), { message: "/app/eet" });
+  }
 });

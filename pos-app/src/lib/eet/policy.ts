@@ -5,6 +5,10 @@ export const EET_ENDPOINTS: Record<EetEnvironment, string> = {
   production: "https://trzbyeet.gov.cz/eet/services/EETServiceSOAP/v4",
 };
 export const EET_NAMESPACE = "http://fs.gov.cz/eet/schema/v4";
+export const PLAYGROUND_EICS = ["CZ00000019", "CZ8551015704", "CZ683555118"] as const;
+export function assertProductionIdentity(environment: EetMode, eic: string) {
+  if (environment === "production" && PLAYGROUND_EICS.some(value => value === eic)) throw new Error("A Playground test identity cannot be used for Production reporting.");
+}
 
 export function assertProductionAllowed(environment: EetMode, env: Record<string, string | undefined> = process.env) {
   if (environment === "production" && (env.EET_PRODUCTION_APPROVED !== "true" || env.EET_COMPLIANCE_REVIEW_APPROVED !== "true")) {
@@ -15,7 +19,7 @@ export function assertProductionAllowed(environment: EetMode, env: Record<string
 export function assertAdminGrant(role: string, staffId: string, grants: string | undefined) {
   // Legacy cashier is normalized to admin by this POS. The independent deployment allowlist
   // prevents publicly editable legacy staff rows from granting EET administration.
-  if (!["admin", "cashier"].includes(role) || !grants?.split(",").map(s => s.trim()).includes(staffId)) {
+  if (!["admin", "cashier", "manager"].includes(role) || !grants?.split(",").map(s => s.trim()).includes(staffId)) {
     throw new Error("EET administrator permission required.");
   }
 }

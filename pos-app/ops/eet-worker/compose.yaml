@@ -1,0 +1,21 @@
+services:
+  eet-worker:
+    build:
+      context: ../..
+      dockerfile: ops/eet-worker/Dockerfile
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    env_file:
+      - .env.eet-worker
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"

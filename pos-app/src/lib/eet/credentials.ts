@@ -1,5 +1,5 @@
 import "server-only";
-import { assertProductionAllowed } from "./policy";
+import { assertProductionAllowed, assertProductionIdentity } from "./policy";
 import { assertCertificate, sha256, soapActionFromWsdl } from "./xml";
 import type { EetEnvironment } from "./types";
 import { decryptStoredMaterial, getStoredMaterial, type ProtocolMaterial, type ResponseMaterial, type SignerMaterial } from "./material-store";
@@ -11,6 +11,7 @@ function secret(name: string) {
 }
 export async function loadCredentials(environment: EetEnvironment, eic: string, options?: { verification?: boolean }) {
   assertProductionAllowed(environment);
+  assertProductionIdentity(environment, eic);
   // Official v4 interface §2.2.1 Table 1 and §3.5: verification returns an unsigned
   // Chyba kod="0", never a sale acknowledgment. Only this Playground check can
   // run without response signing pins; all operational submissions still require them.

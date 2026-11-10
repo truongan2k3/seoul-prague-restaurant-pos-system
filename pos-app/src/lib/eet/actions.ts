@@ -36,7 +36,8 @@ export async function getEetSettingsAction() {
     db.from("eet_audit_logs").select("id,actor_id,action,details,created_at").eq("business_id", businessId)
       .in("action", ["settings_changed", "connection_test", "material_imported"]).order("created_at", { ascending: false }).limit(20),
   ]);
-  if (queueError || audit.error) throw new Error("EET health/audit query unavailable.");
+  if (queueError) throw new Error("EET queue health query unavailable.");
+  if (audit.error) throw new Error("EET audit query unavailable.");
   const [materials, playground, production] = await Promise.all([getMaterialOverview(businessId), certificateStatus("playground"), certificateStatus("production")]);
   return { settings: (data as EetSettings | null) ?? defaultSettings(businessId), health: queue as { pending: number; errors: number; overdue: number; oldest: string | null },
     audit: audit.data, materials, certificates: { playground, production },

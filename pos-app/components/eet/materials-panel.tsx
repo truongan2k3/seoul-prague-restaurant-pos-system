@@ -23,17 +23,18 @@ function Saved({ item }: { item?: MaterialSummary }) {
     {item.metadata.xsdSha256 && <p className="break-all font-mono">XSD SHA-256: {item.metadata.xsdSha256}</p>}
   </div>;
 }
-export function EetMaterialsPanel({ overview, encryptionReady, onSaved }: {
+export function EetMaterialsPanel({ overview, encryptionReady, onSaved, setupBlockedReason }: {
   overview: { storageReady: boolean; items: MaterialSummary[] };
   encryptionReady: boolean;
   onSaved?: () => Promise<void>;
+  setupBlockedReason?: string;
 }) {
   const [environment, setEnvironment] = useState<"playground" | "production">("playground");
   const [format, setFormat] = useState("pkcs12");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const inFlight = useRef(false);
-  const ready = overview.storageReady && encryptionReady;
+  const ready = overview.storageReady && encryptionReady && !setupBlockedReason;
   const protocol = overview.items.find(item => item.kind === "protocol");
   const signer = overview.items.find(item => item.kind === "signer" && item.environment === environment);
   const response = overview.items.find(item => item.kind === "response" && item.environment === environment);
@@ -58,7 +59,13 @@ export function EetMaterialsPanel({ overview, encryptionReady, onSaved }: {
   return <section className="space-y-4" aria-labelledby="eet-materials-title">
     <header><h2 id="eet-materials-title" className="flex items-center gap-2 text-xl font-semibold"><Upload size={22}/>Tax-office files & certificates</h2>
       <p className="mt-2 text-sm text-gray-500">Upload a file or paste its contents here. Imports preserve the reporting mode and payment queue.</p></header>
-    {!ready && <p role="status" className="rounded-xl border border-amber-300 p-3 text-sm text-amber-800 dark:border-amber-800 dark:text-amber-200">One-time setup required: apply the encrypted-material migration and configure EET_SETTINGS_ENCRYPTION_KEY on the server. Import fields stay locked until encrypted storage is ready.</p>}
+    {!ready && <div role="status" className="space-y-2 rounded-xl border border-amber-300 p-3 text-sm text-amber-800 dark:border-amber-800 dark:text-amber-200">
+      {setupBlockedReason ? <p>{setupBlockedReason}</p> : <>
+        {!overview.storageReady && <p>Encrypted certificate storage is not ready. Check the database project and the encrypted certificate storage migration.</p>}
+        {!encryptionReady && <p>EET_SETTINGS_ENCRYPTION_KEY is missing or invalid on this deployment. Configure the existing key in Vercel, then redeploy.</p>}
+      </>}
+      <p>{encryptionReady ? "Encryption key: configured. Keep your existing value." : "Encryption key: not ready."} Import fields stay locked until authorization and encrypted storage checks pass.</p>
+    </div>}
     {message && <p role="status" className="rounded-xl border border-emerald-200 p-3 text-sm dark:border-emerald-900">{message}</p>}
     <form className={card} onSubmit={event => void submit(event, importEetProtocolAction)}>
       <h3 className="flex items-center gap-2 font-semibold"><FileCode2 size={18}/>1. Official protocol files</h3>

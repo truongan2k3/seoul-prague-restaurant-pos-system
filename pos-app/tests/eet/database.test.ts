@@ -52,7 +52,7 @@ async function finish(job: { id: string; lease_token: string }, attemptId: strin
 }
 
 describe("EET migration on an isolated PostgreSQL engine (no live Supabase data)", () => {
-  before(async () => { migration = await readFile("supabase/migrations/202611100001_eet_integration.sql", "utf8"); db = new PGlite(); await db.exec(fixture); await db.exec(migration); });
+  before(async () => { migration = await readFile("supabase/migrations/202611100001_eet_integration.sql", "utf8"); db = new PGlite(); await db.exec(fixture); await db.exec(migration); await db.exec(await readFile("supabase/migrations/202611100002_eet_setup_materials.sql", "utf8")); });
   after(async () => { await db.close(); });
   beforeEach(async () => {
     await db.exec(`RESET ROLE; SELECT set_config('request.jwt.claim.role','service_role',false);
@@ -65,6 +65,31 @@ describe("EET migration on an isolated PostgreSQL engine (no live Supabase data)
     await commit();
     assert.equal((await sql("SELECT * FROM sales")).length, 1);
     assert.equal((await sql("SELECT * FROM eet_transactions")).length, 0);
+  });
+  test("encrypted imports are versioned and audited atomically without secret envelopes in audit", async () => {
+    const envelope = { v: 1, keyId: "fixture-key-id", iv: "opaque-iv", tag: "opaque-tag", ciphertext: "opaque-ciphertext" };
+    await sql("SELECT eet_save_material($1,$2,'playground','signer',0,$3,$4)", [BUSINESS, STAFF, envelope, { fingerprint: "public-fingerprint", eic: "CZ00000019" }]);
+    const row = (await sql<{ version: number; envelope: unknown }>("SELECT * FROM eet_materials"))[0]; assert.equal(row.version, 1); assert.deepEqual(row.envelope, envelope);
+    const audit = (await sql<{ details: Record<string, unknown> }>("SELECT details FROM eet_audit_logs WHERE action='material_imported'"))[0];
+    assert.ok(!JSON.stringify(audit).includes("opaque-ciphertext"));
+    await assert.rejects(() => sql("SELECT eet_save_material($1,$2,'playground','signer',0,$3,$4)", [BUSINESS, STAFF, envelope, {}]), /changed/);
+    assert.equal((await sql("SELECT * FROM eet_audit_logs WHERE action='material_imported'")).length, 1);
+  });
+  test("material imports require an active administrator and keep environment types isolated", async () => {
+    const envelope = { v: 1, keyId: "fixture", iv: "opaque", tag: "opaque", ciphertext: "opaque" };
+    await sql("UPDATE staff SET role='server'");
+    await assert.rejects(() => sql("SELECT eet_save_material($1,$2,'production','signer',0,$3,$4)", [BUSINESS, STAFF, envelope, {}]), /administrator/);
+    await sql("UPDATE staff SET role='admin'");
+    await assert.rejects(() => sql("SELECT eet_save_material($1,$2,'shared','signer',0,$3,$4)", [BUSINESS, STAFF, envelope, {}]), /check constraint/);
+    await assert.rejects(() => sql("SELECT eet_save_material($1,$2,'production','signer',0,$3,$4)", [BUSINESS, STAFF, envelope, { privateKey: "must-not-be-metadata" }]), /metadata/);
+    assert.equal((await sql("SELECT * FROM eet_materials")).length, 0);
+  });
+  test("anon cannot read encrypted material or call import RPCs; migrations keep mode disabled", async () => {
+    await db.exec("SET ROLE anon; SELECT set_config('request.jwt.claim.role','anon',false)");
+    await assert.rejects(() => sql("SELECT * FROM eet_materials"), /permission denied/);
+    await assert.rejects(() => sql("SELECT eet_save_material($1,$2,'playground','signer',0,'{}','{}')", [BUSINESS, STAFF]), /permission denied/);
+    await db.exec("RESET ROLE; SELECT set_config('request.jwt.claim.role','service_role',false)");
+    assert.equal((await sql("SELECT * FROM eet_settings")).length, 0);
   });
   test("cash payment and outbox commit together; employee tips excluded and discount applied once", async () => {
     await configure(); const saved = await commit();

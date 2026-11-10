@@ -1,4 +1,4 @@
--- Additive. Run in a transaction on a staging clone first. Never rewrites historical sales.
+-- Additive. Run after the read-only preflight and a verified backup. Never rewrites historical sales.
 -- Depends on existing businesses/staff/sales/tables and normal POS patches.
 BEGIN;
 

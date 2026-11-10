@@ -18,7 +18,7 @@ export async function GET(request: Request) {
     ]);
     if (settings.error || queue.error) throw new Error("Health unavailable");
     const cfg = settings.data as EetSettings | null;
-    const certificate = certificateStatus(cfg?.capture_environment ?? "playground");
+    const certificate = await certificateStatus(cfg?.capture_environment ?? "playground");
     const reasons: string[] = [];
     if (queue.data.errors) reasons.push("Failed, uncertain or held transactions need review");
     if (queue.data.overdue) reasons.push("Reporting deadline exceeded; obligations remain active");

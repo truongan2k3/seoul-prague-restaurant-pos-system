@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { ShieldCheck, Save, PlugZap, Activity } from "lucide-react";
 import { getEetSettingsAction, saveEetSettingsAction, testEetConnectionAction, type EetSettingsInput } from "@/src/lib/eet/actions";
+import { EetMaterialsPanel } from "./materials-panel";
+import { EetSetupGuide, type EetSetupScript } from "./setup-guide";
 
 type Snapshot = Awaited<ReturnType<typeof getEetSettingsAction>>;
 const fieldClass = "mt-1 w-full rounded-xl border border-gray-300 bg-transparent px-3 py-2 text-sm dark:border-gray-700";
@@ -15,7 +17,7 @@ function inputFrom(snapshot: Snapshot): EetSettingsInput {
     eic: s.eic, unit_id: s.unit_id, register_id: s.register_id, tip_policy: s.tip_policy };
 }
 
-export function EetSettingsPanel({ initial }: { initial: Snapshot }) {
+export function EetSettingsPanel({ initial, scripts }: { initial: Snapshot; scripts: EetSetupScript[] }) {
   const [snapshot, setSnapshot] = useState(initial);
   const [value, setValue] = useState(() => inputFrom(initial));
   const [confirmation, setConfirmation] = useState("");
@@ -65,7 +67,7 @@ export function EetSettingsPanel({ initial }: { initial: Snapshot }) {
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label className="text-sm">Legal business name<input maxLength={200} value={value.business_name} onChange={e => change("business_name", e.target.value)} className={fieldClass}/></label>
           <label className="text-sm">Establishment address<input maxLength={500} value={value.establishment_address} onChange={e => change("establishment_address", e.target.value)} className={fieldClass}/></label>
-          <label className="text-sm">EIČ (not a legacy DIČ assumption)<input disabled={frozen} value={value.eic} onChange={e => change("eic", e.target.value.trim())} placeholder="CZ…" className={fieldClass}/></label>
+          <label className="text-sm">Taxpayer EIČ from DIS+ / certificate<input disabled={frozen} value={value.eic} onChange={e => change("eic", e.target.value.trim())} placeholder="CZ…" className={fieldClass}/></label>
           <label className="text-sm">Registrating unit ID from DIS+<input disabled={frozen} value={value.unit_id} onChange={e => change("unit_id", e.target.value)} className={fieldClass}/></label>
           <label className="text-sm">Register / POS identifier<input disabled={frozen} maxLength={20} value={value.register_id} onChange={e => change("register_id", e.target.value)} className={fieldClass}/></label>
           <label className="text-sm">Tip ownership policy<select disabled={frozen} value={value.tip_policy} onChange={e => change("tip_policy", e.target.value as EetSettingsInput["tip_policy"])} className={fieldClass}>
@@ -75,10 +77,10 @@ export function EetSettingsPanel({ initial }: { initial: Snapshot }) {
         <p className="mt-3 text-xs text-gray-500">Fiscal identity and tip policy are frozen when capture begins. Changing them requires an audited migration. Voucher payments remain held until their fiscal classification is reviewed.</p>
       </section>
       <section className={cardClass}>
-        <h2 className="font-semibold">Certificate management</h2><p className="mt-2 text-sm text-gray-500">Install and rotate separate Playground and Production credentials in server environment settings. Keys and certificates are never sent to this browser.</p>
+        <h2 className="font-semibold">Certificate status</h2><p className="mt-2 text-sm text-gray-500">Import certificates using the forms below. Saved private keys are encrypted and never returned to the browser. Existing environment-managed credentials remain supported.</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">{(["playground", "production"] as const).map(env => {
           const cert = snapshot.certificates[env];
-          return <div key={env} className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"><h3 className="font-medium capitalize">{env}</h3><p className={`mt-2 text-sm ${cert.warning ? "text-amber-600 dark:text-amber-300" : "text-emerald-600 dark:text-emerald-400"}`}>{!cert.configured ? "Not installed" : !cert.valid ? "Expired or invalid — action required" : `${cert.daysRemaining} days remaining`}</p><p className="mt-1 text-xs text-gray-500">Expires: {cert.expiresAt ?? "—"}</p>{cert.fingerprint && <p className="mt-2 break-all font-mono text-[10px] text-gray-500">SHA-256: {cert.fingerprint}</p>}</div>;
+          return <div key={env} className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"><h3 className="font-medium capitalize">{env}</h3><p className={`mt-2 text-sm ${cert.warning ? "text-amber-600 dark:text-amber-300" : "text-emerald-600 dark:text-emerald-400"}`}>{!cert.configured ? "Not installed" : !cert.valid ? "Expired, invalid or unreadable — action required" : `${cert.daysRemaining} days remaining`}</p><p className="mt-1 text-xs text-gray-500">Expires: {cert.expiresAt ?? "—"}{cert.configured ? ` · ${cert.source === "pos" ? "Imported in POS" : "Server environment"}` : ""}</p>{cert.fingerprint && <p className="mt-2 break-all font-mono text-[10px] text-gray-500">SHA-256: {cert.fingerprint}</p>}</div>;
         })}</div>
       </section>
       <section className={cardClass}>
@@ -93,9 +95,12 @@ export function EetSettingsPanel({ initial }: { initial: Snapshot }) {
       </section>
       <div className="flex flex-wrap gap-3">
         <button type="submit" disabled={busy || Boolean(phrase && confirmation !== phrase)} className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40"><Save size={16}/>{busy ? "Working…" : "Save EET settings"}</button>
-        <button type="button" disabled={busy} onClick={() => void perform(async () => { const result = await testEetConnectionAction(); return result.ok ? "Verification succeeded (official code 0). No sale was reported." : "Verification rejected; review the official error in the audit record."; })} className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2 text-sm dark:border-gray-700"><PlugZap size={16}/>Test saved connection</button>
+        <button type="button" disabled={busy} onClick={() => void perform(async () => { const result = await testEetConnectionAction(); return result.ok ? "Verification succeeded (official code 0). No sale was reported; reporting mode is unchanged." : "Verification rejected; review the official error in the audit record."; })} className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2 text-sm dark:border-gray-700"><PlugZap size={16}/>{snapshot.settings.mode === "production" ? "Test saved Production connection" : "Test Playground connection"}</button>
       </div>
     </form>
+    <p className="text-xs text-gray-500">Save the unit/register identifiers before testing. When reporting is Disabled, this button verifies Playground using the imported test certificate’s EIČ and a zero-value verification message; it does not queue or report restaurant payments.</p>
+    <EetMaterialsPanel overview={snapshot.materials} encryptionReady={snapshot.readiness.encryption} onSaved={async () => { setSnapshot(await getEetSettingsAction()); }}/>
+    <EetSetupGuide scripts={scripts}/>
     <details className={cardClass}><summary className="cursor-pointer text-sm font-semibold">Configuration and connection audit</summary><pre className="mt-3 max-h-72 overflow-auto text-xs">{JSON.stringify(snapshot.audit, null, 2)}</pre></details>
     <p className="text-xs text-gray-500">Protocol and legal source: <a href="https://eet.gov.cz/cs/pro-vyvojare" target="_blank" rel="noreferrer" className="underline">Czech Financial Administration — EET 2.0 developer documentation</a>.</p>
   </div>;

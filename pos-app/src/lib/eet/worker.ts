@@ -24,7 +24,7 @@ export async function runEetWorker() {
   let status = "blocked";
   let safeError: string | null = null;
   try {
-    const credentials = loadCredentials(job.environment, job.data.eic_popl);
+    const credentials = await loadCredentials(job.environment, job.data.eic_popl);
     stage = "persistence";
     const { data: attempt, error: attemptError } = await db.rpc("eet_begin_attempt", { p_id: job.id, p_lease: job.lease_token, p_hash: null });
     if (attemptError || !attempt) throw new Error("EET attempt could not be persisted or submissions were paused.");
@@ -59,7 +59,7 @@ export async function runEetWorker() {
 
 export async function testEetConnection(settings: EetSettings) {
   if (settings.mode === "disabled") throw new Error("Select Playground and save settings before testing.");
-  const credentials = loadCredentials(settings.mode, settings.eic);
+  const credentials = await loadCredentials(settings.mode, settings.eic, { verification: true });
   const messageId = randomUUID();
   const xml = signSaleXml({ data: { eic_popl: settings.eic, id_jednotky: settings.unit_id, id_pokl: settings.register_id,
     porad_cis: `TEST-${Date.now()}`, dat_trzby: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), celk_trzba: "0.00" },

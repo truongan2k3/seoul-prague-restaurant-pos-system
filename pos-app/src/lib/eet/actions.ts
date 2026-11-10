@@ -5,6 +5,8 @@ import { certificateStatus, loadCredentials } from "./credentials";
 import { assertProductionAllowed, csvCell, validateData } from "./policy";
 import { runEetWorker, testEetConnection } from "./worker";
 import type { EetSettings, EetStatus, EetTransaction } from "./types";
+import { getMaterialOverview } from "./material-store";
+import { materialEncryptionReady } from "./material-crypto";
 
 const SETTINGS_FIELDS = ["mode", "submission_control", "business_name", "establishment_address", "eic", "unit_id", "register_id", "tip_policy"] as const;
 export type EetSettingsInput = Pick<EetSettings, typeof SETTINGS_FIELDS[number]>;
@@ -28,16 +30,17 @@ function filterValues(filters: EetFilters) {
 export async function getEetSettingsAction() {
   const { db, businessId } = await eetActor(true);
   const { data, error } = await db.from("eet_settings").select("*").eq("business_id", businessId).maybeSingle();
-  if (error) throw new Error("EET schema unavailable. Apply the additive migration on staging first.");
+  if (error) throw new Error("EET schema unavailable. Apply the additive migration after the database preflight.");
   const [{ data: queue, error: queueError }, audit] = await Promise.all([
     db.rpc("eet_queue_health", { p_business: businessId }),
     db.from("eet_audit_logs").select("id,actor_id,action,details,created_at").eq("business_id", businessId)
-      .in("action", ["settings_changed", "connection_test"]).order("created_at", { ascending: false }).limit(20),
+      .in("action", ["settings_changed", "connection_test", "material_imported"]).order("created_at", { ascending: false }).limit(20),
   ]);
   if (queueError || audit.error) throw new Error("EET health/audit query unavailable.");
+  const [materials, playground, production] = await Promise.all([getMaterialOverview(businessId), certificateStatus("playground"), certificateStatus("production")]);
   return { settings: (data as EetSettings | null) ?? defaultSettings(businessId), health: queue as { pending: number; errors: number; overdue: number; oldest: string | null },
-    audit: audit.data, certificates: { playground: certificateStatus("playground"), production: certificateStatus("production") },
-    readiness: { workerHealthy: Boolean(data?.worker_seen_at && Date.now() - Date.parse(data.worker_seen_at) <= 120_000), checkout: process.env.EET_CHECKOUT_ENABLED === "true", worker: process.env.EET_WORKER_ENABLED === "true", protocol: process.env.EET_PROTOCOL_REVIEWED === "true", productionApproved: process.env.EET_PRODUCTION_APPROVED === "true" && process.env.EET_COMPLIANCE_REVIEW_APPROVED === "true" } };
+    audit: audit.data, materials, certificates: { playground, production },
+    readiness: { encryption: materialEncryptionReady(), workerHealthy: Boolean(data?.worker_seen_at && Date.now() - Date.parse(data.worker_seen_at) <= 120_000), checkout: process.env.EET_CHECKOUT_ENABLED === "true", worker: process.env.EET_WORKER_ENABLED === "true", protocol: process.env.EET_PROTOCOL_REVIEWED === "true", productionApproved: process.env.EET_PRODUCTION_APPROVED === "true" && process.env.EET_COMPLIANCE_REVIEW_APPROVED === "true" } };
 }
 
 export async function saveEetSettingsAction(value: EetSettingsInput, version: number, confirmation: string) {
@@ -52,7 +55,7 @@ export async function saveEetSettingsAction(value: EetSettingsInput, version: nu
     if (process.env.EET_CHECKOUT_ENABLED !== "true") throw new Error("Deploy and verify secure EET checkout before enabling capture.");
     if (value.submission_control === "automatic") {
       if (process.env.EET_WORKER_ENABLED !== "true") throw new Error("Configure the durable worker before automatic submission.");
-      try { loadCredentials(value.mode, value.eic); } catch { throw new Error("Certificate/protocol setup is incomplete. Automatic submissions remain locked."); }
+      try { await loadCredentials(value.mode, value.eic); } catch { throw new Error("Certificate/protocol setup is incomplete. Automatic submissions remain locked."); }
     }
   }
   const { error } = await db.rpc("eet_save_settings", { p_business: businessId, p_actor: staff.id, p_version: version, p_value: value, p_confirmation: confirmation });
@@ -61,12 +64,17 @@ export async function saveEetSettingsAction(value: EetSettingsInput, version: nu
 
 export async function testEetConnectionAction() {
   const { db, businessId, staff } = await eetActor(true);
-  const { data, error } = await db.from("eet_settings").select("*").eq("business_id", businessId).single();
-  if (error) throw new Error("Save EET settings before testing.");
+  const { data, error } = await db.from("eet_settings").select("*").eq("business_id", businessId).maybeSingle();
+  if (error) throw new Error("EET settings are unavailable.");
+  const settings = (data as EetSettings | null) ?? defaultSettings(businessId);
+  const target = settings.mode === "disabled" ? "playground" : settings.mode;
+  const overview = await getMaterialOverview(businessId);
+  const testEic = target === "playground" ? overview.items.find(item => item.environment === "playground" && item.kind === "signer")?.metadata.eic : undefined;
+  if (!settings.unit_id || !settings.register_id) throw new Error("Save the unit and register identifiers above before testing the connection.");
   let result: Awaited<ReturnType<typeof testEetConnection>>;
-  try { result = await testEetConnection(data as EetSettings); }
+  try { result = await testEetConnection({ ...settings, mode: target, eic: testEic ?? settings.eic }); }
   catch { throw new Error("EET connection test failed. Check server-only certificate, official artifacts, network and approval configuration."); }
-  const { error: auditError } = await db.from("eet_audit_logs").insert({ business_id: businessId, actor_id: staff.id, action: "connection_test", details: { environment: data.mode, ...result } });
+  const { error: auditError } = await db.from("eet_audit_logs").insert({ business_id: businessId, actor_id: staff.id, action: "connection_test", details: { environment: target, verification_only: true, ...result } });
   if (auditError) throw new Error("Connection test completed but audit persistence failed.");
   return result;
 }

@@ -13,11 +13,48 @@ import { settingsSaveFailure } from "./settings-errors";
 
 const SETTINGS_FIELDS = ["mode", "submission_control", "business_name", "establishment_address", "eic", "unit_id", "register_id", "tip_policy"] as const;
 export type EetSettingsInput = Pick<EetSettings, typeof SETTINGS_FIELDS[number]>;
+export interface EetPreparation { id: string; savedAt: string; value: EetSettingsInput }
 export interface EetFilters { from: string; to: string; status?: EetStatus | "all"; method?: "cash" | "card" | "all"; search?: string; page?: number }
 export interface EetStats { accepted: number; pending: number; failed: number; retrying: number; uncertain: number; blocked: number; processing: number; total: number; amount: string; overdue: number }
 
 function defaultSettings(businessId: string): EetSettings {
   return { business_id: businessId, mode: "disabled", submission_control: "paused", business_name: "", establishment_address: "", eic: "", unit_id: "", register_id: "", tip_policy: "review_required", capture_environment: null, live_reporting_started_at: null, last_success_at: null, worker_seen_at: null, worker_error: null, version: 1, updated_at: new Date().toISOString() };
+}
+
+function validPreparation(value: unknown): value is EetSettingsInput {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const input = value as Record<string, unknown>;
+  return Object.keys(input).length === SETTINGS_FIELDS.length && SETTINGS_FIELDS.every(key => typeof input[key] === "string" && (input[key] as string).length <= (key === "establishment_address" ? 500 : key === "business_name" ? 200 : key === "register_id" ? 20 : 64))
+    && ["disabled", "playground", "production"].includes(input.mode as string)
+    && ["automatic", "paused"].includes(input.submission_control as string)
+    && ["review_required", "employee_income", "business_income"].includes(input.tip_policy as string);
+}
+
+async function getPreparation(db: Awaited<ReturnType<typeof eetActor>>["db"], businessId: string, version: number): Promise<EetPreparation | null> {
+  const { data, error } = await db.from("eet_audit_logs").select("id,details,created_at").eq("business_id", businessId)
+    .eq("action", "preparation_saved").order("id", { ascending: false }).limit(1).maybeSingle();
+  if (error) throw new Error("EET preparation could not be loaded.");
+  // A later Apply invalidates the old draft, but its audit record remains intact.
+  if (!data || data.details?.active_version !== version || !validPreparation(data.details?.value)) return null;
+  return { id: String(data.id), savedAt: data.created_at, value: data.details.value };
+}
+
+/** Incomplete owner details may be prepared now. This append-only configuration
+ * draft never changes eet_settings, capture, the payment queue or worker state.
+ * Private keys/certificates use the separate encrypted material import only. */
+export async function saveEetPreparationAction(value: EetSettingsInput, version: number) {
+  try {
+    const { db, businessId, staff } = await eetActor(true);
+    if (!validPreparation(value) || !Number.isInteger(version)) throw new Error("Invalid EET settings.");
+    const { data: active, error: activeError } = await db.from("eet_settings").select("version").eq("business_id", businessId).maybeSingle();
+    if (activeError) throw new Error("EET schema unavailable. Apply the additive migration after the database preflight.");
+    if ((active?.version ?? 1) !== version) throw new Error("Settings changed. Reload before saving");
+    const { data, error } = await db.from("eet_audit_logs").insert({ business_id: businessId, actor_id: staff.id, action: "preparation_saved", details: { active_version: version, value } })
+      .select("id,created_at").single();
+    if (error || !data) throw new Error("EET preparation could not be saved.");
+    return { ok: true as const, preparation: { id: String(data.id), savedAt: data.created_at, value } satisfies EetPreparation,
+      message: "Preparation saved. Reporting has not been activated or changed. Missing details can be completed later." };
+  } catch (error) { return settingsSaveFailure(error); }
 }
 function filterValues(filters: EetFilters) {
   const from = new Date(filters.from), to = new Date(filters.to);
@@ -37,12 +74,13 @@ export async function getEetSettingsAction() {
   const [{ data: queue, error: queueError }, audit] = await Promise.all([
     db.rpc("eet_queue_health", { p_business: businessId }),
     db.from("eet_audit_logs").select("id,actor_id,action,details,created_at").eq("business_id", businessId)
-      .in("action", ["settings_changed", "connection_test", "material_imported", "manager_unlocked", "manager_unlock_attempt"]).order("created_at", { ascending: false }).limit(20),
+      .in("action", ["settings_changed", "preparation_saved", "connection_test", "material_imported", "manager_unlocked", "manager_unlock_attempt"]).order("created_at", { ascending: false }).limit(20),
   ]);
   if (queueError) throw new Error("EET queue health query unavailable.");
   if (audit.error) throw new Error("EET audit query unavailable.");
-  const [materials, playground, production] = await Promise.all([getMaterialOverview(businessId), certificateStatus("playground"), certificateStatus("production")]);
-  return { settings: (data as EetSettings | null) ?? defaultSettings(businessId), health: queue as { pending: number; errors: number; overdue: number; oldest: string | null },
+  const settings = (data as EetSettings | null) ?? defaultSettings(businessId);
+  const [materials, playground, production, preparation] = await Promise.all([getMaterialOverview(businessId), certificateStatus("playground"), certificateStatus("production"), getPreparation(db, businessId, settings.version)]);
+  return { settings, preparation, health: queue as { pending: number; errors: number; overdue: number; oldest: string | null },
     audit: audit.data, materials, certificates: { playground, production },
     readiness: { encryption: materialEncryptionReady(), workerHealthy: Boolean(data?.worker_seen_at && Date.now() - Date.parse(data.worker_seen_at) <= 120_000), checkout: process.env.EET_CHECKOUT_ENABLED === "true", worker: process.env.EET_WORKER_ENABLED === "true", protocol: process.env.EET_PROTOCOL_REVIEWED === "true", productionApproved: process.env.EET_PRODUCTION_APPROVED === "true" && process.env.EET_COMPLIANCE_REVIEW_APPROVED === "true" } };
 }
@@ -99,7 +137,11 @@ async function performEetProbe(signed: boolean): Promise<EetProbeActionResult> {
     stage = "settings";
     const { data, error } = await db.from("eet_settings").select("*").eq("business_id", businessId).maybeSingle();
     if (error) return probeFailure("EET_TEST_SETTINGS", "Saved EET settings could not be read. Recheck setup and the server database connection.");
-    const settings = (data as EetSettings | null) ?? defaultSettings(businessId);
+    const active = (data as EetSettings | null) ?? defaultSettings(businessId);
+    const preparation = await getPreparation(db, businessId, active.version);
+    // Probes may use prepared unit/register details without applying them. Their
+    // target still follows the active connection mode (signed probe is fixed PG).
+    const settings = preparation ? { ...active, ...preparation.value, mode: active.mode, submission_control: active.submission_control } : active;
     const target = signed || settings.mode === "disabled" ? "playground" : settings.mode;
     if (!settings.unit_id || !settings.register_id) return probeFailure("EET_TEST_REGISTER_FIELDS", "Save the Unit ID and POS/register identifier in Business and register before testing.");
     stage = "materials";

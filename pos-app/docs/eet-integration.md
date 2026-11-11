@@ -91,17 +91,42 @@ and enabling normal reporting. The ordinary worker still requires protocol appro
 the configured operational credentials. A real successful signed test remains required;
 the workspace network restriction prevents running it here.
 
-**Saving reporting controls:** Playground capture requires the existing secure-checkout
-acceptance gate. Automatic additionally requires the configured worker, protocol review
-and operational credentials. The POS displays these blockers before saving and returns
-static `EET_SETTINGS_*` errors rather than production-masked exceptions. Failed saves keep
-the draft; saved configuration is labelled separately. Use **Save EET settings** inside the
-EET form (the unrelated general Settings save button is hidden on this tab). Successful
-writes return the authoritative settings/version and update the workspace snapshot, so
-Dashboard → Settings does not restore a stale configuration. A readback failure after a
-committed write is reported separately and requires Recheck setup before another save.
-No reporting/certificate gates, environment variables, queue rules or Production approvals
-are enabled or bypassed by this UI fix.
+**Prepare now / Apply later:** Save preparation accepts incomplete business/register
+details and desired mode/submission selections without requiring checkout, worker, protocol
+approval or an available tax endpoint. It writes a manager-authorized `preparation_saved`
+event to the existing append-only EET audit table, scoped by business and active settings
+version. It does not change `eet_settings`, freeze fiscal identity, create payments/outbox
+jobs, start the worker or send messages. No new migration is needed. Only the eight
+allowlisted public configuration fields are accepted; certificates/passwords/private keys
+remain exclusively in the existing encrypted material import. The newest valid preparation
+is restored across devices; a later Apply/settings version supersedes older preparation.
+
+**Apply** saves the preparation first, then uses the existing authorized settings action,
+SQL version/frozen-identity/queue guards, certificate checks and server acceptance gates.
+Activating Production or suspending live reporting requires an explicit confirmation.
+Saving a Production preparation is allowed while Production activation remains locked.
+Known service/approval blockers do not prevent saving preparation and are summarized simply
+at Apply; technical details remain in collapsed advanced sections. Successful applies return
+the authoritative active settings/version and clear the superseded preparation from the
+workspace snapshot. A failed readback is distinguished from an uncommitted save. Neither
+preparation nor code deployment enables server flags or Production reporting.
+
+Playground checks can use the saved preparation's unit/register fields while active
+reporting stays unchanged. The reserved Playground signer identity is still selected
+separately; the explicit signed probe remains fixed to Playground. The ordinary connection
+check follows the active environment (Disabled defaults to Playground). The certificate
+import defaults to Production for owner preparation, with protocol/response-trust forms
+collapsed and the separate Playground selection retained.
+
+Official availability was checked on **11 November 2026**: the Financial Administration
+announced Playground open since **1 July 2026**, DIS+ registration/unit creation/register
+certificates available in November, and regular operation scheduled for **1 January 2027**.
+These published dates establish service rollout, not live endpoint uptime or successful POS
+integration. No real signed round trip or Production acceptance is claimed by this change.
+Sources:
+- https://eet.gov.cz/cs/pro-vyvojare/aktuality-pro-vyvojare/2026/financni-sprava-zpristupnila-testovaci-prostredi-p-1228
+- https://eet.gov.cz/cs/o-eet/jaky-je-harmonogram-eet-2-0
+- https://financnisprava.gov.cz/cs/financni-sprava/media-a-verejnost/tiskove-zpravy-gfr/tiskove-zpravy-2026/eet-2-0-podnikatele-se-jiz-mohou-prihlasit
 
 For first-time encryption setup, use **Generate key on this device** in the setup guide.
 No Node.js installation is needed: Web Crypto generates 32 random bytes in the browser,

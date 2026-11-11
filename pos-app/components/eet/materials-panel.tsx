@@ -25,13 +25,15 @@ function Saved({ item }: { item?: MaterialSummary }) {
     {item.metadata.xsdSha256 && <p className="break-all font-mono">XSD SHA-256: {item.metadata.xsdSha256}</p>}
   </div>;
 }
-export function EetMaterialsPanel({ overview, encryptionReady, onSaved, setupBlockedReason }: {
+export function EetMaterialsPanel({ overview, encryptionReady, onSaved, setupBlockedReason, compact = false, initialEnvironment = "playground" }: {
   overview: { storageReady: boolean; items: MaterialSummary[] };
   encryptionReady: boolean;
   onSaved?: () => Promise<void>;
   setupBlockedReason?: string;
+  compact?: boolean;
+  initialEnvironment?: "playground" | "production";
 }) {
-  const [environment, setEnvironment] = useState<"playground" | "production">("playground");
+  const [environment, setEnvironment] = useState<"playground" | "production">(initialEnvironment);
   const [format, setFormat] = useState("pkcs12");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -69,7 +71,7 @@ export function EetMaterialsPanel({ overview, encryptionReady, onSaved, setupBlo
       <p>{encryptionReady ? "Encryption key: configured. Keep your existing value." : "Encryption key: not ready."} Import fields stay locked until authorization and encrypted storage checks pass.</p>
     </div>}
     {message && <p role="status" className="rounded-xl border border-emerald-200 p-3 text-sm dark:border-emerald-900">{message}</p>}
-    <form className={card} onSubmit={event => void submit(event, importEetProtocolAction)}>
+    <details open={!compact} className={compact ? card : undefined}><summary className="cursor-pointer text-sm font-semibold">Official protocol files · technical setup</summary><form className={compact ? "mt-4 space-y-4" : card} onSubmit={event => void submit(event, importEetProtocolAction)}>
       <h3 className="flex items-center gap-2 font-semibold"><FileCode2 size={18}/>1. Official protocol files</h3>
       <p className="mt-2 text-sm text-gray-500">Download <strong>EETServiceSOAP.wsdl</strong> and <strong>EETXMLSchema.xsd</strong> from the <a href={official} target="_blank" rel="noreferrer" className="text-emerald-700 underline dark:text-emerald-400">official EET developer downloads</a>. SHA-256 values are calculated automatically. XML imports are never executed as scripts.</p>
       <Saved item={protocol}/>
@@ -82,7 +84,7 @@ export function EetMaterialsPanel({ overview, encryptionReady, onSaved, setupBlo
         <label className="flex items-start gap-2 text-sm"><input name="sourceReviewed" type="checkbox" required className="mt-1"/>I downloaded these files from the official EET website. Importing them does not replace technical/Playground acceptance.</label>
         <button type="submit" className={button}><Upload size={16}/>{busy ? "Working…" : protocol ? "Replace protocol files" : "Save protocol files"}</button>
       </fieldset>
-    </form>
+    </form></details>
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Certificate environment">
       {(["playground", "production"] as const).map(env => <button key={env} type="button" aria-pressed={environment === env} disabled={busy} onClick={() => setEnvironment(env)} className={`rounded-xl border px-4 py-2 text-sm font-semibold ${environment === env ? "border-emerald-700 bg-emerald-700 text-white" : "border-gray-300 dark:border-gray-700"}`}>{env === "playground" ? "Playground · test credentials" : "Production · live credentials"}</button>)}
     </div>
@@ -103,7 +105,7 @@ export function EetMaterialsPanel({ overview, encryptionReady, onSaved, setupBlo
         <button type="submit" className={button}><LockKeyhole size={16}/>{busy ? "Working…" : signer ? "Replace register certificate securely" : "Save register certificate securely"}</button>
       </fieldset>
     </form>
-    <form key={`response-${environment}`} className={card} onSubmit={event => void submit(event, importEetResponseCertificatesAction)}>
+    <details open={!compact} className={compact ? card : undefined}><summary className="cursor-pointer text-sm font-semibold">Tax-authority trust certificates · technical setup</summary><form key={`response-${environment}`} className={compact ? "mt-4 space-y-4" : card} onSubmit={event => void submit(event, importEetResponseCertificatesAction)}>
       <h3 className="font-semibold">3. Tax-authority response signing certificates</h3>
       <p className="mt-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">{environment === "playground" ? "Not needed for Test Playground connection. Required before operational test submissions: those return a signed acknowledgment." : "Required before live reporting. Playground connection verification does not complete Production acceptance."}</p>
       <p className="mt-2 text-sm text-gray-500">The official operational documentation §3.3 identifies I.CA as the response-signing issuer. Download the two public CA files below, then upload both. The server matches their published fingerprints, verifies the response signer chain and checks current signed revocation lists. No certificate purchase or private key is needed here.</p>
@@ -117,6 +119,6 @@ export function EetMaterialsPanel({ overview, encryptionReady, onSaved, setupBlo
         <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="trustReviewed" required className="mt-1"/>I downloaded these certificates from the official source for this environment and checked the published fingerprints.</label>
         <button type="submit" className={button}><Upload size={16}/>{busy ? "Working…" : response ? "Replace response signing certificates" : "Save response signing certificates"}</button>
       </fieldset>
-    </form>
+    </form></details>
   </section>;
 }

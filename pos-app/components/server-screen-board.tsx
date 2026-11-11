@@ -274,9 +274,9 @@ function ServerScreenFooter({ language }: { language: LanguageCode }) {
   }, []);
 
   return (
-    <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-white/15 bg-[#0B0B0C] px-4 py-2.5 text-sm tabular-nums text-white sm:px-5">
-      <span className="min-w-0 truncate capitalize">
-        {now ? formatServerScreenFooterDate(now, language) : "\u00a0"}
+    <footer className="flex min-w-0 shrink-0 items-center justify-between gap-3 border-t border-white/15 bg-[#0B0B0C] px-4 py-2.5 text-sm tabular-nums text-white sm:px-5">
+      <span className="min-w-0 flex-1 capitalize">
+        <OverflowPanText text={now ? formatServerScreenFooterDate(now, language) : "\u00a0"} respectReducedMotion={false} />
       </span>
       <span className="shrink-0 text-base font-semibold tracking-wide text-white">
         {now ? formatServerScreenFooterTime(now, language) : "\u00a0"}

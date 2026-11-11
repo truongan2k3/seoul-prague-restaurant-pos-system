@@ -4,7 +4,7 @@ import { useCallback, useId, useLayoutEffect, useRef, useState, type PointerEven
 import { ArrowRight, Check, LoaderCircle } from "lucide-react";
 import styles from "./slide-to-send-order.module.css";
 
-const CONFIRM_THRESHOLD = 0.9;
+const CONFIRM_THRESHOLD = 0.5;
 
 type Gesture = {
   pointerId: number;
@@ -222,7 +222,7 @@ export function SlideToSendOrder({ contextId, disabled, onSend, errorMessage }: 
         </button>
       </div>
       <span id={instructionsId} className="sr-only">
-        Drag the arrow right at least 90% and release to send. A tap does not send.
+        Drag the arrow right at least {CONFIRM_THRESHOLD * 100}% and release to send. A tap does not send.
         With a keyboard, press and release Enter or Space, then press again to confirm.
         Press Escape or leave the control to cancel.
       </span>

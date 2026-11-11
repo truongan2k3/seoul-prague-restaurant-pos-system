@@ -2,6 +2,7 @@ import { EetProbeError } from "./probe-errors";
 import { describeEetSetupFailure } from "./setup-diagnostics";
 
 const issues: Record<string, { code: string; message: string }> = {
+  "EET preparation could not be saved.": { code: "EET_PREPARATION_SAVE", message: "The preparation save could not be confirmed. Use Recheck setup to check the latest stored preparation before retrying; your form has been kept." },
   "Invalid EET settings.": { code: "EET_SETTINGS_INVALID", message: "The settings request is invalid. Recheck setup before saving again." },
   "Invalid EET configuration.": { code: "EET_SETTINGS_INVALID", message: "Choose valid reporting, submission and tip-policy options." },
   "Business information is too long.": { code: "EET_SETTINGS_BUSINESS", message: "Use at most 200 characters for the business name and 500 for its address." },

@@ -3,6 +3,9 @@ export interface EetSetupIssue { code: string; title: string; action: string }
 // Only static, allowlisted descriptions reach the browser. Never display arbitrary
 // exception messages: SDK/network errors may contain credentials or query details.
 const issues: Record<string, EetSetupIssue> = {
+  "EET preparation could not be loaded.": {
+    code: "EET_PREPARATION_STORAGE", title: "Saved EET preparation could not be read.", action: "Recheck the server connection to the existing EET audit table. This workflow uses the installed EET schema; no additional migration or encryption-key change is required.",
+  },
   "Enter the manager code to unlock EET settings.": {
     code: "EET_MANAGER_LOCKED", title: "Manager access is locked or expired.", action: "Open POS Settings → EET Integration and enter the manager code again. The server requires a new authorization after 10 minutes or a staff/code change.",
   },

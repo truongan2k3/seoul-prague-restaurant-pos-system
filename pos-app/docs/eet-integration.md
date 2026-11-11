@@ -63,6 +63,18 @@ included; raw fetch/parser/crypto exception messages are never returned. A verif
 revocation is terminal and cannot be overridden by a later mirror. These diagnostics
 do not bypass revocation validation or establish that deployment networking is healthy.
 
+CRL issuer matching uses the original subject ASN.1 from the validated issuer's
+TBSCertificate, not a DN reconstructed from node-forge's flattened attributes. In
+node-forge 1.4.3, parsed UTF8String attributes retain their encoded bytes, while
+`distinguishedNameToAsn1` UTF-8-encodes them again; I.CA's published Czech organization
+name contains accented characters. Reconstructing can therefore reject a valid issuer
+and also loses multi-valued RDN grouping. Preserve the original ASN.1 and retain strict
+issuer/algorithm matching, signature, freshness and revoked-serial checks. The official
+issuer subject is documented at
+https://www.ica.cz/sites/default/files/download/2025/pca22_rsa.txt.
+This corrects an identified implementation defect; a successful signed Playground/CRL
+round trip from the deployed POS still has to be confirmed separately.
+
 In **EET Dashboard → View**, managers can inspect the saved immutable fiscal Data fields,
 verified acknowledgment, and attempt/audit metadata. The readable view distinguishes a
 queued/attempted request from confirmed acceptance. Expanded JSON includes request/response

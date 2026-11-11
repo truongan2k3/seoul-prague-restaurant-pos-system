@@ -26,9 +26,18 @@ export function verifyCertificateRevocation(bytes: Uint8Array, certificate: X509
   const parsedIssuer = forge.pki.certificateFromPem(issuer.toString());
   const keyUsage = parsedIssuer.getExtension("keyUsage") as { cRLSign?: boolean } | null;
   if (!keyUsage?.cRLSign || !certificate.checkIssued(issuer) || !certificate.verify(issuer.publicKey)) throw new Error("Invalid CRL issuer.");
+  // Use the issuer certificate's original subject ASN.1. Forge's parsed DN
+  // attributes retain UTF-8 bytes as binary strings, while rebuilding that DN
+  // UTF-8-encodes them again. I.CA's accented Czech organization name therefore
+  // mismatches despite a valid signature. Rebuilding also flattens multi-value
+  // RDN sets. The preserved TBSCertificate avoids both transformations.
+  const issuerFields = children(parsedIssuer.tbsCertificate);
+  const hasVersion = issuerFields[0]?.tagClass === forge.asn1.Class.CONTEXT_SPECIFIC && issuerFields[0]?.type === 0;
+  const originalSubject = issuerFields[hasVersion ? 5 : 4];
+  if (!originalSubject || originalSubject.tagClass !== forge.asn1.Class.UNIVERSAL || originalSubject.type !== forge.asn1.Type.SEQUENCE) throw new Error("Invalid CRL issuer.");
   const fields = children(tbs);
   let i = fields[0].type === forge.asn1.Type.INTEGER ? 1 : 0;
-  if (!der(fields[i++]).equals(der(algorithm)) || !der(fields[i++]).equals(der(forge.pki.distinguishedNameToAsn1(parsedIssuer.subject)))) throw new Error("CRL issuer/algorithm mismatch.");
+  if (!der(fields[i++]).equals(der(algorithm)) || !der(fields[i++]).equals(der(originalSubject))) throw new Error("CRL issuer/algorithm mismatch.");
   const thisUpdate = time(fields[i++]), nextUpdate = time(fields[i++]);
   if (thisUpdate > now || nextUpdate <= now || nextUpdate <= thisUpdate) throw new Error("CRL is stale or not yet valid.");
   if (fields[i]?.tagClass === forge.asn1.Class.UNIVERSAL && fields[i]?.type === forge.asn1.Type.SEQUENCE) {

@@ -14,7 +14,9 @@ const openssl = (...args: string[]) => execFileSync("openssl", args, { cwd: dir,
 before(() => {
   dir = mkdtempSync(join(tmpdir(), "eet-response-chain-"));
   openssl("req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", "root.key", "-out", "root.pem", "-subj", "/CN=Fixture Root", "-days", "3", "-addext", "basicConstraints=critical,CA:TRUE,pathlen:1", "-addext", "keyUsage=critical,keyCertSign,cRLSign");
-  openssl("req", "-new", "-newkey", "rsa:2048", "-nodes", "-keyout", "issuer.key", "-out", "issuer.csr", "-subj", "/CN=Fixture Issuer");
+  // Real I.CA organization names contain Czech UTF-8. Include a multi-value RDN
+  // too: reconstructing a flattened parsed DN must not be used for CRL matching.
+  openssl("req", "-new", "-newkey", "rsa:2048", "-nodes", "-utf8", "-keyout", "issuer.key", "-out", "issuer.csr", "-subj", "/C=CZ/O=První certifikační autorita, a.s./CN=Fixture Issuer+OU=Signing CA");
   writeFileSync(join(dir, "issuer.ext"), "basicConstraints=critical,CA:TRUE,pathlen:0\nkeyUsage=critical,keyCertSign,cRLSign\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid\ncrlDistributionPoints=URI:http://qcrldp1.ica.cz/fixture-root.crl\n");
   openssl("x509", "-req", "-in", "issuer.csr", "-CA", "root.pem", "-CAkey", "root.key", "-CAcreateserial", "-out", "issuer.pem", "-days", "3", "-extfile", "issuer.ext");
   openssl("req", "-new", "-newkey", "rsa:2048", "-nodes", "-keyout", "leaf.key", "-out", "leaf.csr", "-subj", "/CN=Fixture Tax Authority");
@@ -42,6 +44,7 @@ test("only independently published I.CA authorities can become response trust an
 });
 test("signed fresh CRLs permit an unrevoked leaf and reject revoked, stale, modified or wrongly issued data", () => {
   const cert = new X509Certificate(leaf), ca = new X509Certificate(issuer);
+  assert.match(ca.subject, /První certifikační autorita/);
   assert.ok(verifyCertificateRevocation(emptyCrl, cert, ca) > Date.now());
   assert.throws(() => verifyCertificateRevocation(revokedCrl, cert, ca), /revoked/);
   assert.throws(() => verifyCertificateRevocation(emptyCrl, cert, ca, Date.now() + 3 * 86400000), /stale/);

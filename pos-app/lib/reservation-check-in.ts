@@ -1,6 +1,7 @@
 import type { TableAvailabilitySource } from "@/lib/table-availability";
 import type { GrillNeed } from "@/lib/reservation-capacity-engine";
 import { normalizeTableLabel } from "@/lib/reservation-floor-plan";
+import { reservationHoldsCapacity } from "@/lib/reservation-capacity-status";
 
 export function isExclusiveCheckInConflict(code: string) {
   return code === "TABLE_OCCUPIED" || code === "TABLE_ACTIVE_CHECK_IN";
@@ -28,7 +29,7 @@ export function checkInTableIssues(source: TableAvailabilitySource, tableId: str
   const capacity = source.tables.filter((row) => selectedIds.has(row.id)).reduce((sum, row) => sum + row.capacity, 0);
   if (partySize > capacity) warnings.push(issue("TABLE_CAPACITY", `Selected tables have ${capacity} configured seats for ${partySize} guests (short by ${partySize - capacity}). Staff can arrange extra chairs and confirm check-in anyway, or select more available tables.`));
   if (grill === "yes" && !table.grill) warnings.push(issue("TABLE_NO_GRILL", `${table.label} has no BBQ grill, but this reservation requires BBQ. Staff must confirm suitable seating or update the booking.`));
-  const booking = assigned.filter((row) => ["pending", "confirmed", "late"].includes(row.status))
+  const booking = assigned.filter((row) => reservationHoldsCapacity(row.status) && row.status !== "checked_in")
     .filter((row) => new Date(row.reservedAt).getTime() < now + duration
       && new Date(row.reservedAt).getTime() + duration > now)
     .sort((a, b) => new Date(a.reservedAt).getTime() - new Date(b.reservedAt).getTime())[0];

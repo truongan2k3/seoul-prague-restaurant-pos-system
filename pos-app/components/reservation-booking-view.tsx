@@ -1,6 +1,7 @@
 "use client";
 
 import { ReservationTimePicker } from "@/components/reservation-time-picker";
+import { useReservationAvailabilityRefresh } from "@/hooks/use-reservation-availability-refresh";
 
 import { ReferralCodeField } from "@/components/referral-code-field";
 
@@ -189,6 +190,8 @@ export function ReservationBookingView({
   }, [appSettings.reservationMaxGuestsPerSlot, embedded, guestCount,isStaff]);
 
   const requiresLargePartyContact = !isStaff && !embedded && guestCount === ONLINE_LARGE_PARTY_OPTION;
+  const availabilityRefresh = useReservationAvailabilityRefresh(!isStaff && !settingsLoading
+    && !requiresLargePartyContact && !!wantsBbq && !!date && !holdToken && !submitting && !showSuccess);
 
   // Release hold on unmount / abandon.
   useEffect(() => {
@@ -220,7 +223,7 @@ export function ReservationBookingView({
     });
     if (wantsBbq) params.set("grill", wantsBbq);
 
-    const timer = window.setTimeout(() => { void fetch(`/api/reservations/availability?${params.toString()}`, { signal: controller.signal })
+    const timer = window.setTimeout(() => { void fetch(`/api/reservations/availability?${params.toString()}`, { signal: controller.signal, cache: "no-store" })
       .then(async (response) => {
         const payload = (await response.json().catch(() => ({}))) as {
           slots?: AvailabilitySlot[];
@@ -251,6 +254,7 @@ export function ReservationBookingView({
     sharedSettings.reservationBufferMinutes,
     sharedSettings.reservationTimeStep,
     availabilityRetry,
+    availabilityRefresh,
     settingsLoading,
     date,
     guestCount,

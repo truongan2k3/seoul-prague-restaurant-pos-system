@@ -1,4 +1,5 @@
 import type { AppSettings } from "@/lib/types";
+import { reservationHoldsCapacity } from "@/lib/reservation-capacity-status";
 import {
   minutesNowInVenue,
   todayIsoDateInVenue,
@@ -148,10 +149,8 @@ export function countGuestsInSlot(
 ): number {
   const slotStart = venueWallTimeToUtc(dateIso, time).getTime();
   const slotEnd = slotStart + stepMinutes * 60 * 1000;
-  const activeStatuses = new Set(["pending", "confirmed", "checked_in", "late"]);
-
   return reservations.reduce((sum, row) => {
-    if (!activeStatuses.has(row.status)) return sum;
+    if (!reservationHoldsCapacity(row.status)) return sum;
     const reservedAt = new Date(row.reservedAt).getTime();
     if (reservedAt >= slotStart && reservedAt < slotEnd) {
       return sum + row.partySize;

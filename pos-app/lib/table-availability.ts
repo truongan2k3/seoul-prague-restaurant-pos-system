@@ -1,6 +1,7 @@
 import { planReservationAllocations, type CapacityReservationInput } from "@/lib/reservation-capacity-engine";
 import { RESERVATION_FLOOR_TABLES } from "@/lib/reservation-floor-plan";
 import { todayIsoDateInVenue } from "@/lib/venue-timezone";
+import { reservationHoldsCapacity } from "@/lib/reservation-capacity-status";
 
 export type LiveTableStatus = "available" | "occupied" | "reserved" | "blocked";
 export type AvailabilityTable = {
@@ -49,7 +50,7 @@ export function calculateTableAvailability(source: TableAvailabilitySource, now 
       }
       if (!Number.isFinite(earliest) || earliest > new Date(source.serverNow).getTime() + 48 * 60 * 60_000) earliest = null;
     }
-    const upcomingReservations = source.reservations.filter((r) => ["pending", "confirmed", "late"].includes(r.status)
+    const upcomingReservations = source.reservations.filter((r) => reservationHoldsCapacity(r.status) && r.status !== "checked_in"
       && [r.tableLabel, r.secondaryTableLabel, r.tertiaryTableLabel].some((label) => label?.trim().toUpperCase() === table.label))
       .map((r) => ({ reservedAt: new Date(r.reservedAt).getTime(), partySize: r.actualPartySize ?? r.partySize }))
       .filter((r) => Number.isFinite(r.reservedAt) && todayIsoDateInVenue(new Date(r.reservedAt)) === today

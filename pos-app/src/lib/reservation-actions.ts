@@ -518,12 +518,15 @@ export async function markLateReservations(holdingMinutes = DEFAULT_LATE_GRACE_M
 
   if (overdueIds.length === 0) return { updated: 0, error: null };
 
-  const { error: updateError } = await supabase
+  const { data: updated, error: updateError } = await supabase
     .from("reservations")
     .update({ status: "late", updated_at: nowIso() })
-    .in("id", overdueIds);
+    .in("id", overdueIds)
+    .in("status", ["pending", "confirmed"])
+    .lt("reserved_at", new Date(now - graceMs).toISOString())
+    .select("id");
 
-  return { updated: overdueIds.length, error: updateError };
+  return { updated: updated?.length ?? 0, error: updateError };
 }
 
 export async function createOnlineReservation(input: {

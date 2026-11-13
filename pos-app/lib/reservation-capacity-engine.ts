@@ -14,6 +14,7 @@ import {
 import { parseReservationBbqNotes, type ReservationBbqPreference } from "@/lib/reservation-guest-form";
 import { parseTimeToMinutes } from "@/lib/reservation-slots";
 import { venueWallTimeToUtc } from "@/lib/venue-timezone";
+import { reservationHoldsCapacity } from "@/lib/reservation-capacity-status";
 
 /** Default assumed dining duration for overlap (minutes). Overridable in Settings. */
 export const DEFAULT_RESERVATION_DURATION_MINUTES = 90;
@@ -103,13 +104,6 @@ export type CapacityEvaluateResult = {
   /** Distinct seating configurations still free for this party (staff). */
   freeConfigurationCount: number;
 };
-
-const ACTIVE_STATUSES = new Set([
-  "pending",
-  "confirmed",
-  "checked_in",
-  "late",
-]);
 
 export function resolveGrill(row: CapacityReservationInput): GrillNeed {
   if (row.wantsGrill === "yes" || row.wantsGrill === "no" || row.wantsGrill === "undecided") {
@@ -201,7 +195,7 @@ export function planReservationAllocations(input: {
 }): ReservationAllocation[] {
   const now = input.nowMs ?? Date.now();
   const duration = input.durationMinutes * 60_000;
-  const active = input.reservations.filter((r) => ACTIVE_STATUSES.has(r.status)
+  const active = input.reservations.filter((r) => reservationHoldsCapacity(r.status)
     && (!input.excludeReservationId || r.id !== input.excludeReservationId));
   const allocations: ReservationAllocation[] = [];
   const window = (r: CapacityReservationInput) => {
@@ -349,7 +343,7 @@ export function evaluateReservationCapacity(
   let overlappingGuestCount = held;
   for (const row of input.reservations) {
     if (input.excludeReservationId && row.id === input.excludeReservationId) continue;
-    if (!ACTIVE_STATUSES.has(row.status)) continue;
+    if (!reservationHoldsCapacity(row.status)) continue;
     if (!overlaps(row.reservedAt, duration, startMs, endMs)) continue;
     overlappingGuestCount += effectivePartySize(row);
   }

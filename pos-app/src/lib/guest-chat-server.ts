@@ -9,8 +9,9 @@ import {
   type GuestChatSender,
 } from "@/lib/guest-chat";
 import { broadcastGuestChatAlert } from "@/src/lib/guest-chat-alert-server";
+import { dispatchNotificationTask } from "@/src/lib/notification-dispatch";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
-import { guestChatPushCopy, sendPosPush } from "@/src/lib/push-server";
+import { guestChatPushCopy, dispatchPosPush } from "@/src/lib/push-server";
 
 type SessionRow = {
   id: string;
@@ -176,14 +177,16 @@ export async function openOrResumeGuestChatSession(input: {
       sender: "system",
       body: "Guest requested more help.",
     });
-    void broadcastGuestChatAlert({
+    const reopenedSession = sessionRow;
+    dispatchNotificationTask(() => broadcastGuestChatAlert({
       kind: "new_message",
-      sessionId: sessionRow.id,
+      sessionId: reopenedSession.id,
       preview: "Guest requested more help.",
-      guestClientId: sessionRow.guest_client_id,
+      guestClientId: reopenedSession.guest_client_id,
       status: "open",
       unreadByStaff: true,
-    });
+    }));
+    dispatchPosPush(guestChatPushCopy({ sessionId: sessionRow.id, preview: "Guest requested more help." }));
     const messages = await listMessagesForSession(sessionRow.id);
     return { session: mapSession(sessionRow), messages, config, error: null };
   }
@@ -375,15 +378,15 @@ export async function postGuestChatMessage(input: {
 
   session = (updated as SessionRow | null) ?? { ...session, status: nextStatus, unread_by_staff: true };
 
-  void broadcastGuestChatAlert({
+  dispatchNotificationTask(() => broadcastGuestChatAlert({
     kind: "new_message",
     sessionId: session.id,
     preview: body.slice(0, 120),
     guestClientId: session.guest_client_id,
     status: session.status,
     unreadByStaff: true,
-  });
-  void sendPosPush(
+  }));
+  dispatchPosPush(
     guestChatPushCopy({
       kind: "new_message",
       sessionId: session.id,
@@ -446,14 +449,14 @@ export async function submitGuestChatFollowUp(input: {
     return { session: null, error: error?.message ?? "Failed to save contact." };
   }
 
-  void broadcastGuestChatAlert({
+  dispatchNotificationTask(() => broadcastGuestChatAlert({
     kind: "follow_up",
     sessionId: session.id,
     preview: `Follow-up: ${email}`,
     status: "follow_up",
     unreadByStaff: true,
-  });
-  void sendPosPush(
+  }));
+  dispatchPosPush(
     guestChatPushCopy({
       kind: "follow_up",
       sessionId: session.id,
@@ -562,13 +565,13 @@ export async function postStaffChatReply(input: {
     .select("*")
     .single();
 
-  void broadcastGuestChatAlert({
+  dispatchNotificationTask(() => broadcastGuestChatAlert({
     kind: "session_updated",
     sessionId: session.id,
     preview: body.slice(0, 120),
     status: "replied",
     unreadByStaff: false,
-  });
+  }));
 
   return {
     message: mapMessage(msg as MessageRow),
@@ -620,12 +623,12 @@ export async function updateStaffChatSession(input: {
     });
   }
 
-  void broadcastGuestChatAlert({
+  dispatchNotificationTask(() => broadcastGuestChatAlert({
     kind: "session_updated",
     sessionId: input.sessionId,
     status: (data as SessionRow).status,
     unreadByStaff: (data as SessionRow).unread_by_staff,
-  });
+  }));
 
   return { session: mapSession(data as SessionRow), error: null };
 }

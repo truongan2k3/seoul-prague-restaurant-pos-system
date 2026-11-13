@@ -19,7 +19,7 @@ declare module "web-push" {
   export function sendNotification(
     subscription: PushSubscription,
     payload?: string | Buffer,
-    options?: { TTL?: number; urgency?: string; topic?: string },
+    options?: { TTL?: number; urgency?: string; topic?: string; timeout?: number },
   ): Promise<SendResult>;
 
   export function generateVAPIDKeys(): {

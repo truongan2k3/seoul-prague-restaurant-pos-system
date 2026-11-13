@@ -22,16 +22,21 @@ export function canUseWebPush(): boolean {
 export async function registerPosServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (!canUseWebPush()) return null;
   try {
-    return await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    return await navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" });
   } catch (error) {
     console.warn("[web-push] SW register failed", error);
     return null;
   }
 }
 
-/** Register SW + save push subscription so alerts work when the POS tab is closed. */
-export async function ensurePushSubscription(): Promise<"subscribed" | "denied" | "unsupported" | "error"> {
+export type PushSubscriptionStatus = "subscribed" | "denied" | "unsupported" | "error" | "prompt";
+let subscriptionPending: Promise<PushSubscriptionStatus> | null = null;
+
+/** Register SW + save push subscription so alerts work when the POS tab is closed.
+ * Background bootstrap never consumes the user-gesture permission prompt. */
+export async function ensurePushSubscription(options: { requestPermission?: boolean } = {}): Promise<PushSubscriptionStatus> {
   if (!canUseWebPush()) return "unsupported";
+  if (Notification.permission === "default" && options.requestPermission === false) return "prompt";
 
   const permission =
     Notification.permission === "granted"
@@ -43,18 +48,35 @@ export async function ensurePushSubscription(): Promise<"subscribed" | "denied" 
   if (permission === "denied") return "denied";
   if (permission !== "granted") return "denied";
 
-  const registration = await registerPosServiceWorker();
+  if (subscriptionPending) return subscriptionPending;
+  subscriptionPending = savePushSubscription().catch(() => "error" as const).finally(() => {
+    subscriptionPending = null;
+  });
+  return subscriptionPending;
+}
+
+async function savePushSubscription(): Promise<PushSubscriptionStatus> {
+  if (!await registerPosServiceWorker()) return "error";
+  // A newly installed worker may not be active yet. Always use ready's active
+  // registration rather than subscribing against an installing worker.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const registration = await Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), 10000); }),
+  ]).finally(() => clearTimeout(timer));
   if (!registration) return "error";
-
-  await navigator.serviceWorker.ready;
-
-  const publicKey = getVapidPublicKey();
+  const publicKey = urlBase64ToUint8Array(getVapidPublicKey());
   let subscription = await registration.pushManager.getSubscription();
+  const oldKey = subscription?.options.applicationServerKey;
+  if (subscription && oldKey && (oldKey.byteLength !== publicKey.byteLength || !publicKey.every((value, i) => new Uint8Array(oldKey)[i] === value))) {
+    if (!await subscription.unsubscribe()) return "error";
+    subscription = null;
+  }
   if (!subscription) {
     try {
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
+        applicationServerKey: publicKey as BufferSource,
       });
     } catch (error) {
       console.warn("[web-push] subscribe failed", error);
@@ -99,7 +121,7 @@ export function notifyReservationPushEvent(input: {
   cancelledBy?: string;
 }): void {
   if (typeof window === "undefined") return;
-  void fetch("/api/push/reservation-event", {
+  const send = () => fetch("/api/push/reservation-event", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -120,7 +142,15 @@ export function notifyReservationPushEvent(input: {
       cancellationNote: input.cancellationNote,
       cancelledBy: input.cancelledBy,
     }),
-  }).catch(() => {
-    /* ignore network errors */
   });
+  void (async () => {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const response = await send();
+        if (response.ok || response.status < 500) return;
+      } catch { /* Brief network loss: retry once without redoing the mutation. */ }
+      if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 400));
+    }
+    console.warn("[web-push] reservation notification request failed");
+  })();
 }

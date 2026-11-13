@@ -30,6 +30,7 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
   const kind = body.kind;
   if (kind !== "new" && kind !== "updated" && kind !== "cancelled" && kind !== "no_show") {
@@ -75,5 +76,5 @@ export async function POST(request: Request) {
   }
 
   const result = await sendReservationPush(payload);
-  return NextResponse.json({ ok: true, ...result });
+  return NextResponse.json({ ok: !result.error, ...result }, { status: result.error ? 503 : 200 });
 }

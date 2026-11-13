@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Bell, Check, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import {
   createContext,
   useCallback,
@@ -15,6 +15,7 @@ import {
 import { playCustomAlertSound, preloadNotificationSounds, unlockNotificationAudio } from "@/lib/notification-sound";
 import { MODAL_FADE_MS, useModalPresence } from "@/hooks/use-modal-presence";
 import { useSettings } from "@/contexts/settings-context";
+import { PushNotificationCheck } from "@/components/push-notification-check";
 
 const TOAST_DURATION_MS = 10_000;
 const MAX_HISTORY = 100;
@@ -180,6 +181,7 @@ function NotificationDrawer({
           </div>
         </div>
 
+        <PushNotificationCheck />
         <ul className="flex-1 overflow-y-auto p-4">
           {history.length === 0 ? (
             <li className="py-12 text-center text-sm text-gray-500 dark:text-gray-400">
@@ -290,9 +292,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     [
       dismissToast,
       settings.customAlertSoundUrl,
-      settings.soundConfigs?.itemReady,
-      settings.soundConfigs?.mainNewOrder,
-      settings.soundConfigs?.newOrder,
+      settings.soundConfigs.itemReady,
+      settings.soundConfigs.mainNewOrder,
+      settings.soundConfigs.newOrder,
     ],
   );
 

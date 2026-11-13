@@ -7,8 +7,8 @@ self.addEventListener("activate", (event) => {
 });
 
 /**
- * Show OS notification only when no POS tab is visibly focused.
- * Open tabs already show in-app popup/toast via Realtime.
+ * Always display received push. An open website tab does not prove that the
+ * POS Realtime listener is connected or has processed this event.
  */
 self.addEventListener("push", (event) => {
   event.waitUntil(
@@ -31,22 +31,12 @@ self.addEventListener("push", (event) => {
         }
       }
 
-      const windows = await self.clients.matchAll({
-        type: "window",
-        includeUncontrolled: true,
-      });
-      const hasVisible = windows.some((client) => {
-        // focused + visible tab → in-app UI handles it
-        return client.visibilityState === "visible" && "focused" in client
-          ? client.focused !== false
-          : client.visibilityState === "visible";
-      });
-      if (hasVisible) return;
-
       await self.registration.showNotification(payload.title || "POS update", {
         body: payload.body || "",
         tag: payload.tag || "pos",
-        renotify: true,
+        // Foreground and background deliveries share tags: replace quietly
+        // rather than alerting twice for the same reservation/message.
+        renotify: false,
         data: { url: payload.url || "/app" },
         vibrate: [120, 60, 120],
       });

@@ -2,6 +2,7 @@ import webpush from "web-push";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 import { getVapidPublicKey } from "@/lib/push-vapid-public";
 import { formatVoucherAmount } from "@/lib/voucher";
+import { dispatchNotificationTask } from "@/src/lib/notification-dispatch";
 import { cancellationReasonPhrase, reservationNotificationDetails, reservationUpdateDetails, type ReservationNotificationRecord, type ReservationNotificationSnapshot } from "@/lib/reservation-notification-details";
 
 export type ReservationPushKind = "new" | "updated" | "cancelled" | "no_show";
@@ -11,7 +12,8 @@ export type PosPushKind =
   | "voucher_order"
   | "voucher_guest_paid"
   | "guest_chat"
-  | "guest_chat_follow_up";
+  | "guest_chat_follow_up"
+  | "test";
 
 export type PosPushPayload = {
   kind: PosPushKind;
@@ -42,8 +44,13 @@ function configureVapid(): boolean {
     return false;
   }
 
-  webpush.setVapidDetails(subject, publicKey, privateKey);
-  return true;
+  try {
+    webpush.setVapidDetails(subject, publicKey, privateKey);
+    return true;
+  } catch {
+    console.error("[web-push] Invalid VAPID configuration");
+    return false;
+  }
 }
 
 export async function upsertPushSubscription(input: {
@@ -81,27 +88,34 @@ export async function deletePushSubscription(endpoint: string): Promise<void> {
   }
 }
 
-async function listSubscriptions(): Promise<StoredSubscription[]> {
+async function listSubscriptions(target?: { endpoint: string; staffId: string }): Promise<StoredSubscription[]> {
   const admin = createSupabaseAdmin();
-  const { data, error } = await admin
+  let query = admin
     .from("push_subscriptions")
-    .select("id, endpoint, p256dh, auth")
-    .limit(500);
+    .select("id, endpoint, p256dh, auth");
+  if (target) query = query.eq("endpoint", target.endpoint).eq("staff_id", target.staffId);
+  const { data, error } = await query.limit(500);
   if (error || !data) {
-    console.error("[web-push] list subscriptions failed", error?.message);
-    return [];
+    throw new Error("Subscription storage unavailable");
   }
   return data as StoredSubscription[];
 }
 
 /** Fan-out a POS alert to all saved device subscriptions (phone / closed tab). */
-export async function sendPosPush(payload: PosPushPayload): Promise<{
+export async function sendPosPush(payload: PosPushPayload, target?: { endpoint: string; staffId: string }): Promise<{
   sent: number;
   failed: number;
+  error?: "not_configured" | "subscriptions_unavailable";
 }> {
-  if (!configureVapid()) return { sent: 0, failed: 0 };
+  if (!configureVapid()) return { sent: 0, failed: 0, error: "not_configured" };
 
-  const subs = await listSubscriptions();
+  let subs: StoredSubscription[];
+  try {
+    subs = await listSubscriptions(target);
+  } catch {
+    console.error("[web-push] subscription storage unavailable");
+    return { sent: 0, failed: 0, error: "subscriptions_unavailable" };
+  }
   if (subs.length === 0) return { sent: 0, failed: 0 };
 
   const body = JSON.stringify({
@@ -118,14 +132,24 @@ export async function sendPosPush(payload: PosPushPayload): Promise<{
   await Promise.all(
     subs.map(async (sub) => {
       try {
-        await webpush.sendNotification(
-          {
-            endpoint: sub.endpoint,
-            keys: { p256dh: sub.p256dh, auth: sub.auth },
-          },
-          body,
-          { TTL: 60 * 60 },
-        );
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            await webpush.sendNotification(
+              { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+              body,
+              { TTL: 60 * 60, urgency: "high", timeout: 4000 },
+            );
+            break;
+          } catch (error) {
+            const status = Number((error as { statusCode?: number } | null)?.statusCode) || 0;
+            // One bounded retry for transient network/provider failures. Permanent
+            // errors are never retried; stable tags collapse uncertain duplicates.
+            if (attempt > 0 || (status !== 0 && status !== 429 && status < 500)) throw error;
+            const retryAfter = Number((error as { headers?: Record<string, string> } | null)?.headers?.["retry-after"]);
+            if (status === 429 && retryAfter > 1) throw error;
+            await new Promise(resolve => setTimeout(resolve, status === 429 ? 1000 : 200));
+          }
+        }
         sent += 1;
       } catch (error) {
         failed += 1;
@@ -136,7 +160,7 @@ export async function sendPosPush(payload: PosPushPayload): Promise<{
         if (statusCode === 404 || statusCode === 410) {
           await deletePushSubscription(sub.endpoint);
         } else {
-          console.error("[web-push] send failed", sub.endpoint.slice(0, 48), error);
+          console.error("[web-push] send failed", { statusCode });
         }
       }
     }),
@@ -148,6 +172,11 @@ export async function sendPosPush(payload: PosPushPayload): Promise<{
 /** Reservation fan-out — same transport as sendPosPush. */
 export async function sendReservationPush(payload: ReservationPushPayload) {
   return sendPosPush(payload);
+}
+
+/** Immediate dispatch protected from serverless response teardown. */
+export function dispatchPosPush(payload: PosPushPayload): void {
+  dispatchNotificationTask(() => sendPosPush(payload));
 }
 
 export function reservationPushCopy(input: {

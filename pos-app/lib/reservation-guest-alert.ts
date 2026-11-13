@@ -11,6 +11,7 @@ export interface GuestReservationAlertPayload {
   occurredAt?: string;
   reservation: {
     id: string;
+    updatedAt?: string;
     guestName: string;
     guestPhone?: string | null;
     guestEmail?: string | null;
@@ -44,7 +45,7 @@ export function guestAlertToReservationRecord(
     source: row.source ?? "reservation",
     notes: row.notes ?? undefined,
     createdAt: now,
-    updatedAt: now,
+    updatedAt: new Date(row.updatedAt ?? payload.occurredAt ?? now),
     bookingCode: row.bookingCode ?? undefined,
     eventType: row.eventType ?? undefined,
     cancellationReason: row.cancellationReason,

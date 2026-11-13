@@ -1,4 +1,5 @@
 import QRCode from "qrcode";
+import { dispatchNotificationTask } from "@/src/lib/notification-dispatch";
 import {
   buildCzechSpdPayload,
   buildVoucherPaymentMessage,
@@ -17,7 +18,7 @@ import {
 import { broadcastVoucherOrderAlert } from "@/lib/voucher-order-alert";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 import {
-  sendPosPush,
+  dispatchPosPush,
   voucherGuestPaidPushCopy,
   voucherOrderPushCopy,
 } from "@/src/lib/push-server";
@@ -347,8 +348,8 @@ export async function createVoucherOrder(input: {
     qrDataUrl,
   });
 
-  void broadcastVoucherOrderAlert(order);
-  void sendPosPush(
+  dispatchNotificationTask(() => broadcastVoucherOrderAlert(order));
+  dispatchPosPush(
     voucherOrderPushCopy({
       orderId: order.orderId,
       buyerName: order.buyerName,
@@ -756,8 +757,8 @@ export async function markGuestVoucherPaid(input: {
       action: "guest_marked_paid",
     });
     const order = mapOrder(data as OrderRow);
-    void broadcastVoucherOrderAlert(order, "guest_marked_paid");
-    void sendPosPush(
+    dispatchNotificationTask(() => broadcastVoucherOrderAlert(order, "guest_marked_paid"));
+    dispatchPosPush(
       voucherGuestPaidPushCopy({
         orderId: order.orderId,
         buyerName: order.buyerName,

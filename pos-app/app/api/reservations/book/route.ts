@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createOnlineReservationServer } from "@/src/lib/reservation-guest-server";
 import { releaseReservationHold } from "@/src/lib/reservation-holds";
-import { reservationPushCopy, sendReservationPush } from "@/src/lib/push-server";
+import { reservationPushCopy, dispatchPosPush } from "@/src/lib/push-server";
 
 /**
  * Guest booking. Push notifies staff; guest email is sent ONLY when staff confirms
@@ -63,6 +63,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error ?? "Booking failed." }, { status: 400 });
   }
 
+  dispatchPosPush(
+    reservationPushCopy({
+      kind: "new",
+      reservationId: data.id,
+      guestName: data.guestName,
+      partySize: data.partySize,
+      reservedAt: data.reservedAt,
+      bookingCode: data.bookingCode,
+    }),
+  );
+
   await releaseReservationHold(body.holdToken);
 
   // Reception desk creates confirmed bookings — send confirm email there.
@@ -83,15 +94,6 @@ export async function POST(request: Request) {
     emailSent = emailResult.sent;
   }
 
-  void sendReservationPush(
-    reservationPushCopy({
-      kind: "new",
-      guestName: data.guestName,
-      partySize: data.partySize,
-      reservedAt: data.reservedAt,
-      bookingCode: data.bookingCode,
-    }),
-  );
 
   return NextResponse.json({
     reservation: {

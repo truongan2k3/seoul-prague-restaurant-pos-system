@@ -50,7 +50,7 @@ export function classifyReservationUpdate(
   }
 
   if (next.status === "cancelled") return previous?.status === "cancelled" ? null : "cancelled";
-  if (next.status === "no_show") return "no_show";
+  if (next.status === "no_show") return previous?.status === "no_show" ? null : "no_show";
 
   if (!previous) {
     // No cache yet — still alert on non-silent updates (e.g. guest edit).
@@ -103,4 +103,13 @@ export function reservationAlertDedupeKey(
   reservationId: string,
 ): string {
   return `${kind}:${reservationId}`;
+}
+
+/** Dedupe transport echoes, not separate edits (including reverting an edit).
+ * Call only after classifying a meaningful change, never for email metadata. */
+export function reservationAlertEventKey(kind: ReservationChangeAlertKind, row: ReservationRecord): string {
+  return JSON.stringify([kind, row.id, new Date(row.updatedAt).toISOString(), row.status, row.guestName, row.partySize,
+    new Date(row.reservedAt).toISOString(), row.guestPhone ?? "", row.guestEmail ?? "",
+    row.notes ?? "", row.eventType ?? "", row.cancellationReason ?? "",
+    row.cancellationNote ?? "", row.cancelledBy ?? ""]);
 }

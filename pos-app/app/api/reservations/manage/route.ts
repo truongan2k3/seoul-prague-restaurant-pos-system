@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { after } from "next/server";
 import type { GuestReservationAlertPayload } from "@/lib/reservation-guest-alert";
 import { guestMessageForCancelReason } from "@/lib/reservation-cancel-reasons";
 import {
@@ -12,7 +11,7 @@ import {
   buildManageUrl,
   sendReservationEmail,
 } from "@/src/lib/reservation-email";
-import { reservationPushCopy, sendReservationPush } from "@/src/lib/push-server";
+import { reservationPushCopy, dispatchPosPush } from "@/src/lib/push-server";
 import { reservationUpdateDetails } from "@/lib/reservation-notification-details";
 
 function publicReservation(data: NonNullable<
@@ -36,6 +35,7 @@ function alertReservation(
 ): GuestReservationAlertPayload["reservation"] {
   return {
     id: data.id,
+    updatedAt: data.updatedAt,
     guestName: data.guestName,
     guestPhone: data.guestPhone,
     guestEmail: data.guestEmail,
@@ -88,13 +88,7 @@ export async function PATCH(request: Request) {
   }
 
   if (reservationUpdateDetails(data, previous).length) {
-    await broadcastGuestReservationAlert({
-      kind: "updated",
-      reservation: alertReservation(data),
-      previous,
-    });
-
-    after(() => sendReservationPush(
+    dispatchPosPush(
       reservationPushCopy({
         kind: "updated",
         guestName: data.guestName,
@@ -108,7 +102,12 @@ export async function PATCH(request: Request) {
         previous,
         reservationId: data.id,
       }),
-    ).then(() => {}));
+    );
+    await broadcastGuestReservationAlert({
+      kind: "updated",
+      reservation: alertReservation(data),
+      previous,
+    });
   }
 
   let emailSent = false;
@@ -145,12 +144,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: error ?? "Cancel failed." }, { status: 400 });
   }
 
-  await broadcastGuestReservationAlert({
-    kind: "cancelled",
-    reservation: alertReservation(data),
-  });
-
-  after(() => sendReservationPush(
+  dispatchPosPush(
     reservationPushCopy({
       kind: "cancelled",
       guestName: data.guestName,
@@ -162,7 +156,12 @@ export async function DELETE(request: Request) {
       cancelledBy: data.cancelledBy,
       reservationId: data.id,
     }),
-  ).then(() => {}));
+  );
+
+  await broadcastGuestReservationAlert({
+    kind: "cancelled",
+    reservation: alertReservation(data),
+  });
 
   let emailSent = false;
   if (data.guestEmail) {

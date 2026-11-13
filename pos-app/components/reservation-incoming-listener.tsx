@@ -14,7 +14,7 @@ import { playNotificationCategory } from "@/lib/notification-sound";
 import { claimNotificationEvent } from "@/lib/notification-preferences";
 import {
   classifyReservationUpdate,
-  reservationAlertDedupeKey,
+  reservationAlertEventKey,
   shouldAlertOnReservationInsert,
   type ReservationChangeAlertKind,
 } from "@/lib/reservation-change-alert";
@@ -89,10 +89,9 @@ export function ReservationIncomingListener({
   const queueRef = useRef<ScreenAlert[]>([]);
   const alertRef = useRef<ScreenAlert | null>(null);
   const recentAlertAtRef = useRef<Map<string, number>>(new Map());
-  const suppressUntilRef = useRef<Map<string, number>>(new Map());
   const syncingRef = useRef(false);
   const soundSettingsRef = useRef(settings.soundConfigs.notifications);
-  soundSettingsRef.current = settings.soundConfigs.notifications;
+  useEffect(() => { soundSettingsRef.current = settings.soundConfigs.notifications; }, [settings.soundConfigs.notifications]);
 
   const formatDateTime = useCallback(
     (date: Date | string) =>
@@ -114,26 +113,6 @@ export function ReservationIncomingListener({
   const showNext = useCallback((next: ScreenAlert | null) => {
     alertRef.current = next;
     setAlert(next); setError(null); setVisitProfile(null);
-  }, []);
-
-  const markDeduped = useCallback((kind: ReservationChangeAlertKind, id: string) => {
-    recentAlertAtRef.current.set(reservationAlertDedupeKey(kind, id), Date.now());
-  }, []);
-
-  const wasRecentlyAlerted = useCallback((kind: ReservationChangeAlertKind, id: string) => {
-    const at = recentAlertAtRef.current.get(reservationAlertDedupeKey(kind, id));
-    if (at == null) return false;
-    return Date.now() - at < DEDUPE_MS;
-  }, []);
-
-  const isSuppressed = useCallback((id: string) => {
-    const until = suppressUntilRef.current.get(id);
-    if (until == null) return false;
-    if (Date.now() > until) {
-      suppressUntilRef.current.delete(id);
-      return false;
-    }
-    return true;
   }, []);
 
   const browserBodyFor = useCallback(
@@ -179,7 +158,6 @@ export function ReservationIncomingListener({
 
   const enqueueAlert = useCallback(
     (next: ScreenAlert) => {
-      if (isSuppressed(next.reservation.id)) return;
       const dedupeKind: ReservationChangeAlertKind =
         next.kind === "new"
           ? "new"
@@ -188,14 +166,29 @@ export function ReservationIncomingListener({
             : next.kind === "no_show"
               ? "no_show"
               : "updated";
-      if (wasRecentlyAlerted(dedupeKind, next.reservation.id)) return;
-      markDeduped(dedupeKind, next.reservation.id);
+      const key = reservationAlertEventKey(dedupeKind, next.reservation);
+      const at = recentAlertAtRef.current.get(key);
+      if (at != null && Date.now() - at < DEDUPE_MS) return;
+      recentAlertAtRef.current.set(key, Date.now());
+      if (recentAlertAtRef.current.size > 2000) {
+        recentAlertAtRef.current.delete(recentAlertAtRef.current.keys().next().value!);
+      }
       const category = next.kind === "new" ? "newReservation" : next.kind === "cancelled" ? "cancelledReservation" : null;
       const eventTime = next.kind === "new" ? next.reservation.createdAt : next.reservation.cancelledAt ?? next.reservation.updatedAt;
       if (category && !next.silent && claimNotificationEvent(category, next.reservation.id, eventTime)) {
         playNotificationCategory(category, soundSettingsRef.current);
       }
 
+      const title = titleFor(next);
+      const body = browserBodyFor(next);
+      showBrowserNotification({ title, body, tag: `reservation-${dedupeKind}-${next.reservation.id}` });
+      pushNotification({
+        id: `reservation-${dedupeKind}-${next.reservation.id}-${Date.now()}`,
+        message: `${title}: ${body}`,
+        playSound: false,
+      });
+
+      // Every genuine edit notifies, including edits while this popup is open.
       // Same pending reservation already showing — refresh the payload.
       const current = alertRef.current;
       if (
@@ -216,22 +209,6 @@ export function ReservationIncomingListener({
         return;
       }
 
-      const title = titleFor(next);
-      const body = browserBodyFor(next);
-
-      showBrowserNotification({
-        title,
-        body,
-        tag: `reservation-${dedupeKind}-${next.reservation.id}`,
-      });
-
-      // In-app toast — reliable on phones even when OS notifications are blocked.
-      pushNotification({
-        id: `reservation-${dedupeKind}-${next.reservation.id}-${Date.now()}`,
-        message: `${title}: ${body}`,
-        playSound: false,
-      });
-
       try {
         navigator.vibrate?.([120, 60, 120]);
       } catch {
@@ -246,18 +223,16 @@ export function ReservationIncomingListener({
     },
     [
       browserBodyFor,
-      isSuppressed,
-      markDeduped,
       pushNotification,
       showNext,
       titleFor,
-      wasRecentlyAlerted,
     ],
   );
 
   const applyRemoteRow = useCallback(
     (reservation: ReservationRecord, opts?: { alert: boolean; silent?: boolean }) => {
       const previous = cacheRef.current.get(reservation.id);
+      if (previous && previous.updatedAt.getTime() > reservation.updatedAt.getTime()) return;
       cacheRef.current.set(reservation.id, reservation);
       if (!opts?.alert || !readyRef.current) return;
 
@@ -290,9 +265,6 @@ export function ReservationIncomingListener({
 
       const kind = classifyReservationUpdate(previous, reservation);
       if (!kind) return;
-      // Staff "+ New reservation" often emits INSERT then a quick UPDATE echo —
-      // keep only the "new" alert, not a second "updated" popup.
-      if (kind === "updated" && wasRecentlyAlerted("new", reservation.id)) return;
       if (kind === "updated") {
         enqueueAlert({
           kind: "updated",
@@ -312,7 +284,7 @@ export function ReservationIncomingListener({
       }
       enqueueAlert({ kind: toScreenKind(kind), reservation, silent: opts?.silent } as ScreenAlert);
     },
-    [clearReservationAlert, enqueueAlert, wasRecentlyAlerted],
+    [clearReservationAlert, enqueueAlert],
   );
 
   const syncFromServer = useCallback(
@@ -395,6 +367,9 @@ export function ReservationIncomingListener({
       onUpdate: (reservation) => {
         applyRemoteRow(reservation, { alert: true });
       },
+      onConnectionChange: (connected) => {
+        if (connected && readyRef.current) void syncFromServer({ alert: true, silent: true });
+      },
       onDelete: (reservationId) => {
         const previous = cacheRef.current.get(reservationId);
         cacheRef.current.delete(reservationId);
@@ -404,15 +379,17 @@ export function ReservationIncomingListener({
         enqueueAlert({ kind: "cancelled", reservation: { ...previous, status: "cancelled" } });
       },
     });
-  }, [applyRemoteRow, clearReservationAlert, enqueueAlert]);
+  }, [applyRemoteRow, clearReservationAlert, enqueueAlert, syncFromServer]);
 
   useEffect(() => {
     return subscribeToGuestReservationAlerts((payload) => {
       const reservation = guestAlertToReservationRecord(payload);
+      const cached = cacheRef.current.get(reservation.id);
+      if (cached && cached.updatedAt.getTime() > reservation.updatedAt.getTime()) return;
       const merged: ReservationRecord = {
-        ...(cacheRef.current.get(reservation.id) ?? reservation),
+        ...(cached ?? reservation),
         ...reservation,
-        updatedAt: payload.occurredAt ? new Date(payload.occurredAt) : reservation.updatedAt,
+        updatedAt: reservation.updatedAt,
       };
       cacheRef.current.set(reservation.id, merged);
       if (payload.kind === "cancelled") {
@@ -431,11 +408,9 @@ export function ReservationIncomingListener({
 
   useEffect(() => {
     if (!alert || alert.kind === "cancelled" || alert.kind === "no_show") {
-      setVisitProfile(null);
       return;
     }
     const incoming = alert.reservation;
-    setVisitProfile(null);
     let cancelled = false;
     void fetchGuestVisitProfile({
       email: incoming.guestEmail,
@@ -459,12 +434,9 @@ export function ReservationIncomingListener({
     setBusy(true);
     setError(null);
     const reservationId = alert.reservation.id;
-    suppressUntilRef.current.set(reservationId, Date.now() + DEDUPE_MS);
-    markDeduped("updated", reservationId);
     const result = await confirmReservationWithEmail(reservationId);
     setBusy(false);
     if (result.error) {
-      suppressUntilRef.current.delete(reservationId);
       setError(result.error);
       return;
     }

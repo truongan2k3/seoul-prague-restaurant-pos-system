@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { ensurePushSubscription } from "@/lib/web-push-client";
 
 /**
@@ -8,19 +8,27 @@ import { ensurePushSubscription } from "@/lib/web-push-client";
  * so phones can receive reservation alerts when the tab is closed.
  */
 export function PushSubscriptionBootstrap() {
-  const startedRef = useRef(false);
-
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-
-    const run = () => {
-      void ensurePushSubscription();
+    let disposed = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const run = async () => {
+      clearTimeout(retry);
+      const status = await ensurePushSubscription({ requestPermission: false });
+      if (!disposed && status === "error") retry = setTimeout(() => void run(), 30000);
     };
-
-    run();
-    window.addEventListener("pointerdown", run, { once: true });
-    return () => window.removeEventListener("pointerdown", run);
+    const onGesture = () => { void ensurePushSubscription(); };
+    const onVisible = () => { if (document.visibilityState === "visible") void run(); };
+    void run();
+    window.addEventListener("pointerdown", onGesture, { once: true });
+    window.addEventListener("online", run);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      disposed = true;
+      clearTimeout(retry);
+      window.removeEventListener("pointerdown", onGesture);
+      window.removeEventListener("online", run);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   return null;

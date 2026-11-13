@@ -87,7 +87,7 @@ export type CapacityEvaluateInput = {
 
 export type CapacityEvaluateResult = {
   availability: SlotAvailability;
-  /** Best internal seating suggestion (null when Full with no config). */
+  /** Safe-to-display seating suggestion; hidden capacity exceptions return null. */
   recommendation: SeatingConfiguration | null;
   recommendationLabel: string | null;
   capacity: number | null;
@@ -159,10 +159,24 @@ function assignedLabels(row: CapacityReservationInput): string[] {
 
 export type ReservationAllocation = { labels: string[]; startMs: number; endMs: number; reservationId?: string };
 
+type CapacitySeatingConfiguration = SeatingConfiguration & { internalOnly?: true };
+
+/** Availability-only exception. Never add this to the public floor definitions or
+ * persist it as a seating suggestion: staff still assign physical tables normally. */
+function capacityConfigurations(partySize: number, occupiedTables?: OccupiedTableInput[]): CapacitySeatingConfiguration[] {
+  const configs: CapacitySeatingConfiguration[] = buildAllSeatingConfigurations();
+  if (partySize > 4 && partySize <= 9 && !(occupiedTables ?? []).some((table) =>
+    ["D2", "D3"].includes(normalizeTableLabel(table.label)) && (table.occupied || table.blocked))) {
+    configs.push({ labels: ["D2", "D3"], capacity: 9, grill: true, extended: true, internalOnly: true });
+  }
+  return configs;
+}
+
 /** Planning only: large staff bookings may need separate tables; never merges or assigns them in POS. */
-function planningConfigurations(partySize: number, grill: GrillNeed): SeatingConfiguration[] {
+function planningConfigurations(partySize: number, grill: GrillNeed, occupiedTables?: OccupiedTableInput[]): CapacitySeatingConfiguration[] {
   const singles = buildAllSeatingConfigurations().filter((config) => grillSatisfied(config, grill));
-  const suitable = singles.filter((config) => config.capacity >= partySize);
+  const suitable = capacityConfigurations(partySize, occupiedTables)
+    .filter((config) => config.capacity >= partySize && grillSatisfied(config, grill));
   if (suitable.length) return suitable;
   const groups: SeatingConfiguration[] = [];
   for (let a = 0; a < singles.length; a++) for (let b = a + 1; b < singles.length; b++) {
@@ -176,7 +190,7 @@ function planningConfigurations(partySize: number, grill: GrillNeed): SeatingCon
   return groups.sort((a, b) => a.labels.length - b.labels.length || a.capacity - b.capacity || Number(a.grill) - Number(b.grill));
 }
 
-/** Plan unassigned bookings using individual table capacity and BBQ eligibility. */
+/** Plan unassigned bookings using seating capacity and BBQ eligibility. */
 export function planReservationAllocations(input: {
   reservations: CapacityReservationInput[];
   occupiedTables?: OccupiedTableInput[];
@@ -223,9 +237,9 @@ export function planReservationAllocations(input: {
         const release = Number.isFinite(start) && start + duration > now ? start + duration : Infinity;
         if (table.blocked || (table.occupied && release > span.startMs && (!Number.isFinite(start) || start < span.endMs))) blocked.add(normalizeTableLabel(table.label));
       }
-      const configs = planningConfigurations(effectivePartySize(row), resolveGrill(row))
+      const configs = planningConfigurations(effectivePartySize(row), resolveGrill(row), input.occupiedTables)
         .filter((config) => config.labels.every((label) => !blocked.has(label)))
-        .sort((a, b) => a.capacity - b.capacity || Number(a.grill) - Number(b.grill) || seatingConfigKey(a.labels).localeCompare(seatingConfigKey(b.labels)));
+        .sort((a, b) => Number(!!a.internalOnly) - Number(!!b.internalOnly) || a.capacity - b.capacity || Number(a.grill) - Number(b.grill) || seatingConfigKey(a.labels).localeCompare(seatingConfigKey(b.labels)));
       return { row, span, configs };
     }).sort((a, b) => a.configs.length - b.configs.length || effectivePartySize(b.row) - effectivePartySize(a.row));
     const placed: ReservationAllocation[] = [];
@@ -353,7 +367,7 @@ export function evaluateReservationCapacity(
 
   const fixedBlocked = blockedTableLabels({ ...input, reservations: input.reservations.filter((row) => assignedLabels(row).length), durationMinutes: duration });
   const candidateId = "__guest_availability_candidate__";
-  const feasible = buildAllSeatingConfigurations()
+  const feasible = capacityConfigurations(partySize, input.occupiedTables)
     .filter((config) => config.capacity >= partySize)
     .filter((config) => grillSatisfied(config, grill))
     .filter((config) => config.labels.every((label) => !fixedBlocked.has(normalizeTableLabel(label))))
@@ -362,14 +376,16 @@ export function evaluateReservationCapacity(
       const cached = input.placementCache?.get(key);
       if (cached !== undefined) return cached;
       const planned = planReservationAllocations({ ...input, durationMinutes: duration,
-        reservations: [...input.reservations, { id: candidateId, partySize, reservedAt: new Date(startMs), status: "confirmed", tableLabel: config.labels[0], wantsGrill: grill }] });
+        reservations: [...input.reservations, { id: candidateId, partySize, reservedAt: new Date(startMs), status: "confirmed",
+          tableLabel: config.labels[0], secondaryTableLabel: config.labels[1], wantsGrill: grill }] });
       const fits = !planned.some((allocation) => allocation.reservationId !== candidateId && allocation.startMs < endMs && allocation.endMs > startMs
         && allocation.labels.some((label) => config.labels.includes(label)));
       input.placementCache?.set(key, fits);
       return fits;
     })
-    .sort((a, b) => a.capacity - b.capacity || Number(a.grill) - Number(b.grill) || seatingConfigKey(a.labels).localeCompare(seatingConfigKey(b.labels)));
+    .sort((a, b) => Number(!!a.internalOnly) - Number(!!b.internalOnly) || a.capacity - b.capacity || Number(a.grill) - Number(b.grill) || seatingConfigKey(a.labels).localeCompare(seatingConfigKey(b.labels)));
   const recommendation = feasible[0] ?? null;
+  const visibleRecommendation = recommendation?.internalOnly ? null : recommendation;
   const freeConfigurationCount = feasible.length;
   const warnings: string[] = [];
 
@@ -387,17 +403,17 @@ export function evaluateReservationCapacity(
     .reduce((sum, config) => sum + config.capacity, 0);
   const availability: SlotAvailability = !recommendation ? "full" : freeConfigurationCount === 1 ? "limited" : "available";
 
-  const staffSummary = recommendation
-    ? `Suggested: ${formatSeatingLabels(recommendation.labels)} · Capacity ${recommendation.capacity} · Requested ${partySize} · Grill ${
+  const staffSummary = visibleRecommendation
+    ? `Suggested: ${formatSeatingLabels(visibleRecommendation.labels)} · Capacity ${visibleRecommendation.capacity} · Requested ${partySize} · Grill ${
         grill === "yes" ? "required" : grill === "no" ? "no" : "flexible"
       } · ${availability.toUpperCase()}`
-    : `No seating recommendation · Requested ${partySize} · ${availability.toUpperCase()}`;
+    : `${recommendation ? "Seating available" : "No seating recommendation"} · Requested ${partySize} · ${availability.toUpperCase()}`;
 
   return {
     availability,
-    recommendation,
-    recommendationLabel: recommendation ? formatSeatingLabels(recommendation.labels) : null,
-    capacity: recommendation?.capacity ?? null,
+    recommendation: visibleRecommendation,
+    recommendationLabel: visibleRecommendation ? formatSeatingLabels(visibleRecommendation.labels) : null,
+    capacity: visibleRecommendation?.capacity ?? null,
     requested: partySize,
     grillCompatible: recommendation ? grillSatisfied(recommendation, grill) : false,
     warnings,

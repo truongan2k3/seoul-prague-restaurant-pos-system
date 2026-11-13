@@ -24,6 +24,7 @@ import {
   type GuestReservationAlertPayload,
 } from "@/lib/reservation-guest-alert";
 import type { ReservationRecord } from "@/lib/types";
+import { reservationNotificationDetails } from "@/lib/reservation-notification-details";
 import type { GuestVisitProfile } from "@/src/lib/guest-history-actions";
 import { fetchGuestVisitProfile, guestVisitProfileKey } from "@/src/lib/guest-history-actions";
 import {
@@ -140,7 +141,8 @@ export function ReservationIncomingListener({
       const r = next.reservation;
       const when = formatDateTime(r.reservedAt);
       const code = r.bookingCode ? ` · ${r.bookingCode}` : "";
-      return `${r.guestName} · ${r.partySize} pax · ${when}${code}`;
+      const details = reservationNotificationDetails(next.kind, r, next.kind === "updated" ? next.previous : undefined);
+      return `${details ? `${details} · ` : ""}${r.guestName} · ${r.partySize} pax · ${when}${code}`;
     },
     [formatDateTime],
   );
@@ -300,6 +302,10 @@ export function ReservationIncomingListener({
             partySize: previous.partySize,
             reservedAt: previous.reservedAt.toISOString(),
             notes: previous.notes ?? null,
+            guestName: previous.guestName,
+            guestPhone: previous.guestPhone ?? null,
+            guestEmail: previous.guestEmail ?? null,
+            eventType: previous.eventType ?? null,
           },
         });
         return;
@@ -530,6 +536,7 @@ export function ReservationIncomingListener({
           >
             {hint}
           </p>
+          {reservationNotificationDetails(alert?.kind ?? "", reservation, previous) && <p className="rounded-xl border border-amber-300/40 p-3 text-sm font-medium text-gray-900 dark:text-gray-100">{reservationNotificationDetails(alert?.kind ?? "", reservation, previous)}</p>}
           {visitProfile?.isReturning && !toneCancelled ? (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/50">
               <GuestReturningBadge

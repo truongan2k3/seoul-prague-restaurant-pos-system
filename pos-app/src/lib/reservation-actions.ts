@@ -16,6 +16,8 @@ import { shouldAlertOnReservationInsert } from "@/lib/reservation-change-alert";
 import { normalizeReservationTableIds, reservationTableIdColumns } from "@/lib/reservation-tables";
 import { venueDayRangeUtc, venueWallTimeToUtc } from "@/lib/venue-timezone";
 import { notifyReservationPushEvent } from "@/lib/web-push-client";
+import { RESERVATION_CANCEL_REASONS } from "@/lib/reservation-cancel-reasons";
+import { reservationUpdateDetails } from "@/lib/reservation-notification-details";
 import { fetchAppSettings } from "@/src/lib/settings-actions";
 import { supabase } from "@/src/lib/supabase";
 import {
@@ -237,6 +239,8 @@ export async function cancelReservation(
     cancellationNote?: string;
   },
 ) {
+  if (!RESERVATION_CANCEL_REASONS.some(reason => reason.id === options?.cancellationReason)) return { data: null, error: new Error("Choose a cancellation reason.") };
+  if ((options?.cancellationNote?.trim().length ?? 0) > 300 || (options?.cancellationReason === "other" && !options.cancellationNote?.trim())) return { data: null, error: new Error("Enter cancellation details (maximum 300 characters).") };
   const payload: Record<string, unknown> = {
     status: "cancelled",
     updated_at: nowIso(),
@@ -252,14 +256,11 @@ export async function cancelReservation(
     .from("reservations")
     .update(payload)
     .eq("id", reservationId)
+    .in("status", ["pending", "confirmed", "late"])
     .select(RESERVATION_SELECT)
     .single();
 
   if (result.error) {
-    // Columns may not exist until migration — fall back to status-only cancel.
-    if (/column .* does not exist/i.test(result.error.message)) {
-      return updateReservationStatus(reservationId, "cancelled");
-    }
     return result;
   }
 
@@ -272,6 +273,10 @@ export async function cancelReservation(
       partySize: row.partySize,
       reservedAt: row.reservedAt,
       bookingCode: row.bookingCode,
+      cancellationReason: row.cancellationReason,
+      cancellationNote: row.cancellationNote,
+      cancelledBy: row.cancelledBy,
+      updatedAt: row.updatedAt,
     });
   }
 
@@ -284,7 +289,7 @@ export async function updateReservationDetails(
 ) {
   const { data: existing, error: fetchError } = await supabase
     .from("reservations")
-    .select("id, status, table_id, secondary_table_id, tertiary_table_id")
+    .select("id, status, table_id, secondary_table_id, tertiary_table_id, guest_name, guest_phone, guest_email, party_size, reserved_at, notes, event_type, updated_at")
     .eq("id", reservationId)
     .single();
 
@@ -338,11 +343,15 @@ export async function updateReservationDetails(
     .from("reservations")
     .update(payload)
     .eq("id", reservationId)
+    .eq("updated_at", existing.updated_at)
     .select(RESERVATION_SELECT)
     .single();
 
   if (result.data) {
     const row = mapReservationRow(result.data as Parameters<typeof mapReservationRow>[0]);
+    const previous = { partySize: existing.party_size, reservedAt: existing.reserved_at, notes: existing.notes,
+      guestName: existing.guest_name, guestPhone: existing.guest_phone, guestEmail: existing.guest_email, eventType: existing.event_type };
+    if (!reservationUpdateDetails(row, previous).length) return result;
     notifyReservationPushEvent({
       kind: "updated",
       reservationId: row.id,
@@ -350,6 +359,8 @@ export async function updateReservationDetails(
       partySize: row.partySize,
       reservedAt: row.reservedAt,
       bookingCode: row.bookingCode,
+      updatedAt: row.updatedAt,
+      previous,
     });
   }
 

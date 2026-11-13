@@ -72,6 +72,7 @@ import { fetchGuestVisitProfile } from "@/src/lib/guest-history-actions";
 import { sendCfdEvent } from "@/lib/cfd-display";
 import {
   RESERVATION_CANCEL_REASONS,
+  cancelReasonLabel,
   type ReservationCancelReasonId,
 } from "@/lib/reservation-cancel-reasons";
 import { TableAvailabilityDashboard } from "@/components/table-availability-dashboard";
@@ -922,7 +923,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                       })()}
                       {row.status === "cancelled" && row.cancellationReason ? (
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                          {translate("resCancelReasonTitle")}: {row.cancellationReason}
+                          {translate("resCancelReasonTitle")}: {cancelReasonLabel(row.cancellationReason)}
                           {row.cancelledBy ? ` · ${row.cancelledBy}` : ""}
                           {row.cancelEmailStatus ? ` · ${row.cancelEmailStatus}` : ""}
                         </p>
@@ -1328,7 +1329,11 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                   className="mt-1"
                 />
                 <span>
-                  {reason.id === "capacity"
+                  {reason.id === "changed_mind"
+                    ? language === "vi" ? "Thay đổi ý định" : language === "cs" ? "Změna plánů" : reason.label
+                    : reason.id === "booking_mistake"
+                      ? language === "vi" ? "Đặt nhầm" : language === "cs" ? "Rezervace omylem" : reason.label
+                      : reason.id === "capacity"
                     ? translate("resCancelReasonCapacity")
                     : reason.id === "closed"
                       ? translate("resCancelReasonClosed")
@@ -1349,6 +1354,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             <span className="text-gray-500">{translate("resCancelNoteLabel")}</span>
             <textarea
               value={cancelNote}
+              maxLength={300}
               onChange={(event) => setCancelNote(event.target.value)}
               className="pos-input mt-1 min-h-[72px]"
             />

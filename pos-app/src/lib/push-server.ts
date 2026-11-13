@@ -2,6 +2,7 @@ import webpush from "web-push";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 import { getVapidPublicKey } from "@/lib/push-vapid-public";
 import { formatVoucherAmount } from "@/lib/voucher";
+import { cancellationReasonPhrase, reservationNotificationDetails, reservationUpdateDetails, type ReservationNotificationRecord, type ReservationNotificationSnapshot } from "@/lib/reservation-notification-details";
 
 export type ReservationPushKind = "new" | "updated" | "cancelled" | "no_show";
 
@@ -155,7 +156,9 @@ export function reservationPushCopy(input: {
   partySize: number;
   reservedAt: string | Date;
   bookingCode?: string | null;
-}): ReservationPushPayload {
+  reservationId?: string;
+  previous?: ReservationNotificationSnapshot;
+} & ReservationNotificationRecord): ReservationPushPayload {
   const when = new Date(input.reservedAt).toLocaleString("en-GB", {
     timeZone: "Europe/Prague",
     weekday: "short",
@@ -165,22 +168,24 @@ export function reservationPushCopy(input: {
     minute: "2-digit",
   });
   const code = input.bookingCode ? ` · ${input.bookingCode}` : "";
-  const body = `${input.guestName} · ${input.partySize} pax · ${when}${code}`;
+  const details = reservationNotificationDetails(input.kind, input, input.previous);
+  const body = `${details ? `${details} · ` : ""}${input.guestName.slice(0, 120)} · ${input.partySize} pax · ${when}${code}`;
+  const changes = input.kind === "updated" ? reservationUpdateDetails(input, input.previous) : [];
 
   const title =
     input.kind === "cancelled"
-      ? "Reservation cancelled"
+      ? `Reservation cancelled due to ${cancellationReasonPhrase(input.cancellationReason)}`
       : input.kind === "no_show"
         ? "Reservation no-show"
         : input.kind === "updated"
-          ? "Reservation updated"
+          ? `Reservation updated${changes.length ? ` — ${changes.join("; ")}` : ""}`.slice(0, 160)
           : "New reservation";
 
   return {
     kind: input.kind,
     title,
     body,
-    tag: `reservation-${input.kind}-${input.guestName}`.slice(0, 64),
+    tag: `reservation-${input.kind}-${input.reservationId ?? input.bookingCode ?? input.guestName}`.slice(0, 64),
     url: "/app",
   };
 }

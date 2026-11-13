@@ -1,6 +1,8 @@
 /** Customer-safe cancellation reasons (staff picks; guest never sees internal notes). */
 
 export const RESERVATION_CANCEL_REASONS = [
+  { id: "changed_mind", label: "Change of plans", guestMessage: "Your reservation was cancelled because your plans changed." },
+  { id: "booking_mistake", label: "Booked by mistake", guestMessage: "Your reservation was cancelled because it was booked by mistake." },
   {
     id: "capacity",
     label: "Restaurant capacity / fully booked",
@@ -43,6 +45,19 @@ export const RESERVATION_CANCEL_REASONS = [
 ] as const;
 
 export type ReservationCancelReasonId = (typeof RESERVATION_CANCEL_REASONS)[number]["id"];
+
+export const GUEST_RESERVATION_CANCEL_REASONS = RESERVATION_CANCEL_REASONS.filter(reason =>
+  ["changed_mind", "booking_mistake", "duplicate", "other"].includes(reason.id));
+
+export function validateGuestCancellation(reason: unknown, note: unknown): { reason: ReservationCancelReasonId; note: string } | { error: string } {
+  const selected = GUEST_RESERVATION_CANCEL_REASONS.find(item => item.id === reason);
+  if (!selected) return { error: "Choose a cancellation reason." };
+  if (note !== undefined && note !== null && typeof note !== "string") return { error: "Enter valid cancellation details." };
+  const text = typeof note === "string" ? note.trim() : "";
+  if (text.length > 300) return { error: "Cancellation details must be 300 characters or fewer." };
+  if (selected.id === "other" && !text) return { error: "Please explain the reason for cancellation." };
+  return { reason: selected.id, note: text };
+}
 
 export function guestMessageForCancelReason(
   reasonId: string | null | undefined,

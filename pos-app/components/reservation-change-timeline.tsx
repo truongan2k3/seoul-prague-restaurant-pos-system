@@ -9,6 +9,7 @@ import { parseReservationBbqNotes, pickEventTypeLabel } from "@/lib/reservation-
 import type { TranslationKey } from "@/lib/i18n/translations";
 import type { ReservationRecord, ReservationStatus } from "@/lib/types";
 import { reservationTableLabels } from "@/lib/reservation-tables";
+import { cancelReasonLabel } from "@/lib/reservation-cancel-reasons";
 
 type ChangeValue = string | number | string[] | null;
 type ChangeEvent = {
@@ -133,7 +134,7 @@ export function ReservationChangeTimeline({ reservation }: { reservation: Reserv
             {completed && seatedTables.length > 0 && <div className="mt-3 border-t border-emerald-400/15 pt-3"><p className="text-[11px] text-[var(--muted)]">{translate("resTimelineSeatedTables")}</p><p className="pos-serif mt-1 text-xl font-semibold">{seatedTables.join(" · ")}</p></div>}
             {cancelled && <div className="mt-2 space-y-1 text-xs text-[var(--muted)]">
               {reservation.cancelledBy && <p>{reservation.cancelledBy}</p>}
-              {reservation.cancellationReason && <p>{reservation.cancellationReason}</p>}
+              {reservation.cancellationReason && <p>{cancelReasonLabel(reservation.cancellationReason)}</p>}
               {reservation.cancellationNote && <p className="whitespace-pre-wrap break-words">{reservation.cancellationNote}</p>}
             </div>}
           </div>

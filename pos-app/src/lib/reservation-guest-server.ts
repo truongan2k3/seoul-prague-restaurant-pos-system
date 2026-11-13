@@ -37,6 +37,8 @@ import type { AppSettings, ReservationOperatingHours, ReservationStatus } from "
 import { venueDayRangeUtc, venueWallTimeToUtc } from "@/lib/venue-timezone";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 import { loadActiveReservationHolds } from "@/src/lib/reservation-holds";
+import { validateGuestCancellation } from "@/lib/reservation-cancel-reasons";
+import type { ReservationNotificationSnapshot } from "@/lib/reservation-notification-details";
 
 export interface OnlineBookInput {
   referralCode?: string;
@@ -62,6 +64,10 @@ export interface OnlineBookInput {
 }
 
 export interface GuestReservationPublic {
+  updatedAt?: string;
+  cancellationReason?: string | null;
+  cancellationNote?: string;
+  cancelledBy?: string;
   id: string;
   bookingCode: string;
   manageToken: string;
@@ -171,6 +177,7 @@ export function isGuestManageableStatus(status: ReservationStatus): boolean {
 }
 
 function mapPublicRow(row: {
+  updated_at?: string;
   id: string;
   booking_code: string | null;
   manage_token: string | null;
@@ -196,6 +203,7 @@ function mapPublicRow(row: {
     status: row.status,
     notes: row.notes,
     eventType: row.event_type ?? null,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -737,7 +745,7 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
     .from("reservations")
     .insert(insertPayload)
     .select(
-      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type, updated_at",
     )
     .single();
 
@@ -761,7 +769,7 @@ export async function createOnlineReservationServer(input: OnlineBookInput): Pro
         updated_at: nowIso,
       })
       .select(
-        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type, updated_at",
       )
       .single();
     data = legacy.data;
@@ -785,7 +793,7 @@ export async function fetchReservationByManageToken(
   const { data, error } = await admin
     .from("reservations")
     .select(
-      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type, updated_at",
     )
     .eq("manage_token", manageToken)
     .maybeSingle();
@@ -806,7 +814,7 @@ export async function updateReservationByManageToken(input: {
   time: string;
   guestCount: number;
   notes?: string;
-}): Promise<{ data: GuestReservationPublic | null; error: string | null }> {
+}): Promise<{ data: GuestReservationPublic | null; error: string | null; previous?: ReservationNotificationSnapshot }> {
   const { data: existing, error: fetchError } = await fetchReservationByManageToken(input.token);
   if (fetchError || !existing) return { data: null, error: fetchError ?? "Not found" };
 
@@ -842,8 +850,10 @@ export async function updateReservationByManageToken(input: {
       guest_changed_at: nowIso,
     })
     .eq("id", existing.id)
+    .eq("updated_at", existing.updatedAt ?? "")
+    .in("status", MANAGEABLE_STATUSES)
     .select(
-      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type, updated_at",
     )
     .single();
 
@@ -858,8 +868,10 @@ export async function updateReservationByManageToken(input: {
         updated_at: nowIso,
       })
       .eq("id", existing.id)
+      .eq("updated_at", existing.updatedAt ?? "")
+      .in("status", MANAGEABLE_STATUSES)
       .select(
-        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type, updated_at",
       )
       .single();
     data = legacy.data;
@@ -867,15 +879,18 @@ export async function updateReservationByManageToken(input: {
   }
 
   if (error || !data) {
-    return { data: null, error: error?.message ?? "Failed to update reservation." };
+    return { data: null, error: error?.code === "PGRST116" ? "This reservation changed. Reload it before trying again." : error?.message ?? "Failed to update reservation." };
   }
 
-  return { data: mapPublicRow(data), error: null };
+  return { data: mapPublicRow(data), error: null, previous: { partySize: existing.partySize, reservedAt: existing.reservedAt, notes: existing.notes,
+    guestName: existing.guestName, guestPhone: existing.guestPhone, guestEmail: existing.guestEmail, eventType: existing.eventType } };
 }
 
 export async function cancelReservationByManageToken(
-  token: string,
+  token: string, options: { cancellationReason?: unknown; cancellationNote?: unknown },
 ): Promise<{ data: GuestReservationPublic | null; error: string | null }> {
+  const reason = validateGuestCancellation(options.cancellationReason, options.cancellationNote);
+  if ("error" in reason) return { data: null, error: reason.error };
   const { data: existing, error: fetchError } = await fetchReservationByManageToken(token);
   if (fetchError || !existing) return { data: null, error: fetchError ?? "Not found" };
 
@@ -896,24 +911,33 @@ export async function cancelReservationByManageToken(
       guest_changed_at: now,
       cancelled_at: now,
       cancelled_by: "guest",
-      cancellation_reason: "customer",
+      cancellation_reason: reason.reason,
+      cancellation_note: reason.note || null,
     })
     .eq("id", existing.id)
+    .eq("updated_at", existing.updatedAt ?? "")
+    .in("status", MANAGEABLE_STATUSES)
     .select(
-      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type, updated_at",
     )
     .single();
 
-  if (error && /column .* does not exist/i.test(error.message)) {
+  if (error && /guest_changed_at/i.test(error.message)) {
     const legacy = await admin
       .from("reservations")
       .update({
         status: "cancelled",
         updated_at: now,
+        cancelled_at: now,
+        cancelled_by: "guest",
+        cancellation_reason: reason.reason,
+        cancellation_note: reason.note || null,
       })
       .eq("id", existing.id)
+      .eq("updated_at", existing.updatedAt ?? "")
+      .in("status", MANAGEABLE_STATUSES)
       .select(
-        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type, updated_at",
       )
       .single();
     data = legacy.data;
@@ -921,10 +945,11 @@ export async function cancelReservationByManageToken(
   }
 
   if (error || !data) {
-    return { data: null, error: error?.message ?? "Failed to cancel reservation." };
+    return { data: null, error: error?.code === "PGRST116" ? "This reservation changed. Reload it before trying again." : error?.message ?? "Failed to cancel reservation." };
   }
 
-  return { data: mapPublicRow(data), error: null };
+  const mapped = mapPublicRow(data);
+  return { data: mapped ? { ...mapped, cancellationReason: reason.reason, cancellationNote: reason.note, cancelledBy: "guest" } : null, error: null };
 }
 
 export async function confirmReservationServer(reservationId: string): Promise<{
@@ -959,7 +984,7 @@ export async function confirmReservationServer(reservationId: string): Promise<{
     })
     .eq("id", reservationId)
     .select(
-      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+      "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type, updated_at",
     )
     .single();
 
@@ -990,7 +1015,7 @@ export async function fetchReservationEmailContext(reservationId: string): Promi
     const legacy = await admin
       .from("reservations")
       .select(
-        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type",
+        "id, booking_code, manage_token, guest_name, guest_email, guest_phone, party_size, reserved_at, status, notes, event_type, updated_at",
       )
       .eq("id", reservationId)
       .single();

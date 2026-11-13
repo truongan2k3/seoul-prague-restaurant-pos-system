@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { after } from "next/server";
 import type { GuestReservationAlertPayload } from "@/lib/reservation-guest-alert";
 import { guestMessageForCancelReason } from "@/lib/reservation-cancel-reasons";
 import {
@@ -12,6 +13,7 @@ import {
   sendReservationEmail,
 } from "@/src/lib/reservation-email";
 import { reservationPushCopy, sendReservationPush } from "@/src/lib/push-server";
+import { reservationUpdateDetails } from "@/lib/reservation-notification-details";
 
 function publicReservation(data: NonNullable<
   Awaited<ReturnType<typeof fetchReservationByManageToken>>["data"]
@@ -44,6 +46,9 @@ function alertReservation(
     bookingCode: data.bookingCode,
     eventType: data.eventType,
     source: "reservation",
+    cancellationReason: data.cancellationReason ?? undefined,
+    cancellationNote: data.cancellationNote,
+    cancelledBy: data.cancelledBy,
   };
 }
 
@@ -70,9 +75,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const before = await fetchReservationByManageToken(body.token ?? "");
-
-  const { data, error } = await updateReservationByManageToken({
+  const { data, error, previous } = await updateReservationByManageToken({
     token: body.token ?? "",
     date: body.date ?? "",
     time: body.time ?? "",
@@ -84,27 +87,29 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: error ?? "Update failed." }, { status: 400 });
   }
 
-  await broadcastGuestReservationAlert({
-    kind: "updated",
-    reservation: alertReservation(data),
-    previous: before.data
-      ? {
-          partySize: before.data.partySize,
-          reservedAt: before.data.reservedAt,
-          notes: before.data.notes,
-        }
-      : undefined,
-  });
-
-  void sendReservationPush(
-    reservationPushCopy({
+  if (reservationUpdateDetails(data, previous).length) {
+    await broadcastGuestReservationAlert({
       kind: "updated",
-      guestName: data.guestName,
-      partySize: data.partySize,
-      reservedAt: data.reservedAt,
-      bookingCode: data.bookingCode,
-    }),
-  );
+      reservation: alertReservation(data),
+      previous,
+    });
+
+    after(() => sendReservationPush(
+      reservationPushCopy({
+        kind: "updated",
+        guestName: data.guestName,
+        partySize: data.partySize,
+        reservedAt: data.reservedAt,
+        bookingCode: data.bookingCode,
+        notes: data.notes,
+        guestPhone: data.guestPhone,
+        guestEmail: data.guestEmail,
+        eventType: data.eventType,
+        previous,
+        reservationId: data.id,
+      }),
+    ).then(() => {}));
+  }
 
   let emailSent = false;
   if (data.guestEmail) {
@@ -128,14 +133,14 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  let body: { token?: string };
+  let body: { token?: string; cancellationReason?: unknown; cancellationNote?: unknown };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const { data, error } = await cancelReservationByManageToken(body.token ?? "");
+  const { data, error } = await cancelReservationByManageToken(body.token ?? "", body);
   if (error || !data) {
     return NextResponse.json({ error: error ?? "Cancel failed." }, { status: 400 });
   }
@@ -145,15 +150,19 @@ export async function DELETE(request: Request) {
     reservation: alertReservation(data),
   });
 
-  void sendReservationPush(
+  after(() => sendReservationPush(
     reservationPushCopy({
       kind: "cancelled",
       guestName: data.guestName,
       partySize: data.partySize,
       reservedAt: data.reservedAt,
       bookingCode: data.bookingCode,
+      cancellationReason: data.cancellationReason,
+      cancellationNote: data.cancellationNote,
+      cancelledBy: data.cancelledBy,
+      reservationId: data.id,
     }),
-  );
+  ).then(() => {}));
 
   let emailSent = false;
   if (data.guestEmail) {
@@ -166,7 +175,7 @@ export async function DELETE(request: Request) {
       manageUrl: buildManageUrl(data.manageToken),
       notes: data.notes ?? undefined,
       status: data.status,
-      cancellationGuestMessage: guestMessageForCancelReason("customer"),
+      cancellationGuestMessage: guestMessageForCancelReason(data.cancellationReason === "other" ? "customer" : data.cancellationReason),
     });
     emailSent = emailResult.sent;
   }

@@ -1,4 +1,5 @@
 import type { ReservationRecord, ReservationStatus } from "@/lib/types";
+import type { ReservationNotificationSnapshot } from "@/lib/reservation-notification-details";
 
 export const GUEST_RESERVATION_ALERT_CHANNEL = "pos-guest-reservation-alerts";
 export const GUEST_RESERVATION_ALERT_EVENT = "guest-change";
@@ -20,12 +21,11 @@ export interface GuestReservationAlertPayload {
     bookingCode?: string | null;
     eventType?: string | null;
     source?: "reservation" | "walk_in" | "phone_call" | "online";
+    cancellationReason?: string;
+    cancellationNote?: string;
+    cancelledBy?: string;
   };
-  previous?: {
-    partySize?: number;
-    reservedAt?: string;
-    notes?: string | null;
-  };
+  previous?: ReservationNotificationSnapshot;
 }
 
 export function guestAlertToReservationRecord(
@@ -47,5 +47,8 @@ export function guestAlertToReservationRecord(
     updatedAt: now,
     bookingCode: row.bookingCode ?? undefined,
     eventType: row.eventType ?? undefined,
+    cancellationReason: row.cancellationReason,
+    cancellationNote: row.cancellationNote,
+    cancelledBy: row.cancelledBy,
   };
 }

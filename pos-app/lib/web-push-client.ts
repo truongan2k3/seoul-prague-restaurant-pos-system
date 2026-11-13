@@ -1,4 +1,5 @@
 import { getVapidPublicKey } from "@/lib/push-vapid-public";
+import type { ReservationNotificationSnapshot } from "@/lib/reservation-notification-details";
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -91,12 +92,18 @@ export function notifyReservationPushEvent(input: {
   partySize: number;
   reservedAt: Date | string;
   bookingCode?: string | null;
+  updatedAt?: Date | string;
+  previous?: ReservationNotificationSnapshot;
+  cancellationReason?: string;
+  cancellationNote?: string;
+  cancelledBy?: string;
 }): void {
   if (typeof window === "undefined") return;
   void fetch("/api/push/reservation-event", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
+    keepalive: true,
     body: JSON.stringify({
       kind: input.kind,
       reservationId: input.reservationId,
@@ -107,6 +114,11 @@ export function notifyReservationPushEvent(input: {
           ? input.reservedAt
           : input.reservedAt.toISOString(),
       bookingCode: input.bookingCode ?? null,
+      updatedAt: input.updatedAt,
+      previous: input.previous,
+      cancellationReason: input.cancellationReason,
+      cancellationNote: input.cancellationNote,
+      cancelledBy: input.cancelledBy,
     }),
   }).catch(() => {
     /* ignore network errors */

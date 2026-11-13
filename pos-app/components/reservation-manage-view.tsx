@@ -2,7 +2,8 @@
 
 import { ReservationTimePicker } from "@/components/reservation-time-picker";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { GUEST_RESERVATION_CANCEL_REASONS, validateGuestCancellation } from "@/lib/reservation-cancel-reasons";
 import { useSearchParams } from "next/navigation";
 import { CalendarClock, Loader2, UtensilsCrossed } from "lucide-react";
 import { todayIsoDate } from "@/lib/reservation-slots";
@@ -57,6 +58,10 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [showCancelReasons, setShowCancelReasons] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [cancellationNote, setCancellationNote] = useState("");
+  const mutationInFlight = useRef(false);
 
   const [guestCount, setGuestCount] = useState(2);
   const [date, setDate] = useState(todayIsoDate());
@@ -145,8 +150,9 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!token || !canEdit) return;
+    if (!token || !canEdit || mutationInFlight.current) return;
     if (slotsLoading || !availableTimeSlots.includes(time)) { setError("Choose an available time."); return; }
+    mutationInFlight.current = true;
     setSaving(true);
     setError(null);
     setMessage(null);
@@ -180,13 +186,16 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
     } catch {
       setError("Could not update reservation.");
     } finally {
+      mutationInFlight.current = false;
       setSaving(false);
     }
   };
 
   const handleCancel = async () => {
-    if (!token || !canEdit) return;
-    if (!window.confirm("Cancel this reservation?")) return;
+    if (!token || !canEdit || mutationInFlight.current) return;
+    const reason = validateGuestCancellation(cancellationReason, cancellationNote);
+    if ("error" in reason) { setError(reason.error); return; }
+    mutationInFlight.current = true;
     setCancelling(true);
     setError(null);
     setMessage(null);
@@ -194,7 +203,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
       const response = await fetch("/api/reservations/manage", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ token, cancellationReason: reason.reason, cancellationNote: reason.note }),
       });
       const payload = (await response.json().catch(() => ({}))) as {
         error?: string;
@@ -206,6 +215,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
         return;
       }
       setReservation(payload.reservation);
+      setShowCancelReasons(false);
       setMessage(
         payload.emailSent
           ? "Reservation cancelled. A confirmation email was sent."
@@ -214,6 +224,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
     } catch {
       setError("Could not cancel reservation.");
     } finally {
+      mutationInFlight.current = false;
       setCancelling(false);
     }
   };
@@ -325,7 +336,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
 
                 <button
                   type="submit"
-                  disabled={saving || slotsLoading || !availableTimeSlots.includes(time)}
+                  disabled={saving || cancelling || slotsLoading || !availableTimeSlots.includes(time)}
                   className="w-full rounded-none bg-[#8B1E2D] py-3.5 text-sm font-semibold text-white hover:bg-[#A02435] disabled:opacity-60"
                 >
                   {saving ? "Saving…" : "Save changes"}
@@ -333,12 +344,18 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
 
                 <button
                   type="button"
-                  disabled={cancelling}
-                  onClick={() => void handleCancel()}
+                  disabled={cancelling || saving}
+                  onClick={() => setShowCancelReasons(true)}
                   className="w-full rounded-none border border-white/15 py-3 text-sm font-semibold text-white/90 hover:bg-white/10 disabled:opacity-60"
                 >
                   {cancelling ? "Cancelling…" : "Cancel reservation"}
                 </button>
+                {showCancelReasons && <section aria-label="Cancellation reason" className="space-y-4 border border-[#8B1E2D]/60 bg-[#8B1E2D]/10 p-4">
+                  <h2 className="font-semibold text-white">Why are you cancelling?</h2>
+                  <label className="block text-sm text-white/90">Reason<select value={cancellationReason} disabled={cancelling || saving} onChange={event => setCancellationReason(event.target.value)} className="mt-2 w-full border border-white/15 bg-[#0B0B0C] px-3 py-3 text-white"><option value="">Choose a reason</option>{GUEST_RESERVATION_CANCEL_REASONS.map(reason => <option key={reason.id} value={reason.id}>{reason.label}</option>)}</select></label>
+                  <label className="block text-sm text-white/90">{cancellationReason === "other" ? "Please tell us why (required)" : "Additional details (optional)"}<textarea value={cancellationNote} maxLength={300} disabled={cancelling || saving} onChange={event => setCancellationNote(event.target.value)} rows={2} className="mt-2 w-full border border-white/15 bg-[#0B0B0C] px-3 py-3 text-white"/></label>
+                  <div className="flex gap-3"><button type="button" disabled={cancelling || saving} onClick={() => setShowCancelReasons(false)} className="flex-1 border border-white/15 px-3 py-3 text-sm text-white">Keep reservation</button><button type="button" disabled={cancelling || saving || !cancellationReason || (cancellationReason === "other" && !cancellationNote.trim())} onClick={() => void handleCancel()} className="flex-1 bg-[#8B1E2D] px-3 py-3 text-sm font-semibold text-white disabled:opacity-50">{cancelling ? "Cancelling…" : "Confirm cancellation"}</button></div>
+                </section>}
               </form>
             ) : (
               <p className="text-sm text-white/55">

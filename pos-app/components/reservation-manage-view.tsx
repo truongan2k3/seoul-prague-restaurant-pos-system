@@ -1,6 +1,7 @@
 "use client";
 
 import { ReservationTimePicker } from "@/components/reservation-time-picker";
+import { useReservationAvailabilityRefresh } from "@/hooks/use-reservation-availability-refresh";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GUEST_RESERVATION_CANCEL_REASONS, validateGuestCancellation } from "@/lib/reservation-cancel-reasons";
@@ -70,6 +71,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
 
   const minDate = useMemo(() => todayIsoDate(), []);
   const canEdit = reservation ? MANAGEABLE.includes(reservation.status) : false;
+  const availabilityRefresh = useReservationAvailabilityRefresh(!!token && canEdit && !loading && !saving && !cancelling);
 
   useEffect(() => {
     void fetchAppSettings().then(({ data }) => setAppSettings(data));
@@ -123,7 +125,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
     setSlotsLoading(true);
     const params = new URLSearchParams({ date, partySize: String(guestCount), manageToken: token });
     const timer = window.setTimeout(() => {
-      void fetch(`/api/reservations/availability?${params}`, { signal: controller.signal })
+      void fetch(`/api/reservations/availability?${params}`, { signal: controller.signal, cache: "no-store" })
         .then(async (response) => {
           const payload = await response.json();
           if (controller.signal.aborted) return;
@@ -133,7 +135,7 @@ export function ReservationManageView({ website }: { website?: WebsiteContent })
         .finally(() => { if (!controller.signal.aborted) setSlotsLoading(false); });
     }, 200);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [date, guestCount, token, reservation, sharedSettings.reservationCapacityLimitsEnabled, sharedSettings.reservationBufferMinutes, sharedSettings.reservationDurationMinutes, sharedSettings.reservationTimeStep]);
+  }, [date, guestCount, token, reservation, availabilityRefresh, sharedSettings.reservationCapacityLimitsEnabled, sharedSettings.reservationBufferMinutes, sharedSettings.reservationDurationMinutes, sharedSettings.reservationTimeStep]);
 
   const guestOptions = useMemo(
     () =>

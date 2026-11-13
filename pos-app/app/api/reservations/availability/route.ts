@@ -50,7 +50,7 @@ export async function GET(request: Request) {
       grill,
       maxGuestsPerSlot: settings.reservationMaxGuestsPerSlot,
       slots: visible,
-    });
+    }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Availability check failed." },

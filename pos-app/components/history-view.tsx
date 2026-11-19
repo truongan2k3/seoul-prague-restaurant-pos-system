@@ -580,7 +580,6 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                                   : ""}
                             </p>
                           )}
-                          <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{sale.staffName}</p>
                         </td>
                         <td className="px-2.5 py-2.5 lg:px-3">
                           <p className="truncate text-xs font-medium text-gray-900 dark:text-gray-100">

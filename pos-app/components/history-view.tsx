@@ -248,8 +248,8 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="mx-auto max-w-[1600px] space-y-6">
+      <div className="flex-1 overflow-auto p-2.5 sm:p-4 lg:p-6">
+        <div className="mx-auto max-w-[1600px] space-y-4 sm:space-y-6">
           <section className="rounded-xl border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:p-3">
             <div className="flex flex-wrap items-center gap-2">
               <p className="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-xs">
@@ -394,7 +394,58 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
               </p>
             ) : (
               <div className="space-y-3">
-                <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+                {/* Mobile Cancelled Card View */}
+                <div className="space-y-2 md:hidden">
+                  {pagedCancelled.map((row) => (
+                    <div
+                      key={row.id}
+                      className={`rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800 ${
+                        row.saleId ? "cursor-pointer active:scale-[0.99]" : ""
+                      }`}
+                      onClick={() => openSaleFromCancelled(row)}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-lg bg-gray-900 px-2 py-0.5 text-xs font-bold leading-none text-white dark:bg-gray-100 dark:text-gray-900">
+                            {row.tableLabel}
+                          </span>
+                          <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm truncate">
+                            {row.itemName}
+                          </span>
+                        </div>
+                        <span className="text-sm font-bold tabular-nums text-rose-600 dark:text-rose-400 shrink-0">
+                          {row.quantity}×
+                        </span>
+                      </div>
+                      {row.reason && (
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          {translate("historyCancelledReason")}: {row.reason}
+                        </p>
+                      )}
+                      <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 text-xs text-gray-500 dark:border-gray-700/60 dark:text-gray-400">
+                        <span>{row.staffName} · {formatHistoryDateTime(row.cancelledAt, language)}</span>
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            row.source === "open"
+                              ? "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                              : row.source === "voided"
+                                ? "bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-200"
+                                : "bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300"
+                          }`}
+                        >
+                          {row.source === "open"
+                            ? translate("historyCancelledSourceOpen")
+                            : row.source === "voided"
+                              ? translate("historyCancelledSourceVoided")
+                              : translate("historyCancelledSourcePaid")}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop/Tablet Table */}
+                <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
                   <table className="w-full min-w-[880px] text-left text-sm">
                     <thead>
                       <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
@@ -487,112 +538,238 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
             </p>
           ) : (
             <div className="space-y-3">
-            <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
-              <table className="w-full text-left text-sm table-fixed">
-                <colgroup>
-                  <col className="w-[12%]" />
-                  <col className="w-[16%]" />
-                  <col className="w-[8%]" />
-                  <col className="w-[10%]" />
-                  <col className="w-[8%]" />
-                  <col className="w-[10%]" />
-                  <col className="w-[12%]" />
-                  <col className="w-[12%]" />
-                  <col className="w-[12%]" />
-                </colgroup>
-                <thead>
-                  <tr className="border-b border-gray-200 text-[11px] uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
-                    <th className="px-2.5 py-2.5 font-semibold lg:px-3">{translate("table")}</th>
-                    <th className="px-2.5 py-2.5 font-semibold lg:px-3">{translate("historyItems")}</th>
-                    <th className="px-2.5 py-2.5 font-semibold lg:px-3">{translate("payment")}</th>
-                    <th className="px-2.5 py-2.5 font-semibold text-right lg:px-3">{translate("totalExclTip")}</th>
-                    <th className="px-2.5 py-2.5 font-semibold text-right lg:px-3">{translate("tips")}</th>
-                    <th className="px-2.5 py-2.5 font-semibold text-right lg:px-3">{translate("grandTotal")}</th>
-                    <th className="px-2.5 py-2.5 font-semibold lg:px-3">{translate("historyGuestArrived")}</th>
-                    <th className="px-2.5 py-2.5 font-semibold lg:px-3">{translate("historyGuestCheckout")}</th>
-                    <th className="px-2.5 py-2.5 font-semibold lg:px-3"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedSales.map((sale) => {
-                    const orderId = generateOrderNumber(sale.closedAt);
-                    const isDeleted = Boolean(sale.deletedAt);
-                    const colCount = 9;
-                    return (
-                      <Fragment key={sale.id}>
-                        {isDeleted && (
-                          <tr className="bg-red-600 text-white">
-                            <td colSpan={colCount} className="px-3 py-1.5 text-xs font-bold uppercase tracking-wide">
-                              − {translate("historyDeletedBanner")} · {translate("table")}{" "}
-                              {sale.tableLabel} · {orderId} · −{formatCzk(sale.grandTotal)}
-                            </td>
-                          </tr>
-                        )}
-                        <tr
-                          onClick={() => openSale(sale)}
-                          className={`border-b border-gray-100 last:border-b-0 cursor-pointer hover:bg-gray-50 dark:border-gray-700/60 dark:hover:bg-gray-900/40 ${
-                            isDeleted
-                              ? "bg-red-50/80 text-red-800 line-through decoration-red-400 dark:bg-red-950/30 dark:text-red-200"
-                              : ""
-                          }`}
-                        >
-                        <td className="px-2.5 py-2.5 lg:px-3">
-                          <div className="flex items-center gap-1.5">
-                            <span className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-lg bg-gray-900 px-2 py-0.5 text-sm font-bold leading-none text-white dark:bg-gray-100 dark:text-gray-900">
-                              {sale.tableLabel}
+              {/* Mobile Card View */}
+              <div className="space-y-2.5 md:hidden">
+                {pagedSales.map((sale) => {
+                  const orderId = generateOrderNumber(sale.closedAt);
+                  const isDeleted = Boolean(sale.deletedAt);
+                  return (
+                    <div
+                      key={sale.id}
+                      onClick={() => openSale(sale)}
+                      className={`cursor-pointer rounded-xl border p-3 transition-colors active:scale-[0.99] ${
+                        isDeleted
+                          ? "border-red-300/60 bg-red-50/70 dark:border-red-900/60 dark:bg-red-950/20"
+                          : "border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700/80 dark:bg-gray-800/90 dark:hover:border-gray-600"
+                      }`}
+                    >
+                      {isDeleted && (
+                        <div className="mb-2 rounded bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                          − {translate("historyDeletedBanner")} · {translate("table")} {sale.tableLabel} · {orderId} · −{formatCzk(sale.grandTotal)}
+                        </div>
+                      )}
+
+                      {/* Header: Table & Badges / Grand Total */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-1.5 flex-wrap">
+                          <span className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-lg bg-gray-900 px-2 py-0.5 text-sm font-bold leading-none text-white dark:bg-gray-100 dark:text-gray-900">
+                            {sale.tableLabel}
+                          </span>
+                          <SaleDiscountCodeBadges sale={sale} />
+                          {saleHasHistoryAlert(sale) && (
+                            <span title={translate("historyActivityAlert")} className="text-amber-500">
+                              <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={2.5} />
                             </span>
-                            <SaleDiscountCodeBadges sale={sale} />
-                            {saleHasHistoryAlert(sale) && (
-                              <span
-                                title={translate("historyActivityAlert")}
-                                className="inline-flex shrink-0 text-amber-500"
-                                aria-label={translate("historyActivityAlert")}
+                          )}
+                          {sale.discountAmount > 0 && (
+                            <span title={translate("historyDiscountAlert")} className="text-emerald-600 dark:text-emerald-400">
+                              <Percent className="h-4 w-4 shrink-0" strokeWidth={2.5} />
+                            </span>
+                          )}
+                          {(sale.voucherDiscountAmount ?? 0) > 0 && (
+                            <span title={translate("historyVoucherAlert")} className="text-amber-600 dark:text-amber-400">
+                              <Ticket className="h-4 w-4 shrink-0" strokeWidth={2.5} />
+                            </span>
+                          )}
+                          {sale.guestName && (
+                            <span className="truncate text-xs text-gray-500 dark:text-gray-400">
+                              · {sale.guestName}
+                              {sale.visitSource === "phone_call" ? " (Phone)" : sale.visitSource ? " (Online)" : ""}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="shrink-0 text-right">
+                          <span
+                            className={`text-base font-bold tabular-nums ${
+                              isDeleted
+                                ? "text-red-600 line-through dark:text-red-400"
+                                : "text-emerald-600 dark:text-emerald-400"
+                            }`}
+                          >
+                            {isDeleted ? `−${formatCzk(sale.grandTotal)}` : formatCzk(sale.grandTotal)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Body: Items Preview */}
+                      <div className="mt-2 text-xs">
+                        <span className="font-medium text-gray-900 dark:text-gray-100">
+                          {itemCount(sale)} {translate("historyItems").toLowerCase()}
+                        </span>
+                        <span className="mx-1 text-gray-400">·</span>
+                        <span className="text-gray-500 dark:text-gray-400">
+                          {itemPreview(sale, 3)}
+                        </span>
+                      </div>
+
+                      {/* Footer: Payment Method, Tip & Checkout Time */}
+                      <div className="mt-2.5 flex items-center justify-between border-t border-gray-100 pt-2 text-xs text-gray-500 dark:border-gray-700/60 dark:text-gray-400">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className={`inline-flex whitespace-nowrap rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${
+                              sale.paymentMethod === "cash"
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                : "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                            }`}
+                          >
+                            {translate(sale.paymentMethod)}
+                          </span>
+                          {sale.tip > 0 && (
+                            <span className="tabular-nums text-gray-600 dark:text-gray-300 text-[11px]">
+                              Tip: {formatCzk(sale.tip)}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="tabular-nums text-[11px] text-gray-500 dark:text-gray-400">
+                            {formatHistoryDateTime(sale.closedAt, language)}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); openSale(sale); }}
+                              className="inline-flex items-center justify-center rounded-lg border border-gray-200 p-1.5 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                              title={translate("historyViewBill")}
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                            </button>
+                            {canEditTip && !isDeleted && (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); openSale(sale, true); }}
+                                className="inline-flex items-center justify-center rounded-lg border border-blue-200 bg-blue-50 p-1.5 text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300"
+                                title={translate("editTipAndPayment")}
                               >
-                                <AlertTriangle className="h-4 w-4" strokeWidth={2.5} />
-                              </span>
-                            )}
-                            {sale.discountAmount > 0 && (
-                              <span
-                                title={translate("historyDiscountAlert")}
-                                className="inline-flex shrink-0 text-emerald-600 dark:text-emerald-400"
-                                aria-label={translate("historyDiscountAlert")}
-                              >
-                                <Percent className="h-4 w-4" strokeWidth={2.5} />
-                              </span>
-                            )}
-                            {(sale.voucherDiscountAmount ?? 0) > 0 && (
-                              <span
-                                title={translate("historyVoucherAlert")}
-                                className="inline-flex shrink-0 text-amber-600 dark:text-amber-400"
-                                aria-label={translate("historyVoucherAlert")}
-                              >
-                                <Ticket className="h-4 w-4" strokeWidth={2.5} />
-                              </span>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
                             )}
                           </div>
-                          {sale.guestName && (
-                            <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
-                              {sale.guestName}
-                              {sale.visitSource === "phone_call"
-                                ? " · Phone"
-                                : sale.visitSource
-                                  ? " · Online"
-                                  : ""}
-                            </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop/Tablet Table View */}
+              <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+                <table className="w-full text-left text-sm table-fixed min-w-[860px]">
+                  <colgroup>
+                    <col className="w-[12%]" />
+                    <col className="w-[18%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[11%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[11%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[6%]" />
+                  </colgroup>
+                  <thead>
+                    <tr className="border-b border-gray-200 text-[11px] uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                      <th className="px-2.5 py-2.5 font-semibold lg:px-3">{translate("table")}</th>
+                      <th className="px-2.5 py-2.5 font-semibold lg:px-3">{translate("historyItems")}</th>
+                      <th className="px-2.5 py-2.5 font-semibold lg:px-3">{translate("payment")}</th>
+                      <th className="px-2.5 py-2.5 font-semibold text-right lg:px-3">{translate("totalExclTip")}</th>
+                      <th className="px-2.5 py-2.5 font-semibold text-right lg:px-3">{translate("tips")}</th>
+                      <th className="px-2.5 py-2.5 font-semibold text-right lg:px-3">{translate("grandTotal")}</th>
+                      <th className="px-2.5 py-2.5 font-semibold lg:px-3">{translate("historyGuestArrived")}</th>
+                      <th className="px-2.5 py-2.5 font-semibold lg:px-3">{translate("historyGuestCheckout")}</th>
+                      <th className="px-2.5 py-2.5 font-semibold lg:px-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedSales.map((sale) => {
+                      const orderId = generateOrderNumber(sale.closedAt);
+                      const isDeleted = Boolean(sale.deletedAt);
+                      const colCount = 9;
+                      return (
+                        <Fragment key={sale.id}>
+                          {isDeleted && (
+                            <tr className="bg-red-600 text-white">
+                              <td colSpan={colCount} className="px-3 py-1.5 text-xs font-bold uppercase tracking-wide">
+                                − {translate("historyDeletedBanner")} · {translate("table")}{" "}
+                                {sale.tableLabel} · {orderId} · −{formatCzk(sale.grandTotal)}
+                              </td>
+                            </tr>
                           )}
-                        </td>
-                        <td className="px-2.5 py-2.5 lg:px-3">
-                          <p className="truncate text-xs font-medium text-gray-900 dark:text-gray-100">
-                            {itemCount(sale)} {translate("historyItems").toLowerCase()}
-                          </p>
-                          <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">
-                            {itemPreview(sale)}
-                          </p>
-                        </td>
-                        <td className="px-2.5 py-2.5 lg:px-3">
-                          <span
-                            className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${
-                              sale.paymentMethod === "cash"
+                          <tr
+                            onClick={() => openSale(sale)}
+                            className={`border-b border-gray-100 last:border-b-0 cursor-pointer hover:bg-gray-50 dark:border-gray-700/60 dark:hover:bg-gray-900/40 ${
+                              isDeleted
+                                ? "bg-red-50/80 text-red-800 line-through decoration-red-400 dark:bg-red-950/30 dark:text-red-200"
+                                : ""
+                            }`}
+                          >
+                          <td className="px-2.5 py-2.5 lg:px-3">
+                            <div className="flex items-center gap-1.5">
+                              <span className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-lg bg-gray-900 px-2 py-0.5 text-sm font-bold leading-none text-white dark:bg-gray-100 dark:text-gray-900">
+                                {sale.tableLabel}
+                              </span>
+                              <SaleDiscountCodeBadges sale={sale} />
+                              {saleHasHistoryAlert(sale) && (
+                                <span
+                                  title={translate("historyActivityAlert")}
+                                  className="inline-flex shrink-0 text-amber-500"
+                                  aria-label={translate("historyActivityAlert")}
+                                >
+                                  <AlertTriangle className="h-4 w-4" strokeWidth={2.5} />
+                                </span>
+                              )}
+                              {sale.discountAmount > 0 && (
+                                <span
+                                  title={translate("historyDiscountAlert")}
+                                  className="inline-flex shrink-0 text-emerald-600 dark:text-emerald-400"
+                                  aria-label={translate("historyDiscountAlert")}
+                                >
+                                  <Percent className="h-4 w-4" strokeWidth={2.5} />
+                                </span>
+                              )}
+                              {(sale.voucherDiscountAmount ?? 0) > 0 && (
+                                <span
+                                  title={translate("historyVoucherAlert")}
+                                  className="inline-flex shrink-0 text-amber-600 dark:text-amber-400"
+                                  aria-label={translate("historyVoucherAlert")}
+                                >
+                                  <Ticket className="h-4 w-4" strokeWidth={2.5} />
+                                </span>
+                              )}
+                            </div>
+                            {sale.guestName && (
+                              <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
+                                {sale.guestName}
+                                {sale.visitSource === "phone_call"
+                                  ? " · Phone"
+                                  : sale.visitSource
+                                    ? " · Online"
+                                    : ""}
+                              </p>
+                            )}
+                          </td>
+                          <td className="px-2.5 py-2.5 lg:px-3">
+                            <p className="truncate text-xs font-medium text-gray-900 dark:text-gray-100">
+                              {itemCount(sale)} {translate("historyItems").toLowerCase()}
+                            </p>
+                            <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">
+                              {itemPreview(sale)}
+                            </p>
+                          </td>
+                          <td className="px-2.5 py-2.5 lg:px-3">
+                            <span
+                              className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${
+                                sale.paymentMethod === "cash"
                                 ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
                                 : "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
                             }`}
@@ -648,12 +825,12 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
             </div>
 
             {filteredSales.length > HISTORY_PAGE_SIZE ? (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
-                <p className="text-sm text-gray-600 dark:text-gray-300">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5 sm:px-4 sm:py-3 dark:border-gray-700 dark:bg-gray-800">
+                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">
                   {translate("historyPageOf")
                     .replace("{page}", String(currentPage))
                     .replace("{total}", String(totalPages))}
-                  <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                  <span className="ml-1 sm:ml-2 text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">
                     ({translate("historyPageShowing")
                       .replace("{from}", String((currentPage - 1) * HISTORY_PAGE_SIZE + 1))
                       .replace(
@@ -669,18 +846,18 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                     type="button"
                     onClick={() => setPage((prev) => Math.max(1, Math.min(prev, totalPages) - 1))}
                     disabled={currentPage <= 1}
-                    className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 enabled:hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:text-gray-200 dark:enabled:hover:bg-gray-700"
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 sm:px-3 sm:py-1.5 text-xs font-medium text-gray-700 enabled:hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:text-gray-200 dark:enabled:hover:bg-gray-700"
                   >
                     <ChevronLeft className="h-4 w-4" />
-                    {translate("historyPrevPage")}
+                    <span className="hidden sm:inline">{translate("historyPrevPage")}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setPage((prev) => Math.min(totalPages, Math.min(prev, totalPages) + 1))}
                     disabled={currentPage >= totalPages}
-                    className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 enabled:hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:text-gray-200 dark:enabled:hover:bg-gray-700"
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 sm:px-3 sm:py-1.5 text-xs font-medium text-gray-700 enabled:hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:text-gray-200 dark:enabled:hover:bg-gray-700"
                   >
-                    {translate("historyNextPage")}
+                    <span className="hidden sm:inline">{translate("historyNextPage")}</span>
                     <ChevronRight className="h-4 w-4" />
                   </button>
                 </div>

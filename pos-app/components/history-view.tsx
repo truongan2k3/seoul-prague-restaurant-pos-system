@@ -603,21 +603,21 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                       </div>
 
                       {/* Body: Items Preview */}
-                      <div className="mt-2 text-xs">
-                        <span className="font-medium text-gray-900 dark:text-gray-100">
+                      <div className="mt-2 text-sm">
+                        <span className="font-semibold text-gray-900 dark:text-gray-100">
                           {itemCount(sale)} {translate("historyItems").toLowerCase()}
                         </span>
-                        <span className="mx-1 text-gray-400">·</span>
-                        <span className="text-gray-500 dark:text-gray-400">
+                        <span className="mx-1.5 text-gray-400">·</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
                           {itemPreview(sale, 3)}
                         </span>
                       </div>
 
                       {/* Footer: Payment Method, Tip & Checkout Time */}
                       <div className="mt-2.5 flex items-center justify-between border-t border-gray-100 pt-2 text-xs text-gray-500 dark:border-gray-700/60 dark:text-gray-400">
-                        <div className="flex items-center gap-1.5 flex-wrap">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span
-                            className={`inline-flex whitespace-nowrap rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${
+                            className={`inline-flex whitespace-nowrap rounded-md px-2.5 py-0.5 text-xs font-semibold uppercase ${
                               sale.paymentMethod === "cash"
                                 ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
                                 : "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
@@ -626,14 +626,14 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                             {translate(sale.paymentMethod)}
                           </span>
                           {sale.tip > 0 && (
-                            <span className="tabular-nums text-gray-600 dark:text-gray-300 text-[11px]">
+                            <span className="tabular-nums text-gray-600 dark:text-gray-300 text-xs font-medium">
                               Tip: {formatCzk(sale.tip)}
                             </span>
                           )}
                         </div>
 
                         <div className="flex items-center gap-2">
-                          <span className="tabular-nums text-[11px] text-gray-500 dark:text-gray-400">
+                          <span className="tabular-nums text-xs text-gray-500 dark:text-gray-400">
                             {formatHistoryDateTime(sale.closedAt, language)}
                           </span>
                           <div className="flex items-center gap-1">
@@ -643,7 +643,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                               className="inline-flex items-center justify-center rounded-lg border border-gray-200 p-1.5 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
                               title={translate("historyViewBill")}
                             >
-                              <Eye className="h-3.5 w-3.5" />
+                              <Eye className="h-4 w-4" />
                             </button>
                             {canEditTip && !isDeleted && (
                               <button
@@ -652,7 +652,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                                 className="inline-flex items-center justify-center rounded-lg border border-blue-200 bg-blue-50 p-1.5 text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300"
                                 title={translate("editTipAndPayment")}
                               >
-                                <Pencil className="h-3.5 w-3.5" />
+                                <Pencil className="h-4 w-4" />
                               </button>
                             )}
                           </div>
@@ -665,29 +665,29 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
 
               {/* Desktop/Tablet Table View */}
               <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
-                <table className="w-full text-left text-sm table-fixed min-w-[860px]">
+                <table className="w-full text-left text-sm table-fixed min-w-[920px]">
                   <colgroup>
-                    <col className="w-[12%]" />
-                    <col className="w-[18%]" />
-                    <col className="w-[9%]" />
                     <col className="w-[11%]" />
+                    <col className="w-[20%]" />
                     <col className="w-[9%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[12%]" />
                     <col className="w-[11%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[12%]" />
+                    <col className="w-[11%]" />
                     <col className="w-[6%]" />
                   </colgroup>
                   <thead>
-                    <tr className="border-b border-gray-200 text-[11px] uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
-                      <th className="px-2.5 py-2.5 font-semibold lg:px-3">{translate("table")}</th>
-                      <th className="px-2.5 py-2.5 font-semibold lg:px-3">{translate("historyItems")}</th>
-                      <th className="px-2.5 py-2.5 font-semibold lg:px-3">{translate("payment")}</th>
-                      <th className="px-2.5 py-2.5 font-semibold text-right lg:px-3">{translate("totalExclTip")}</th>
-                      <th className="px-2.5 py-2.5 font-semibold text-right lg:px-3">{translate("tips")}</th>
-                      <th className="px-2.5 py-2.5 font-semibold text-right lg:px-3">{translate("grandTotal")}</th>
-                      <th className="px-2.5 py-2.5 font-semibold lg:px-3">{translate("historyGuestArrived")}</th>
-                      <th className="px-2.5 py-2.5 font-semibold lg:px-3">{translate("historyGuestCheckout")}</th>
-                      <th className="px-2.5 py-2.5 font-semibold lg:px-3"></th>
+                    <tr className="border-b border-gray-200 text-xs uppercase tracking-wider text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                      <th className="px-3.5 py-3 font-semibold lg:px-4">{translate("table")}</th>
+                      <th className="px-3.5 py-3 font-semibold lg:px-4">{translate("historyItems")}</th>
+                      <th className="px-3.5 py-3 font-semibold lg:px-4">{translate("payment")}</th>
+                      <th className="px-3.5 py-3 font-semibold text-right lg:px-4">{translate("totalExclTip")}</th>
+                      <th className="px-3.5 py-3 font-semibold text-right lg:px-4">{translate("tips")}</th>
+                      <th className="px-3.5 py-3 font-semibold text-right lg:px-4">{translate("grandTotal")}</th>
+                      <th className="px-3.5 py-3 font-semibold lg:px-4">{translate("historyGuestArrived")}</th>
+                      <th className="px-3.5 py-3 font-semibold lg:px-4">{translate("historyGuestCheckout")}</th>
+                      <th className="px-3.5 py-3 font-semibold lg:px-4"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -699,7 +699,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                         <Fragment key={sale.id}>
                           {isDeleted && (
                             <tr className="bg-red-600 text-white">
-                              <td colSpan={colCount} className="px-3 py-1.5 text-xs font-bold uppercase tracking-wide">
+                              <td colSpan={colCount} className="px-4 py-2 text-xs font-bold uppercase tracking-wide">
                                 − {translate("historyDeletedBanner")} · {translate("table")}{" "}
                                 {sale.tableLabel} · {orderId} · −{formatCzk(sale.grandTotal)}
                               </td>
@@ -707,15 +707,15 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                           )}
                           <tr
                             onClick={() => openSale(sale)}
-                            className={`border-b border-gray-100 last:border-b-0 cursor-pointer hover:bg-gray-50 dark:border-gray-700/60 dark:hover:bg-gray-900/40 ${
+                            className={`border-b border-gray-100 last:border-b-0 cursor-pointer hover:bg-gray-50/80 dark:border-gray-700/60 dark:hover:bg-gray-900/40 transition-colors ${
                               isDeleted
                                 ? "bg-red-50/80 text-red-800 line-through decoration-red-400 dark:bg-red-950/30 dark:text-red-200"
                                 : ""
                             }`}
                           >
-                          <td className="px-2.5 py-2.5 lg:px-3">
-                            <div className="flex items-center gap-1.5">
-                              <span className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-lg bg-gray-900 px-2 py-0.5 text-sm font-bold leading-none text-white dark:bg-gray-100 dark:text-gray-900">
+                          <td className="px-3.5 py-3 lg:px-4">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1 text-sm font-bold leading-none text-white dark:bg-gray-100 dark:text-gray-900">
                                 {sale.tableLabel}
                               </span>
                               <SaleDiscountCodeBadges sale={sale} />
@@ -748,7 +748,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                               )}
                             </div>
                             {sale.guestName && (
-                              <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
+                              <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
                                 {sale.guestName}
                                 {sale.visitSource === "phone_call"
                                   ? " · Phone"
@@ -758,17 +758,17 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                               </p>
                             )}
                           </td>
-                          <td className="px-2.5 py-2.5 lg:px-3">
-                            <p className="truncate text-xs font-medium text-gray-900 dark:text-gray-100">
+                          <td className="px-3.5 py-3 lg:px-4">
+                            <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
                               {itemCount(sale)} {translate("historyItems").toLowerCase()}
                             </p>
-                            <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">
+                            <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
                               {itemPreview(sale)}
                             </p>
                           </td>
-                          <td className="px-2.5 py-2.5 lg:px-3">
+                          <td className="px-3.5 py-3 lg:px-4">
                             <span
-                              className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${
+                              className={`inline-flex whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold uppercase ${
                                 sale.paymentMethod === "cash"
                                 ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
                                 : "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
@@ -777,41 +777,41 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                             {translate(sale.paymentMethod)}
                           </span>
                         </td>
-                        <td className="px-2.5 py-2.5 text-right whitespace-nowrap tabular-nums text-xs text-gray-700 dark:text-gray-300 lg:px-3">
+                        <td className="px-3.5 py-3 text-right whitespace-nowrap tabular-nums text-sm font-medium text-gray-700 dark:text-gray-300 lg:px-4">
                           {formatCzk(saleNetTotal(sale))}
                         </td>
-                        <td className="px-2.5 py-2.5 text-right whitespace-nowrap tabular-nums text-xs text-gray-600 dark:text-gray-400 lg:px-3">
+                        <td className="px-3.5 py-3 text-right whitespace-nowrap tabular-nums text-sm text-gray-600 dark:text-gray-400 lg:px-4">
                           {sale.tip > 0 ? formatCzk(sale.tip) : "—"}
                         </td>
-                        <td className="px-2.5 py-2.5 text-right font-semibold whitespace-nowrap tabular-nums text-xs lg:px-3">
-                          <span className={isDeleted ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}>
+                        <td className="px-3.5 py-3 text-right whitespace-nowrap tabular-nums lg:px-4">
+                          <span className={`text-base font-bold ${isDeleted ? "text-red-600 dark:text-red-400 line-through" : "text-emerald-600 dark:text-emerald-400"}`}>
                             {isDeleted ? `−${formatCzk(sale.grandTotal)}` : formatCzk(sale.grandTotal)}
                           </span>
                         </td>
-                        <td className="px-2.5 py-2.5 whitespace-nowrap tabular-nums text-xs text-gray-600 dark:text-gray-300 lg:px-3">
+                        <td className="px-3.5 py-3 whitespace-nowrap tabular-nums text-sm text-gray-600 dark:text-gray-300 lg:px-4">
                           {formatHistoryDateTime(resolveGuestSeatedAt(sale), language)}
                         </td>
-                        <td className="px-2.5 py-2.5 whitespace-nowrap tabular-nums text-xs text-gray-600 dark:text-gray-300 lg:px-3">
+                        <td className="px-3.5 py-3 whitespace-nowrap tabular-nums text-sm text-gray-600 dark:text-gray-300 lg:px-4">
                           {formatHistoryDateTime(sale.closedAt, language)}
                         </td>
-                        <td className="px-2.5 py-2.5 lg:px-3">
-                          <div className="flex items-center justify-end gap-1">
+                        <td className="px-3.5 py-3 lg:px-4">
+                          <div className="flex items-center justify-end gap-1.5">
                             <button
                               type="button"
                               onClick={(e) => { e.stopPropagation(); openSale(sale); }}
-                              className="inline-flex items-center justify-center rounded-lg border border-gray-200 p-1.5 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                              className="inline-flex items-center justify-center rounded-lg border border-gray-200 p-1.5 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white"
                               title={translate("historyViewBill")}
                             >
-                              <Eye className="h-3.5 w-3.5" />
+                              <Eye className="h-4 w-4" />
                             </button>
                             {canEditTip && !isDeleted && (
                               <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); openSale(sale, true); }}
-                                className="inline-flex items-center justify-center rounded-lg border border-blue-200 bg-blue-50 p-1.5 text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300"
+                                className="inline-flex items-center justify-center rounded-lg border border-blue-200 bg-blue-50 p-1.5 text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300 dark:hover:bg-blue-900"
                                 title={translate("editTipAndPayment")}
                               >
-                                <Pencil className="h-3.5 w-3.5" />
+                                <Pencil className="h-4 w-4" />
                               </button>
                             )}
                           </div>

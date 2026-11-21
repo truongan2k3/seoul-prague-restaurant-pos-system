@@ -4,6 +4,8 @@ import {
   isRestrictedLunchCategory,
   normalizeCategoryKey,
   isLunchRestrictionActive,
+  recordStaffOrderItems,
+  getStaffItemClickCounts,
 } from "../lib/staff-item-popularity";
 
 test("normalizeCategoryKey handles diacritics and formatting", () => {
@@ -70,4 +72,31 @@ test("isLunchRestrictionActive evaluates Prague time window 16:00 to 01:00 and w
   // Sunday 14:00 Prague = Sunday 13:00 UTC (weekend all day)
   const sunAfternoon = new Date("2026-11-22T13:00:00Z");
   assert.equal(isLunchRestrictionActive(sunAfternoon), true);
+});
+
+test("recordStaffOrderItems increments item counts by order quantity", () => {
+  const store = new Map<string, string>();
+  const mockStorage = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, val: string) => store.set(key, val),
+  };
+  (globalThis as any).window = { localStorage: mockStorage };
+
+  recordStaffOrderItems([
+    { menuItemId: "item-banchan", quantity: 2 },
+    { menuItemId: "item-birell", quantity: 1 },
+  ]);
+
+  const counts = getStaffItemClickCounts();
+  assert.equal(counts["item-banchan"], 2);
+  assert.equal(counts["item-birell"], 1);
+
+  // Send another order with 1 more banchan
+  recordStaffOrderItems([
+    { menuItemId: "item-banchan", quantity: 1 },
+  ]);
+
+  const updated = getStaffItemClickCounts();
+  assert.equal(updated["item-banchan"], 3);
+  assert.equal(updated["item-birell"], 1);
 });

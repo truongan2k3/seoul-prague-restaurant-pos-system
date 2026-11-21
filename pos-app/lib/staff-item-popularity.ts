@@ -79,15 +79,30 @@ export function getStaffItemClickCounts(): Record<string, number> {
 }
 
 /**
- * Increment click count for an item selected by staff.
+ * Increment counts for items in an order that was actually sent or saved by staff.
+ * Items that are simply added to cart but discarded/not sent will not be counted.
  */
-export function recordStaffItemClick(itemId: string): void {
-  if (!itemId || typeof window === "undefined" || !window.localStorage) {
+export function recordStaffOrderItems(
+  items: Array<{ menuItemId?: string; quantity?: number }>,
+): void {
+  if (!items || items.length === 0 || typeof window === "undefined" || !window.localStorage) {
     return;
   }
   try {
     const counts = getStaffItemClickCounts();
-    counts[itemId] = (counts[itemId] ?? 0) + 1;
+    for (const item of items) {
+      if (!item.menuItemId) continue;
+      const qty = Math.max(1, item.quantity ?? 1);
+      counts[item.menuItemId] = (counts[item.menuItemId] ?? 0) + qty;
+    }
     window.localStorage.setItem(POS_STAFF_ITEM_CLICKS_KEY, JSON.stringify(counts));
   } catch {}
+}
+
+/**
+ * Increment click count for an item (single item helper).
+ */
+export function recordStaffItemClick(itemId: string, qty = 1): void {
+  if (!itemId) return;
+  recordStaffOrderItems([{ menuItemId: itemId, quantity: qty }]);
 }

@@ -34,7 +34,7 @@ import { categoriesForOrdering } from "@/lib/category-utils";
 import { sortMenuItemsForDisplay } from "@/lib/menu-sort";
 import {
   getStaffItemClickCounts,
-  recordStaffItemClick,
+  recordStaffOrderItems,
   isRestrictedLunchCategory,
   isLunchRestrictionActive,
 } from "@/lib/staff-item-popularity";
@@ -1098,7 +1098,6 @@ export function NewOrderModal({
   const quickAdd = (item: MenuItem) => {
     if (!item.isAvailable) return;
     setSearch("");
-    recordStaffItemClick(item.id);
     if (hasCustomization(item)) {
       setCustomizeItem(item);
       return;
@@ -1121,7 +1120,6 @@ export function NewOrderModal({
   };
 
   const addItemToCart = (item: MenuItem) => {
-    recordStaffItemClick(item.id);
     const label = menuItemDisplayName(item, language);
     const dispatch = orderDispatchFromMenuItem(item);
     setCart((prev) => {
@@ -1154,7 +1152,6 @@ export function NewOrderModal({
   };
 
   const applyCustomizeResult = async (item: MenuItem, result: CustomizeResult) => {
-    recordStaffItemClick(item.id);
     const signature = buildCustomizationSignature(item.id, result.selections);
 
     let itemNoteTranslated = "";
@@ -1538,6 +1535,7 @@ export function NewOrderModal({
       if (orders.length > 0) {
         await onSendToKitchen(orders);
         committed = true;
+        recordStaffOrderItems(orders);
         if (sameContext()) {
           setCart([]);
           setCartOpen(false);
@@ -1588,6 +1586,7 @@ export function NewOrderModal({
         if (!onAppendCartNoPrint) return;
         const orders = await buildCartOrdersFromLines();
         await onAppendCartNoPrint(orders);
+        recordStaffOrderItems(orders);
         setCart([]);
         setGrillGuestCount(null);
         onRefreshExistingOrders?.();

@@ -84,10 +84,15 @@ export function GuestChatWidget({ page, liftAboveBookCta = false }: Props) {
     const el = draftRef.current;
     if (!el) return;
     el.style.height = "auto";
+    const minPx = 42;
     // Grow with content; cap so the message list still has room in the panel.
-    const maxPx = Math.round(Math.min(window.innerHeight * 0.28, 220));
-    el.style.height = `${Math.min(el.scrollHeight, maxPx)}px`;
+    const maxPx = Math.max(140, Math.round(Math.min(window.innerHeight * 0.35, 180)));
+    const nextHeight = Math.max(minPx, Math.min(el.scrollHeight, maxPx));
+    el.style.height = `${nextHeight}px`;
     el.style.overflowY = el.scrollHeight > maxPx ? "auto" : "hidden";
+    if (listRef.current) {
+      listRef.current.scrollTop = listRef.current.scrollHeight;
+    }
   }, []);
 
   useEffect(() => {
@@ -690,7 +695,8 @@ export function GuestChatWidget({ page, liftAboveBookCta = false }: Props) {
                       rows={1}
                       placeholder="Write a message…"
                       disabled={!canSend}
-                      className="min-h-[42px] flex-1 resize-none overflow-hidden rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-sm leading-snug text-white outline-none placeholder:text-white/35 focus:border-[#C9A88B]/60 disabled:opacity-50"
+                      className="min-h-[42px] flex-1 resize-none rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-sm leading-snug text-white outline-none placeholder:text-white/35 focus:border-[#C9A88B]/60 disabled:opacity-50"
+                      style={{ height: "42px" }}
                       onInput={resizeDraft}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.shiftKey) {

@@ -65,9 +65,29 @@ export function GuestChatView() {
   const [filter, setFilter] = useState<"open" | "follow_up" | "all">("open");
   const [keyboardInset, setKeyboardInset] = useState(0);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const draftRef = useRef<HTMLTextAreaElement | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const stickToBottomRef = useRef(true);
   const prevMessageCountRef = useRef(0);
+
+  const resizeDraft = useCallback(() => {
+    const el = draftRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const minPx = 44;
+    // Cap height so messages above still remain visible, while allowing plenty of room for multi-line text
+    const maxPx = Math.round(Math.min(window.innerHeight * 0.35, 180));
+    const nextHeight = Math.max(minPx, Math.min(el.scrollHeight, maxPx));
+    el.style.height = `${nextHeight}px`;
+    el.style.overflowY = el.scrollHeight > maxPx ? "auto" : "hidden";
+    if (stickToBottomRef.current && listRef.current) {
+      listRef.current.scrollTop = listRef.current.scrollHeight;
+    }
+  }, []);
+
+  useEffect(() => {
+    resizeDraft();
+  }, [draft, selectedId, resizeDraft]);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -483,8 +503,10 @@ export function GuestChatView() {
                 }}
               >
                 <textarea
+                  ref={draftRef}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
+                  onInput={resizeDraft}
                   disabled={busy || selected.status === "closed"}
                   placeholder={translate("guestChatReplyPlaceholder")}
                   rows={1}
@@ -495,7 +517,8 @@ export function GuestChatView() {
                       void sendReply();
                     }
                   }}
-                  className="max-h-28 min-h-[44px] flex-1 resize-none overflow-y-auto rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base leading-snug dark:border-gray-700 dark:bg-gray-900 sm:text-sm"
+                  className="min-h-[44px] flex-1 resize-none rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base leading-snug dark:border-gray-700 dark:bg-gray-900 sm:text-sm"
+                  style={{ height: "44px" }}
                 />
                 <button
                   type="submit"

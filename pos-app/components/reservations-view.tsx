@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, Eye, LayoutGrid, MapPin, ChevronLeft, ChevronRight, Pencil, Plus, Users } from "lucide-react";
 import { GuestReturningBadge } from "@/components/guest-returning-badge";
+import { GuestRedFlagBadge } from "@/components/guest-red-flag-badge";
 import { ReservationChangeTimeline } from "@/components/reservation-change-timeline";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { Modal } from "@/components/modal";
@@ -894,6 +895,13 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           phoneLabel={translate("resSourcePhoneCall")}
                           onlineLabel={translate("resSourceOnline")}
                         />
+                        <GuestRedFlagBadge
+                          compact
+                          email={row.guestEmail}
+                          phone={row.guestPhone}
+                          excludeReservationId={row.id}
+                          beforeAt={row.checkedInAt ?? row.reservedAt}
+                        />
                       </div>
                       <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
                         {formatDateTime(row.reservedAt)} · {row.partySize} {translate("partySize").toLowerCase()}
@@ -977,6 +985,12 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                           </>
                         );
                       })()}
+                      <GuestRedFlagBadge
+                        email={row.guestEmail}
+                        phone={row.guestPhone}
+                        excludeReservationId={row.id}
+                        beforeAt={row.checkedInAt ?? row.reservedAt}
+                      />
                       <GuestReturningBadge
                         email={row.guestEmail}
                         phone={row.guestPhone}
@@ -1104,6 +1118,19 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
             <div><p className="text-[11px] text-[var(--muted)]">{translate("partySize")}</p><p className="mt-1 text-lg font-semibold tabular-nums">{detailsTarget.partySize}</p>{detailsTarget.actualPartySize!=null&&<p className="mt-1 text-[11px] text-[var(--muted)]">{translate("resActualPartySize")}: {detailsTarget.actualPartySize}</p>}</div>
             <div className="col-span-2 border-t border-[#C9A88B]/15 pt-3 sm:col-span-1 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0"><p className="text-[11px] text-[var(--muted)]">{translate(detailsTarget.checkedInAt||detailsTarget.status==="completed"?"resTimelineSeatedTables":"table")}</p><p className="pos-serif mt-1 break-words text-2xl font-semibold text-[#C9A88B]">{detailsTables||"—"}</p></div>
           </div>
+          <GuestRedFlagBadge
+            defaultOpen
+            email={detailsTarget.guestEmail}
+            phone={detailsTarget.guestPhone}
+            excludeReservationId={detailsTarget.id}
+            beforeAt={detailsTarget.checkedInAt ?? detailsTarget.reservedAt}
+          />
+          <GuestReturningBadge
+            email={detailsTarget.guestEmail}
+            phone={detailsTarget.guestPhone}
+            excludeReservationId={detailsTarget.id}
+            beforeAt={detailsTarget.checkedInAt ?? detailsTarget.reservedAt}
+          />
           <ReservationChangeTimeline key={detailsTarget.id} reservation={detailsTarget} />
           <button type="button" onClick={()=>setDetailsId(null)} className="min-h-11 w-full rounded-xl border border-[var(--border)] text-sm font-medium transition hover:bg-[var(--accent)]">{translate("close")}</button>
         </div>}

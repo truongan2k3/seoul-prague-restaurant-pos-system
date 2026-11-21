@@ -4,6 +4,7 @@ import { useMemo, useState, type PointerEvent, type ReactNode } from "react";
 import { CalendarClock, ChevronDown, ChevronUp, GripVertical, Loader2, MapPin, Users, Unlink } from "lucide-react";
 import { UNASSIGN_DROP_TARGET } from "@/hooks/use-reservation-map-assignment";
 import { CompactReservationTicker } from "@/components/compact-reservation-ticker";
+import { GuestRedFlagBadge } from "@/components/guest-red-flag-badge";
 import { useApp } from "@/contexts/app-context";
 import { reservationStatusLabelKey, reservationStatusTone } from "@/lib/reservation-analytics";
 import { parseReservationBbqNotes } from "@/lib/reservation-guest-form";
@@ -72,7 +73,16 @@ function ReservationAssignmentCards({ reservations, selectedId = null, busyId = 
             <span className="flex items-center justify-between gap-2"><span className="font-mono text-sm font-semibold tabular-nums text-[var(--foreground)]">{formatInVenueTz(row.reservedAt, language === "cs" ? "cs-CZ" : "en-GB", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
               <span className="inline-flex items-center gap-1 text-[11px] text-[var(--muted)]">{busyId === row.id ? <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" /> : <Users className="h-3 w-3" />}{row.partySize}</span>
             </span>
-            <span className="mt-0.5 block truncate text-xs font-semibold text-[var(--foreground)]">{row.guestName}</span>
+            <span className="mt-0.5 flex items-center justify-between gap-1">
+              <span className="truncate text-xs font-semibold text-[var(--foreground)]">{row.guestName}</span>
+              <GuestRedFlagBadge
+                compact
+                email={row.guestEmail}
+                phone={row.guestPhone}
+                excludeReservationId={row.id}
+                beforeAt={row.reservedAt}
+              />
+            </span>
             <span className="mt-1 flex items-center gap-1.5"><span className={`rounded px-1 py-0.5 text-[8px] font-semibold uppercase ${reservationStatusTone(row.status)}`}>{translate(reservationStatusLabelKey(row.status))}</span>{bbq === "yes" && <span className="text-[9px] text-orange-400">BBQ</span>}</span>
             <span className="mt-1 flex items-center gap-1 truncate text-[10px] text-[var(--muted)]"><MapPin className="h-2.5 w-2.5 shrink-0" />{row.tableLabel || translate("mapResTickerNoTable")}</span>
           </>;

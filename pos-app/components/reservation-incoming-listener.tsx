@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/modal";
 import { GuestReturningBadge } from "@/components/guest-returning-badge";
+import { GuestRedFlagBadge } from "@/components/guest-red-flag-badge";
 import { useApp } from "@/contexts/app-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { useSettings } from "@/contexts/settings-context";
@@ -509,6 +510,12 @@ export function ReservationIncomingListener({
             {hint}
           </p>
           {reservationNotificationDetails(alert?.kind ?? "", reservation, previous) && <p className="rounded-xl border border-amber-300/40 p-3 text-sm font-medium text-gray-900 dark:text-gray-100">{reservationNotificationDetails(alert?.kind ?? "", reservation, previous)}</p>}
+          {visitProfile?.redFlag?.hasRedFlag && !toneCancelled ? (
+            <GuestRedFlagBadge
+              profile={visitProfile.redFlag}
+              defaultOpen
+            />
+          ) : null}
           {visitProfile?.isReturning && !toneCancelled ? (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/50">
               <GuestReturningBadge

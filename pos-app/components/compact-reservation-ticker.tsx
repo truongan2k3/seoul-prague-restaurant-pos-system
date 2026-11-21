@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useReducedMotion } from "framer-motion";
 import { CalendarClock } from "lucide-react";
+import { GuestRedFlagBadge } from "@/components/guest-red-flag-badge";
 import { useApp } from "@/contexts/app-context";
 import { useSettings } from "@/contexts/settings-context";
 import {
@@ -147,6 +148,13 @@ export function CompactReservationTicker({ reservations, action }: { reservation
                 · {current.partySize}
               </span>
             </span>
+            <GuestRedFlagBadge
+              compact
+              email={current.guestEmail}
+              phone={current.guestPhone}
+              excludeReservationId={current.id}
+              beforeAt={current.reservedAt}
+            />
           </div>
           <div className="flex min-w-0 items-center gap-1.5 pl-[0.15rem] sm:min-w-0 sm:flex-1 sm:pl-0">
             <span

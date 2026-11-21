@@ -12,3 +12,5 @@ pos-app/yarn-debug.log*
 pos-app/yarn-error.log*
 pos-app/.pnpm-debug.log*
 .DS_Store
+.vercel
+.env*

@@ -1,6 +1,11 @@
 import { guestIdentityMatches, normalizeEmail, phoneLookupTail } from "@/lib/guest-identity";
 import type { ReservationStatus } from "@/lib/types";
 import { supabase } from "@/src/lib/supabase";
+import {
+  evaluateGuestRedFlags,
+  type GuestRedFlagReport,
+  EMPTY_RED_FLAG_REPORT,
+} from "@/lib/reservation-red-flag";
 
 export type GuestVisitKind = "reservation" | "sale";
 export interface GuestVisitEntry {
@@ -8,18 +13,33 @@ export interface GuestVisitEntry {
   partySize?: number; tableLabel?: string; status?: ReservationStatus;
 }
 export interface GuestVisitProfile {
-  priorVisitCount: number; currentVisitNumber: number; isReturning: boolean; visits: GuestVisitEntry[];
+  priorVisitCount: number;
+  currentVisitNumber: number;
+  isReturning: boolean;
+  visits: GuestVisitEntry[];
+  redFlag?: GuestRedFlagReport;
 }
 export type GuestVisitLookup = {
   email?: string | null; phone?: string | null; excludeReservationId?: string | null;
   beforeAt?: string | Date | null;
 };
-const EMPTY_PROFILE: GuestVisitProfile = { priorVisitCount: 0, currentVisitNumber: 1, isReturning: false, visits: [] };
+const EMPTY_PROFILE: GuestVisitProfile = {
+  priorVisitCount: 0,
+  currentVisitNumber: 1,
+  isReturning: false,
+  visits: [],
+  redFlag: EMPTY_RED_FLAG_REPORT,
+};
 const VISITED = new Set<ReservationStatus>(["checked_in", "completed"]);
 type ReservationHistory = {
   id: string; guest_name: string; guest_email: string | null; guest_phone: string | null;
   party_size: number; reserved_at: string; checked_in_at: string | null; status: ReservationStatus;
   tables: { label: string } | { label: string }[] | null;
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
+  cancellation_reason?: string | null;
+  cancellation_note?: string | null;
+  updated_at?: string | null;
 };
 type SaleHistory = {
   id: string; table_id: string | null; guest_name: string | null; guest_phone: string | null;
@@ -60,9 +80,16 @@ async function loadHistory(email: string | null, phone: string | null): Promise<
   const identityFilters: string[] = [];
   if (email) identityFilters.push(`guest_email.ilike.${quotedFilter(email.replace(/[\\%_]/g, "\\$&"))}`);
   if (phonePattern) identityFilters.push(`guest_phone.ilike.${quotedFilter(phonePattern)}`);
-  const candidates = await allPages<ReservationHistory>((from, to) => supabase.from("reservations")
-    .select("id, guest_name, guest_phone, guest_email, party_size, reserved_at, checked_in_at, status, tables!table_id(label)")
-    .or(identityFilters.join(",")).order("reserved_at", { ascending: false }).order("id", { ascending: false }).range(from, to));
+  let candidates: ReservationHistory[] = [];
+  try {
+    candidates = await allPages<ReservationHistory>((from, to) => supabase.from("reservations")
+      .select("id, guest_name, guest_phone, guest_email, party_size, reserved_at, checked_in_at, status, tables!table_id(label), cancelled_at, cancelled_by, cancellation_reason, cancellation_note, updated_at")
+      .or(identityFilters.join(",")).order("reserved_at", { ascending: false }).order("id", { ascending: false }).range(from, to));
+  } catch {
+    candidates = await allPages<ReservationHistory>((from, to) => supabase.from("reservations")
+      .select("id, guest_name, guest_phone, guest_email, party_size, reserved_at, checked_in_at, status, tables!table_id(label)")
+      .or(identityFilters.join(",")).order("reserved_at", { ascending: false }).order("id", { ascending: false }).range(from, to));
+  }
   const reservations = candidates.filter((row) => guestIdentityMatches({ email, phone }, { email: row.guest_email, phone: row.guest_phone }));
   const linkedIds = reservations.map((row) => row.id);
   const linkedSet = new Set(linkedIds);
@@ -140,8 +167,31 @@ export async function fetchGuestVisitProfile(input: GuestVisitLookup): Promise<{
         guestName: row.guest_name, partySize: row.party_size, tableLabel: table?.label, status: row.status });
     }
     const visits = [...byVisit.values()].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
-    return { data: { priorVisitCount: visits.length, currentVisitNumber: visits.length + 1, isReturning: visits.length > 0, visits: visits.slice(0, 12) }, error: null };
+    const redFlag = evaluateGuestRedFlags(history.reservations, {
+      excludeReservationId: input.excludeReservationId,
+      beforeAt: new Date(cutoff),
+    });
+    return {
+      data: {
+        priorVisitCount: visits.length,
+        currentVisitNumber: visits.length + 1,
+        isReturning: visits.length > 0,
+        visits: visits.slice(0, 12),
+        redFlag,
+      },
+      error: null,
+    };
   } catch (error) {
     return { data: EMPTY_PROFILE, error: error instanceof Error ? error.message : "Could not load guest history." };
   }
+}
+
+export async function fetchGuestRedFlags(
+  input: GuestVisitLookup,
+): Promise<{ data: GuestRedFlagReport; error: string | null }> {
+  const profile = await fetchGuestVisitProfile(input);
+  return {
+    data: profile.data.redFlag ?? EMPTY_RED_FLAG_REPORT,
+    error: profile.error,
+  };
 }

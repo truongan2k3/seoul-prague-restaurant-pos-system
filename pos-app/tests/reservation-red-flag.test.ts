@@ -9,6 +9,11 @@ import {
   LATE_CANCELLATION_THRESHOLD_MINUTES,
   type ReservationHistoryItem,
 } from "../lib/reservation-red-flag";
+import {
+  guestIdentityMatches,
+  isWhitelistedStaffEmail,
+  emailsMatch,
+} from "../lib/guest-identity";
 
 test("checkLateCancellation accurately flags cancellations within 2 hours (120 minutes) or after", () => {
   const reservedAt = new Date("2026-11-20T18:00:00Z");
@@ -142,4 +147,33 @@ test("evaluateGuestRedFlags respects excludeReservationId and cutoff", () => {
     beforeAt: new Date("2026-11-20T00:00:00Z"),
   });
   assert.equal(reportCutoff.hasRedFlag, false);
+});
+
+test("whitelisted staff email (anan28022004@gmail.com) differentiates guests by phone only", () => {
+  const staffEmail = "anan28022004@gmail.com";
+  assert.equal(isWhitelistedStaffEmail(staffEmail), true);
+  assert.equal(isWhitelistedStaffEmail("  AnAn28022004@gmail.com  "), true);
+  assert.equal(isWhitelistedStaffEmail("customer@gmail.com"), false);
+
+  // emailsMatch returns false for whitelisted staff emails to prevent email-alone grouping
+  assert.equal(emailsMatch(staffEmail, staffEmail), false);
+  assert.equal(emailsMatch("customer@gmail.com", "customer@gmail.com"), true);
+
+  // Two reservations with the same staff email but DIFFERENT phone numbers -> DIFFERENT guests
+  const guestA = { email: staffEmail, phone: "+420 111 222 333" };
+  const guestB = { email: staffEmail, phone: "+420 444 555 666" };
+  assert.equal(guestIdentityMatches(guestA, guestB), false);
+
+  // Same staff email and SAME phone number -> SAME guest
+  const guestA2 = { email: staffEmail, phone: "111222333" };
+  assert.equal(guestIdentityMatches(guestA, guestA2), true);
+
+  // Same staff email, but one or both have no phone -> DIFFERENT guests (cannot group)
+  assert.equal(guestIdentityMatches({ email: staffEmail }, { email: staffEmail }), false);
+  assert.equal(guestIdentityMatches(guestA, { email: staffEmail }), false);
+
+  // Normal customer emails with different phones still match by email
+  const regularGuest1 = { email: "customer@gmail.com", phone: "+420 111 222 333" };
+  const regularGuest2 = { email: "customer@gmail.com", phone: "+420 444 555 666" };
+  assert.equal(guestIdentityMatches(regularGuest1, regularGuest2), true);
 });

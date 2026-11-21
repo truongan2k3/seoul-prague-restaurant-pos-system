@@ -1,4 +1,9 @@
-import { guestIdentityMatches, normalizeEmail, phoneLookupTail } from "@/lib/guest-identity";
+import {
+  guestIdentityMatches,
+  isWhitelistedStaffEmail,
+  normalizeEmail,
+  phoneLookupTail,
+} from "@/lib/guest-identity";
 import type { ReservationStatus } from "@/lib/types";
 import { supabase } from "@/src/lib/supabase";
 import {
@@ -54,7 +59,8 @@ const pendingHistory = new Map<string, Promise<History>>();
 
 export function guestVisitProfileKey(input: GuestVisitLookup): string {
   const before = input.beforeAt ? new Date(input.beforeAt).getTime() : null;
-  return JSON.stringify([normalizeEmail(input.email), input.phone?.replace(/\D/g, "") ?? null,
+  const effectiveEmail = isWhitelistedStaffEmail(input.email) ? null : normalizeEmail(input.email);
+  return JSON.stringify([effectiveEmail, input.phone?.replace(/\D/g, "") ?? null,
     input.excludeReservationId ?? null, Number.isFinite(before) ? before : null]);
 }
 
@@ -74,12 +80,16 @@ async function allPages<T>(page: (from: number, to: number) => PromiseLike<{
 }
 
 async function loadHistory(email: string | null, phone: string | null): Promise<History> {
+  const effectiveEmail = isWhitelistedStaffEmail(email) ? null : email;
   const tail = phoneLookupTail(phone);
   // Match formatted phones in SQL; exact normalized identity is checked below.
   const phonePattern = tail ? `%${tail.split("").join("%")}%` : null;
   const identityFilters: string[] = [];
-  if (email) identityFilters.push(`guest_email.ilike.${quotedFilter(email.replace(/[\\%_]/g, "\\$&"))}`);
+  if (effectiveEmail) identityFilters.push(`guest_email.ilike.${quotedFilter(effectiveEmail.replace(/[\\%_]/g, "\\$&"))}`);
   if (phonePattern) identityFilters.push(`guest_phone.ilike.${quotedFilter(phonePattern)}`);
+  if (identityFilters.length === 0) {
+    return { reservations: [], sales: [] };
+  }
   let candidates: ReservationHistory[] = [];
   try {
     candidates = await allPages<ReservationHistory>((from, to) => supabase.from("reservations")
@@ -111,12 +121,13 @@ async function loadHistory(email: string | null, phone: string | null): Promise<
   return { reservations, sales: [...saleRows.values()] };
 }
 async function historyFor(email: string | null, phone: string | null): Promise<History> {
-  const key = JSON.stringify([email, phone?.replace(/\D/g, "") ?? null]);
+  const effectiveEmail = isWhitelistedStaffEmail(email) ? null : email;
+  const key = JSON.stringify([effectiveEmail, phone?.replace(/\D/g, "") ?? null]);
   const cached = historyCache.get(key);
   if (cached && cached.expires > Date.now()) return cached.history;
   const pending = pendingHistory.get(key);
   if (pending) return pending;
-  const request = loadHistory(email, phone).then((history) => {
+  const request = loadHistory(effectiveEmail, phone).then((history) => {
     for (const [entry, value] of historyCache) if (value.expires <= Date.now()) historyCache.delete(entry);
     if (historyCache.size >= 100) historyCache.delete(historyCache.keys().next().value!);
     historyCache.set(key, { history, expires: Date.now() + CACHE_MS });
@@ -128,7 +139,8 @@ async function historyFor(email: string | null, phone: string | null): Promise<H
 
 /** Count actual visits; exclude this booking and all of its split-payment receipts. */
 export async function fetchGuestVisitProfile(input: GuestVisitLookup): Promise<{ data: GuestVisitProfile; error: string | null }> {
-  const email = normalizeEmail(input.email), phone = phoneLookupTail(input.phone) ? input.phone ?? null : null;
+  const email = isWhitelistedStaffEmail(input.email) ? null : normalizeEmail(input.email);
+  const phone = phoneLookupTail(input.phone) ? input.phone ?? null : null;
   if (!email && !phone) return { data: EMPTY_PROFILE, error: null };
   try {
     const history = await historyFor(email, phone);

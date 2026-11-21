@@ -4,6 +4,19 @@ export function normalizeEmail(email?: string | null): string | null {
   return value || null;
 }
 
+/**
+ * Whitelist of staff or internal shared emails that should NOT be used for cross-guest identity matching.
+ * When a reservation uses this email, guests are differentiated strictly by phone number.
+ */
+export const WHITELISTED_STAFF_EMAILS = new Set<string>([
+  "anan28022004@gmail.com",
+]);
+
+export function isWhitelistedStaffEmail(email?: string | null): boolean {
+  const normalized = normalizeEmail(email);
+  return Boolean(normalized && WHITELISTED_STAFF_EMAILS.has(normalized));
+}
+
 /** Digits-only phone; null if too short to be useful. */
 export function normalizePhoneDigits(phone?: string | null): string | null {
   const digits = (phone ?? "").replace(/\D/g, "").replace(/^00/, "");
@@ -27,7 +40,10 @@ export function phonesMatch(a?: string | null, b?: string | null): boolean {
 export function emailsMatch(a?: string | null, b?: string | null): boolean {
   const left = normalizeEmail(a);
   const right = normalizeEmail(b);
-  return Boolean(left && right && left === right);
+  if (!left || !right || left !== right) return false;
+  // If email belongs to staff whitelist, do not match identities based on this email alone!
+  if (isWhitelistedStaffEmail(left)) return false;
+  return true;
 }
 
 /** True when email or phone identifies the same guest. */

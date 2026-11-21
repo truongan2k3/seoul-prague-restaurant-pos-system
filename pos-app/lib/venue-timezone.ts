@@ -1,7 +1,7 @@
 /** Restaurant wall-clock timezone (Czech Republic). */
 export const VENUE_TIMEZONE = "Europe/Prague";
 
-type VenueParts = {
+export type VenueParts = {
   year: number;
   month: number;
   day: number;
@@ -10,7 +10,7 @@ type VenueParts = {
   weekday: string;
 };
 
-function venueParts(date: Date): VenueParts {
+export function venueParts(date: Date = new Date()): VenueParts {
   const fmt = new Intl.DateTimeFormat("en-GB", {
     timeZone: VENUE_TIMEZONE,
     year: "numeric",

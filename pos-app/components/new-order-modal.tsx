@@ -32,6 +32,12 @@ import {
 } from "@/lib/order-item-timers";
 import { categoriesForOrdering } from "@/lib/category-utils";
 import { sortMenuItemsForDisplay } from "@/lib/menu-sort";
+import {
+  getStaffItemClickCounts,
+  recordStaffItemClick,
+  isRestrictedLunchCategory,
+  isLunchRestrictionActive,
+} from "@/lib/staff-item-popularity";
 import { formatPosPrice, menuPriceDisplayOptionsFromSettings } from "@/lib/price-display";
 import {
   cartLineDisplayName,
@@ -399,6 +405,18 @@ export function NewOrderModal({
   const [search, setSearch] = useState("");
   const [searchKeyboardOpen, setSearchKeyboardOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>("__all__");
+  const [popularityMap, setPopularityMap] = useState<Record<string, number>>({});
+
+  const handleSelectCategory = (categoryId: string) => {
+    setActiveCategory(categoryId);
+    setPopularityMap(getStaffItemClickCounts());
+  };
+
+  useEffect(() => {
+    if (open) {
+      setPopularityMap(getStaffItemClickCounts());
+    }
+  }, [open]);
   const [cartOpen, setCartOpen] = useState(false);
   const [noteLineId, setNoteLineId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
@@ -603,7 +621,21 @@ export function NewOrderModal({
     const query = search.trim();
     const ranks = new Map<string, number>();
     const selectedCategoryName = categoryOptions.find((c) => c.id === activeCategory)?.name;
+    const isTopDefaultView = activeCategory === "__all__" && !query;
+    const isRestrictedTime = isLunchRestrictionActive();
+
     const filtered = menuItems.filter((item) => {
+      // In default Top view during restricted hours (16:00-01:00 or Sat/Sun),
+      // exclude items in the 5 lunch categories.
+      if (isTopDefaultView && isRestrictedTime) {
+        const itemCatName =
+          categoryOptions.find((c) => c.id === item.categoryId)?.name ||
+          (typeof item.category === "string" ? item.category : "");
+        if (isRestrictedLunchCategory(itemCatName)) {
+          return false;
+        }
+      }
+
       const matchesCategory =
         activeCategory === "__all__" ||
         item.categoryId === activeCategory ||
@@ -620,8 +652,21 @@ export function NewOrderModal({
       ranks.set(item.id, rank);
       return true;
     });
+
+    if (query) {
+      const sorted = sortMenuItemsForDisplay(filtered, settings.menuItemSortMode);
+      return sorted.sort((a, b) => ranks.get(a.id)! - ranks.get(b.id)!);
+    }
+
     const sorted = sortMenuItemsForDisplay(filtered, settings.menuItemSortMode);
-    return query ? sorted.sort((a, b) => ranks.get(a.id)! - ranks.get(b.id)!) : sorted;
+    return sorted.sort((a, b) => {
+      const countA = popularityMap[a.id] ?? 0;
+      const countB = popularityMap[b.id] ?? 0;
+      if (countA !== countB) {
+        return countB - countA;
+      }
+      return 0;
+    });
   }, [
     menuItems,
     activeCategory,
@@ -629,6 +674,7 @@ export function NewOrderModal({
     language,
     categoryOptions,
     settings.menuItemSortMode,
+    popularityMap,
   ]);
 
   const submittedOrdersRaw = useMemo(
@@ -1052,6 +1098,7 @@ export function NewOrderModal({
   const quickAdd = (item: MenuItem) => {
     if (!item.isAvailable) return;
     setSearch("");
+    recordStaffItemClick(item.id);
     if (hasCustomization(item)) {
       setCustomizeItem(item);
       return;
@@ -1074,6 +1121,7 @@ export function NewOrderModal({
   };
 
   const addItemToCart = (item: MenuItem) => {
+    recordStaffItemClick(item.id);
     const label = menuItemDisplayName(item, language);
     const dispatch = orderDispatchFromMenuItem(item);
     setCart((prev) => {
@@ -1106,6 +1154,7 @@ export function NewOrderModal({
   };
 
   const applyCustomizeResult = async (item: MenuItem, result: CustomizeResult) => {
+    recordStaffItemClick(item.id);
     const signature = buildCustomizationSignature(item.id, result.selections);
 
     let itemNoteTranslated = "";
@@ -2135,7 +2184,7 @@ export function NewOrderModal({
             <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-4">
               <button
                 type="button"
-                onClick={() => setActiveCategory("__all__")}
+                onClick={() => handleSelectCategory("__all__")}
                 className={`min-h-[44px] w-full text-left ${filterButtonClass(activeCategory === "__all__")}`}
               >
                 {translate("allCategories")}
@@ -2144,7 +2193,7 @@ export function NewOrderModal({
                 <button
                   key={category.id}
                   type="button"
-                  onClick={() => setActiveCategory(category.id)}
+                  onClick={() => handleSelectCategory(category.id)}
                   className={`min-h-[44px] w-full text-left ${filterButtonClass(activeCategory === category.id)}`}
                 >
                   {category.name}
@@ -2158,7 +2207,7 @@ export function NewOrderModal({
               <div className="flex gap-1.5 overflow-x-auto px-2 py-1.5 no-scrollbar sm:gap-2 sm:px-3 sm:py-2">
                 <button
                   type="button"
-                  onClick={() => setActiveCategory("__all__")}
+                  onClick={() => handleSelectCategory("__all__")}
                   className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold sm:px-3 sm:py-1.5 sm:text-xs ${filterButtonClass(activeCategory === "__all__")}`}
                 >
                   {translate("allCategories")}
@@ -2167,7 +2216,7 @@ export function NewOrderModal({
                   <button
                     key={category.id}
                     type="button"
-                    onClick={() => setActiveCategory(category.id)}
+                    onClick={() => handleSelectCategory(category.id)}
                     className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold sm:px-3 sm:py-1.5 sm:text-xs ${filterButtonClass(activeCategory === category.id)}`}
                   >
                     {category.name}

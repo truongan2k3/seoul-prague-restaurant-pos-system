@@ -1587,6 +1587,7 @@ export function NewOrderModal({
         const orders = await buildCartOrdersFromLines();
         await onAppendCartNoPrint(orders);
         recordStaffOrderItems(orders);
+        setPopularityMap(getStaffItemClickCounts());
         setCart([]);
         setGrillGuestCount(null);
         onRefreshExistingOrders?.();

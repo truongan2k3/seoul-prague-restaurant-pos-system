@@ -6,7 +6,10 @@ import {
 } from "@/lib/grill-guest-count";
 import { isKitchenMessageOrder } from "@/lib/kitchen-message-order";
 import { resolveKitchenStatus } from "@/lib/auto-serve";
-import { resolveMenuItemForOrder } from "@/lib/menu-display";
+import {
+  kitchenOrderItemDisplayNames,
+  resolveMenuItemForOrder,
+} from "@/lib/menu-display";
 import { SLA_THRESHOLD_MS } from "@/lib/order-sla";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
 import { stationTicketNumber } from "@/lib/station-ticket-number";
@@ -614,6 +617,8 @@ type BuildOrderCardsInput = {
   showChineseForGrill?: boolean;
   /** Menu item ids that should also show Chinese under the primary label. */
   forceChineseMenuItemIds?: Iterable<string>;
+  /** When true (e.g. KDS kitchen station), item names show Chinese as primary (big) and English as secondary (small). */
+  chinesePrimary?: boolean;
 };
 
 function lineAggregateKey(item: OrderItem): string {
@@ -632,6 +637,7 @@ function buildCompanionLinesForParent(
   language: LanguageCode,
   companionStore: GrillCompanionStore,
   showChineseForGrill = true,
+  chinesePrimary = false,
 ): { lines: ServerScreenOrderCardLine[]; pendingCount: number } {
   const lines: ServerScreenOrderCardLine[] = [];
   let pendingCount = 0;
@@ -640,15 +646,17 @@ function buildCompanionLinesForParent(
     const doneAt = companionStore.done[key];
     if (!doneAt && !isCompanionPending(companionStore, parentId, companion.id)) continue;
     if (!doneAt) pendingCount += 1;
-    const primary = companion.names[language] || companion.names.en;
     const zh = companion.names.zh?.trim() || "";
-    const showZh =
-      showChineseForGrill && language !== "zh" && Boolean(zh) && zh !== primary;
+    const en = companion.names.en?.trim() || "";
+    const primary = chinesePrimary && zh ? zh : (companion.names[language] || companion.names.en);
+    const secondary = chinesePrimary && zh
+      ? (en && en !== zh ? en : null)
+      : (showChineseForGrill && language !== "zh" && Boolean(zh) && zh !== primary ? zh : null);
     lines.push({
       key,
       kind: "companion",
       name: primary,
-      nameZh: showZh ? zh : null,
+      nameZh: secondary,
       note: null,
       remainingIds: doneAt ? [] : [key],
       unitIds: [key],
@@ -681,6 +689,7 @@ export function buildServerScreenOrderCards(
     nowMs = Date.now(),
     showChineseForGrill = true,
     forceChineseMenuItemIds,
+    chinesePrimary = false,
   } = input;
 
   const forceZhIds = new Set(
@@ -775,6 +784,7 @@ export function buildServerScreenOrderCards(
         language,
         companionStore,
         showChineseForGrill,
+        chinesePrimary,
       );
       companionLines = built.lines;
       pendingCompanions = built.pendingCount;
@@ -822,25 +832,42 @@ export function buildServerScreenOrderCards(
       let line = lineMap.get(key);
       if (!line) {
         const isMessage = isKitchenMessageOrder(item);
-        const primary = isMessage
-          ? language === "zh"
-            ? item.notesTranslated?.trim() || item.name
-            : item.notes?.trim() || item.name
-          : resolveName(item);
-        const zhForMessage =
-          isMessage && language !== "zh"
-            ? item.notesTranslated?.trim() || item.name
-            : null;
+        let primary: string;
+        let secondary: string | null;
+
+        if (chinesePrimary) {
+          if (isMessage) {
+            const zh = item.notesTranslated?.trim();
+            const orig = item.notes?.trim() || item.name;
+            primary = zh || orig;
+            secondary = zh && orig && orig !== zh ? orig : null;
+          } else {
+            const { primaryZh, secondaryEn } = kitchenOrderItemDisplayNames(item, menuItems);
+            primary = primaryZh;
+            secondary = secondaryEn;
+          }
+        } else {
+          primary = isMessage
+            ? language === "zh"
+              ? item.notesTranslated?.trim() || item.name
+              : item.notes?.trim() || item.name
+            : resolveName(item);
+          const zhForMessage =
+            isMessage && language !== "zh"
+              ? item.notesTranslated?.trim() || item.name
+              : null;
+          secondary = isMessage
+            ? zhForMessage && zhForMessage !== primary
+              ? zhForMessage
+              : null
+            : resolveForcedZh(item, primary);
+        }
+
         line = {
           key,
           kind: "item",
           name: primary,
-          nameZh:
-            isMessage
-              ? zhForMessage && zhForMessage !== primary
-                ? zhForMessage
-                : null
-              : resolveForcedZh(item, primary),
+          nameZh: secondary,
           note: isMessage ? null : resolveNote(item),
           remainingIds: [],
           unitIds: [],
@@ -861,15 +888,25 @@ export function buildServerScreenOrderCards(
       const key = `sauce:${waveId}:${agg}`;
       let line = sauceLineMap.get(key);
       if (!line) {
-        const primary = resolveName(item);
-        const zhName = grillGuestPrepDisplayName(item, "zh");
-        const showZh =
-          showChineseForGrill && language !== "zh" && Boolean(zhName) && zhName !== primary;
+        let primary: string;
+        let secondary: string | null;
+        if (chinesePrimary) {
+          const zh = grillGuestPrepDisplayName(item, "zh");
+          const en = grillGuestPrepDisplayName(item, "en");
+          primary = zh || en;
+          secondary = zh && en && en !== zh ? en : null;
+        } else {
+          primary = resolveName(item);
+          const zhName = grillGuestPrepDisplayName(item, "zh");
+          const showZh =
+            showChineseForGrill && language !== "zh" && Boolean(zhName) && zhName !== primary;
+          secondary = showZh ? zhName : null;
+        }
         line = {
           key,
           kind: "item",
           name: primary,
-          nameZh: showZh ? zhName : null,
+          nameZh: secondary,
           note: null,
           remainingIds: [],
           unitIds: [],

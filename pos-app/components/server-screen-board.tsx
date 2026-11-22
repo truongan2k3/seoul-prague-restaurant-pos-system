@@ -40,7 +40,11 @@ import { isGrillGuestPrepOrder, grillGuestPrepDisplayName } from "@/lib/grill-gu
 import { isKitchenMessageOrder } from "@/lib/kitchen-message-order";
 import { usesKitchenScreen } from "@/lib/kitchen-fulfillment-mode";
 import { itemTransferLabel, orderItemEventKind } from "@/lib/item-transfers";
-import { orderItemDisplayName, resolveMenuItemForOrder } from "@/lib/menu-display";
+import {
+  kitchenOrderItemDisplayNames,
+  orderItemDisplayName,
+  resolveMenuItemForOrder,
+} from "@/lib/menu-display";
 import { stationTicketNumber } from "@/lib/station-ticket-number";
 import {
   isNotificationAudioUnlocked,
@@ -550,7 +554,9 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         const mapped = mapOrderItemRow(row);
         return {
           key: row.id,
-          name: orderItemDisplayName(mapped, menuItemsRef.current, languageRef.current),
+          name: station === "kitchen"
+            ? kitchenOrderItemDisplayNames(mapped, menuItemsRef.current).primaryZh
+            : orderItemDisplayName(mapped, menuItemsRef.current, languageRef.current),
           tableLabel: tableLabelByIdRef.current.get(row.table_id) ?? "—",
           note: itemNote(
             { ...mapped, tableId: row.table_id, createdAt: row.created_at },
@@ -920,6 +926,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         nowMs,
         forceChineseMenuItemIds: serverScreen.forceChineseMenuItemIds,
         showChineseForGrill: serverScreen.showChineseForGrill ?? true,
+        chinesePrimary: station === "kitchen",
       }),
     [
       items,
@@ -931,6 +938,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       nowMs,
       serverScreen.forceChineseMenuItemIds,
       serverScreen.showChineseForGrill,
+      station,
     ],
   );
   orderCardsRef.current = orderCards;
@@ -1070,7 +1078,9 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       if (!historyWithinRetention(item.readyAt, nowMs)) continue;
       incoming.push({
         key: item.id,
-        name: orderItemDisplayName(item, menuItems, language),
+        name: station === "kitchen"
+          ? kitchenOrderItemDisplayNames(item, menuItems).primaryZh
+          : orderItemDisplayName(item, menuItems, language),
         tableLabel: tableLabelById.get(item.tableId) ?? "—",
         note: itemNote(item, language),
         orderedAt: item.createdAt,
@@ -1210,14 +1220,38 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     const add = (row:BoardRow,completedAt?:string) => {
       const companion = row.kind === "companion";
       const message = !companion && isKitchenMessageOrder(row.item);
-      const name = companion ? row.companionName ?? "" : message
-        ? (language === "zh" ? row.item.notesTranslated?.trim() : row.item.notes?.trim()) || orderItemDisplayName(row.item,menuItems,language)
-        : orderItemDisplayName(row.item,menuItems,language);
-      const nameZh = companion
-        ? language !== "zh" && serverScreen.showChineseForGrill ? GRILL_FIRST_ORDER_COMPANIONS.find(entry=>entry.id===row.companionId)?.names.zh ?? null : null
-        : isGrillGuestPrepOrder(row.item)
-          ? language !== "zh" && serverScreen.showChineseForGrill ? grillGuestPrepDisplayName(row.item,"zh") : null
-          : forcedChineseName(row.item,menuItems,language,serverScreen.forceChineseMenuItemIds,name,serverScreen.showChineseForGrill);
+
+      let name: string;
+      let nameZh: string | null;
+
+      if (station === "kitchen") {
+        if (companion) {
+          const comp = GRILL_FIRST_ORDER_COMPANIONS.find(entry => entry.id === row.companionId);
+          const zh = comp?.names.zh?.trim();
+          const en = comp?.names.en?.trim() || row.companionName || "";
+          name = zh || en;
+          nameZh = zh && en && en !== zh ? en : null;
+        } else if (message) {
+          const zh = row.item.notesTranslated?.trim();
+          const orig = row.item.notes?.trim() || row.item.name;
+          name = zh || orig;
+          nameZh = zh && orig && orig !== zh ? orig : null;
+        } else {
+          const names = kitchenOrderItemDisplayNames(row.item, menuItems);
+          name = names.primaryZh;
+          nameZh = names.secondaryEn;
+        }
+      } else {
+        name = companion ? row.companionName ?? "" : message
+          ? (language === "zh" ? row.item.notesTranslated?.trim() : row.item.notes?.trim()) || orderItemDisplayName(row.item,menuItems,language)
+          : orderItemDisplayName(row.item,menuItems,language);
+        nameZh = companion
+          ? language !== "zh" && serverScreen.showChineseForGrill ? GRILL_FIRST_ORDER_COMPANIONS.find(entry=>entry.id===row.companionId)?.names.zh ?? null : null
+          : isGrillGuestPrepOrder(row.item)
+            ? language !== "zh" && serverScreen.showChineseForGrill ? grillGuestPrepDisplayName(row.item,"zh") : null
+            : forcedChineseName(row.item,menuItems,language,serverScreen.forceChineseMenuItemIds,name,serverScreen.showChineseForGrill);
+      }
+
       result.set(row.key,{
         id:row.key,dishKey:companion?`companion:${row.companionId}`:message?`message:${row.key}`:`item:${row.item.menuItemId??row.item.name}`,
         name,nameZh:nameZh===name?null:nameZh,tableId:row.item.tableId,tableLabel:row.tableLabel,

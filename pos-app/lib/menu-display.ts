@@ -91,3 +91,35 @@ export function cartLineDisplayName(
 ): string {
   return orderItemDisplayName(line, menuItems, language);
 }
+
+/**
+ * For Kitchen Display System (KDS):
+ * Returns primary (Chinese, big) and secondary (English, small below).
+ * If Chinese is missing, primary is English and secondary is null.
+ */
+export function kitchenOrderItemDisplayNames(
+  order: Pick<OrderItem, "menuItemId" | "name" | "notes" | "notesTranslated">,
+  menuItems: MenuItem[],
+): { primaryZh: string; secondaryEn: string | null } {
+  if (isGrillGuestPrepOrder(order as OrderItem)) {
+    const zh = grillGuestPrepDisplayName(order as OrderItem, "zh").trim();
+    const en = grillGuestPrepDisplayName(order as OrderItem, "en").trim();
+    if (zh) {
+      return { primaryZh: zh, secondaryEn: en && en !== zh ? en : null };
+    }
+    return { primaryZh: en || order.name, secondaryEn: null };
+  }
+
+  const menu = resolveMenuItemForOrder(order, menuItems);
+  if (menu) {
+    const zh = menu.nameZh?.trim();
+    const en = menu.nameEn?.trim() || order.name?.trim();
+    if (zh) {
+      return { primaryZh: zh, secondaryEn: en && en !== zh ? en : null };
+    }
+    return { primaryZh: en || order.name, secondaryEn: null };
+  }
+
+  return { primaryZh: order.name, secondaryEn: null };
+}
+

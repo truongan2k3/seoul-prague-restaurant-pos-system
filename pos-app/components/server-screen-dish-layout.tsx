@@ -129,10 +129,10 @@ export function ServerScreenDishLayout({entries,selections,externalSelected,nowM
           <div className="min-w-0">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
               {dish.outstanding===0&&<Check aria-hidden="true" className="h-5 w-5 shrink-0 text-emerald-300"/>}
-              <h2 className="break-words text-base font-semibold leading-snug text-[#F5EDE4] sm:text-lg lg:text-xl">{dish.name}</h2>
+              <h2 className="break-words text-lg font-bold leading-snug text-[#F5EDE4] sm:text-xl lg:text-2xl">{dish.name}</h2>
               <span aria-label={`${dish.outstanding} outstanding`} aria-live="polite" aria-atomic="true" className={`whitespace-nowrap text-lg font-bold tabular-nums sm:text-xl ${dish.outstanding>0?"text-[#DCC1A5]":"text-emerald-400/65"}`}>{dish.outstanding}×</span>
             </div>
-            {dish.nameZh&&<p className="mt-0.5 text-xs text-white/50">{dish.nameZh}</p>}
+            {dish.nameZh&&<p className="mt-0.5 text-xs font-semibold sm:text-sm text-white/65">{dish.nameZh}</p>}
           </div>
           <div className="flex min-w-0 flex-wrap items-start justify-end gap-y-1">
             {tables.map((table,index)=>{

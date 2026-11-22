@@ -80,7 +80,7 @@ function OrderCardLineRow({
       >
         <div className="flex min-w-0 items-baseline gap-2">
           <span
-            className={`min-w-0 flex-1 text-[0.95rem] font-medium leading-tight text-white/70 line-through decoration-white/35 ${
+            className={`min-w-0 flex-1 text-[1.05rem] font-medium leading-tight text-white/70 line-through decoration-white/35 sm:text-[1.15rem] ${
               nested ? "pl-2 truncate" : isMessage ? "whitespace-pre-wrap break-words" : "truncate"
             }`}
             title={line.name}
@@ -96,7 +96,7 @@ function OrderCardLineRow({
         </div>
         {line.nameZh ? (
           <p
-            className={`mt-0.5 text-xs text-white/40 ${
+            className={`mt-0.5 text-xs font-medium text-white/40 ${
               nested ? "pl-2 truncate" : isMessage ? "whitespace-pre-wrap break-words" : "truncate"
             }`}
             title={line.nameZh}
@@ -131,7 +131,7 @@ function OrderCardLineRow({
       >
         <span className="min-w-0 flex-1">
           <span
-            className={`block text-[0.95rem] font-semibold leading-tight sm:text-[1.05rem] ${
+            className={`block text-[1.1rem] font-bold leading-tight sm:text-[1.25rem] ${
               nested ? "pl-2 font-medium truncate" : isMessage ? "whitespace-pre-wrap break-words" : "truncate"
             } ${selected ? "text-zinc-950" : ""}`}
             title={line.name}
@@ -146,9 +146,9 @@ function OrderCardLineRow({
           </span>
           {line.nameZh ? (
             <span
-              className={`mt-0.5 block text-xs font-medium sm:text-sm ${
+              className={`mt-0.5 block text-xs font-semibold sm:text-[0.82rem] tracking-tight ${
                 nested ? "pl-2 truncate" : isMessage ? "whitespace-pre-wrap break-words" : "truncate"
-              } ${selected ? "text-zinc-800/75" : "text-white/55"}`}
+              } ${selected ? "text-zinc-800" : "text-white/70"}`}
               title={line.nameZh}
             >
               {line.nameZh}

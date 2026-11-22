@@ -384,12 +384,6 @@ export function SettingsView({
   const devices = [
     { href: POS_HOME_PATH, label: translate("posWindows"), icon: Monitor, desc: "Cashier & floor manager" },
     { href: "/server", label: translate("tabletServer"), icon: Tablet, desc: "Table ordering" },
-    {
-      href: "/print-station",
-      label: translate("printStation"),
-      icon: Printer,
-      desc: translate("printStationDeviceHint"),
-    },
     { href: "/kds", label: translate("tabletKds"), icon: Tablet, desc: "Kitchen display" },
     { href: "/bar", label: translate("barScreen"), icon: Tv, desc: "Bar display" },
     { href: "/client", label: translate("customerDisplay"), icon: Monitor, desc: translate("settingsCfdDeviceHint") },
@@ -555,35 +549,46 @@ export function SettingsView({
                     className="mt-0.5 h-4 w-4 shrink-0 rounded border-emerald-300"
                   />
                 </label>
-                <label className="block text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">
-                    {translate("settingsPrintBridgeUrl")}
-                  </span>
-                  <input
-                    value={draft.printBridgeUrl}
-                    onChange={(event) => updateDraft("printBridgeUrl", event.target.value)}
-                    className="pos-input mt-1"
-                    placeholder="http://127.0.0.1:39100"
-                  />
-                  <span className="mt-1 block text-xs text-amber-700 dark:text-amber-300">
-                    {translate("settingsPrintBridgeUrlWarning")}
-                  </span>
-                </label>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/60">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span
+                      className={`h-2.5 w-2.5 rounded-full ${
+                        bridgeTestMessage?.includes("OK")
+                          ? "bg-emerald-500"
+                          : bridgeTestMessage
+                            ? "bg-rose-500"
+                            : "bg-zinc-400"
+                      }`}
+                    />
+                    <span className="font-medium text-gray-800 dark:text-gray-200">
+                      Print Bridge: {bridgeTestMessage || "Sẵn sàng (http://127.0.0.1:39100)"}
+                    </span>
+                  </div>
                   <button
                     type="button"
                     disabled={bridgeTesting}
                     onClick={() => void handleTestPrintBridge()}
-                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold dark:border-gray-600"
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:hover:bg-gray-600"
                   >
                     {bridgeTesting
                       ? translate("settingsPrintBridgeTesting")
                       : translate("settingsPrintBridgeTest")}
                   </button>
-                  {bridgeTestMessage && (
-                    <span className="text-xs text-gray-600 dark:text-gray-300">{bridgeTestMessage}</span>
-                  )}
                 </div>
+
+                <details className="text-xs text-gray-400">
+                  <summary className="cursor-pointer hover:underline">
+                    Cài đặt nâng cao (Đường dẫn Print Bridge)
+                  </summary>
+                  <div className="mt-2">
+                    <input
+                      value={draft.printBridgeUrl}
+                      onChange={(event) => updateDraft("printBridgeUrl", event.target.value)}
+                      className="pos-input text-xs"
+                      placeholder="http://127.0.0.1:39100"
+                    />
+                  </div>
+                </details>
                 <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-gray-700">
                   <span className="text-sm text-gray-800 dark:text-gray-200">
                     {translate("settingsBrowserPrintFallback")}

@@ -11,30 +11,68 @@ export type CallWaiterPayload = {
   at: string;
 };
 
+async function sendPosNotificationBroadcast(event: string, payload: unknown): Promise<string> {
+  const getChannelsFn = (supabase as unknown as { getChannels?: () => Array<{ topic?: string; subTopic?: string }> }).getChannels;
+  const existingChannels = typeof getChannelsFn === "function" ? getChannelsFn.call(supabase) : [];
+  const hadExistingChannel = existingChannels.some((c) => c.topic === `realtime:${POS_NOTIFICATIONS_CHANNEL}` || c.subTopic === POS_NOTIFICATIONS_CHANNEL);
+
+  const channel = supabase.channel(POS_NOTIFICATIONS_CHANNEL, {
+    config: { broadcast: { self: true } },
+  });
+
+  const channelAny = channel as unknown as {
+    state?: string;
+    channelAdapter?: { isJoined?: () => boolean };
+  };
+  const isAlreadyJoined = channelAny.state === "joined" ||
+    Boolean(channelAny.channelAdapter?.isJoined?.());
+
+  if (!isAlreadyJoined) {
+    await new Promise<void>((resolve, reject) => {
+      let resolved = false;
+      const timeout = window.setTimeout(() => {
+        if (resolved) return;
+        if (channelAny.state === "joined") {
+          resolved = true;
+          resolve();
+        } else {
+          reject(new Error("Realtime subscribe timeout"));
+        }
+      }, 10000);
+
+      channel.subscribe((status) => {
+        if (resolved) return;
+        if (status === "SUBSCRIBED" || channelAny.state === "joined") {
+          resolved = true;
+          window.clearTimeout(timeout);
+          resolve();
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          resolved = true;
+          window.clearTimeout(timeout);
+          reject(new Error(`Realtime ${status}`));
+        }
+      });
+    });
+  }
+
+  const result = await channel.send({
+    type: "broadcast",
+    event,
+    payload,
+  });
+
+  if (!hadExistingChannel) {
+    void supabase.removeChannel(channel);
+  }
+  return result;
+}
+
 export async function broadcastCallWaiter(input: {
   tableId?: string;
   tableLabel?: string;
   station?: "kitchen" | "bar";
   message?: string;
 }) {
-  const channel = supabase.channel(POS_NOTIFICATIONS_CHANNEL, {
-    config: { broadcast: { self: true } },
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    const timeout = window.setTimeout(() => reject(new Error("Realtime subscribe timeout")), 4000);
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        window.clearTimeout(timeout);
-        resolve();
-      }
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        window.clearTimeout(timeout);
-        reject(new Error(`Realtime ${status}`));
-      }
-    });
-  });
-
   const payload: CallWaiterPayload = {
     tableId: input.tableId,
     tableLabel: input.tableLabel,
@@ -43,21 +81,16 @@ export async function broadcastCallWaiter(input: {
     at: new Date().toISOString(),
   };
 
-  const result = await channel.send({
-    type: "broadcast",
-    event: "call_waiter",
-    payload,
-  });
-
-  void supabase.removeChannel(channel);
-  return result;
+  return sendPosNotificationBroadcast("call_waiter", payload);
 }
 
 export function subscribeToCallWaiter(
   onEvent: (payload: CallWaiterPayload) => void,
 ): () => void {
   const channel = supabase
-    .channel(POS_NOTIFICATIONS_CHANNEL)
+    .channel(POS_NOTIFICATIONS_CHANNEL, {
+      config: { broadcast: { self: true } },
+    })
     .on("broadcast", { event: "call_waiter" }, ({ payload }) => {
       onEvent(payload as CallWaiterPayload);
     })
@@ -207,24 +240,6 @@ export async function broadcastPrintFailed(input: {
   detail: string;
   pendingId: string;
 }) {
-  const channel = supabase.channel(POS_NOTIFICATIONS_CHANNEL, {
-    config: { broadcast: { self: true } },
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    const timeout = window.setTimeout(() => reject(new Error("Realtime subscribe timeout")), 4000);
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        window.clearTimeout(timeout);
-        resolve();
-      }
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        window.clearTimeout(timeout);
-        reject(new Error(`Realtime ${status}`));
-      }
-    });
-  });
-
   const payload: PrintFailedPayload = {
     tableId: input.tableId?.trim() || undefined,
     tableLabel: input.tableLabel?.trim() || undefined,
@@ -233,14 +248,7 @@ export async function broadcastPrintFailed(input: {
     at: new Date().toISOString(),
   };
 
-  const result = await channel.send({
-    type: "broadcast",
-    event: "print_failed",
-    payload,
-  });
-
-  void supabase.removeChannel(channel);
-  return result;
+  return sendPosNotificationBroadcast("print_failed", payload);
 }
 
 /** Print Station → main POS: kitchen ticket printed (acks Send watchdog). */
@@ -248,45 +256,22 @@ export async function broadcastPrintOk(input: {
   tableId: string;
   tableLabel?: string;
 }) {
-  const channel = supabase.channel(POS_NOTIFICATIONS_CHANNEL, {
-    config: { broadcast: { self: true } },
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    const timeout = window.setTimeout(() => reject(new Error("Realtime subscribe timeout")), 4000);
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        window.clearTimeout(timeout);
-        resolve();
-      }
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        window.clearTimeout(timeout);
-        reject(new Error(`Realtime ${status}`));
-      }
-    });
-  });
-
   const payload: PrintOkPayload = {
     tableId: input.tableId,
     tableLabel: input.tableLabel?.trim() || undefined,
     at: new Date().toISOString(),
   };
 
-  const result = await channel.send({
-    type: "broadcast",
-    event: "print_ok",
-    payload,
-  });
-
-  void supabase.removeChannel(channel);
-  return result;
+  return sendPosNotificationBroadcast("print_ok", payload);
 }
 
 export function subscribeToPrintFailed(
   onEvent: (payload: PrintFailedPayload) => void,
 ): () => void {
   const channel = supabase
-    .channel(POS_NOTIFICATIONS_CHANNEL)
+    .channel(POS_NOTIFICATIONS_CHANNEL, {
+      config: { broadcast: { self: true } },
+    })
     .on("broadcast", { event: "print_failed" }, ({ payload }) => {
       onEvent(payload as PrintFailedPayload);
     })
@@ -301,7 +286,9 @@ export function subscribeToPrintOk(
   onEvent: (payload: PrintOkPayload) => void,
 ): () => void {
   const channel = supabase
-    .channel(POS_NOTIFICATIONS_CHANNEL)
+    .channel(POS_NOTIFICATIONS_CHANNEL, {
+      config: { broadcast: { self: true } },
+    })
     .on("broadcast", { event: "print_ok" }, ({ payload }) => {
       onEvent(payload as PrintOkPayload);
     })

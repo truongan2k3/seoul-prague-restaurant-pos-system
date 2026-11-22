@@ -20,12 +20,17 @@ type PendingAck = {
 const pending = new Map<string, PendingAck>();
 
 /** Cancel watchdog(s) for a table when Print Station confirms ok or failed. */
-export function clearPrintStationAck(tableId?: string) {
-  if (!tableId) return;
+export function clearPrintStationAck(tableId?: string, tableLabel?: string) {
+  if (!tableId && !tableLabel) return;
+  const normId = tableId?.trim();
+  const normLabel = tableLabel?.trim();
   for (const [id, entry] of [...pending.entries()]) {
-    if (entry.tableId !== tableId) continue;
-    clearTimeout(entry.timer);
-    pending.delete(id);
+    const matchId = Boolean(normId && (entry.tableId === normId || entry.tableLabel === normId));
+    const matchLabel = Boolean(normLabel && (entry.tableLabel === normLabel || entry.tableId === normLabel));
+    if (matchId || matchLabel) {
+      clearTimeout(entry.timer);
+      pending.delete(id);
+    }
   }
 }
 

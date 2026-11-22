@@ -90,10 +90,12 @@ export function PrintFailedListener() {
     const unsubLocal = subscribeToPrintFailedAlerts(enqueueAlert);
     // Must use the same channel topic Print Station sends on.
     const channel = supabase
-      .channel(POS_NOTIFICATIONS_CHANNEL)
+      .channel(POS_NOTIFICATIONS_CHANNEL, {
+        config: { broadcast: { self: true } },
+      })
       .on("broadcast", { event: "print_failed" }, ({ payload }) => {
         const data = payload as PrintFailedPayload;
-        clearPrintStationAck(data.tableId);
+        clearPrintStationAck(data.tableId, data.tableLabel);
         enqueueAlert({
           id: data.pendingId,
           tableLabel: data.tableLabel,
@@ -102,7 +104,8 @@ export function PrintFailedListener() {
         });
       })
       .on("broadcast", { event: "print_ok" }, ({ payload }) => {
-        clearPrintStationAck((payload as PrintOkPayload).tableId);
+        const data = payload as PrintOkPayload;
+        clearPrintStationAck(data.tableId, data.tableLabel);
       })
       .subscribe();
     return () => {

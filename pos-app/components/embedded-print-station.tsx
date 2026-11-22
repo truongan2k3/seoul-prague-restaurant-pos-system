@@ -284,6 +284,9 @@ export function PrintStationProvider({ children }: { children: ReactNode }) {
           const printableOrders = filterAndClaimUnprintedOrders(orders);
           if (printableOrders.length === 0) {
             clearPrintStationAck(tableId);
+            try {
+              await broadcastPrintOk({ tableId, tableLabel });
+            } catch {}
             return;
           }
 

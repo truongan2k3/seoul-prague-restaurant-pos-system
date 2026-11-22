@@ -230,6 +230,9 @@ export function PrintStationView() {
           const printableOrders = filterAndClaimUnprintedOrders(orders);
           if (printableOrders.length === 0) {
             clearPrintStationAck(tableId);
+            try {
+              await broadcastPrintOk({ tableId, tableLabel });
+            } catch {}
             return;
           }
 

@@ -9,6 +9,7 @@ const mock={...react,jsx:()=>null,jsxs:()=>null,useApp:()=>({translate:k=>k,lang
  subscribeToOrderItemInserts:fn=>{insert=fn;return ()=>{};},fetchTableSummaries:async()=>({data:[]}),loadMenuItemsResolved:async()=>({data:[]}),pingPrintBridge:async()=>({ok:true,message:'OK'}),
  mapTableRow:row=>row,mapOrderItemRow:row=>({...row,notesTranslated:row.notes_translated,createdAt:row.created_at}),
  printKitchenMessage:async job=>messages.push(job),printKitchenTicket:async job=>tickets.push(job),broadcastPrintOk:async()=>{},broadcastPrintFailed:async()=>{},
+ clearPrintStationAck:()=>{},
  registerPrintStationTab:()=>({isLeader:()=>true,heartbeat:()=>true,resign:()=>{}}),
  claimKitchenPrintItemId:()=>true,claimKitchenPrintMessage:()=>true,filterAndClaimUnprintedOrders:orders=>orders,
  StationPrintPartialError:class extends Error{constructor(m,orders){super(m);this.unprintedOrders=orders;}},};

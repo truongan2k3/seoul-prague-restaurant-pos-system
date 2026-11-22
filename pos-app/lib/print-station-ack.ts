@@ -8,7 +8,7 @@ import { reportPrintFailed } from "@/lib/print-failed-alert";
  * Timeout covers insert batch (~1.2s) + print/bridge (~8s) + slack.
  * Call clearPrintStationAck from PrintFailedListener when ok/failed arrives.
  */
-export const PRINT_STATION_ACK_TIMEOUT_MS = 15_000;
+export const PRINT_STATION_ACK_TIMEOUT_MS = 25_000;
 
 type PendingAck = {
   id: string;

@@ -18,6 +18,7 @@ import {
   upsertPendingKitchenPrint,
   type PendingKitchenPrintJob,
 } from "@/lib/pending-kitchen-prints";
+import { clearPrintStationAck } from "@/lib/print-station-ack";
 import { pingPrintBridge, pingPrinter } from "@/src/lib/print-bridge-client";
 import { printKitchenMessage, printKitchenTicket, StationPrintPartialError } from "@/src/lib/printKitchenTicket";
 import {
@@ -220,6 +221,7 @@ export function PrintStationView() {
         tablesRef.current.find((t) => t.id === tableId)?.label ?? tableId.slice(0, 6);
       const orders = batch.orders;
       const cfg = settingsRef.current;
+      clearPrintStationAck(tableId);
 
       enqueuePrint(async () => {
         try {

@@ -32,7 +32,7 @@ function Send-TcpBytes([string]$hostName, [int]$printerPort, [byte[]]$data) {
   $client = New-Object System.Net.Sockets.TcpClient
   try {
     $iar = $client.BeginConnect($hostName, $printerPort, $null, $null)
-    $ok = $iar.AsyncWaitHandle.WaitOne(8000, $false)
+    $ok = $iar.AsyncWaitHandle.WaitOne(4000, $false)
     if (-not $ok) { throw "Timeout connecting to ${hostName}:${printerPort}" }
     $client.EndConnect($iar)
     $stream = $client.GetStream()

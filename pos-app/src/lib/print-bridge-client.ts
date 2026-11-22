@@ -253,21 +253,23 @@ export async function silentPrintEscPosPerPrinter(
   const errors: string[] = [];
   let sent = false;
 
-  for (const printer of uniqueTargets) {
-    try {
-      const payload = await resolvePayload(printer);
-      if (!payload || payload.length === 0) {
-        errors.push(`${printer.name} (${printer.host}): no print payload`);
-        continue;
+  await Promise.all(
+    uniqueTargets.map(async (printer) => {
+      try {
+        const payload = await resolvePayload(printer);
+        if (!payload || payload.length === 0) {
+          errors.push(`${printer.name} (${printer.host}): no print payload`);
+          return;
+        }
+        await sendRawToPrinter(settings.printBridgeUrl, printer, payload);
+        sent = true;
+      } catch (error) {
+        errors.push(
+          `${printer.name} (${printer.host}): ${error instanceof Error ? error.message : "print failed"}`,
+        );
       }
-      await sendRawToPrinter(settings.printBridgeUrl, printer, payload);
-      sent = true;
-    } catch (error) {
-      errors.push(
-        `${printer.name} (${printer.host}): ${error instanceof Error ? error.message : "print failed"}`,
-      );
-    }
-  }
+    }),
+  );
 
   return { sent, error: errors.length > 0 ? errors.join("; ") : undefined };
 }

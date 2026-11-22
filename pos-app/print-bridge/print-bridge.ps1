@@ -71,7 +71,7 @@ function Test-And-Claim-Print([string]$hostName, [int]$port, [int]$byteCount, [s
 
   if ($RecentPrints.ContainsKey($key)) {
     $elapsed = ($now - $RecentPrints[$key]).TotalSeconds
-    if ($elapsed -lt 4) {
+    if ($elapsed -lt 10) {
       return $false # Duplicate!
     }
   }
@@ -144,6 +144,39 @@ try {
           port    = $Port
           engine  = "powershell"
           lanIps  = @($ips)
+        }
+        continue
+      }
+
+      if ($req.HttpMethod -eq "POST" -and ($path -eq "/ping-printer" -or $path -eq "ping-printer")) {
+        $reader = New-Object System.IO.StreamReader($req.InputStream, $req.ContentEncoding)
+        $raw = $reader.ReadToEnd()
+        $reader.Close()
+        $payload = $raw | ConvertFrom-Json
+        $pingHost = [string]$payload.host
+        $pingPort = if ($payload.port) { [int]$payload.port } else { 9100 }
+        if ([string]::IsNullOrWhiteSpace($pingHost)) {
+          Send-Json $res 400 @{ ok = $false; error = "host required" }
+          continue
+        }
+        $pingStart = [DateTime]::UtcNow
+        $pingClient = New-Object System.Net.Sockets.TcpClient
+        try {
+          $iar = $pingClient.BeginConnect($pingHost, $pingPort, $null, $null)
+          $connected = $iar.AsyncWaitHandle.WaitOne(3000, $false)
+          if (-not $connected) { throw "Timeout connecting to ${pingHost}:${pingPort}" }
+          $pingClient.EndConnect($iar)
+          $latencyMs = [int]([DateTime]::UtcNow - $pingStart).TotalMilliseconds
+          Write-Host ("[print-bridge] ping {0}:{1} -> OK ({2}ms)" -f $pingHost, $pingPort, $latencyMs)
+          Send-Json $res 200 @{ ok = $true; latencyMs = $latencyMs }
+        }
+        catch {
+          $errMsg = $_.Exception.Message
+          Write-Host ("[print-bridge] ping {0}:{1} -> FAIL: {2}" -f $pingHost, $pingPort, $errMsg)
+          Send-Json $res 200 @{ ok = $false; error = $errMsg }
+        }
+        finally {
+          $pingClient.Close()
         }
         continue
       }

@@ -7,7 +7,7 @@ import { LanguageSelector } from "@/components/language-selector";
 import { normalizeOrderItemStatus } from "@/lib/order-status";
 import { isKitchenMessageOrder } from "@/lib/kitchen-message-order";
 import { shouldPrintKitchenOnSend } from "@/lib/kitchen-fulfillment-mode";
-import type { MenuItem, OrderItem, RestaurantTable } from "@/lib/types";
+import type { MenuItem, NetworkPrinter, OrderItem, RestaurantTable } from "@/lib/types";
 import { applyTableRealtimeEvent } from "@/lib/realtime-pos-sync";
 import { subscribeToPostgresRowChanges } from "@/lib/realtime-subscribe";
 import { subscribePosSoftRefresh } from "@/lib/pos-refresh";
@@ -18,7 +18,7 @@ import {
   upsertPendingKitchenPrint,
   type PendingKitchenPrintJob,
 } from "@/lib/pending-kitchen-prints";
-import { pingPrintBridge } from "@/src/lib/print-bridge-client";
+import { pingPrintBridge, pingPrinter } from "@/src/lib/print-bridge-client";
 import { printKitchenMessage, printKitchenTicket, StationPrintPartialError } from "@/src/lib/printKitchenTicket";
 import {
   claimKitchenPrintItemId,
@@ -61,6 +61,9 @@ export function PrintStationView() {
   const [printing, setPrinting] = useState(false);
   const [reprintingId, setReprintingId] = useState<string | null>(null);
   const [isLeader, setIsLeader] = useState(true);
+  const [printerStatuses, setPrinterStatuses] = useState<
+    Record<string, { checking: boolean; ok?: boolean; latencyMs?: number; error?: string }>
+  >({});
 
   const tabIdRef = useRef("");
   if (!tabIdRef.current) {
@@ -412,6 +415,39 @@ export function PrintStationView() {
     };
   }, [settings.silentPrintEnabled, settings.printBridgeUrl, translate]);
 
+  const checkSinglePrinter = useCallback(
+    async (printer: NetworkPrinter) => {
+      if (!settings.silentPrintEnabled) return;
+      setPrinterStatuses((prev) => ({
+        ...prev,
+        [printer.id]: { ...prev[printer.id], checking: true },
+      }));
+      const res = await pingPrinter(settings.printBridgeUrl, printer);
+      setPrinterStatuses((prev) => ({
+        ...prev,
+        [printer.id]: { checking: false, ok: res.ok, latencyMs: res.latencyMs, error: res.error },
+      }));
+    },
+    [settings.silentPrintEnabled, settings.printBridgeUrl],
+  );
+
+  const printers = settings.printers ?? [];
+
+  const checkAllPrinters = useCallback(async () => {
+    if (!settings.silentPrintEnabled || bridgeOk !== true) return;
+    for (const printer of (settings.printers ?? []).filter((p) => p.enabled)) {
+      void checkSinglePrinter(printer);
+    }
+  }, [settings.silentPrintEnabled, settings.printers, bridgeOk, checkSinglePrinter]);
+
+  useEffect(() => {
+    if (bridgeOk === true) {
+      void checkAllPrinters();
+      const id = window.setInterval(() => void checkAllPrinters(), 25000);
+      return () => window.clearInterval(id);
+    }
+  }, [bridgeOk, checkAllPrinters]);
+
   useEffect(() => {
     // Only the leader tab connects to Supabase Realtime print streams, avoiding duplicate printing across tabs
     if (!shouldPrintKitchenOnSend(settings) || !settings.kitchenPrintViaStation || !isLeader) {
@@ -422,7 +458,7 @@ export function PrintStationView() {
     setListening(true);
     const unsubInserts = subscribeToOrderItemInserts(
       queueInsert,
-      `print-station-inserts-${Date.now()}`,
+      "print-station-inserts",
     );
     const unsubMessages = subscribeToKitchenPrintMessage(queueKitchenMessage);
 
@@ -544,6 +580,90 @@ export function PrintStationView() {
               {translate("printStationBridgeHelp")}
             </p>
           ) : null}
+        </section>
+
+        <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold">{translate("settingsPrinters")}</h2>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">Trạng thái kết nối máy in thời gian thực</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void checkAllPrinters()}
+              disabled={!settings.silentPrintEnabled || bridgeOk !== true}
+              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            >
+              {translate("settingsPrinterPing")}
+            </button>
+          </div>
+          <div className="mt-3 space-y-2.5">
+            {printers.length === 0 ? (
+              <p className="text-sm text-zinc-500">Chưa cấu hình máy in nào.</p>
+            ) : (
+              printers.map((printer) => {
+                const st = printerStatuses[printer.id];
+                return (
+                  <div
+                    key={printer.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-100 bg-zinc-50/70 p-3 text-sm dark:border-zinc-800 dark:bg-zinc-800/40"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-zinc-900 dark:text-zinc-100">{printer.name}</span>
+                        <code className="rounded bg-zinc-200/70 px-1.5 py-0.5 text-xs text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
+                          {printer.host}:{printer.port}
+                        </code>
+                        {!printer.enabled && (
+                          <span className="rounded bg-zinc-200 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400">
+                            OFF
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                        {printer.roles.map((r) => (
+                          <span key={r} className="rounded bg-zinc-200/60 px-1.5 py-0.5 dark:bg-zinc-700/60">
+                            {r === "receipt" ? "Receipt" : r === "kitchen" ? "Kitchen" : r === "kitchen-message" ? "Message" : "Bar"}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {st?.checking ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                          <span className="h-2 w-2 animate-ping rounded-full bg-amber-500" />
+                          {translate("settingsPrinterPingTesting")}
+                        </span>
+                      ) : st?.ok === true ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                          {translate("settingsPrinterPingOk")} ({st.latencyMs}ms)
+                        </span>
+                      ) : st?.ok === false ? (
+                        <span
+                          className="inline-flex items-center gap-1.5 rounded-md bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 dark:bg-rose-950 dark:text-rose-300"
+                          title={st.error}
+                        >
+                          <span className="h-2 w-2 rounded-full bg-rose-500" />
+                          {translate("settingsPrinterPingFail")}: {st.error || "Timeout"}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-zinc-400">Chưa kiểm tra</span>
+                      )}
+                      <button
+                        type="button"
+                        disabled={st?.checking || !settings.silentPrintEnabled || bridgeOk !== true}
+                        onClick={() => void checkSinglePrinter(printer)}
+                        className="rounded-md border border-zinc-300 bg-white px-2.5 py-1 text-xs font-medium hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+                      >
+                        Ping
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </section>
 
         <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900 dark:bg-amber-950/30">

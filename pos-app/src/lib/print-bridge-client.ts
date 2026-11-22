@@ -77,6 +77,50 @@ export function isLoopbackPrintBridgeUrl(bridgeUrl: string): boolean {
   }
 }
 
+export async function pingPrinter(
+  bridgeUrl: string,
+  printer: { host: string; port: string | number },
+): Promise<{ ok: boolean; latencyMs?: number; error?: string }> {
+  const check = validatePrintBridgeUrl(bridgeUrl);
+  if (!check.ok) return { ok: false, error: check.message };
+
+  const base = bridgeUrl.replace(/\/$/, "");
+  try {
+    const response = await fetch(`${base}/ping-printer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(5_000),
+      body: JSON.stringify({ host: printer.host, port: Number(printer.port) || 9100 }),
+    });
+    if (!response.ok) {
+      return { ok: false, error: `Bridge HTTP ${response.status}` };
+    }
+    const result = (await response.json().catch(() => null)) as {
+      ok?: boolean;
+      latencyMs?: number;
+      error?: string;
+    } | null;
+    return {
+      ok: result?.ok === true,
+      latencyMs: typeof result?.latencyMs === "number" ? result.latencyMs : undefined,
+      error: result?.ok ? undefined : (result?.error ?? "Printer unreachable"),
+    };
+  } catch (error) {
+    const timedOut =
+      error instanceof DOMException && error.name === "TimeoutError"
+        ? true
+        : error instanceof Error && /aborted|timeout/i.test(error.message);
+    return {
+      ok: false,
+      error: timedOut
+        ? "Ping timed out"
+        : error instanceof Error
+          ? error.message
+          : "Ping failed",
+    };
+  }
+}
+
 export async function pingPrintBridge(bridgeUrl: string): Promise<{ ok: boolean; message: string }> {
   const check = validatePrintBridgeUrl(bridgeUrl);
   if (!check.ok) return check;

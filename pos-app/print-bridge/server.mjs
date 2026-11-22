@@ -93,7 +93,7 @@ function isDuplicatePrint(host, port, byteCount, dataBase64) {
 
   if (recentPrints.has(key)) {
     const elapsed = now - recentPrints.get(key);
-    if (elapsed < 4000) return true;
+    if (elapsed < 10000) return true;
   }
   recentPrints.set(key, now);
   return false;
@@ -115,6 +115,44 @@ const server = http.createServer(async (req, res) => {
       port: PORT,
       lanIps: lanIPv4Addresses(),
     });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/ping-printer") {
+    try {
+      const raw = await readBody(req);
+      const payload = JSON.parse(raw.toString("utf8"));
+      const host = String(payload.host || "").trim();
+      const port = Number(payload.port) || 9100;
+      if (!host) {
+        sendJson(res, 400, { ok: false, error: "host required" });
+        return;
+      }
+      const pingStart = Date.now();
+      const socket = new net.Socket();
+      socket.setTimeout(3000);
+
+      socket.connect(port, host, () => {
+        const latencyMs = Date.now() - pingStart;
+        socket.destroy();
+        console.log(`[print-bridge] ping ${host}:${port} -> OK (${latencyMs}ms)`);
+        sendJson(res, 200, { ok: true, latencyMs });
+      });
+
+      socket.on("timeout", () => {
+        socket.destroy();
+        console.log(`[print-bridge] ping ${host}:${port} -> FAIL: Timeout`);
+        sendJson(res, 200, { ok: false, error: "Timeout connecting to printer" });
+      });
+
+      socket.on("error", (err) => {
+        socket.destroy();
+        console.log(`[print-bridge] ping ${host}:${port} -> FAIL: ${err.message}`);
+        sendJson(res, 200, { ok: false, error: err.message });
+      });
+    } catch (e) {
+      sendJson(res, 400, { ok: false, error: e.message });
+    }
     return;
   }
 

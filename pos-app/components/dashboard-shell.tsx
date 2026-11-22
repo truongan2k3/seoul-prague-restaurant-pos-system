@@ -16,6 +16,7 @@ import { VouchersView } from "@/components/vouchers-view";
 import { VoucherOrderListener } from "@/components/voucher-order-listener";
 import { CallWaiterListener } from "@/components/call-waiter-listener";
 import { PrintFailedListener } from "@/components/print-failed-listener";
+import { EmbeddedPrintStation } from "@/components/embedded-print-station";
 import { TableGuestRequestListener } from "@/components/table-guest-request-listener";
 import { Sidebar } from "@/components/sidebar";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
@@ -700,6 +701,7 @@ export function DashboardShell({ initialEet = false }: { initialEet?: boolean })
 
   return (
     <div data-pos-interaction={tableOrder.modal || tableOrder.isSaving ? "busy" : undefined} className="flex h-[100dvh] max-h-[100dvh] bg-background pb-[env(safe-area-inset-bottom,0px)] text-[var(--foreground)]">
+      <EmbeddedPrintStation />
       <CallWaiterListener />
       <PrintFailedListener />
       <TableGuestRequestListener />

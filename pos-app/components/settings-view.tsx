@@ -49,7 +49,6 @@ import { ServerScreenSettingsEditor } from "@/components/server-screen-settings-
 import { SidebarNavOrderEditor } from "@/components/sidebar-nav-order-editor";
 import type { TranslationKey } from "@/lib/i18n/translations";
 import { DEFAULT_SERVER_SCREEN_CONFIG } from "@/lib/server-screen";
-import { pingPrintBridge } from "@/src/lib/print-bridge-client";
 import type { NetworkPrinter, PrinterRole, ReceiptFontFamily, WeekdayKey } from "@/lib/types";
 import { formatPrinterEndpoint } from "@/lib/print-dispatch";
 import { CfdSlideshowManager } from "@/components/cfd-slideshow-manager";
@@ -59,7 +58,8 @@ import {
   uploadBusinessLogoAction,
 } from "@/src/lib/business-auth-actions";
 import { canManageStaff } from "@/lib/staff-roles";
-import { Monitor, Plus, Printer, Save, Tablet, Trash2, Tv } from "lucide-react";
+import { Activity, Monitor, Plus, Printer, Save, Tablet, Trash2, Tv } from "lucide-react";
+import { pingPrintBridge, pingPrinter } from "@/src/lib/print-bridge-client";
 
 const RECEIPT_FONT_LABEL_KEYS: Record<ReceiptFontFamily, TranslationKey> = {
   consolas: "settingsReceiptFontConsolas",
@@ -292,6 +292,50 @@ export function SettingsView({
     }
   };
 
+  const [isBridgeHost, setIsBridgeHost] = useState(false);
+  const [printerPingStatus, setPrinterPingStatus] = useState<
+    Record<string, { testing: boolean; ok?: boolean; latencyMs?: number; error?: string }>
+  >({});
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsBridgeHost(localStorage.getItem("pos_is_print_bridge_host") === "true");
+    }
+  }, []);
+
+  const handleToggleBridgeHost = (enabled: boolean) => {
+    setIsBridgeHost(enabled);
+    if (typeof window !== "undefined") {
+      if (enabled) {
+        localStorage.setItem("pos_is_print_bridge_host", "true");
+        window.dispatchEvent(new Event("pos_bridge_host_changed"));
+        if (!draft.printBridgeUrl || draft.printBridgeUrl.trim() === "") {
+          updateDraft("printBridgeUrl", "http://127.0.0.1:39100");
+        }
+      } else {
+        localStorage.removeItem("pos_is_print_bridge_host");
+        window.dispatchEvent(new Event("pos_bridge_host_changed"));
+      }
+    }
+  };
+
+  const handlePingPrinter = async (printer: NetworkPrinter) => {
+    setPrinterPingStatus((prev) => ({
+      ...prev,
+      [printer.id]: { testing: true },
+    }));
+    const result = await pingPrinter(draft.printBridgeUrl, printer);
+    setPrinterPingStatus((prev) => ({
+      ...prev,
+      [printer.id]: {
+        testing: false,
+        ok: result.ok,
+        latencyMs: result.latencyMs,
+        error: result.error,
+      },
+    }));
+  };
+
   const handleTestPrintBridge = async () => {
     setBridgeTesting(true);
     setBridgeTestMessage(null);
@@ -495,6 +539,22 @@ export function SettingsView({
 
             {draft.silentPrintEnabled && (
               <div className="mt-3 space-y-3">
+                <label className="flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3.5 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                  <div className="min-w-0">
+                    <span className="block text-sm font-semibold text-emerald-950 dark:text-emerald-100">
+                      {translate("settingsThisIsBridgeHost")}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-emerald-800 dark:text-emerald-300">
+                      {translate("settingsThisIsBridgeHostHint")}
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={isBridgeHost}
+                    onChange={(event) => handleToggleBridgeHost(event.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-emerald-300"
+                  />
+                </label>
                 <label className="block text-sm">
                   <span className="text-gray-500 dark:text-gray-400">
                     {translate("settingsPrintBridgeUrl")}
@@ -563,18 +623,51 @@ export function SettingsView({
                   key={printer.id}
                   className="rounded-xl border border-gray-200 p-3 dark:border-gray-700"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-                      <input
-                        type="checkbox"
-                        checked={printer.enabled}
-                        onChange={(event) =>
-                          updatePrinter(printer.id, { enabled: event.target.checked })
-                        }
-                        className="h-4 w-4 rounded border-gray-300"
-                      />
-                      {translate("settingsPrinterEnabled")}
-                    </label>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                      <label className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        <input
+                          type="checkbox"
+                          checked={printer.enabled}
+                          onChange={(event) =>
+                            updatePrinter(printer.id, { enabled: event.target.checked })
+                          }
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        {translate("settingsPrinterEnabled")}
+                      </label>
+                      {draft.silentPrintEnabled && (
+                        <button
+                          type="button"
+                          disabled={printerPingStatus[printer.id]?.testing}
+                          onClick={() => void handlePingPrinter(printer)}
+                          className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs font-medium hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-700"
+                        >
+                          <Activity className="h-3 w-3" />
+                          {printerPingStatus[printer.id]?.testing
+                            ? translate("settingsPrinterPingTesting")
+                            : translate("settingsPrinterPing")}
+                        </button>
+                      )}
+                      {printerPingStatus[printer.id]?.testing ? (
+                        <span className="text-xs text-amber-600 dark:text-amber-400">
+                          {translate("settingsPrinterPingTesting")}
+                        </span>
+                      ) : printerPingStatus[printer.id]?.ok === true ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          {translate("settingsPrinterPingOk")} ({printerPingStatus[printer.id]?.latencyMs}ms)
+                        </span>
+                      ) : printerPingStatus[printer.id]?.ok === false ? (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700 dark:bg-rose-950 dark:text-rose-300"
+                          title={printerPingStatus[printer.id]?.error}
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                          {translate("settingsPrinterPingFail")}: {printerPingStatus[printer.id]?.error}
+                        </span>
+                      ) : null}
+                    </div>
                     <button
                       type="button"
                       onClick={() => removePrinter(printer.id)}

@@ -476,6 +476,9 @@ const en = {
   serverScreenShowChineseForGrill: "Show Chinese for grill / BBQ",
   serverScreenShowChineseForGrillHint:
     "When on, grill dishes and first-order companions (Banchan, Lettuce, …) also show Chinese under the active KDS/Bar language. Grill tables still sort to the top.",
+  serverScreenKitchenChinesePrimary: "Show Chinese as primary name on Kitchen Display (KDS)",
+  serverScreenKitchenChinesePrimaryHint:
+    "When enabled, KDS displays Chinese name large with English small below. When disabled (default), KDS displays English large as usual.",
   pending: "Pending",
   table: "Table",
   tableOccupiedSince: "Seated for",
@@ -2059,6 +2062,9 @@ const cs: Record<TranslationKey, string> = {
   serverScreenShowChineseForGrill: "Zobrazit čínštinu u grilu / BBQ",
   serverScreenShowChineseForGrillHint:
     "Zapnuto: grilovaná jídla a doprovody první objednávky (Banchan, salát, …) ukazují i čínský název. Stoly s grilem zůstávají nahoře v seznamu.",
+  serverScreenKitchenChinesePrimary: "Zobrazit čínštinu jako hlavní název na KDS (Kuchyně)",
+  serverScreenKitchenChinesePrimaryHint:
+    "Při zapnutí KDS zobrazuje čínský název velkým písmem a anglický malým dole. Při vypnutí (výchozí) zobrazuje anglický velkým jako obvykle.",
   pending: "Čeká",
   table: "Stůl",
   tableOccupiedSince: "Obsazeno",

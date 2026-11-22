@@ -359,6 +359,8 @@
   "serverScreenForceChineseItemsSelected": "Đã chọn {count}",
   "serverScreenShowChineseForGrill": "Hiện tiếng Trung cho món nướng / BBQ",
   "serverScreenShowChineseForGrillHint": "Khi bật, món nướng và món kèm đầu lượt (Banchan, xà lách, …) hiện thêm tiếng Trung trên KDS/Bar.",
+  "serverScreenKitchenChinesePrimary": "Hiển thị Tiếng Trung làm tên chính trên màn hình Bếp (KDS)",
+  "serverScreenKitchenChinesePrimaryHint": "Khi bật, màn hình Bếp sẽ hiện tên tiếng Trung to ở trên, tiếng Anh nhỏ ở dưới. Mặc định tắt để hiện tiếng Anh to như cũ.",
   "pending": "Đang chờ",
   "table": "Bàn",
   "tableOccupiedSince": "Đã ngồi được",

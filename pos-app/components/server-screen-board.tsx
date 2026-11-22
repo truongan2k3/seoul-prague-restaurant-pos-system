@@ -554,7 +554,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         const mapped = mapOrderItemRow(row);
         return {
           key: row.id,
-          name: station === "kitchen"
+          name: station === "kitchen" && Boolean(serverScreen.kitchenChinesePrimary)
             ? kitchenOrderItemDisplayNames(mapped, menuItemsRef.current).primaryZh
             : orderItemDisplayName(mapped, menuItemsRef.current, languageRef.current),
           tableLabel: tableLabelByIdRef.current.get(row.table_id) ?? "—",
@@ -926,7 +926,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
         nowMs,
         forceChineseMenuItemIds: serverScreen.forceChineseMenuItemIds,
         showChineseForGrill: serverScreen.showChineseForGrill ?? true,
-        chinesePrimary: station === "kitchen",
+        chinesePrimary: station === "kitchen" && Boolean(serverScreen.kitchenChinesePrimary),
       }),
     [
       items,
@@ -938,6 +938,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       nowMs,
       serverScreen.forceChineseMenuItemIds,
       serverScreen.showChineseForGrill,
+      serverScreen.kitchenChinesePrimary,
       station,
     ],
   );
@@ -1078,7 +1079,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       if (!historyWithinRetention(item.readyAt, nowMs)) continue;
       incoming.push({
         key: item.id,
-        name: station === "kitchen"
+        name: station === "kitchen" && Boolean(serverScreen.kitchenChinesePrimary)
           ? kitchenOrderItemDisplayNames(item, menuItems).primaryZh
           : orderItemDisplayName(item, menuItems, language),
         tableLabel: tableLabelById.get(item.tableId) ?? "—",
@@ -1224,7 +1225,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       let name: string;
       let nameZh: string | null;
 
-      if (station === "kitchen") {
+      if (station === "kitchen" && Boolean(serverScreen.kitchenChinesePrimary)) {
         if (companion) {
           const comp = GRILL_FIRST_ORDER_COMPANIONS.find(entry => entry.id === row.companionId);
           const zh = comp?.names.zh?.trim();

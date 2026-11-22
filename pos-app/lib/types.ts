@@ -53,6 +53,11 @@ export interface ServerScreenConfig {
    * active server-screen language).
    */
   forceChineseMenuItemIds: string[];
+  /**
+   * When true, KDS displays Chinese as primary name and English as secondary.
+   * Default false (English primary as usual).
+   */
+  kitchenChinesePrimary?: boolean;
 }
 export type NavId =
   | "map"

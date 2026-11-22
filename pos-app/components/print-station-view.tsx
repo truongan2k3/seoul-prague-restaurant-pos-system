@@ -401,6 +401,7 @@ export function PrintStationView() {
   useEffect(() => {
     let alive = true;
     const check = async () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       if (!settings.silentPrintEnabled) {
         if (alive) {
           setBridgeOk(null);
@@ -414,10 +415,19 @@ export function PrintStationView() {
       setBridgeDetail(result.message);
     };
     void check();
-    const id = window.setInterval(() => void check(), 15000);
+    const id = window.setInterval(() => void check(), 60000);
+    const onVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") void check();
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
     return () => {
       alive = false;
       window.clearInterval(id);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
     };
   }, [settings.silentPrintEnabled, settings.printBridgeUrl, translate]);
 
@@ -440,6 +450,7 @@ export function PrintStationView() {
   const printers = settings.printers ?? [];
 
   const checkAllPrinters = useCallback(async () => {
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
     if (!settings.silentPrintEnabled || bridgeOk !== true) return;
     for (const printer of (settings.printers ?? []).filter((p) => p.enabled)) {
       void checkSinglePrinter(printer);
@@ -449,8 +460,19 @@ export function PrintStationView() {
   useEffect(() => {
     if (bridgeOk === true) {
       void checkAllPrinters();
-      const id = window.setInterval(() => void checkAllPrinters(), 25000);
-      return () => window.clearInterval(id);
+      const id = window.setInterval(() => void checkAllPrinters(), 90000);
+      const onVisibility = () => {
+        if (typeof document !== "undefined" && document.visibilityState === "visible") void checkAllPrinters();
+      };
+      if (typeof document !== "undefined") {
+        document.addEventListener("visibilitychange", onVisibility);
+      }
+      return () => {
+        window.clearInterval(id);
+        if (typeof document !== "undefined") {
+          document.removeEventListener("visibilitychange", onVisibility);
+        }
+      };
     }
   }, [bridgeOk, checkAllPrinters]);
 

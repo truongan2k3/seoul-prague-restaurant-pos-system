@@ -116,13 +116,18 @@ function GeneralKitchenMessageDialog({ onClose }: { onClose: () => void }) {
 export function GeneralKitchenMessageButton({ compact = false }: { compact?: boolean }) {
   const { translate } = useApp();
   const [open, setOpen] = useState(false);
-  return <>
-    <button type="button" onClick={() => setOpen(true)}
-      title={translate("kitchenMessageGeneral")} aria-label={translate("kitchenMessageGeneral")}
-      className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-2.5 py-2 text-xs font-semibold text-orange-800 transition-colors hover:bg-orange-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-200 dark:hover:bg-orange-900/50 sm:px-3 sm:text-sm">
-      <MessageSquare className="h-4 w-4 shrink-0" aria-hidden />
-      <span className={compact ? "hidden xl:inline" : "hidden sm:inline"}>{translate("kitchenMessageGeneral")}</span>
-    </button>
-    {open && <GeneralKitchenMessageDialog onClose={() => setOpen(false)} />}
-  </>;
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title={translate("kitchenMessageGeneral")}
+        aria-label={translate("kitchenMessageGeneral")}
+        className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl border border-orange-200 bg-orange-50 p-2.5 text-orange-800 transition-colors hover:bg-orange-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-200 dark:hover:bg-orange-900/50"
+      >
+        <MessageSquare className="h-5 w-5 shrink-0" aria-hidden />
+      </button>
+      {open && <GeneralKitchenMessageDialog onClose={() => setOpen(false)} />}
+    </>
+  );
 }

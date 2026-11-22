@@ -55,6 +55,7 @@ export const DEFAULT_SERVER_SCREEN_CONFIG: ServerScreenConfig = {
   showPaymentOverlayOnKds: false,
   showChineseForGrill: true,
   forceChineseMenuItemIds: [],
+  kitchenChinesePrimary: false,
 };
 
 const LANG_SET = new Set<LanguageCode>(["en", "cs", "vi"]);
@@ -144,6 +145,12 @@ export function parseServerScreenConfig(raw: unknown): ServerScreenConfig {
     forceChineseMenuItemIds: parseForceChineseMenuItemIds(
       row.forceChineseMenuItemIds ?? row.force_chinese_menu_item_ids,
     ),
+    kitchenChinesePrimary:
+      typeof row.kitchenChinesePrimary === "boolean"
+        ? row.kitchenChinesePrimary
+        : typeof row.kitchen_chinese_primary === "boolean"
+          ? row.kitchen_chinese_primary
+          : false,
   };
 }
 
@@ -157,6 +164,7 @@ export function serverScreenConfigToDb(config: ServerScreenConfig) {
     showPaymentOverlayOnKds: Boolean(config.showPaymentOverlayOnKds),
     showChineseForGrill: Boolean(config.showChineseForGrill),
     forceChineseMenuItemIds: parseForceChineseMenuItemIds(config.forceChineseMenuItemIds),
+    kitchenChinesePrimary: Boolean(config.kitchenChinesePrimary),
   };
 }
 

@@ -2,6 +2,7 @@
 
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { NotificationBell } from "@/components/notification-bell";
+import { EmbeddedPrintStationButton } from "@/components/embedded-print-station";
 import { useApp } from "@/contexts/app-context";
 import type { TranslationKey } from "@/lib/i18n/translations";
 import type { NavId } from "@/lib/types";
@@ -33,7 +34,8 @@ export function MainHeader({ activeTab }: MainHeaderProps) {
       <h1 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
         {translate(TAB_LABEL_KEYS[activeTab])}
       </h1>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
+        <EmbeddedPrintStationButton />
         <NotificationBell />
         <HeaderClockWithStatus />
       </div>

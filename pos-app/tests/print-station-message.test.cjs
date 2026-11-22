@@ -8,7 +8,10 @@ const mock={...react,jsx:()=>null,jsxs:()=>null,useApp:()=>({translate:k=>k,lang
  loadPendingKitchenPrints:()=>[],subscribeToPosSoftRefresh:()=>()=>{},subscribePosSoftRefresh:()=>()=>{},subscribeToKitchenPrintMessage:()=>()=>{},subscribeToPostgresRowChanges:()=>()=>{},subscribeToMenuChanges:()=>()=>{},
  subscribeToOrderItemInserts:fn=>{insert=fn;return ()=>{};},fetchTableSummaries:async()=>({data:[]}),loadMenuItemsResolved:async()=>({data:[]}),pingPrintBridge:async()=>({ok:true,message:'OK'}),
  mapTableRow:row=>row,mapOrderItemRow:row=>({...row,notesTranslated:row.notes_translated,createdAt:row.created_at}),
- printKitchenMessage:async job=>messages.push(job),printKitchenTicket:async job=>tickets.push(job),broadcastPrintOk:async()=>{},broadcastPrintFailed:async()=>{},};
+ printKitchenMessage:async job=>messages.push(job),printKitchenTicket:async job=>tickets.push(job),broadcastPrintOk:async()=>{},broadcastPrintFailed:async()=>{},
+ registerPrintStationTab:()=>({isLeader:()=>true,heartbeat:()=>true,resign:()=>{}}),
+ claimKitchenPrintItemId:()=>true,claimKitchenPrintMessage:()=>true,filterAndClaimUnprintedOrders:orders=>orders,
+ StationPrintPartialError:class extends Error{constructor(m,orders){super(m);this.unprintedOrders=orders;}},};
 const componentExports={};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/print-station-view.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports:componentExports,require:()=>mock,Date,Map,Set,console,window:{setInterval:()=>1,clearInterval:()=>{},setTimeout:f=>{timers.push(f);return timers.length;},clearTimeout:()=>{}}});
 (async()=>{

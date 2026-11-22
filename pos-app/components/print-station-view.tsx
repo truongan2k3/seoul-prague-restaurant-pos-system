@@ -19,7 +19,13 @@ import {
   type PendingKitchenPrintJob,
 } from "@/lib/pending-kitchen-prints";
 import { pingPrintBridge } from "@/src/lib/print-bridge-client";
-import { printKitchenMessage, printKitchenTicket } from "@/src/lib/printKitchenTicket";
+import { printKitchenMessage, printKitchenTicket, StationPrintPartialError } from "@/src/lib/printKitchenTicket";
+import {
+  claimKitchenPrintItemId,
+  claimKitchenPrintMessage,
+  filterAndClaimUnprintedOrders,
+  registerPrintStationTab,
+} from "@/lib/kitchen-print-dedupe";
 import {
   fetchTableSummaries,
   loadMenuItemsResolved,
@@ -54,6 +60,15 @@ export function PrintStationView() {
   const [pending, setPending] = useState<PendingKitchenPrintJob[]>([]);
   const [printing, setPrinting] = useState(false);
   const [reprintingId, setReprintingId] = useState<string | null>(null);
+  const [isLeader, setIsLeader] = useState(true);
+
+  const tabIdRef = useRef("");
+  if (!tabIdRef.current) {
+    tabIdRef.current =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `tab-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  }
 
   const settingsRef = useRef(settings);
   const tablesRef = useRef(tables);
@@ -65,6 +80,19 @@ export function PrintStationView() {
   settingsRef.current = settings;
   tablesRef.current = tables;
   menuRef.current = menuItems;
+
+  // Single-tab leader election: only one tab per browser connects to printer stream to avoid duplicate tickets
+  useEffect(() => {
+    const tab = registerPrintStationTab(tabIdRef.current);
+    setIsLeader(tab.isLeader());
+    const interval = window.setInterval(() => {
+      setIsLeader(tab.heartbeat());
+    }, 2500);
+    return () => {
+      window.clearInterval(interval);
+      tab.resign();
+    };
+  }, []);
 
   useEffect(() => {
     setPending(loadPendingKitchenPrints());
@@ -141,8 +169,11 @@ export function PrintStationView() {
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : "Print failed";
+          const failedOrders =
+            error instanceof StationPrintPartialError ? error.unprintedOrders : (job.orders ?? []);
           const nextJob: PendingKitchenPrintJob = {
             ...job,
+            orders: failedOrders,
             error: message,
             failedAt: new Date().toISOString(),
           };
@@ -189,16 +220,20 @@ export function PrintStationView() {
 
       enqueuePrint(async () => {
         try {
+          // Deduplicate in batch to guarantee no already-printed items are re-printed
+          const printableOrders = filterAndClaimUnprintedOrders(orders);
+          if (printableOrders.length === 0) return;
+
           await printKitchenTicket({
             tableLabel,
-            orders,
+            orders: printableOrders,
             menuItems: menuRef.current,
             settings: cfg,
           });
           pushLog({
             label: `${translate("table")} ${tableLabel}`,
             ok: true,
-            detail: `${orders.length} ${translate("printStationItems")}`,
+            detail: `${printableOrders.length} ${translate("printStationItems")}`,
           });
           try {
             await broadcastPrintOk({ tableId, tableLabel });
@@ -208,12 +243,14 @@ export function PrintStationView() {
         } catch (error) {
           const message = error instanceof Error ? error.message : "Print failed";
           const pendingId = `ticket-${tableId}-${Date.now()}`;
+          const failedOrders =
+            error instanceof StationPrintPartialError ? error.unprintedOrders : orders;
           await rememberFailedJob({
             id: pendingId,
             kind: "ticket",
             tableId,
             tableLabel,
-            orders,
+            orders: failedOrders,
             error: message,
             failedAt: new Date().toISOString(),
           });
@@ -231,6 +268,14 @@ export function PrintStationView() {
   const queueKitchenMessage = useCallback((payload: KitchenPrintMessagePayload, acknowledge: (error?: string) => void = () => {}) => {
     const cfg = settingsRef.current;
     if (!shouldPrintKitchenOnSend(cfg) || !cfg.kitchenPrintViaStation) return;
+
+    // Deduplicate kitchen messages across tabs and reconnects
+    const msgKey = payload.jobId || `${payload.tableLabel ?? ""}:${payload.message}:${payload.at?.slice(0, 16) ?? ""}`;
+    if (!claimKitchenPrintMessage(msgKey)) {
+      acknowledge(); // Already printed elsewhere, acknowledge so sender does not timeout
+      return;
+    }
+
     enqueuePrint(async () => {
       try {
         await printKitchenMessage({
@@ -290,6 +335,8 @@ export function PrintStationView() {
       if (row.is_cancelled) return;
       if (row.skip_print && !row.modifiers?.kitchenMessage) return;
       if (seenIdsRef.current.has(row.id)) return;
+      // Cross-tab and persistent claim check: if already claimed or printed, skip!
+      if (!claimKitchenPrintItemId(row.id)) return;
 
       seenIdsRef.current.add(row.id);
       if (seenIdsRef.current.size > MAX_SEEN) {
@@ -366,7 +413,8 @@ export function PrintStationView() {
   }, [settings.silentPrintEnabled, settings.printBridgeUrl, translate]);
 
   useEffect(() => {
-    if (!shouldPrintKitchenOnSend(settings) || !settings.kitchenPrintViaStation) {
+    // Only the leader tab connects to Supabase Realtime print streams, avoiding duplicate printing across tabs
+    if (!shouldPrintKitchenOnSend(settings) || !settings.kitchenPrintViaStation || !isLeader) {
       setListening(false);
       return;
     }
@@ -391,6 +439,7 @@ export function PrintStationView() {
     settings.kitchenFulfillmentMode,
     settings.kitchenPrintEnabled,
     settings.kitchenPrintViaStation,
+    isLeader,
     queueInsert,
     queueKitchenMessage,
   ]);
@@ -398,6 +447,7 @@ export function PrintStationView() {
   const statusReady =
     shouldPrintKitchenOnSend(settings) &&
     settings.kitchenPrintViaStation &&
+    isLeader &&
     listening &&
     (!settings.silentPrintEnabled || bridgeOk === true);
 
@@ -405,11 +455,17 @@ export function PrintStationView() {
     ? translate("printStationNeedKitchenPrint")
     : !settings.kitchenPrintViaStation
       ? translate("printStationNeedViaStation")
-      : !listening
-        ? translate("printStationIdle")
-        : settings.silentPrintEnabled && bridgeOk !== true
-          ? translate("printStationNeedBridge")
-          : null;
+      : !isLeader
+        ? (language === "vi"
+            ? "Chế độ chờ: Đang có tab Print Station khác hoạt động trên máy này (tránh in 2 lần)"
+            : language === "cs"
+              ? "Pohotovostní režim: Jiná karta tiskové stanice je aktivní (ochrana proti duplicitnímu tisku)"
+              : "Standby: Another Print Station tab is active (avoiding duplicate prints)")
+        : !listening
+          ? translate("printStationIdle")
+          : settings.silentPrintEnabled && bridgeOk !== true
+            ? translate("printStationNeedBridge")
+            : null;
 
   return (
     <div className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">

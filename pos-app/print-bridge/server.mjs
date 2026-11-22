@@ -80,6 +80,25 @@ function tcpSend(host, port, data) {
   });
 }
 
+const recentPrints = new Map();
+
+function isDuplicatePrint(host, port, byteCount, dataBase64) {
+  const sample = dataBase64.length > 120 ? dataBase64.slice(-120) : dataBase64;
+  const key = `${host}:${port}:${byteCount}:${sample}`;
+  const now = Date.now();
+
+  for (const [k, ts] of recentPrints.entries()) {
+    if (now - ts > 30000) recentPrints.delete(k);
+  }
+
+  if (recentPrints.has(key)) {
+    const elapsed = now - recentPrints.get(key);
+    if (elapsed < 4000) return true;
+  }
+  recentPrints.set(key, now);
+  return false;
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") {
     res.writeHead(204, corsHeaders());
@@ -111,14 +130,27 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const data = Buffer.from(dataBase64, "base64");
+      const printerName = payload.printerName || `${host}:${port}`;
+
+      if (isDuplicatePrint(host, port, data.length, dataBase64)) {
+        console.log(`[print-bridge] duplicate print ignored (${data.length} bytes → ${printerName})`);
+        sendJson(res, 200, {
+          ok: true,
+          bytes: data.length,
+          printer: printerName,
+          duplicate: true,
+        });
+        return;
+      }
+
       await tcpSend(host, port, data);
       console.log(
-        `[print-bridge] sent ${data.length} bytes → ${payload.printerName || host}:${port}`,
+        `[print-bridge] sent ${data.length} bytes → ${printerName}`,
       );
       sendJson(res, 200, {
         ok: true,
         bytes: data.length,
-        printer: payload.printerName || `${host}:${port}`,
+        printer: printerName,
       });
     } catch (error) {
       console.error("[print-bridge] print failed:", error);

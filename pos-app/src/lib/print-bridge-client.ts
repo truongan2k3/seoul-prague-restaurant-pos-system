@@ -194,10 +194,22 @@ export async function silentPrintEscPosPerPrinter(
     return { sent: false, error: "No enabled printers for this role" };
   }
 
+  // Deduplicate printers by host:port endpoint to prevent duplicate printing to the same physical printer
+  const seenEndpoints = new Set<string>();
+  const uniqueTargets: NetworkPrinter[] = [];
+  for (const printer of targets) {
+    const host = (printer.host || "").trim().toLowerCase();
+    const port = Number(printer.port) || 9100;
+    const endpoint = `${host}:${port}`;
+    if (!host || seenEndpoints.has(endpoint)) continue;
+    seenEndpoints.add(endpoint);
+    uniqueTargets.push(printer);
+  }
+
   const errors: string[] = [];
   let sent = false;
 
-  for (const printer of targets) {
+  for (const printer of uniqueTargets) {
     try {
       const payload = await resolvePayload(printer);
       if (!payload || payload.length === 0) {

@@ -1,4 +1,4 @@
-# POS Print Bridge — Windows PowerShell (no Node.js required)
+﻿# POS Print Bridge — Windows PowerShell (no Node.js required)
 # Double-click start-bridge.bat  OR  right-click → Run with PowerShell
 # Listens on 127.0.0.1:39100 for the Print Station tab on this PC.
 
@@ -55,6 +55,28 @@ function Get-LanIps {
   catch {
     return @()
   }
+}
+
+# Cache to prevent duplicate prints within 4 seconds
+$RecentPrints = @{}
+
+function Test-And-Claim-Print([string]$hostName, [int]$port, [int]$byteCount, [string]$dataBase64) {
+  $sample = if ($dataBase64.Length -gt 120) { $dataBase64.Substring($dataBase64.Length - 120) } else { $dataBase64 }
+  $key = "${hostName}:${port}:${byteCount}:${sample}"
+  $now = [DateTime]::UtcNow
+
+  # Clean expired entries (> 30s)
+  $expiredKeys = @($RecentPrints.Keys | Where-Object { ($now - $RecentPrints[$_]).TotalSeconds -gt 30 })
+  foreach ($k in $expiredKeys) { $RecentPrints.Remove($k) }
+
+  if ($RecentPrints.ContainsKey($key)) {
+    $elapsed = ($now - $RecentPrints[$key]).TotalSeconds
+    if ($elapsed -lt 4) {
+      return $false # Duplicate!
+    }
+  }
+  $RecentPrints[$key] = $now
+  return $true
 }
 
 $listener = New-Object System.Net.HttpListener
@@ -140,6 +162,18 @@ try {
         }
         $data = [Convert]::FromBase64String($dataBase64)
         $printerName = if ($payload.printerName) { [string]$payload.printerName } else { "${hostName}:${printerPort}" }
+
+        # Prevent duplicate prints of the exact same data to the same printer within 4 seconds
+        if (-not (Test-And-Claim-Print $hostName $printerPort $data.Length $dataBase64)) {
+          Write-Host ("[print-bridge] duplicate print ignored ({0} bytes → {1})" -f $data.Length, $printerName)
+          Send-Json $res 200 @{
+            ok        = $true
+            bytes     = $data.Length
+            printer   = $printerName
+            duplicate = $true
+          }
+          continue
+        }
         try {
           Send-TcpBytes $hostName $printerPort $data
           Write-Host ("[print-bridge] sent {0} bytes → {1}" -f $data.Length, $printerName)

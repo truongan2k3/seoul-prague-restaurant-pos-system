@@ -614,6 +614,15 @@ async function printStationTicket(input: {
   await dispatchKitchenPrint(input.settings, html, pngs, input.role);
 }
 
+export class StationPrintPartialError extends Error {
+  unprintedOrders: OrderItem[];
+  constructor(message: string, unprintedOrders: OrderItem[]) {
+    super(message);
+    this.name = "StationPrintPartialError";
+    this.unprintedOrders = unprintedOrders;
+  }
+}
+
 export async function printKitchenTicket(input: {
   tableLabel: string;
   orders: OrderItem[];
@@ -654,18 +663,43 @@ export async function printKitchenTicket(input: {
   );
   if (kitchenOrders.length === 0 && barOrders.length === 0) return;
 
-  await printStationTicket({
-    ...input,
-    orders: kitchenOrders,
-    role: "kitchen",
-    stationLabel: input.stationLabel ?? "KITCHEN",
-  });
-  await printStationTicket({
-    ...input,
-    orders: barOrders,
-    role: "bar",
-    stationLabel: "BAR",
-  });
+  let kitchenError: Error | null = null;
+  if (kitchenOrders.length > 0) {
+    try {
+      await printStationTicket({
+        ...input,
+        orders: kitchenOrders,
+        role: "kitchen",
+        stationLabel: input.stationLabel ?? "KITCHEN",
+      });
+    } catch (err) {
+      kitchenError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+
+  let barError: Error | null = null;
+  if (barOrders.length > 0) {
+    try {
+      await printStationTicket({
+        ...input,
+        orders: barOrders,
+        role: "bar",
+        stationLabel: "BAR",
+      });
+    } catch (err) {
+      barError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+
+  // If one station succeeds and the other fails, only unprinted orders should be queued for retry
+  // to avoid printing the already-successful station a second time.
+  if (kitchenError && barError) {
+    throw new StationPrintPartialError(kitchenError.message, [...kitchenOrders, ...barOrders]);
+  } else if (kitchenError) {
+    throw new StationPrintPartialError(kitchenError.message, kitchenOrders);
+  } else if (barError) {
+    throw new StationPrintPartialError(barError.message, barOrders);
+  }
 }
 
 export async function printKitchenMessage(input: {

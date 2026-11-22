@@ -12,6 +12,7 @@ const mock={...react,jsx:()=>null,jsxs:()=>null,useApp:()=>({translate:k=>k,lang
  clearPrintStationAck:()=>{},
  registerPrintStationTab:()=>({isLeader:()=>true,heartbeat:()=>true,resign:()=>{}}),
  claimKitchenPrintItemId:()=>true,claimKitchenPrintMessage:()=>true,filterAndClaimUnprintedOrders:orders=>orders,
+ hasKitchenPrintItemIdBeenClaimed:()=>false,
  StationPrintPartialError:class extends Error{constructor(m,orders){super(m);this.unprintedOrders=orders;}},};
 const componentExports={};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/print-station-view.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports:componentExports,require:()=>mock,Date,Map,Set,console,window:{setInterval:()=>1,clearInterval:()=>{},setTimeout:f=>{timers.push(f);return timers.length;},clearTimeout:()=>{}}});

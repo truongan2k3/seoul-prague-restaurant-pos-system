@@ -25,6 +25,7 @@ import {
   claimKitchenPrintItemId,
   claimKitchenPrintMessage,
   filterAndClaimUnprintedOrders,
+  hasKitchenPrintItemIdBeenClaimed,
   registerPrintStationTab,
 } from "@/lib/kitchen-print-dedupe";
 import {
@@ -227,7 +228,10 @@ export function PrintStationView() {
         try {
           // Deduplicate in batch to guarantee no already-printed items are re-printed
           const printableOrders = filterAndClaimUnprintedOrders(orders);
-          if (printableOrders.length === 0) return;
+          if (printableOrders.length === 0) {
+            clearPrintStationAck(tableId);
+            return;
+          }
 
           await printKitchenTicket({
             tableLabel,
@@ -340,8 +344,8 @@ export function PrintStationView() {
       if (row.is_cancelled) return;
       if (row.skip_print && !row.modifiers?.kitchenMessage) return;
       if (seenIdsRef.current.has(row.id)) return;
-      // Cross-tab and persistent claim check: if already claimed or printed, skip!
-      if (!claimKitchenPrintItemId(row.id)) return;
+      // Cross-tab and persistent claim check: if already printed in a previous batch, skip!
+      if (hasKitchenPrintItemIdBeenClaimed(row.id)) return;
 
       seenIdsRef.current.add(row.id);
       if (seenIdsRef.current.size > MAX_SEEN) {

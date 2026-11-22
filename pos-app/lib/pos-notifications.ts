@@ -85,6 +85,10 @@ export async function broadcastKitchenPrintMessage(input: {
   messageZh: string;
 }) {
   const jobId = crypto.randomUUID();
+  const getChannelsFn = (supabase as unknown as { getChannels?: () => Array<{ topic?: string; subTopic?: string }> }).getChannels;
+  const existingChannels = typeof getChannelsFn === "function" ? getChannelsFn.call(supabase) : [];
+  const hadExistingChannel = existingChannels.some((c) => c.topic === `realtime:${KITCHEN_PRINT_CHANNEL}` || c.subTopic === KITCHEN_PRINT_CHANNEL);
+
   const channel = supabase.channel(KITCHEN_PRINT_CHANNEL, {
     config: { broadcast: { self: true, ack: true } },
   });
@@ -102,19 +106,17 @@ export async function broadcastKitchenPrintMessage(input: {
   try {
     await new Promise<void>((resolve, reject) => {
       let sent = false;
-      timeout = setTimeout(() => reject(new Error("Realtime subscribe timeout")), 4000);
-      channel.on("broadcast", { event: "kitchen_print_message_result" }, ({ payload: result }) => {
-        if (result?.jobId !== jobId) return;
-        if (result.error) reject(new Error(String(result.error)));
-        else resolve();
-      });
-      channel.subscribe((status) => {
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-          reject(new Error(`Realtime ${status}`));
-        }
-        if (status !== "SUBSCRIBED" || sent) return;
+      const channelAny = channel as unknown as {
+        state?: string;
+        channelAdapter?: { isJoined?: () => boolean };
+      };
+      const isAlreadyJoined = channelAny.state === "joined" ||
+        Boolean(channelAny.channelAdapter?.isJoined?.());
+
+      const startSending = () => {
+        if (sent) return;
         sent = true;
-        clearTimeout(timeout);
+        if (timeout) clearTimeout(timeout);
         timeout = setTimeout(() => reject(new Error(
           "Print Station did not confirm printing. Check the station and printer before retrying to avoid duplicate tickets.",
         )), 30000);
@@ -123,11 +125,40 @@ export async function broadcastKitchenPrintMessage(input: {
             if (result !== "ok") reject(new Error(`Kitchen message send failed: ${result}`));
           })
           .catch(reject);
+      };
+
+      channel.on("broadcast", { event: "kitchen_print_message_result" }, ({ payload: result }) => {
+        if (result?.jobId !== jobId) return;
+        if (result.error) reject(new Error(String(result.error)));
+        else resolve();
+      });
+
+      if (isAlreadyJoined) {
+        startSending();
+        return;
+      }
+
+      timeout = setTimeout(() => {
+        if (isAlreadyJoined || channelAny.state === "joined") {
+          startSending();
+        } else {
+          reject(new Error("Realtime subscribe timeout"));
+        }
+      }, 10000);
+
+      channel.subscribe((status) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          reject(new Error(`Realtime ${status}`));
+        }
+        if (status !== "SUBSCRIBED" || sent) return;
+        startSending();
       });
     });
   } finally {
-    clearTimeout(timeout);
-    void supabase.removeChannel(channel);
+    if (timeout) clearTimeout(timeout);
+    if (!hadExistingChannel) {
+      void supabase.removeChannel(channel);
+    }
   }
 }
 
@@ -135,7 +166,9 @@ export function subscribeToKitchenPrintMessage(
   onEvent: (payload: KitchenPrintMessagePayload, acknowledge: (error?: string) => void) => void,
 ): () => void {
   const channel = supabase
-    .channel(KITCHEN_PRINT_CHANNEL)
+    .channel(KITCHEN_PRINT_CHANNEL, {
+      config: { broadcast: { self: true, ack: true } },
+    })
     .on("broadcast", { event: "kitchen_print_message" }, ({ payload }) => {
       onEvent(payload as KitchenPrintMessagePayload, (error) => {
         if (!payload.jobId) return;

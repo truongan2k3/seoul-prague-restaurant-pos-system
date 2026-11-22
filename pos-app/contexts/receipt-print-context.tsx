@@ -243,14 +243,42 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
       const messageZh =
         input.messageZh?.trim() || (await translateNoteToChineseAction(input.message));
       const tableLabel = input.tableLabel?.trim();
+      const isLocalHost = typeof window !== "undefined" && (
+        localStorage.getItem("pos_is_print_bridge_host") === "true" ||
+        !settings.kitchenPrintViaStation
+      );
       try {
-        if (settings.kitchenPrintViaStation) {
-          await broadcastKitchenPrintMessage({
-            tableLabel,
-            message: input.message,
-            messageZh,
-          });
-          return;
+        if (!isLocalHost && settings.kitchenPrintViaStation) {
+          try {
+            await broadcastKitchenPrintMessage({
+              tableLabel,
+              message: input.message,
+              messageZh,
+            });
+            return;
+          } catch (broadcastErr) {
+            if (settings.silentPrintEnabled) {
+              await printKitchenMessage({
+                tableLabel,
+                message: input.message,
+                messageZh,
+                settings,
+              });
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(
+                  new CustomEvent("pos_print_station_log", {
+                    detail: {
+                      label: tableLabel ? `Bàn ${tableLabel}` : "Tin nhắn bếp",
+                      ok: true,
+                      detail: "Đã in tin nhắn bếp",
+                    },
+                  }),
+                );
+              }
+              return;
+            }
+            throw broadcastErr;
+          }
         }
         await printKitchenMessage({
           tableLabel,
@@ -258,6 +286,17 @@ export function ReceiptPrintProvider({ children }: { children: ReactNode }) {
           messageZh,
           settings,
         });
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("pos_print_station_log", {
+              detail: {
+                label: tableLabel ? `Bàn ${tableLabel}` : "Tin nhắn bếp",
+                ok: true,
+                detail: "Đã in tin nhắn bếp",
+              },
+            }),
+          );
+        }
       } catch (error) {
         // Sending a table message can close its order modal before printing.
         // Keep failures visible on the POS even when that modal has unmounted.

@@ -163,6 +163,17 @@ export function PrintStationProvider({ children }: { children: ReactNode }) {
     setLogs((prev) => [row, ...prev].slice(0, MAX_LOG));
   }, []);
 
+  useEffect(() => {
+    const handleLog = (event: Event) => {
+      const customEvent = event as CustomEvent<Omit<JobLog, "id" | "at">>;
+      if (customEvent.detail) {
+        pushLog(customEvent.detail);
+      }
+    };
+    window.addEventListener("pos_print_station_log", handleLog);
+    return () => window.removeEventListener("pos_print_station_log", handleLog);
+  }, [pushLog]);
+
   const enqueuePrint = useCallback((task: () => Promise<void>) => {
     printChainRef.current = printChainRef.current
       .then(async () => {

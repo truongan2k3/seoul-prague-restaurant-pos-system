@@ -12,6 +12,7 @@ import {
 import { clearPrintStationAck } from "@/lib/print-station-ack";
 import {
   POS_NOTIFICATIONS_CHANNEL,
+  getPosNotificationsChannel,
   type PrintFailedPayload,
   type PrintOkPayload,
 } from "@/lib/pos-notifications";
@@ -86,33 +87,52 @@ export function PrintFailedListener() {
     [playAlertSound, pushNotification, showNext, translate],
   );
 
+  const enqueueAlertRef = useRef(enqueueAlert);
+  enqueueAlertRef.current = enqueueAlert;
+
   useEffect(() => {
-    const unsubLocal = subscribeToPrintFailedAlerts(enqueueAlert);
-    // Must use the same channel topic Print Station sends on.
-    const channel = supabase
-      .channel(POS_NOTIFICATIONS_CHANNEL, {
-        config: { broadcast: { self: true } },
-      })
-      .on("broadcast", { event: "print_failed" }, ({ payload }) => {
+    const unsubLocal = subscribeToPrintFailedAlerts((payload) => {
+      enqueueAlertRef.current(payload);
+    });
+
+    const channel = getPosNotificationsChannel();
+    channel
+      .on("broadcast", { event: "print_failed" }, ({ payload }: { payload: unknown }) => {
         const data = payload as PrintFailedPayload;
         clearPrintStationAck(data.tableId, data.tableLabel);
-        enqueueAlert({
+        enqueueAlertRef.current({
           id: data.pendingId,
           tableLabel: data.tableLabel,
           detail: data.detail,
           source: "station",
         });
       })
-      .on("broadcast", { event: "print_ok" }, ({ payload }) => {
+      .on("broadcast", { event: "print_ok" }, ({ payload }: { payload: unknown }) => {
         const data = payload as PrintOkPayload;
         clearPrintStationAck(data.tableId, data.tableLabel);
-      })
-      .subscribe();
+      });
+
+    const isJoined = (channel as unknown as { state?: string }).state === "joined" ||
+      Boolean((channel as unknown as { channelAdapter?: { isJoined?: () => boolean } }).channelAdapter?.isJoined?.());
+    if (!isJoined && (channel as unknown as { state?: string }).state !== "joining") {
+      channel.subscribe();
+    }
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "pos_last_print_ok" && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          clearPrintStationAck(parsed.tableId, parsed.tableLabel);
+        } catch {}
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+
     return () => {
       unsubLocal();
-      void supabase.removeChannel(channel);
+      window.removeEventListener("storage", handleStorage);
     };
-  }, [enqueueAlert]);
+  }, []);
 
   const hint =
     alert?.source === "station-offline"

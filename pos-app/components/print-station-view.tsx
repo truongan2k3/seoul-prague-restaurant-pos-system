@@ -222,16 +222,25 @@ export function PrintStationView() {
         tablesRef.current.find((t) => t.id === tableId)?.label ?? tableId.slice(0, 6);
       const orders = batch.orders;
       const cfg = settingsRef.current;
-      clearPrintStationAck(tableId);
+      clearPrintStationAck(tableId, tableLabel);
 
       enqueuePrint(async () => {
         try {
           // Deduplicate in batch to guarantee no already-printed items are re-printed
           const printableOrders = filterAndClaimUnprintedOrders(orders);
           if (printableOrders.length === 0) {
-            clearPrintStationAck(tableId);
+            clearPrintStationAck(tableId, tableLabel);
             try {
+              if (typeof window !== "undefined") {
+                localStorage.setItem(
+                  "pos_last_print_ok",
+                  JSON.stringify({ tableId, tableLabel, at: Date.now() }),
+                );
+              }
               await broadcastPrintOk({ tableId, tableLabel });
+              setTimeout(() => {
+                void broadcastPrintOk({ tableId, tableLabel }).catch(() => {});
+              }, 500);
             } catch {}
             return;
           }
@@ -248,7 +257,16 @@ export function PrintStationView() {
             detail: `${printableOrders.length} ${translate("printStationItems")}`,
           });
           try {
+            if (typeof window !== "undefined") {
+              localStorage.setItem(
+                "pos_last_print_ok",
+                JSON.stringify({ tableId, tableLabel, at: Date.now() }),
+              );
+            }
             await broadcastPrintOk({ tableId, tableLabel });
+            setTimeout(() => {
+              void broadcastPrintOk({ tableId, tableLabel }).catch(() => {});
+            }, 500);
           } catch {
             /* ack is best-effort — main POS may still timeout */
           }

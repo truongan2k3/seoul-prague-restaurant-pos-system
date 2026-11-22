@@ -11,60 +11,60 @@ export type CallWaiterPayload = {
   at: string;
 };
 
-async function sendPosNotificationBroadcast(event: string, payload: unknown): Promise<string> {
-  const getChannelsFn = (supabase as unknown as { getChannels?: () => Array<{ topic?: string; subTopic?: string }> }).getChannels;
-  const existingChannels = typeof getChannelsFn === "function" ? getChannelsFn.call(supabase) : [];
-  const hadExistingChannel = existingChannels.some((c) => c.topic === `realtime:${POS_NOTIFICATIONS_CHANNEL}` || c.subTopic === POS_NOTIFICATIONS_CHANNEL);
+let sharedPosNotificationChannel: ReturnType<typeof supabase.channel> | null = null;
 
-  const channel = supabase.channel(POS_NOTIFICATIONS_CHANNEL, {
+export function getPosNotificationsChannel(): ReturnType<typeof supabase.channel> {
+  if (sharedPosNotificationChannel) {
+    return sharedPosNotificationChannel;
+  }
+  const getChannelsFn = (supabase as unknown as { getChannels?: () => Array<ReturnType<typeof supabase.channel>> }).getChannels;
+  const existingChannels = typeof getChannelsFn === "function" ? getChannelsFn.call(supabase) : [];
+  const existing = existingChannels.find(
+    (c) => c.topic === `realtime:${POS_NOTIFICATIONS_CHANNEL}` || c.subTopic === POS_NOTIFICATIONS_CHANNEL,
+  );
+  if (existing) {
+    sharedPosNotificationChannel = existing;
+    return existing;
+  }
+  sharedPosNotificationChannel = supabase.channel(POS_NOTIFICATIONS_CHANNEL, {
     config: { broadcast: { self: true } },
   });
+  return sharedPosNotificationChannel;
+}
+
+async function sendPosNotificationBroadcast(event: string, payload: unknown): Promise<string> {
+  const channel = getPosNotificationsChannel();
 
   const channelAny = channel as unknown as {
     state?: string;
-    channelAdapter?: { isJoined?: () => boolean };
+    channelAdapter?: { canPush?: () => boolean; isJoined?: () => boolean };
+    httpSend?: (event: string, payload: unknown) => Promise<unknown>;
   };
-  const isAlreadyJoined = channelAny.state === "joined" ||
-    Boolean(channelAny.channelAdapter?.isJoined?.());
 
-  if (!isAlreadyJoined) {
-    await new Promise<void>((resolve, reject) => {
-      let resolved = false;
-      const timeout = window.setTimeout(() => {
-        if (resolved) return;
-        if (channelAny.state === "joined") {
-          resolved = true;
-          resolve();
-        } else {
-          reject(new Error("Realtime subscribe timeout"));
-        }
-      }, 10000);
-
-      channel.subscribe((status) => {
-        if (resolved) return;
-        if (status === "SUBSCRIBED" || channelAny.state === "joined") {
-          resolved = true;
-          window.clearTimeout(timeout);
-          resolve();
-        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-          resolved = true;
-          window.clearTimeout(timeout);
-          reject(new Error(`Realtime ${status}`));
-        }
-      });
+  // If websocket is already joined and ready, push immediately
+  if (channelAny.channelAdapter?.canPush?.()) {
+    return channel.send({
+      type: "broadcast",
+      event,
+      payload,
     });
   }
 
-  const result = await channel.send({
+  // If httpSend (Supabase Realtime REST broadcast) is available, deliver via HTTP immediately
+  if (typeof channelAny.httpSend === "function") {
+    try {
+      await channelAny.httpSend(event, payload);
+      return "ok";
+    } catch {
+      // Fallback
+    }
+  }
+
+  return channel.send({
     type: "broadcast",
     event,
     payload,
   });
-
-  if (!hadExistingChannel) {
-    void supabase.removeChannel(channel);
-  }
-  return result;
 }
 
 export async function broadcastCallWaiter(input: {

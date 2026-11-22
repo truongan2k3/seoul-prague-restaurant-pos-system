@@ -277,15 +277,24 @@ export function PrintStationProvider({ children }: { children: ReactNode }) {
         tablesRef.current.find((t) => t.id === tableId)?.label ?? tableId.slice(0, 6);
       const orders = batch.orders;
       const cfg = settingsRef.current;
-      clearPrintStationAck(tableId);
+      clearPrintStationAck(tableId, tableLabel);
 
       enqueuePrint(async () => {
         try {
           const printableOrders = filterAndClaimUnprintedOrders(orders);
           if (printableOrders.length === 0) {
-            clearPrintStationAck(tableId);
+            clearPrintStationAck(tableId, tableLabel);
             try {
+              if (typeof window !== "undefined") {
+                localStorage.setItem(
+                  "pos_last_print_ok",
+                  JSON.stringify({ tableId, tableLabel, at: Date.now() }),
+                );
+              }
               await broadcastPrintOk({ tableId, tableLabel });
+              setTimeout(() => {
+                void broadcastPrintOk({ tableId, tableLabel }).catch(() => {});
+              }, 500);
             } catch {}
             return;
           }
@@ -302,7 +311,16 @@ export function PrintStationProvider({ children }: { children: ReactNode }) {
             detail: `${printableOrders.length} món`,
           });
           try {
+            if (typeof window !== "undefined") {
+              localStorage.setItem(
+                "pos_last_print_ok",
+                JSON.stringify({ tableId, tableLabel, at: Date.now() }),
+              );
+            }
             await broadcastPrintOk({ tableId, tableLabel });
+            setTimeout(() => {
+              void broadcastPrintOk({ tableId, tableLabel }).catch(() => {});
+            }, 500);
           } catch {}
         } catch (error) {
           const message = error instanceof Error ? error.message : "Print failed";

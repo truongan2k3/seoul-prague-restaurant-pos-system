@@ -871,9 +871,9 @@ const en = {
   printFailedToast: "Kitchen print failed",
   printFailedToastHint: "Open Print Station to reprint",
   printFailedDirectHint: "Check the print bridge and kitchen printer on this PC.",
-  printStationOfflineHint: "Open /print-station in the browser on the print PC",
+  printStationOfflineHint: "Check the main POS machine (Print Station)",
   printStationOfflineDetail:
-    "Print Station did not confirm — the /print-station browser tab is probably closed. Bridge alone is not enough.",
+    "Print Station did not confirm — please ensure the main POS tab is open and the kitchen printer is operational.",
   printFailedAlertTitle: "Kitchen print failed",
   printFailedAlertDetail: "Error",
   printFailedAlertOk: "OK",
@@ -2457,9 +2457,9 @@ const cs: Record<TranslationKey, string> = {
   printFailedToast: "Tisk do kuchyně selhal",
   printFailedToastHint: "Otevřete Print Station a vytiskněte znovu",
   printFailedDirectHint: "Zkontrolujte print bridge a kuchyňskou tiskárnu na tomto PC.",
-  printStationOfflineHint: "Otevřete /print-station v prohlížeči na tiskovém PC",
+  printStationOfflineHint: "Zkontrolujte hlavní POS (Tiskovou stanici)",
   printStationOfflineDetail:
-    "Print Station nepotvrdil tisk — karta /print-station v prohlížeči je pravděpodobně zavřená. Samotný bridge nestačí.",
+    "Tisková stanice nepotvrdila tisk — zkontrolujte, zda je hlavní POS otevřen a tiskárna v kuchyni funguje.",
   printFailedAlertTitle: "Tisk do kuchyně selhal",
   printFailedAlertDetail: "Chyba",
   printFailedAlertOk: "OK",

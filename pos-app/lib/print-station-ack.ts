@@ -8,7 +8,7 @@ import { reportPrintFailed } from "@/lib/print-failed-alert";
  * Timeout covers insert batch (~1.2s) + print/bridge (~8s) + slack.
  * Call clearPrintStationAck from PrintFailedListener when ok/failed arrives.
  */
-export const PRINT_STATION_ACK_TIMEOUT_MS = 25_000;
+export const PRINT_STATION_ACK_TIMEOUT_MS = 40_000;
 
 type PendingAck = {
   id: string;
@@ -45,9 +45,26 @@ export function expectPrintStationAck(input: {
   const tableId = input.tableId.trim();
   if (!tableId) return;
 
+  // Clear any previous ack for this table before starting a new one
+  clearPrintStationAck(tableId, input.tableLabel);
+
   const id = `station-ack-${tableId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const timer = setTimeout(() => {
     pending.delete(id);
+    if (typeof window !== "undefined") {
+      try {
+        const last = localStorage.getItem("pos_last_print_ok");
+        if (last) {
+          const parsed = JSON.parse(last);
+          const isMatch =
+            Boolean(parsed.tableId && (parsed.tableId === tableId || parsed.tableId === input.tableLabel)) ||
+            Boolean(parsed.tableLabel && (parsed.tableLabel === input.tableLabel || parsed.tableLabel === tableId));
+          if (isMatch && Date.now() - Number(parsed.at || 0) < 60_000) {
+            return;
+          }
+        }
+      } catch {}
+    }
     reportPrintFailed({
       id: `station-offline-${id}`,
       tableLabel: input.tableLabel,

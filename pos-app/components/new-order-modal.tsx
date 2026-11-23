@@ -37,6 +37,10 @@ import {
   mergeStaffItemClickCounts,
   seedStaffItemClickCounts,
   sortTopMenuItems,
+  aggregateItemSentCounts,
+  mergeSentCounts,
+  fetchRecentSentItemCounts,
+  getCombinedItemSentCounts,
   isRestrictedLunchCategory,
   isLunchRestrictionActive,
 } from "@/lib/staff-item-popularity";
@@ -417,23 +421,24 @@ export function NewOrderModal({
 
   const handleSelectCategory = (categoryId: string) => {
     setActiveCategory(categoryId);
-    setPopularityMap(getStaffItemClickCounts());
   };
 
   useEffect(() => {
-    if (open) {
-      if (activeOrderItems && activeOrderItems.length > 0) {
-        seedStaffItemClickCounts(activeOrderItems);
-      }
-      setPopularityMap(getStaffItemClickCounts());
-    }
-  }, [open, activeOrderItems]);
+    if (!open) return;
+    // 1. Immediately calculate sent quantities from active tables in restaurant + session sends
+    const initial = getCombinedItemSentCounts(activeOrderItems, menuItems);
+    setPopularityMap(initial);
+
+    // 2. Load recent completed sales in the background (cached 10m) to include checked out orders
+    void fetchRecentSentItemCounts(menuItems).then((salesCounts) => {
+      setPopularityMap(getCombinedItemSentCounts(activeOrderItems, menuItems, salesCounts));
+    });
+  }, [open, activeOrderItems, menuItems]);
 
   useEffect(() => {
     return subscribeToStaffItemPopularity((payload) => {
       if (payload?.counts) {
-        const merged = mergeStaffItemClickCounts(payload.counts);
-        setPopularityMap(merged);
+        setPopularityMap((prev) => mergeSentCounts(prev, payload.counts));
       }
     });
   }, []);
@@ -1552,9 +1557,9 @@ export function NewOrderModal({
         await onSendToKitchen(orders);
         committed = true;
         recordStaffOrderItems(orders);
-        const updatedPopularity = getStaffItemClickCounts();
-        setPopularityMap(updatedPopularity);
-        void broadcastStaffItemPopularity(updatedPopularity);
+        const newlySent = aggregateItemSentCounts(orders, menuItems);
+        setPopularityMap((prev) => mergeSentCounts(prev, newlySent));
+        void broadcastStaffItemPopularity(newlySent);
         if (sameContext()) {
           setCart([]);
           setCartOpen(false);
@@ -1606,9 +1611,9 @@ export function NewOrderModal({
         const orders = await buildCartOrdersFromLines();
         await onAppendCartNoPrint(orders);
         recordStaffOrderItems(orders);
-        const updatedPopularity = getStaffItemClickCounts();
-        setPopularityMap(updatedPopularity);
-        void broadcastStaffItemPopularity(updatedPopularity);
+        const newlySent = aggregateItemSentCounts(orders, menuItems);
+        setPopularityMap((prev) => mergeSentCounts(prev, newlySent));
+        void broadcastStaffItemPopularity(newlySent);
         setCart([]);
         setGrillGuestCount(null);
         onRefreshExistingOrders?.();

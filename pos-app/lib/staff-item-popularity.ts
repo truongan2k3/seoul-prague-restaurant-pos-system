@@ -1,5 +1,6 @@
 import { venueParts } from "@/lib/venue-timezone";
 import type { MenuItem, MenuSortMode } from "@/lib/types";
+import { supabase } from "@/src/lib/supabase";
 
 export const POS_STAFF_ITEM_CLICKS_KEY = "pos_staff_item_clicks";
 
@@ -133,6 +134,112 @@ export function mergeStaffItemClickCounts(
 }
 
 /**
+ * Sums counts from incoming into target without mutating target.
+ */
+export function mergeSentCounts(
+  target: Record<string, number>,
+  incoming: Record<string, number>,
+): Record<string, number> {
+  const result = { ...target };
+  for (const [id, count] of Object.entries(incoming)) {
+    result[id] = (result[id] ?? 0) + (Number(count) || 0);
+  }
+  return result;
+}
+
+/**
+ * Sums up the exact sent quantities for each menu item from an array of order lines.
+ * Ignores cancelled orders and matches by menuItemId or item name.
+ */
+export function aggregateItemSentCounts(
+  orders: Array<{ menuItemId?: string; name?: string; quantity?: number; isCancelled?: boolean }>,
+  menuItems?: MenuItem[],
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  if (!orders || orders.length === 0) return counts;
+
+  const nameToId = new Map<string, string>();
+  if (menuItems) {
+    for (const m of menuItems) {
+      if (m.nameEn) nameToId.set(m.nameEn.toLowerCase().trim(), m.id);
+      if (m.nameCz) nameToId.set(m.nameCz.toLowerCase().trim(), m.id);
+      if (m.nameZh) nameToId.set(m.nameZh.toLowerCase().trim(), m.id);
+    }
+  }
+
+  for (const order of orders) {
+    if (order.isCancelled) continue;
+    let itemId = order.menuItemId;
+    if (!itemId && order.name) {
+      itemId = nameToId.get(order.name.toLowerCase().trim());
+    }
+    if (!itemId) continue;
+    const qty = Math.max(1, order.quantity ?? 1);
+    counts[itemId] = (counts[itemId] ?? 0) + qty;
+  }
+  return counts;
+}
+
+let cachedSalesCounts: Record<string, number> | null = null;
+let lastSalesFetchAt = 0;
+const SALES_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes cache
+
+/**
+ * Fetches recent completed sales from Supabase to get real historical item sent quantities.
+ * Cached for 10 minutes to minimize database egress.
+ */
+export async function fetchRecentSentItemCounts(
+  menuItems?: MenuItem[],
+): Promise<Record<string, number>> {
+  if (typeof window === "undefined") return {};
+  if (cachedSalesCounts && Date.now() - lastSalesFetchAt < SALES_CACHE_TTL_MS) {
+    return cachedSalesCounts;
+  }
+  try {
+    const { data, error } = await supabase
+      .from("sales")
+      .select("items")
+      .order("closed_at", { ascending: false })
+      .limit(150);
+
+    if (error || !data) {
+      return cachedSalesCounts ?? {};
+    }
+
+    const allSaleOrders: Array<{ menuItemId?: string; name?: string; quantity?: number; isCancelled?: boolean }> = [];
+    for (const row of data) {
+      const items = (row.items as Array<{ menuItemId?: string; name?: string; quantity?: number; isCancelled?: boolean }>) ?? [];
+      allSaleOrders.push(...items);
+    }
+
+    const counts = aggregateItemSentCounts(allSaleOrders, menuItems);
+    cachedSalesCounts = counts;
+    lastSalesFetchAt = Date.now();
+    return counts;
+  } catch {
+    return cachedSalesCounts ?? {};
+  }
+}
+
+/**
+ * Combines sent quantities from:
+ * 1. Completed sales bills (historical bestsellers)
+ * 2. Active tables in the restaurant (current shift orders)
+ * 3. Local staff session sends
+ */
+export function getCombinedItemSentCounts(
+  activeOrderItems?: Array<{ menuItemId?: string; name?: string; quantity?: number; isCancelled?: boolean }>,
+  menuItems?: MenuItem[],
+  salesCounts?: Record<string, number>,
+): Record<string, number> {
+  const localSessionCounts = getStaffItemClickCounts();
+  const activeCounts = aggregateItemSentCounts(activeOrderItems ?? [], menuItems);
+  let total = mergeSentCounts(salesCounts ?? cachedSalesCounts ?? {}, localSessionCounts);
+  total = mergeSentCounts(total, activeCounts);
+  return total;
+}
+
+/**
  * Seed counts from active restaurant orders if local storage is low or empty.
  */
 export function seedStaffItemClickCounts(
@@ -144,10 +251,8 @@ export function seedStaffItemClickCounts(
   for (const order of orders) {
     if (!order.menuItemId) continue;
     const qty = Math.max(1, order.quantity ?? 1);
-    if (!current[order.menuItemId]) {
-      current[order.menuItemId] = qty;
-      changed = true;
-    }
+    current[order.menuItemId] = (current[order.menuItemId] ?? 0) + qty;
+    changed = true;
   }
   if (changed && typeof window !== "undefined" && window.localStorage) {
     try {

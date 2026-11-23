@@ -9,6 +9,9 @@ import {
   mergeStaffItemClickCounts,
   seedStaffItemClickCounts,
   sortTopMenuItems,
+  aggregateItemSentCounts,
+  mergeSentCounts,
+  getCombinedItemSentCounts,
 } from "../lib/staff-item-popularity";
 import type { MenuItem } from "../lib/types";
 
@@ -173,4 +176,53 @@ test("sortTopMenuItems prioritizes popularity then category then sortOrder", () 
   assert.equal(sorted[2].id, "item-app-kimchi");
   // 4th: Beer (0 clicks, cat-drinks is 3rd category)
   assert.equal(sorted[3].id, "item-drink-1");
+});
+
+test("aggregateItemSentCounts sums quantities across tables and matches names", () => {
+  const menuItems: MenuItem[] = [
+    { id: "item-wagyu", nameEn: "Wagyu Beef", nameCz: "Wagyu", nameZh: "和牛", category: "bbq", price: 600, isAvailable: true, station: "kitchen", itemType: "food", sortOrder: 0 },
+    { id: "item-beer", nameEn: "Pilsner Beer", nameCz: "Pivo", nameZh: "啤酒", category: "drinks", price: 70, isAvailable: true, station: "bar", itemType: "drink", sortOrder: 0 },
+  ];
+
+  const orders = [
+    { menuItemId: "item-wagyu", quantity: 2 },
+    { menuItemId: "item-beer", quantity: 3 },
+    { menuItemId: "item-wagyu", quantity: 4 }, // second table ordered wagyu
+    { name: "Pilsner Beer", quantity: 2 }, // matched by name
+    { menuItemId: "item-wagyu", quantity: 5, isCancelled: true }, // cancelled -> ignored
+  ];
+
+  const counts = aggregateItemSentCounts(orders, menuItems);
+  assert.equal(counts["item-wagyu"], 6); // 2 + 4 = 6
+  assert.equal(counts["item-beer"], 5); // 3 + 2 = 5
+});
+
+test("getCombinedItemSentCounts aggregates sales, active orders, and session sends", () => {
+  const store = new Map<string, string>();
+  const mockStorage = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, val: string) => store.set(key, val),
+  };
+  (globalThis as any).window = { localStorage: mockStorage };
+
+  // 1. Completed sales bills
+  const salesCounts = {
+    "item-wagyu": 20,
+    "item-beer": 15,
+  };
+
+  // 2. Active tables right now
+  const activeOrders = [
+    { menuItemId: "item-beer", quantity: 10 },
+    { menuItemId: "item-kimchi", quantity: 5 },
+  ];
+
+  const combined = getCombinedItemSentCounts(activeOrders, undefined, salesCounts);
+
+  // Wagyu: 20 (sales) + 0 (active) = 20
+  assert.equal(combined["item-wagyu"], 20);
+  // Beer: 15 (sales) + 10 (active) = 25 -> Beer becomes #1!
+  assert.equal(combined["item-beer"], 25);
+  // Kimchi: 0 (sales) + 5 (active) = 5
+  assert.equal(combined["item-kimchi"], 5);
 });

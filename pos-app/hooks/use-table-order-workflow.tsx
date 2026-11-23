@@ -260,12 +260,15 @@ export function useTableOrderWorkflow({
       if (shouldPrintKitchenOnSend(settings) && selectedTable) {
         const printable = preparedOrders.filter((o) => (!isBillOnlyOrderLine(o) && !o.skipPrint) || (settings.kitchenPrintViaStation && isKitchenMessageOrder(o)));
         if (printable.length > 0) {
+          const isBridgeHost = typeof window !== "undefined" && window.localStorage?.getItem("pos_is_print_bridge_host") === "true";
           if (settings.kitchenPrintViaStation) {
-            expectPrintStationAck({
-              tableId: modal.tableId,
-              tableLabel: selectedTable.label,
-              offlineDetail: translate("printStationOfflineDetail"),
-            });
+            if (isBridgeHost) {
+              expectPrintStationAck({
+                tableId: modal.tableId,
+                tableLabel: selectedTable.label,
+                offlineDetail: translate("printStationOfflineDetail"),
+              });
+            }
           } else {
             void printKitchenOrder({
               tableLabel: selectedTable.label,
@@ -391,12 +394,15 @@ export function useTableOrderWorkflow({
     ) {
       const printable = options.printOrders.filter((o) => !isBillOnlyOrderLine(o) && !o.skipPrint);
       if (printable.length > 0) {
+        const isBridgeHost = typeof window !== "undefined" && window.localStorage?.getItem("pos_is_print_bridge_host") === "true";
         if (settings.kitchenPrintViaStation) {
-          expectPrintStationAck({
-            tableId: targetTableId,
-            tableLabel: selectedTable.label,
-            offlineDetail: translate("printStationOfflineDetail"),
-          });
+          if (isBridgeHost) {
+            expectPrintStationAck({
+              tableId: targetTableId,
+              tableLabel: selectedTable.label,
+              offlineDetail: translate("printStationOfflineDetail"),
+            });
+          }
         } else {
           void printKitchenOrder({
             tableLabel: selectedTable.label,
@@ -729,6 +735,7 @@ export function useTableOrderWorkflow({
           categories={categories}
           mode={modal.mode}
           existingOrders={floorItemsForTable(selectedTable.id)}
+          activeOrderItems={orderItems}
           onClose={() => setModal(null)}
           onSendToKitchen={handleSendToKitchen}
           onAppendCartNoPrint={handleAppendCartNoPrint}

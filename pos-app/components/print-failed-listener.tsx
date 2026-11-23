@@ -49,6 +49,13 @@ export function PrintFailedListener() {
 
   const enqueueAlert = useCallback(
     (payload: PrintFailedAlertPayload) => {
+      const isHost = typeof window !== "undefined" && window.localStorage?.getItem("pos_is_print_bridge_host") === "true";
+      // Secondary devices (máy phụ, waiter phone/tablet, /server) do not host the print station/bridge
+      // and should NEVER show the "Mở /print-station" blocking modal or station-offline alarm.
+      if (payload.source === "station-offline" && !isHost) {
+        return;
+      }
+
       const lastAt = recentAtRef.current.get(payload.id);
       if (lastAt != null && Date.now() - lastAt < DEDUPE_MS) return;
       recentAtRef.current.set(payload.id, Date.now());

@@ -42,6 +42,12 @@ export function expectPrintStationAck(input: {
   offlineDetail: string;
 }) {
   if (typeof window === "undefined") return;
+  // Only the designated print bridge host needs to track print station watchdog.
+  // Secondary devices (waiters on phones, /server, remote tablets) do not host the printer
+  // and must not trigger false "station-offline" alarms when mobile networks drop packets.
+  const isHost = window.localStorage?.getItem("pos_is_print_bridge_host") === "true";
+  if (!isHost) return;
+
   const tableId = input.tableId.trim();
   if (!tableId) return;
 

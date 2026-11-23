@@ -31,7 +31,6 @@ import {
 } from "@/src/lib/supabase-data";
 import { shouldPrintKitchenOnSend, applyFulfillmentModeToNewOrders } from "@/lib/kitchen-fulfillment-mode";
 import { reportPrintFailed } from "@/lib/print-failed-alert";
-import { expectPrintStationAck } from "@/lib/print-station-ack";
 import { isKitchenMessageOrder } from "@/lib/kitchen-message-order";
 import { isBillOnlyOrderLine } from "@/lib/menu-item-dispatch";
 import { appendOrdersToTable, occupyTable } from "@/src/lib/table-actions";
@@ -159,13 +158,7 @@ function ServerApp() {
       if (shouldPrintKitchenOnSend(settings)) {
         const printable = prepared.filter((o) => (!isBillOnlyOrderLine(o) && !o.skipPrint) || (settings.kitchenPrintViaStation && isKitchenMessageOrder(o)));
         if (printable.length > 0) {
-          if (settings.kitchenPrintViaStation) {
-            expectPrintStationAck({
-              tableId: orderModal.table.id,
-              tableLabel: orderModal.table.label,
-              offlineDetail: translate("printStationOfflineDetail"),
-            });
-          } else {
+          if (!settings.kitchenPrintViaStation) {
             void printKitchenOrder({
               tableLabel: orderModal.table.label,
               orders: prepared,
@@ -249,6 +242,7 @@ function ServerApp() {
           categories={categories}
           mode={orderModal.mode}
           existingOrders={floorItemsForTable(orderModal.table.id)}
+          activeOrderItems={orderItems}
           onClose={() => setOrderModal(null)}
           onSendToKitchen={handleSend}
           isSaving={isSaving}

@@ -6,7 +6,11 @@ import {
   isLunchRestrictionActive,
   recordStaffOrderItems,
   getStaffItemClickCounts,
+  mergeStaffItemClickCounts,
+  seedStaffItemClickCounts,
+  sortTopMenuItems,
 } from "../lib/staff-item-popularity";
+import type { MenuItem } from "../lib/types";
 
 test("normalizeCategoryKey handles diacritics and formatting", () => {
   assert.equal(normalizeCategoryKey("Polévka"), "polevka");
@@ -99,4 +103,74 @@ test("recordStaffOrderItems increments item counts by order quantity", () => {
   const updated = getStaffItemClickCounts();
   assert.equal(updated["item-banchan"], 3);
   assert.equal(updated["item-birell"], 1);
+});
+
+test("mergeStaffItemClickCounts merges remote counts keeping highest values", () => {
+  const store = new Map<string, string>();
+  const mockStorage = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, val: string) => store.set(key, val),
+  };
+  (globalThis as any).window = { localStorage: mockStorage };
+
+  recordStaffOrderItems([{ menuItemId: "item-a", quantity: 2 }]);
+  mergeStaffItemClickCounts({ "item-a": 5, "item-b": 3 });
+
+  const counts = getStaffItemClickCounts();
+  assert.equal(counts["item-a"], 5);
+  assert.equal(counts["item-b"], 3);
+
+  // Lower count shouldn't decrease
+  mergeStaffItemClickCounts({ "item-a": 1 });
+  assert.equal(getStaffItemClickCounts()["item-a"], 5);
+});
+
+test("seedStaffItemClickCounts populates counts from active orders", () => {
+  const store = new Map<string, string>();
+  const mockStorage = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, val: string) => store.set(key, val),
+  };
+  (globalThis as any).window = { localStorage: mockStorage };
+
+  seedStaffItemClickCounts([
+    { menuItemId: "item-pork", quantity: 3 },
+    { menuItemId: "item-kimchi", quantity: 1 },
+  ]);
+
+  const counts = getStaffItemClickCounts();
+  assert.equal(counts["item-pork"], 3);
+  assert.equal(counts["item-kimchi"], 1);
+});
+
+test("sortTopMenuItems prioritizes popularity then category then sortOrder", () => {
+  const categories = [
+    { id: "cat-appetizers", name: "Khai vị" },
+    { id: "cat-bbq", name: "Món nướng BBQ" },
+    { id: "cat-drinks", name: "Đồ uống" },
+  ];
+
+  const items: MenuItem[] = [
+    { id: "item-drink-2", nameEn: "Soju", nameCz: "Soju", nameZh: "烧酒", categoryId: "cat-drinks", category: "cat-drinks", price: 200, isAvailable: true, station: "bar", itemType: "drink", sortOrder: 1 },
+    { id: "item-bbq-wagyu", nameEn: "Wagyu", nameCz: "Wagyu", nameZh: "和牛", categoryId: "cat-bbq", category: "cat-bbq", price: 600, isAvailable: true, station: "kitchen", itemType: "food", sortOrder: 0 },
+    { id: "item-app-kimchi", nameEn: "Kimchi", nameCz: "Kimchi", nameZh: "泡菜", categoryId: "cat-appetizers", category: "cat-appetizers", price: 80, isAvailable: true, station: "kitchen", itemType: "food", sortOrder: 0 },
+    { id: "item-drink-1", nameEn: "Beer", nameCz: "Pivo", nameZh: "啤酒", categoryId: "cat-drinks", category: "cat-drinks", price: 70, isAvailable: true, station: "bar", itemType: "drink", sortOrder: 0 },
+  ];
+
+  // Case 1: item-drink-2 has highest popularity (10), item-bbq-wagyu has 5, others have 0
+  const popularity = {
+    "item-drink-2": 10,
+    "item-bbq-wagyu": 5,
+  };
+
+  const sorted = sortTopMenuItems(items, popularity, categories);
+
+  // 1st: Soju (10 clicks)
+  assert.equal(sorted[0].id, "item-drink-2");
+  // 2nd: Wagyu (5 clicks)
+  assert.equal(sorted[1].id, "item-bbq-wagyu");
+  // 3rd: Kimchi (0 clicks, but cat-appetizers is 1st category)
+  assert.equal(sorted[2].id, "item-app-kimchi");
+  // 4th: Beer (0 clicks, cat-drinks is 3rd category)
+  assert.equal(sorted[3].id, "item-drink-1");
 });

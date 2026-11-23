@@ -1,4 +1,5 @@
 import { venueParts } from "@/lib/venue-timezone";
+import type { MenuItem, MenuSortMode } from "@/lib/types";
 
 export const POS_STAFF_ITEM_CLICKS_KEY = "pos_staff_item_clicks";
 
@@ -105,4 +106,105 @@ export function recordStaffOrderItems(
 export function recordStaffItemClick(itemId: string, qty = 1): void {
   if (!itemId) return;
   recordStaffOrderItems([{ menuItemId: itemId, quantity: qty }]);
+}
+
+/**
+ * Merges incoming click counts into localStorage and returns the updated map.
+ */
+export function mergeStaffItemClickCounts(
+  incoming: Record<string, number>,
+): Record<string, number> {
+  if (!incoming || typeof incoming !== "object") return getStaffItemClickCounts();
+  const current = getStaffItemClickCounts();
+  let changed = false;
+  for (const [id, count] of Object.entries(incoming)) {
+    const val = Number(count) || 0;
+    if (val > (current[id] ?? 0)) {
+      current[id] = val;
+      changed = true;
+    }
+  }
+  if (changed && typeof window !== "undefined" && window.localStorage) {
+    try {
+      window.localStorage.setItem(POS_STAFF_ITEM_CLICKS_KEY, JSON.stringify(current));
+    } catch {}
+  }
+  return current;
+}
+
+/**
+ * Seed counts from active restaurant orders if local storage is low or empty.
+ */
+export function seedStaffItemClickCounts(
+  orders: Array<{ menuItemId?: string; quantity?: number }>,
+): Record<string, number> {
+  if (!orders || orders.length === 0) return getStaffItemClickCounts();
+  const current = getStaffItemClickCounts();
+  let changed = false;
+  for (const order of orders) {
+    if (!order.menuItemId) continue;
+    const qty = Math.max(1, order.quantity ?? 1);
+    if (!current[order.menuItemId]) {
+      current[order.menuItemId] = qty;
+      changed = true;
+    }
+  }
+  if (changed && typeof window !== "undefined" && window.localStorage) {
+    try {
+      window.localStorage.setItem(POS_STAFF_ITEM_CLICKS_KEY, JSON.stringify(current));
+    } catch {}
+  }
+  return current;
+}
+
+/**
+ * Sort menu items for the default Top / All view:
+ * 1. Items with popularity count > 0 sort descending by count (most popular first).
+ * 2. Items with equal counts sort by category order (configured category sequence).
+ * 3. Within same category, sort by item sortOrder (custom display order) or name.
+ */
+export function sortTopMenuItems(
+  items: MenuItem[],
+  popularityMap: Record<string, number>,
+  categoryOptions: Array<{ id: string; name?: string }>,
+  mode: MenuSortMode = "custom",
+): MenuItem[] {
+  const categoryIndexMap = new Map<string, number>();
+  categoryOptions.forEach((cat, index) => {
+    categoryIndexMap.set(cat.id, index);
+    if (cat.name) categoryIndexMap.set(cat.name, index);
+  });
+
+  return [...items].sort((a, b) => {
+    const countA = popularityMap[a.id] ?? 0;
+    const countB = popularityMap[b.id] ?? 0;
+
+    // 1. Higher popularity count comes first
+    if (countA !== countB) {
+      return countB - countA;
+    }
+
+    // 2. Tie-break: Category order (defined by restaurant categories)
+    const catOrderA =
+      categoryIndexMap.get(a.categoryId ?? "") ??
+      categoryIndexMap.get(typeof a.category === "string" ? a.category : "") ??
+      999;
+    const catOrderB =
+      categoryIndexMap.get(b.categoryId ?? "") ??
+      categoryIndexMap.get(typeof b.category === "string" ? b.category : "") ??
+      999;
+    if (catOrderA !== catOrderB) {
+      return catOrderA - catOrderB;
+    }
+
+    // 3. Within same category: item sortOrder
+    if (mode === "alphabetical") {
+      return a.nameEn.localeCompare(b.nameEn, undefined, { sensitivity: "base" });
+    }
+
+    const sortDiff = (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+    if (sortDiff !== 0) return sortDiff;
+
+    return a.nameEn.localeCompare(b.nameEn, undefined, { sensitivity: "base" });
+  });
 }

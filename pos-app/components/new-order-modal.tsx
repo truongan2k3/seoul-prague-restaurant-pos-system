@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronRight, CreditCard, Gift, MessageSquare, Minus, Plus, Save, Search, X } from "lucide-react";
+import { Check, ChevronRight, CreditCard, Gift, LoaderCircle, MessageSquare, Minus, Plus, Save, Search, Send, X } from "lucide-react";
 import { CancelReasonModal } from "@/components/cancel-reason-modal";
 import { ItemCustomizeModal, type CustomizeResult } from "@/components/item-customize-modal";
 import { GrillGuestCountModal } from "@/components/grill-guest-count-modal";
@@ -10,7 +10,6 @@ import { Modal } from "@/components/modal";
 import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { TableInteractionConfirmation } from "@/components/table-interaction-confirmation";
 import { NoteTranslationSource } from "@/components/note-translation-source";
-import { SlideToSendOrder } from "@/components/slide-to-send-order";
 import { OnScreenKeyboard } from "@/components/on-screen-keyboard";
 import { OrderLineToolbar } from "@/components/order-line-toolbar";
 import { VoucherScanFab } from "@/components/voucher-scan-fab";
@@ -35,9 +34,16 @@ import { sortMenuItemsForDisplay } from "@/lib/menu-sort";
 import {
   getStaffItemClickCounts,
   recordStaffOrderItems,
+  mergeStaffItemClickCounts,
+  seedStaffItemClickCounts,
+  sortTopMenuItems,
   isRestrictedLunchCategory,
   isLunchRestrictionActive,
 } from "@/lib/staff-item-popularity";
+import {
+  broadcastStaffItemPopularity,
+  subscribeToStaffItemPopularity,
+} from "@/lib/pos-notifications";
 import { formatPosPrice, menuPriceDisplayOptionsFromSettings } from "@/lib/price-display";
 import {
   cartLineDisplayName,
@@ -151,6 +157,7 @@ interface NewOrderModalProps {
   categories?: MenuCategoryRecord[];
   mode?: "new" | "append";
   existingOrders?: OrderItem[];
+  activeOrderItems?: OrderItem[];
   onClose: () => void;
   onSendToKitchen: (orders: OrderItem[]) => void | Promise<void>;
   /** Append cart lines to bill only — no kitchen print / KDS */
@@ -357,6 +364,7 @@ export function NewOrderModal({
   categories = [],
   mode = "new",
   existingOrders = [],
+  activeOrderItems,
   onClose,
   onSendToKitchen,
   onAppendCartNoPrint,
@@ -414,9 +422,21 @@ export function NewOrderModal({
 
   useEffect(() => {
     if (open) {
+      if (activeOrderItems && activeOrderItems.length > 0) {
+        seedStaffItemClickCounts(activeOrderItems);
+      }
       setPopularityMap(getStaffItemClickCounts());
     }
-  }, [open]);
+  }, [open, activeOrderItems]);
+
+  useEffect(() => {
+    return subscribeToStaffItemPopularity((payload) => {
+      if (payload?.counts) {
+        const merged = mergeStaffItemClickCounts(payload.counts);
+        setPopularityMap(merged);
+      }
+    });
+  }, []);
   const [cartOpen, setCartOpen] = useState(false);
   const [noteLineId, setNoteLineId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
@@ -658,15 +678,11 @@ export function NewOrderModal({
       return sorted.sort((a, b) => ranks.get(a.id)! - ranks.get(b.id)!);
     }
 
-    const sorted = sortMenuItemsForDisplay(filtered, settings.menuItemSortMode);
-    return sorted.sort((a, b) => {
-      const countA = popularityMap[a.id] ?? 0;
-      const countB = popularityMap[b.id] ?? 0;
-      if (countA !== countB) {
-        return countB - countA;
-      }
-      return 0;
-    });
+    if (isTopDefaultView) {
+      return sortTopMenuItems(filtered, popularityMap, categoryOptions, settings.menuItemSortMode);
+    }
+
+    return sortMenuItemsForDisplay(filtered, settings.menuItemSortMode);
   }, [
     menuItems,
     activeCategory,
@@ -1536,6 +1552,9 @@ export function NewOrderModal({
         await onSendToKitchen(orders);
         committed = true;
         recordStaffOrderItems(orders);
+        const updatedPopularity = getStaffItemClickCounts();
+        setPopularityMap(updatedPopularity);
+        void broadcastStaffItemPopularity(updatedPopularity);
         if (sameContext()) {
           setCart([]);
           setCartOpen(false);
@@ -1587,7 +1606,9 @@ export function NewOrderModal({
         const orders = await buildCartOrdersFromLines();
         await onAppendCartNoPrint(orders);
         recordStaffOrderItems(orders);
-        setPopularityMap(getStaffItemClickCounts());
+        const updatedPopularity = getStaffItemClickCounts();
+        setPopularityMap(updatedPopularity);
+        void broadcastStaffItemPopularity(updatedPopularity);
         setCart([]);
         setGrillGuestCount(null);
         onRefreshExistingOrders?.();
@@ -2094,13 +2115,25 @@ export function NewOrderModal({
         </div>
 
         <div className={`grid items-start gap-2 ${onCheckout ? "grid-cols-[minmax(0,7fr)_minmax(0,3fr)]" : "grid-cols-1"}`}>
-          <SlideToSendOrder
-            key={orderingTableId ?? "no-table"}
-            contextId={orderingTableId ?? ""}
-            disabled={!open || !hasPendingSend || isBusy || !orderingTableId}
-            onSend={handleSend}
-            errorMessage={submittedLineError}
-          />
+          <div className="flex flex-col gap-1">
+            <button
+              type="button"
+              disabled={!open || !hasPendingSend || isBusy || !orderingTableId}
+              onClick={() => void handleSend()}
+              title={translate("sendToKitchen")}
+              className="flex h-14 min-w-0 items-center justify-center gap-2 rounded-xl border border-blue-500/40 bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40 dark:focus-visible:ring-offset-gray-900"
+            >
+              {isBusy ? (
+                <LoaderCircle className="h-5 w-5 animate-spin shrink-0" aria-hidden />
+              ) : (
+                <Send className="h-5 w-5 shrink-0" aria-hidden />
+              )}
+              <span>{isBusy ? "…" : translate("sendToKitchen")}</span>
+            </button>
+            {submittedLineError && (
+              <p className="px-1 text-xs text-rose-500">{submittedLineError}</p>
+            )}
+          </div>
           {onCheckout && (
             <button
               type="button"

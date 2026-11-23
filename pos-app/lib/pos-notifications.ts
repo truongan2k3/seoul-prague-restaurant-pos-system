@@ -298,3 +298,34 @@ export function subscribeToPrintOk(
     void supabase.removeChannel(channel);
   };
 }
+
+export type StaffItemPopularityPayload = {
+  counts: Record<string, number>;
+  at: string;
+};
+
+/** Broadcast staff item popularity counts across all devices. */
+export async function broadcastStaffItemPopularity(counts: Record<string, number>) {
+  const payload: StaffItemPopularityPayload = {
+    counts,
+    at: new Date().toISOString(),
+  };
+  return sendPosNotificationBroadcast("staff_item_popularity", payload);
+}
+
+export function subscribeToStaffItemPopularity(
+  onEvent: (payload: StaffItemPopularityPayload) => void,
+): () => void {
+  const channel = supabase
+    .channel(`${POS_NOTIFICATIONS_CHANNEL}_popularity`, {
+      config: { broadcast: { self: false } },
+    })
+    .on("broadcast", { event: "staff_item_popularity" }, ({ payload }) => {
+      onEvent(payload as StaffItemPopularityPayload);
+    })
+    .subscribe();
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}

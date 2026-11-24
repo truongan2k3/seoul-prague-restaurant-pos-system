@@ -973,7 +973,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                         {isReservationNew(row) && (
                           <span
                             className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-bold text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400"
-                            title="Đơn đặt bàn mới tạo trong 6 giờ"
+                            title={translate("newReservationBadge")}
                           >
                             <Sparkles className="h-3 w-3 animate-pulse text-emerald-500" />
                             New
@@ -1205,7 +1205,11 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                         language === "vi"
                           ? "bàn"
                           : language === "cs"
-                            ? "stolů"
+                            ? group.tablesCount === 1
+                              ? "stůl"
+                              : group.tablesCount < 5
+                                ? "stoly"
+                                : "stolů"
                             : group.tablesCount === 1
                               ? "table"
                               : "tables";
@@ -1213,7 +1217,11 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                         language === "vi"
                           ? "khách"
                           : language === "cs"
-                            ? "hostů"
+                            ? group.guestsCount === 1
+                              ? "host"
+                              : group.guestsCount < 5
+                                ? "hosté"
+                                : "hostů"
                             : group.guestsCount === 1
                               ? "guest"
                               : "guests";

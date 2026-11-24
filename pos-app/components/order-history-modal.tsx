@@ -317,11 +317,11 @@ export function OrderHistoryModal({
                   <div className="flex items-center gap-2">
                     <Receipt className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                     <span className="font-bold text-gray-800 dark:text-gray-100">
-                      {translate("paymentMethod")} (Hóa đơn)
+                      {translate("billPaymentMethod")}
                     </span>
                   </div>
                   <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                    Hình thức khách thanh toán tiền đơn hàng
+                    {translate("billPaymentHint")}
                   </p>
                   <div className="mt-2.5 grid grid-cols-2 gap-2">
                     <button
@@ -363,7 +363,7 @@ export function OrderHistoryModal({
                     <div className="flex items-center gap-2">
                       <Coins className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                       <span className="font-bold text-gray-800 dark:text-gray-100">
-                        {translate("tip")} (Tiền boa)
+                        {translate("tip")}
                       </span>
                     </div>
                     {editTip > 0 && (
@@ -392,9 +392,9 @@ export function OrderHistoryModal({
                         type="button"
                         onClick={() => setEditTip(0)}
                         className="rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-                        title="Xóa tip"
+                        title={translate("clearAction")}
                       >
-                        Xóa
+                        {translate("clearAction")}
                       </button>
                     )}
                   </div>
@@ -442,7 +442,7 @@ export function OrderHistoryModal({
                           }`}
                         >
                           <Banknote className="h-3.5 w-3.5 shrink-0" />
-                          <span>Tip {translate("cash")}</span>
+                          <span>{translate("tip")} {translate("cash")}</span>
                         </button>
                         <button
                           type="button"
@@ -457,20 +457,24 @@ export function OrderHistoryModal({
                           }`}
                         >
                           <CreditCard className="h-3.5 w-3.5 shrink-0" />
-                          <span>Tip {translate("card")}</span>
+                          <span>{translate("tip")} {translate("card")}</span>
                         </button>
                       </div>
 
                       {/* Explicit confirmation message when methods differ */}
                       {editPaymentMethod !== editTipPaymentMethod && (
                         <p className="mt-2 rounded-md bg-amber-100/70 px-2.5 py-1 text-[11px] font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                          ⚡ Hóa đơn bằng <strong>{editPaymentMethod === "cash" ? "Tiền mặt" : "Thẻ"}</strong>, Tip bằng <strong>{editTipPaymentMethod === "cash" ? "Tiền mặt" : "Thẻ"}</strong>
+                          ⚡ {language === "vi"
+                            ? `Hóa đơn bằng ${translate(editPaymentMethod)}, Tip bằng ${translate(editTipPaymentMethod)}`
+                            : language === "cs"
+                            ? `Účet zaplacen: ${translate(editPaymentMethod)}, spropitné: ${translate(editTipPaymentMethod)}`
+                            : `Bill paid by ${translate(editPaymentMethod)}, tip paid by ${translate(editTipPaymentMethod)}`}
                         </p>
                       )}
                     </div>
                   ) : (
                     <p className="mt-2 text-xs italic text-gray-400">
-                      (Chưa có tiền tip)
+                      ({translate("noTipYet")})
                     </p>
                   )}
                 </div>

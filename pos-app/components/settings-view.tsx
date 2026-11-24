@@ -561,7 +561,7 @@ export function SettingsView({
                       }`}
                     />
                     <span className="font-medium text-gray-800 dark:text-gray-200">
-                      Print Bridge: {bridgeTestMessage || "Sẵn sàng (http://127.0.0.1:39100)"}
+                      Print Bridge: {bridgeTestMessage || (language === "vi" ? "Sẵn sàng (http://127.0.0.1:39100)" : language === "cs" ? "Připraveno (http://127.0.0.1:39100)" : "Ready (http://127.0.0.1:39100)")}
                     </span>
                   </div>
                   <button
@@ -578,7 +578,7 @@ export function SettingsView({
 
                 <details className="text-xs text-gray-400">
                   <summary className="cursor-pointer hover:underline">
-                    Cài đặt nâng cao (Đường dẫn Print Bridge)
+                    {language === "vi" ? "Cài đặt nâng cao (Đường dẫn Print Bridge)" : language === "cs" ? "Pokročilá nastavení (URL tiskového mostu)" : "Advanced settings (Print bridge URL)"}
                   </summary>
                   <div className="mt-2">
                     <input

@@ -1672,10 +1672,10 @@ export function CheckoutPanel({
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200/80 bg-amber-50/60 p-2.5 dark:border-amber-900/50 dark:bg-amber-950/20">
           <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900 dark:text-amber-200">
             <Coins className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-            <span>Tip: {displayPrice(totalTipWithKeep)}</span>
+            <span>{translate("tip")}: {displayPrice(totalTipWithKeep)}</span>
           </div>
           <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-[11px] text-gray-500 dark:text-gray-400">Hình thức tip:</span>
+            <span className="text-[11px] text-gray-500 dark:text-gray-400">{translate("tipPaymentMethod")}:</span>
             <button
               type="button"
               onClick={() => setExplicitTipMethod("cash")}
@@ -1686,7 +1686,7 @@ export function CheckoutPanel({
               }`}
             >
               <Banknote className="h-3.5 w-3.5 shrink-0" />
-              <span>Tiền mặt</span>
+              <span>{translate("cash")}</span>
             </button>
             <button
               type="button"
@@ -1698,7 +1698,7 @@ export function CheckoutPanel({
               }`}
             >
               <CreditCard className="h-3.5 w-3.5 shrink-0" />
-              <span>Thẻ</span>
+              <span>{translate("card")}</span>
             </button>
           </div>
         </div>
@@ -1762,7 +1762,7 @@ export function CheckoutPanel({
               </span>
               {explicitTipMethod === "cash" && totalTipWithKeep > 0 && (
                 <span className="mt-0.5 text-xs font-normal text-blue-100 opacity-90">
-                  (+ Tip {displayPrice(totalTipWithKeep)} tiền mặt)
+                  (+ {translate("tip")} {displayPrice(totalTipWithKeep)} · {translate("cash")})
                 </span>
               )}
             </div>
@@ -1795,7 +1795,7 @@ export function CheckoutPanel({
               </span>
               {explicitTipMethod === "card" && totalTipWithKeep > 0 && (
                 <span className="mt-0.5 text-xs font-normal text-emerald-100 opacity-90">
-                  (+ Tip {displayPrice(totalTipWithKeep)} thẻ)
+                  (+ {translate("tip")} {displayPrice(totalTipWithKeep)} · {translate("card")})
                 </span>
               )}
             </div>

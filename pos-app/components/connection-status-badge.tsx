@@ -10,9 +10,11 @@ import { usePathname } from "next/navigation";
 import { AlertTriangle, Wifi, WifiOff, X } from "lucide-react";
 import {
   CONNECTION_STATUS_LABELS,
+  getConnectionStatusLabel,
   type ConnectionStatus,
 } from "@/lib/connection-status";
 import { useConnectionStatus } from "@/contexts/connection-status-context";
+import { useOptionalApp } from "@/contexts/app-context";
 import { LiveClock } from "@/components/live-clock";
 import { isStationPath } from "@/lib/page-routes";
 
@@ -60,6 +62,8 @@ function networkIconShell(status: ConnectionStatus): string {
 export function ConnectionStatusBadge({ children }: { children?: ReactNode }) {
   const pathname = usePathname();
   const { status } = useConnectionStatus();
+  const app = useOptionalApp();
+  const language = app?.language ?? "en";
   const [networkAlert, setNetworkAlert] = useState<string | null>(null);
   const lastNetworkAlertAt = useRef(0);
   const prevNetworkStatus = useRef<ConnectionStatus | null>(null);
@@ -76,10 +80,14 @@ export function ConnectionStatusBadge({ children }: { children?: ReactNode }) {
     const now = Date.now();
     if (now - lastNetworkAlertAt.current < NETWORK_ALERT_COOLDOWN_MS) return;
     lastNetworkAlertAt.current = now;
-    setNetworkAlert(
-      "Mất kết nối mạng. Đơn và đồng bộ có thể bị treo — kiểm tra Wi‑Fi / dây mạng.",
-    );
-  }, [status, hidden, onStation]);
+    const alertMessage =
+      language === "vi"
+        ? "Mất kết nối mạng. Đơn và đồng bộ có thể bị treo — kiểm tra Wi‑Fi / dây mạng."
+        : language === "cs"
+          ? "Ztráta připojení k síti. Objednávky a synchronizace se mohou pozastavit — zkontrolujte Wi-Fi nebo síťový kabel."
+          : "Network connection lost. Orders and synchronization may stall — check Wi-Fi or LAN cable.";
+    setNetworkAlert(alertMessage);
+  }, [status, hidden, onStation, language]);
 
   return (
     <>
@@ -101,7 +109,11 @@ export function ConnectionStatusBadge({ children }: { children?: ReactNode }) {
                   id="pos-status-alert-title"
                   className="text-base font-semibold text-stone-900 dark:text-zinc-50"
                 >
-                  Mất kết nối mạng
+                  {language === "vi"
+                    ? "Mất kết nối mạng"
+                    : language === "cs"
+                      ? "Ztráta připojení k síti"
+                      : "Network Disconnected"}
                 </h2>
                 <p className="mt-1.5 text-sm leading-relaxed text-stone-600 dark:text-zinc-300">
                   {networkAlert}
@@ -110,7 +122,7 @@ export function ConnectionStatusBadge({ children }: { children?: ReactNode }) {
               <button
                 type="button"
                 className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-stone-500 hover:bg-stone-100 dark:hover:bg-zinc-800"
-                aria-label="Đóng"
+                aria-label={language === "vi" ? "Đóng" : language === "cs" ? "Zavřít" : "Close"}
                 onClick={() => setNetworkAlert(null)}
               >
                 <X className="size-4" />
@@ -122,7 +134,7 @@ export function ConnectionStatusBadge({ children }: { children?: ReactNode }) {
                 className="rounded-md bg-stone-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-stone-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
                 onClick={() => setNetworkAlert(null)}
               >
-                Đã hiểu
+                {language === "vi" ? "Đã hiểu" : language === "cs" ? "Rozumím" : "Got it"}
               </button>
             </div>
           </div>
@@ -136,11 +148,14 @@ export function ConnectionStatusBadge({ children }: { children?: ReactNode }) {
 export function PosStatusChips({ className = "" }: { className?: string }) {
   const pathname = usePathname();
   const { status } = useConnectionStatus();
+  const app = useOptionalApp();
+  const language = app?.language ?? "en";
 
   if (shouldHideOnPath(pathname)) return null;
   if (pathname && isStationPath(pathname)) return null;
 
   const NetworkIcon = status === "online" ? Wifi : WifiOff;
+  const label = getConnectionStatusLabel(status, language);
 
   return (
     <div
@@ -150,10 +165,10 @@ export function PosStatusChips({ className = "" }: { className?: string }) {
     >
       <span
         className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-none sm:text-[11px] ${networkBadgeClass(status)}`}
-        title={CONNECTION_STATUS_LABELS[status]}
+        title={label}
       >
         <NetworkIcon className="size-3 shrink-0" aria-hidden />
-        <span className="whitespace-nowrap">{CONNECTION_STATUS_LABELS[status]}</span>
+        <span className="whitespace-nowrap">{label}</span>
       </span>
     </div>
   );
@@ -163,11 +178,14 @@ export function PosStatusChips({ className = "" }: { className?: string }) {
 export function SidebarStatusIcons({ className = "" }: { className?: string }) {
   const pathname = usePathname();
   const { status } = useConnectionStatus();
+  const app = useOptionalApp();
+  const language = app?.language ?? "en";
 
   if (shouldHideOnPath(pathname)) return null;
   if (pathname && isStationPath(pathname)) return null;
 
   const NetworkIcon = status === "online" ? Wifi : WifiOff;
+  const label = getConnectionStatusLabel(status, language);
 
   return (
     <div
@@ -177,8 +195,8 @@ export function SidebarStatusIcons({ className = "" }: { className?: string }) {
     >
       <span
         className={`inline-flex h-8 w-8 items-center justify-center rounded-md ${networkIconShell(status)}`}
-        title={CONNECTION_STATUS_LABELS[status]}
-        aria-label={CONNECTION_STATUS_LABELS[status]}
+        title={label}
+        aria-label={label}
       >
         <NetworkIcon className="h-4 w-4" aria-hidden />
       </span>

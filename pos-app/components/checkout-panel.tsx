@@ -3,7 +3,7 @@
 import { useEetCheckout } from "@/hooks/use-eet-checkout";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
-import { ArrowLeft, ArrowRight, Calculator, Printer } from "lucide-react";
+import { ArrowLeft, ArrowRight, Banknote, Calculator, Coins, CreditCard, Printer } from "lucide-react";
 import { FloatingCalculator } from "@/components/floating-calculator";
 import {
   NumericInputField,
@@ -254,6 +254,7 @@ export function CheckoutPanel({
   const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
   const [printReceipt, setPrintReceipt] = useState(settings.autoPrintOnPayment);
+  const [explicitTipMethod, setExplicitTipMethod] = useState<PaymentMethod | null>(null);
   const splitSessionRef = useRef<{ active: boolean; mode: SplitMode; count: number }>({
     active: false,
     mode: "items",
@@ -276,6 +277,7 @@ export function CheckoutPanel({
     setTipMode("custom");
     setAdjustmentMode(null);
     setRoundUpTotal("");
+    setExplicitTipMethod(null);
   }, []);
 
   const clearCashOnly = useCallback(() => {
@@ -885,17 +887,23 @@ export function CheckoutPanel({
 
     const shareTip = totalTipWithKeep;
 
+    const finalTipMethod = shareTip > 0 ? (explicitTipMethod ?? method) : method;
+    const netAmountDueNow =
+      (method === "card" && finalTipMethod === "cash") || (method === "cash" && finalTipMethod === "card")
+        ? Math.max(0, chargeTotal - shareTip)
+        : chargeTotal;
+
     const payment = {
       ...(referralQuote ? {referral: {code:referralPercent > 0 ? referralQuote.code : undefined,reservationId:referralQuote.reservationId,paymentKey:referralPaymentKey,installment:referralQuote.lastInstallment+successfulReferralPayments+1,codeId:referralQuote.codeId,version:referralQuote.version,discountPercent:referralPercent,discountAmount:totals.referralDiscountAmount,overrideReason:effectiveOverride?.reason},referralEqualScope:equalAdjustScope} : {}),
       paymentMethod: method,
-      tipPaymentMethod: method,
+      tipPaymentMethod: finalTipMethod,
       subtotal: totals.subtotal,
       discountType,
       discountValue,
       discountAmount: totals.discountAmount,
       tip: shareTip,
       grandTotal: chargeTotal + keepAsTipAmount,
-      amountDueNow: chargeTotal,
+      amountDueNow: netAmountDueNow,
       amountGiven:
         method === "cash" && usingCashGiven
           ? cashGivenNum
@@ -1453,6 +1461,45 @@ export function CheckoutPanel({
         </label>
       )}
 
+      {adjustmentMode === "tip" && totalTipWithKeep > 0 && (
+        <div className="rounded-xl border border-amber-200/80 bg-amber-50/50 p-3 text-xs dark:border-amber-900/50 dark:bg-amber-950/20">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-gray-700 dark:text-gray-200">
+              {translate("tipPaymentMethod")}:
+            </span>
+            <span className="text-[11px] text-gray-500 dark:text-gray-400">
+              {translate("tipPaymentMethodHint")}
+            </span>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setExplicitTipMethod("cash")}
+              className={`flex min-h-[40px] items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition-all ${
+                (explicitTipMethod ?? "card") === "cash"
+                  ? "bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-500/30"
+                  : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+              }`}
+            >
+              <Banknote className="h-3.5 w-3.5 shrink-0" />
+              <span>Tip {translate("cash")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setExplicitTipMethod("card")}
+              className={`flex min-h-[40px] items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition-all ${
+                (explicitTipMethod ?? "card") === "card"
+                  ? "bg-blue-600 text-white shadow-xs ring-2 ring-blue-500/30"
+                  : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+              }`}
+            >
+              <CreditCard className="h-3.5 w-3.5 shrink-0" />
+              <span>Tip {translate("card")}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {referralLoading && <p role="status" className="text-sm text-amber-700 dark:text-amber-200">Loading reservation referral…</p>}
       {referralError && <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-200">
         {referralError}
@@ -1620,24 +1667,106 @@ export function CheckoutPanel({
       <p className="-mt-1 text-xs text-gray-500 dark:text-gray-400">
         {translate("printProvisionalBillHint")}
       </p>
-      <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
-        <Printer className="h-4 w-4 shrink-0 text-gray-500" />
-        {translate("checkoutPrintReceipt")}
-        <input
-          type="checkbox"
-          checked={printReceipt}
-          onChange={(event) => setPrintReceipt(event.target.checked)}
-          className="ml-auto h-4 w-4 rounded border-gray-300"
-        />
-      </label>
+      {/* Tip Payment Method quick toggle when tip > 0 */}
+      {totalTipWithKeep > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200/80 bg-amber-50/60 p-2.5 dark:border-amber-900/50 dark:bg-amber-950/20">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900 dark:text-amber-200">
+            <Coins className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <span>Tip: {displayPrice(totalTipWithKeep)}</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="text-[11px] text-gray-500 dark:text-gray-400">Hình thức tip:</span>
+            <button
+              type="button"
+              onClick={() => setExplicitTipMethod("cash")}
+              className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                (explicitTipMethod ?? "cash") === "cash"
+                  ? "bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-500/30"
+                  : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+              }`}
+            >
+              <Banknote className="h-3.5 w-3.5 shrink-0" />
+              <span>Tiền mặt</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setExplicitTipMethod("card")}
+              className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                explicitTipMethod === "card"
+                  ? "bg-blue-600 text-white shadow-xs ring-2 ring-blue-500/30"
+                  : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+              }`}
+            >
+              <CreditCard className="h-3.5 w-3.5 shrink-0" />
+              <span>Thẻ</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modern styled Print receipt switch box */}
+      <button
+        type="button"
+        role="switch"
+        aria-checked={printReceipt}
+        onClick={() => setPrintReceipt((prev) => !prev)}
+        className={`flex w-full items-center justify-between rounded-xl border p-2.5 transition-all ${
+          printReceipt
+            ? "border-blue-500/40 bg-blue-50/70 text-blue-950 dark:border-blue-500/30 dark:bg-blue-950/30 dark:text-blue-100 shadow-xs"
+            : "border-gray-200 bg-gray-50/60 text-gray-600 hover:bg-gray-100/70 dark:border-gray-700 dark:bg-gray-800/40 dark:text-gray-400"
+        }`}
+      >
+        <span className="flex items-center gap-2.5 text-sm font-semibold">
+          <span
+            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+              printReceipt
+                ? "bg-blue-600 text-white shadow-xs"
+                : "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+            }`}
+          >
+            <Printer className="h-4 w-4" />
+          </span>
+          <span>{translate("checkoutPrintReceipt")}</span>
+        </span>
+        <div
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+            printReceipt ? "bg-blue-600" : "bg-gray-300 dark:bg-gray-600"
+          }`}
+        >
+          <span
+            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+              printReceipt ? "translate-x-5" : "translate-x-0"
+            }`}
+          />
+        </div>
+      </button>
+
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <button
           type="button"
           disabled={isSaving || submitting || referralLoading || Boolean(referralError) || lines.length === 0 || !splitItemsSelected}
           onClick={() => void handleCheckout("card")}
-          className="min-h-[56px] rounded-xl bg-blue-600 px-3 py-3 text-base font-bold text-white shadow-sm disabled:opacity-40 sm:min-h-[60px] sm:text-lg"
+          className="min-h-[56px] rounded-xl bg-blue-600 px-3 py-2 text-base font-bold text-white shadow-sm disabled:opacity-40 sm:min-h-[60px] sm:text-lg"
         >
-          {isSaving ? "..." : `${translate("payByCard")} — ${displayPrice(payTotal)}`}
+          {isSaving ? (
+            "..."
+          ) : (
+            <div className="flex flex-col items-center justify-center leading-tight">
+              <span>
+                {translate("payByCard")} —{" "}
+                {displayPrice(
+                  explicitTipMethod === "cash" && totalTipWithKeep > 0
+                    ? Math.max(0, payTotal - totalTipWithKeep)
+                    : payTotal,
+                )}
+              </span>
+              {explicitTipMethod === "cash" && totalTipWithKeep > 0 && (
+                <span className="mt-0.5 text-xs font-normal text-blue-100 opacity-90">
+                  (+ Tip {displayPrice(totalTipWithKeep)} tiền mặt)
+                </span>
+              )}
+            </div>
+          )}
         </button>
         <button
           type="button"
@@ -1650,9 +1779,27 @@ export function CheckoutPanel({
             (usingCashGiven && insufficientPayment)
           }
           onClick={() => void handleCheckout("cash")}
-          className="min-h-[56px] rounded-xl bg-emerald-600 px-3 py-3 text-base font-bold text-white shadow-sm disabled:opacity-40 sm:min-h-[60px] sm:text-lg"
+          className="min-h-[56px] rounded-xl bg-emerald-600 px-3 py-2 text-base font-bold text-white shadow-sm disabled:opacity-40 sm:min-h-[60px] sm:text-lg"
         >
-          {isSaving ? "..." : `${translate("payInCash")} — ${displayPrice(payTotal)}`}
+          {isSaving ? (
+            "..."
+          ) : (
+            <div className="flex flex-col items-center justify-center leading-tight">
+              <span>
+                {translate("payInCash")} —{" "}
+                {displayPrice(
+                  explicitTipMethod === "card" && totalTipWithKeep > 0
+                    ? Math.max(0, payTotal - totalTipWithKeep)
+                    : payTotal,
+                )}
+              </span>
+              {explicitTipMethod === "card" && totalTipWithKeep > 0 && (
+                <span className="mt-0.5 text-xs font-normal text-emerald-100 opacity-90">
+                  (+ Tip {displayPrice(totalTipWithKeep)} thẻ)
+                </span>
+              )}
+            </div>
+          )}
         </button>
       </div>
     </div>

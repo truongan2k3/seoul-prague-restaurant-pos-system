@@ -96,8 +96,14 @@ export interface ReservationStats {
   late: number;
 }
 
-/** Upcoming list only — still waiting / expected guests. */
-const UPCOMING_STATUSES = new Set<ReservationStatus>(["pending", "confirmed", "late"]);
+/** Upcoming list — active bookings, checked-in, and cancellations for upcoming dates. */
+const UPCOMING_STATUSES = new Set<ReservationStatus>([
+  "pending",
+  "confirmed",
+  "late",
+  "checked_in",
+  "cancelled",
+]);
 
 export function filterReservationsByPeriod(
   reservations: ReservationRecord[],

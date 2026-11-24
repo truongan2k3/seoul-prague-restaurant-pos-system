@@ -3,7 +3,7 @@
 import { SaleDiscountCodeBadges } from "@/components/sale-discount-code-badges";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Printer, Trash2, X } from "lucide-react";
+import { AlertTriangle, Banknote, Coins, CreditCard, Printer, Receipt, Trash2, X } from "lucide-react";
 import { ModalOverlay, ModalPanel } from "@/components/modal-overlay";
 import { usePinGate } from "@/contexts/pin-gate-context";
 import { NumericInputField } from "@/components/numeric-input-field";
@@ -311,54 +311,168 @@ export function OrderHistoryModal({
 
           <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
             {editTipMode ? (
-              <div className="mb-4 space-y-3 text-sm">
-                <div>
-                  <span className="text-gray-500 dark:text-gray-400">{translate("paymentMethod")}</span>
-                  <div className="mt-2 flex gap-2">
-                    {(["cash", "card"] as const).map((method) => (
-                      <button
-                        key={method}
-                        type="button"
-                        onClick={() => { setEditPaymentMethod(method); if (!tipMethodExplicit) setEditTipPaymentMethod(method); }}
-                        className={`min-h-[40px] flex-1 rounded-lg px-3 text-sm font-semibold capitalize ${paymentFilterClass(
-                          editPaymentMethod === method,
-                          method,
-                        )}`}
-                      >
-                        {translate(method)}
-                      </button>
-                    ))}
+              <div className="mb-4 space-y-4 text-sm">
+                {/* 1. Bill Payment Method */}
+                <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-3.5 dark:border-gray-700/80 dark:bg-gray-800/40">
+                  <div className="flex items-center gap-2">
+                    <Receipt className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <span className="font-bold text-gray-800 dark:text-gray-100">
+                      {translate("paymentMethod")} (Hóa đơn)
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    Hình thức khách thanh toán tiền đơn hàng
+                  </p>
+                  <div className="mt-2.5 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditPaymentMethod("cash");
+                        if (!tipMethodExplicit) setEditTipPaymentMethod("cash");
+                      }}
+                      className={`flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition-all ${
+                        editPaymentMethod === "cash"
+                          ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/30"
+                          : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                      }`}
+                    >
+                      <Banknote className="h-4 w-4 shrink-0" />
+                      <span>{translate("cash")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditPaymentMethod("card");
+                        if (!tipMethodExplicit) setEditTipPaymentMethod("card");
+                      }}
+                      className={`flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition-all ${
+                        editPaymentMethod === "card"
+                          ? "bg-blue-600 text-white shadow-sm ring-2 ring-blue-500/30"
+                          : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                      }`}
+                    >
+                      <CreditCard className="h-4 w-4 shrink-0" />
+                      <span>{translate("card")}</span>
+                    </button>
                   </div>
                 </div>
-                <label className="block space-y-1">
-                  <span>{translate("tip")}</span>
-                  <NumericInputField
-                    value={editTip > 0 ? String(editTip) : ""}
-                    onChange={(raw) => setEditTip(Math.max(0, Number(raw) || 0))}
-                    allowDecimal
-                    inputClassName="w-full rounded border border-gray-200 px-2 py-1 text-right text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-                  />
-                </label>
-                <div>
-                  <span className="text-gray-500 dark:text-gray-400">{translate("tipPaymentMethod")}</span>
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    {translate("tipPaymentMethodHint")}
-                  </p>
-                  <div className="mt-2 flex gap-2">
-                    {(["cash", "card"] as const).map((method) => (
+
+                {/* 2. Tip & Tip Payment Method */}
+                <div className="rounded-xl border border-amber-200/80 bg-amber-50/40 p-3.5 dark:border-amber-900/60 dark:bg-amber-950/20">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Coins className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                      <span className="font-bold text-gray-800 dark:text-gray-100">
+                        {translate("tip")} (Tiền boa)
+                      </span>
+                    </div>
+                    {editTip > 0 && (
+                      <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                        {formatCzk(editTip)}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Tip amount input */}
+                  <div className="mt-2.5 flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <NumericInputField
+                        value={editTip > 0 ? String(editTip) : ""}
+                        onChange={(raw) => setEditTip(Math.max(0, Number(raw) || 0))}
+                        allowDecimal
+                        placeholder="0"
+                        inputClassName="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-right font-semibold text-gray-900 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 pr-9 text-base"
+                      />
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">
+                        Kč
+                      </span>
+                    </div>
+                    {editTip > 0 && (
                       <button
-                        key={method}
                         type="button"
-                        onClick={() => { setEditTipPaymentMethod(method); setTipMethodExplicit(true); }}
-                        className={`min-h-[40px] flex-1 rounded-lg px-3 text-sm font-semibold capitalize ${paymentFilterClass(
-                          editTipPaymentMethod === method,
-                          method,
-                        )}`}
+                        onClick={() => setEditTip(0)}
+                        className="rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                        title="Xóa tip"
                       >
-                        {translate(method)}
+                        Xóa
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Tip quick presets */}
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+                    {[20, 50, 100, 200].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setEditTip(preset)}
+                        className={`rounded-md border px-2 py-1 font-semibold transition-colors ${
+                          editTip === preset
+                            ? "border-amber-500 bg-amber-500 text-white"
+                            : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                        }`}
+                      >
+                        +{preset} Kč
                       </button>
                     ))}
                   </div>
+
+                  {/* Tip Payment Method Selector (Only when tip > 0) */}
+                  {editTip > 0 ? (
+                    <div className="mt-3.5 border-t border-amber-200/70 pt-3 dark:border-amber-900/40">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-700 dark:text-gray-200">
+                          {translate("tipPaymentMethod")}:
+                        </span>
+                        <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                          {translate("tipPaymentMethodHint")}
+                        </span>
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditTipPaymentMethod("cash");
+                            setTipMethodExplicit(true);
+                          }}
+                          className={`flex min-h-[40px] items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition-all ${
+                            editTipPaymentMethod === "cash"
+                              ? "bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-500/30"
+                              : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                          }`}
+                        >
+                          <Banknote className="h-3.5 w-3.5 shrink-0" />
+                          <span>Tip {translate("cash")}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditTipPaymentMethod("card");
+                            setTipMethodExplicit(true);
+                          }}
+                          className={`flex min-h-[40px] items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition-all ${
+                            editTipPaymentMethod === "card"
+                              ? "bg-blue-600 text-white shadow-xs ring-2 ring-blue-500/30"
+                              : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                          }`}
+                        >
+                          <CreditCard className="h-3.5 w-3.5 shrink-0" />
+                          <span>Tip {translate("card")}</span>
+                        </button>
+                      </div>
+
+                      {/* Explicit confirmation message when methods differ */}
+                      {editPaymentMethod !== editTipPaymentMethod && (
+                        <p className="mt-2 rounded-md bg-amber-100/70 px-2.5 py-1 text-[11px] font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                          ⚡ Hóa đơn bằng <strong>{editPaymentMethod === "cash" ? "Tiền mặt" : "Thẻ"}</strong>, Tip bằng <strong>{editTipPaymentMethod === "cash" ? "Tiền mặt" : "Thẻ"}</strong>
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs italic text-gray-400">
+                      (Chưa có tiền tip)
+                    </p>
+                  )}
                 </div>
               </div>
             ) : (

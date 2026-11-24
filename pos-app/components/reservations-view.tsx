@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, Eye, LayoutGrid, MapPin, ChevronLeft, ChevronRight, Pencil, Plus, Users } from "lucide-react";
+import { Activity, Calendar, ChevronDown, ChevronLeft, ChevronRight, Eye, LayoutGrid, MapPin, Pencil, Plus, Sparkles, Users } from "lucide-react";
 import { GuestReturningBadge } from "@/components/guest-returning-badge";
 import { GuestRedFlagBadge } from "@/components/guest-red-flag-badge";
 import { ReservationChangeTimeline } from "@/components/reservation-change-timeline";
@@ -180,6 +180,33 @@ function toDateTimeLocalValue(date: Date): string {
   return `${parts.date}T${parts.time}`;
 }
 
+/** Reservations created within the last 6 hours get a special "New" badge. */
+function isReservationNew(row: ReservationRecord): boolean {
+  if (!row.createdAt) return false;
+  const createdMs =
+    row.createdAt instanceof Date ? row.createdAt.getTime() : new Date(row.createdAt).getTime();
+  if (isNaN(createdMs)) return false;
+  const elapsed = Date.now() - createdMs;
+  return elapsed >= 0 && elapsed < 6 * 60 * 60 * 1000;
+}
+
+/** Format header for upcoming date group: e.g. "Tuesday, 24.11.2026" */
+function formatUpcomingDateHeader(dateStr: string, locale: string): string {
+  const [yStr, mStr, dStr] = dateStr.split("-");
+  const y = Number(yStr);
+  const m = Number(mStr);
+  const d = Number(dStr);
+  const dateObj = new Date(y, m - 1, d, 12, 0, 0);
+
+  const weekday = dateObj.toLocaleDateString(locale, { weekday: "long" });
+  const capitalizedWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+  const dd = String(d).padStart(2, "0");
+  const mm = String(m).padStart(2, "0");
+  const yyyy = String(y);
+
+  return `${capitalizedWeekday}, ${dd}.${mm}.${yyyy}`;
+}
+
 const PERIOD_OPTIONS: ReservationPeriod[] = ["day", "upcoming", "range"];
 
 const PERIOD_LABEL_KEYS = {
@@ -356,6 +383,49 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
       year: "numeric",
     });
   }, [anchorDate, dateNavLocale]);
+
+  const [collapsedDates, setCollapsedDates] = useState<Record<string, boolean>>({});
+
+  const toggleDateCollapse = (dateKey: string) => {
+    setCollapsedDates((prev) => ({
+      ...prev,
+      [dateKey]: !prev[dateKey],
+    }));
+  };
+
+  const upcomingGroups = useMemo(() => {
+    if (period !== "upcoming") return [];
+    const map = new Map<string, ReservationRecord[]>();
+    for (const row of filtered) {
+      const dateKey = toDateInputValue(row.reservedAt);
+      const list = map.get(dateKey) ?? [];
+      list.push(row);
+      map.set(dateKey, list);
+    }
+
+    const sortedKeys = Array.from(map.keys()).sort();
+
+    return sortedKeys.map((dateKey) => {
+      const rows = map.get(dateKey)!;
+      rows.sort((a, b) => a.reservedAt.getTime() - b.reservedAt.getTime());
+
+      const validRows = rows.filter((r) => r.status !== "cancelled");
+      const tablesCount = validRows.length;
+      const guestsCount = validRows.reduce((sum, r) => sum + (r.actualPartySize ?? r.partySize), 0);
+      const cancelledCount = rows.filter((r) => r.status === "cancelled").length;
+
+      const dateLabel = formatUpcomingDateHeader(dateKey, dateNavLocale);
+
+      return {
+        dateKey,
+        dateLabel,
+        tablesCount,
+        guestsCount,
+        cancelledCount,
+        reservations: rows,
+      };
+    });
+  }, [filtered, period, dateNavLocale]);
 
   const showDayNav = period === "day";
   const isTodayAnchor = anchorDate === toDateInputValue(new Date());
@@ -874,13 +944,22 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
               {translate("resNoResults")}
             </p>
           ) : (
-            <div className="space-y-3">
-              {filtered.map((row) => (
+            (() => {
+              const renderReservationCard = (row: ReservationRecord) => (
                 <article key={row.id} className={cardClassName(row)}>
                   <div className="grid items-center gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(140px,0.65fr)_minmax(220px,0.8fr)]">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="text-sm font-semibold sm:text-base lg:text-lg"><button type="button" onClick={()=>setDetailsId(row.id)} className="text-left transition-colors hover:text-[#C9A88B] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[#C9A88B]" aria-label={`${translate("resGuestDetails")}: ${row.guestName}`}>{row.guestName}</button>{row.referralCode && <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">{row.referralCode}</span>}</h2>
+                        {isReservationNew(row) && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-bold text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400"
+                            title="Đơn đặt bàn mới tạo trong 6 giờ"
+                          >
+                            <Sparkles className="h-3 w-3 animate-pulse text-emerald-500" />
+                            New
+                          </span>
+                        )}
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide sm:text-xs ${
                             isLateReservation(row)
@@ -1096,8 +1175,75 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                     </div>
                   </div>
                 </article>
-              ))}
-            </div>
+              );
+
+              if (period === "upcoming") {
+                return (
+                  <div className="space-y-4">
+                    {upcomingGroups.map((group) => {
+                      const isCollapsed = Boolean(collapsedDates[group.dateKey]);
+                      const tableUnit =
+                        language === "vi"
+                          ? "bàn"
+                          : language === "cs"
+                            ? "stolů"
+                            : group.tablesCount === 1
+                              ? "table"
+                              : "tables";
+                      const guestUnit =
+                        language === "vi"
+                          ? "khách"
+                          : language === "cs"
+                            ? "hostů"
+                            : group.guestsCount === 1
+                              ? "guest"
+                              : "guests";
+                      const cancelledUnit =
+                        language === "vi" ? "đã hủy" : language === "cs" ? "zrušeno" : "cancelled";
+
+                      return (
+                        <div key={group.dateKey} className="space-y-2.5">
+                          <button
+                            type="button"
+                            onClick={() => toggleDateCollapse(group.dateKey)}
+                            className="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-gray-100/90 px-4 py-3 text-left font-bold text-gray-800 transition-colors hover:bg-gray-200/80 dark:border-stone-700/80 dark:bg-stone-800/90 dark:text-gray-100 dark:hover:bg-stone-700/80 shadow-xs"
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Calendar className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400" />
+                              <span className="text-sm sm:text-base">
+                                {group.dateLabel} : {group.tablesCount} {tableUnit} – {group.guestsCount} {guestUnit}
+                                {group.cancelledCount > 0 ? `, ${group.cancelledCount} ${cancelledUnit}` : ""}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-gray-600 shadow-2xs dark:bg-stone-700 dark:text-gray-300">
+                                {group.reservations.length}
+                              </span>
+                              <ChevronDown
+                                className={`h-4 w-4 text-gray-500 transition-transform duration-200 ${
+                                  isCollapsed ? "-rotate-90" : "rotate-0"
+                                }`}
+                              />
+                            </div>
+                          </button>
+                          {!isCollapsed && (
+                            <div className="space-y-3 pl-1 sm:pl-3">
+                              {group.reservations.map((item) => renderReservationCard(item))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-3">
+                  {filtered.map((item) => renderReservationCard(item))}
+                </div>
+              );
+            })()
           )}
         </div>
       </div>

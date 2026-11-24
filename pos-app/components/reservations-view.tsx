@@ -262,6 +262,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
   const [checkInActualParty, setCheckInActualParty] = useState(2);
   const seenReservationIdsRef = useRef<Set<string>>(new Set());
   const initialLoadDoneRef = useRef(false);
+  const datePickerInputRef = useRef<HTMLInputElement>(null);
 
   const [formGuestName, setFormGuestName] = useState("");
   const [formPhone, setFormPhone] = useState("");
@@ -384,10 +385,10 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
     });
   }, [anchorDate, dateNavLocale]);
 
-  const [collapsedDates, setCollapsedDates] = useState<Record<string, boolean>>({});
+  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
 
-  const toggleDateCollapse = (dateKey: string) => {
-    setCollapsedDates((prev) => ({
+  const toggleDateExpanded = (dateKey: string) => {
+    setExpandedDates((prev) => ({
       ...prev,
       [dateKey]: !prev[dateKey],
     }));
@@ -856,18 +857,36 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </button>
-                  <label className="relative inline-flex min-w-[9.5rem] cursor-pointer items-center justify-center">
-                    <span className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-center text-xs font-semibold tabular-nums text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:text-sm">
-                      {dayLabel}
-                    </span>
+                  <div className="relative inline-flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          datePickerInputRef.current?.showPicker();
+                        } catch {
+                          datePickerInputRef.current?.focus();
+                        }
+                      }}
+                      className="inline-flex min-w-[9.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-center text-xs font-semibold tabular-nums text-gray-900 shadow-2xs hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 sm:text-sm transition-colors"
+                      title={translate("resPeriodDay")}
+                    >
+                      <Calendar className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-gray-500" />
+                      <span>{dayLabel}</span>
+                    </button>
                     <input
+                      ref={datePickerInputRef}
                       type="date"
                       value={anchorDate}
-                      onChange={(event) => setAnchorDate(event.target.value)}
-                      className="absolute inset-0 z-10 cursor-pointer opacity-0"
+                      onChange={(event) => {
+                        if (event.target.value) {
+                          setAnchorDate(event.target.value);
+                        }
+                      }}
+                      className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
+                      tabIndex={-1}
                       aria-label={translate("resPeriodDay")}
                     />
-                  </label>
+                  </div>
                   <button
                     type="button"
                     onClick={() => shiftAnchor(1)}
@@ -1181,7 +1200,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                 return (
                   <div className="space-y-4">
                     {upcomingGroups.map((group) => {
-                      const isCollapsed = Boolean(collapsedDates[group.dateKey]);
+                      const isExpanded = Boolean(expandedDates[group.dateKey]);
                       const tableUnit =
                         language === "vi"
                           ? "bàn"
@@ -1205,8 +1224,8 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                         <div key={group.dateKey} className="space-y-2.5">
                           <button
                             type="button"
-                            onClick={() => toggleDateCollapse(group.dateKey)}
-                            className="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-gray-100/90 px-4 py-3 text-left font-bold text-gray-800 transition-colors hover:bg-gray-200/80 dark:border-stone-700/80 dark:bg-stone-800/90 dark:text-gray-100 dark:hover:bg-stone-700/80 shadow-xs"
+                            onClick={() => toggleDateExpanded(group.dateKey)}
+                            className="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-gray-100/90 px-4 py-3 text-left font-bold text-gray-800 transition-colors hover:bg-gray-200/80 dark:border-stone-700/80 dark:bg-stone-800/90 dark:text-gray-100 dark:hover:bg-stone-700/80 shadow-xs cursor-pointer"
                           >
                             <div className="flex flex-wrap items-center gap-2">
                               <Calendar className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400" />
@@ -1216,17 +1235,17 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
                               </span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-gray-600 shadow-2xs dark:bg-stone-700 dark:text-gray-300">
+                              <span className="rounded-full bg-black/10 px-2 py-0.5 text-xs font-semibold text-gray-600 dark:bg-stone-700 dark:text-gray-300">
                                 {group.reservations.length}
                               </span>
-                              <ChevronDown
-                                className={`h-4 w-4 text-gray-500 transition-transform duration-200 ${
-                                  isCollapsed ? "-rotate-90" : "rotate-0"
+                              <ChevronRight
+                                className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${
+                                  isExpanded ? "rotate-90" : "rotate-0"
                                 }`}
                               />
                             </div>
                           </button>
-                          {!isCollapsed && (
+                          {isExpanded && (
                             <div className="space-y-3 pl-1 sm:pl-3">
                               {group.reservations.map((item) => renderReservationCard(item))}
                             </div>

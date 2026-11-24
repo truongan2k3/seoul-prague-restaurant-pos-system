@@ -76,3 +76,14 @@ test("Upcoming grouping calculates tables, guests and only appends cancelled whe
   }`;
   assert.equal(formattedNoCancelled, "Tuesday, 24.11.2026 : 2 tables – 12 guests");
 });
+
+test("Upcoming accordion is collapsed by default", () => {
+  const expandedDates: Record<string, boolean> = {};
+  const isExpanded = (dateKey: string) => Boolean(expandedDates[dateKey]);
+  assert.equal(isExpanded("2026-11-24"), false);
+  assert.equal(isExpanded("2026-11-25"), false);
+
+  expandedDates["2026-11-24"] = true;
+  assert.equal(isExpanded("2026-11-24"), true);
+  assert.equal(isExpanded("2026-11-25"), false);
+});

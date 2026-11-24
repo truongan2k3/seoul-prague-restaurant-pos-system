@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
-import { AlertTriangle, Banknote, ChevronLeft, ChevronRight, CreditCard, Eye, Pencil, Percent, Ticket } from "lucide-react";
+import { AlertTriangle, Banknote, Calendar, ChevronLeft, ChevronRight, CreditCard, Eye, Pencil, Percent, Ticket } from "lucide-react";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { DateRangeInputs } from "@/components/date-range-inputs";
 import { HistoryAnalyticsDashboard } from "@/components/history-analytics-dashboard";
@@ -98,6 +98,7 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
   const [cancelRefresh, setCancelRefresh] = useState(0);
   const requests = useRef(0);
   const cancelRequests = useRef(0);
+  const datePickerInputRef = useRef<HTMLInputElement>(null);
   const listCache = useRef(new Map<string, { dates: {from:string;to:string}; rows: SaleRecord[]; expires: number }>());
 
 
@@ -287,18 +288,36 @@ export function HistoryView({ menuItems, onSaleUpdated }: HistoryViewProps) {
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </button>
-                  <label className="relative inline-flex min-w-[9.5rem] cursor-pointer items-center justify-center">
-                    <span className="pointer-events-none rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-center text-xs font-semibold tabular-nums text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:text-sm">
-                      {dayLabel}
-                    </span>
+                  <div className="relative inline-flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          datePickerInputRef.current?.showPicker();
+                        } catch {
+                          datePickerInputRef.current?.focus();
+                        }
+                      }}
+                      className="inline-flex min-w-[9.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-center text-xs font-semibold tabular-nums text-gray-900 shadow-2xs hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 sm:text-sm transition-colors"
+                      title={translate("resPeriodDay")}
+                    >
+                      <Calendar className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-gray-500" />
+                      <span>{dayLabel}</span>
+                    </button>
                     <input
+                      ref={datePickerInputRef}
                       type="date"
                       value={anchorDate}
-                      onChange={(event) => setAnchorDate(event.target.value)}
-                      className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0"
+                      onChange={(event) => {
+                        if (event.target.value) {
+                          setAnchorDate(event.target.value);
+                        }
+                      }}
+                      className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
+                      tabIndex={-1}
                       aria-label={translate("resPeriodDay")}
                     />
-                  </label>
+                  </div>
                   <button
                     type="button"
                     onClick={() => shiftAnchor(1)}

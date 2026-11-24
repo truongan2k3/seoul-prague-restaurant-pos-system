@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Calendar, Check, RotateCcw } from "lucide-react";
+import { Calendar, Check } from "lucide-react";
 import { useApp } from "@/contexts/app-context";
-import { todayIsoDateInVenue } from "@/lib/venue-timezone";
 
 export interface DateRangeInputsProps {
   from: string;
@@ -14,7 +13,7 @@ export interface DateRangeInputsProps {
   className?: string;
 }
 
-/** From–to date inputs with draft state, quick presets, and confirmation button. */
+/** Clean, unified From–To date picker with confirmation button. */
 export function DateRangeInputs({
   from,
   to,
@@ -62,89 +61,15 @@ export function DateRangeInputs({
     }
   };
 
-  const applyPreset = (preset: "today" | "yesterday" | "last7" | "last30" | "thisMonth") => {
-    const todayStr = todayIsoDateInVenue();
-    const [yStr, mStr] = todayStr.split("-");
-    const year = Number(yStr);
-    const month = Number(mStr);
-
-    let nextFrom = todayStr;
-    let nextTo = todayStr;
-
-    if (preset === "today") {
-      nextFrom = todayStr;
-      nextTo = todayStr;
-    } else if (preset === "yesterday") {
-      const yDate = new Date();
-      yDate.setDate(yDate.getDate() - 1);
-      nextFrom = todayIsoDateInVenue(yDate);
-      nextTo = nextFrom;
-    } else if (preset === "last7") {
-      const d = new Date();
-      d.setDate(d.getDate() - 6);
-      nextFrom = todayIsoDateInVenue(d);
-      nextTo = todayStr;
-    } else if (preset === "last30") {
-      const d = new Date();
-      d.setDate(d.getDate() - 29);
-      nextFrom = todayIsoDateInVenue(d);
-      nextTo = todayStr;
-    } else if (preset === "thisMonth") {
-      const firstDay = `${year}-${String(month).padStart(2, "0")}-01`;
-      nextFrom = firstDay;
-      nextTo = todayStr;
-    }
-
-    setDraftFrom(nextFrom);
-    setDraftTo(nextTo);
-    if (onApply) {
-      onApply({ from: nextFrom, to: nextTo });
-    }
-    onFromChange?.(nextFrom);
-    onToChange?.(nextTo);
-  };
-
-  const resetToToday = () => {
-    applyPreset("today");
-  };
-
   const okLabel = language === "vi" ? "Áp dụng" : language === "cs" ? "Použít" : "Apply";
-  const todayLabel = language === "vi" ? "Hôm nay" : language === "cs" ? "Dnes" : "Today";
-  const last7Label = language === "vi" ? "7 ngày" : language === "cs" ? "7 dní" : "7 days";
-  const thisMonthLabel = language === "vi" ? "Tháng này" : language === "cs" ? "Tento měsíc" : "This month";
 
   return (
-    <div className={`mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-gray-50/90 p-2 dark:border-stone-700/80 dark:bg-stone-900/70 ${className}`}>
-      {/* Quick Presets */}
-      <div className="flex flex-wrap items-center gap-1.5 text-xs">
-        <button
-          type="button"
-          onClick={() => applyPreset("today")}
-          className="rounded-lg border border-gray-200 bg-white px-2 py-1 font-medium text-gray-700 shadow-xs hover:bg-gray-100 dark:border-stone-700 dark:bg-stone-800 dark:text-gray-200 dark:hover:bg-stone-700"
-        >
-          {todayLabel}
-        </button>
-        <button
-          type="button"
-          onClick={() => applyPreset("last7")}
-          className="rounded-lg border border-gray-200 bg-white px-2 py-1 font-medium text-gray-700 shadow-xs hover:bg-gray-100 dark:border-stone-700 dark:bg-stone-800 dark:text-gray-200 dark:hover:bg-stone-700"
-        >
-          {last7Label}
-        </button>
-        <button
-          type="button"
-          onClick={() => applyPreset("thisMonth")}
-          className="rounded-lg border border-gray-200 bg-white px-2 py-1 font-medium text-gray-700 shadow-xs hover:bg-gray-100 dark:border-stone-700 dark:bg-stone-800 dark:text-gray-200 dark:hover:bg-stone-700"
-        >
-          {thisMonthLabel}
-        </button>
-      </div>
-
+    <div className={`flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white/70 p-1.5 dark:border-stone-700/80 dark:bg-stone-900/60 shadow-xs ${className}`}>
       {/* Date Pickers in a single unified strip */}
-      <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 dark:border-stone-700 dark:bg-stone-800">
+      <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 dark:border-stone-700 dark:bg-stone-800 shadow-2xs">
         <Calendar className="h-4 w-4 shrink-0 text-gray-400 dark:text-gray-500" />
         <label className="flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-300">
-          <span className="sr-only sm:not-sr-only text-[11px] text-gray-500 dark:text-gray-400">{translate("dateFrom")}</span>
+          <span className="text-[11px] text-gray-400 dark:text-gray-500 font-normal">{translate("dateFrom")}</span>
           <input
             type="date"
             value={draftFrom}
@@ -156,7 +81,7 @@ export function DateRangeInputs({
         </label>
         <span className="text-xs font-bold text-gray-400 dark:text-gray-500">→</span>
         <label className="flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-300">
-          <span className="sr-only sm:not-sr-only text-[11px] text-gray-500 dark:text-gray-400">{translate("dateTo")}</span>
+          <span className="text-[11px] text-gray-400 dark:text-gray-500 font-normal">{translate("dateTo")}</span>
           <input
             type="date"
             value={draftTo}
@@ -174,7 +99,7 @@ export function DateRangeInputs({
         onClick={handleApply}
         className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all shadow-xs ${
           isDirty
-            ? "bg-emerald-600 text-white hover:bg-emerald-700 ring-2 ring-emerald-500/30 scale-105"
+            ? "bg-emerald-600 text-white hover:bg-emerald-700 ring-2 ring-emerald-500/30 scale-102"
             : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-100 dark:border-stone-700 dark:bg-stone-800 dark:text-gray-200 dark:hover:bg-stone-700"
         }`}
         title="OK / Apply date range"
@@ -182,18 +107,6 @@ export function DateRangeInputs({
         <Check className="h-3.5 w-3.5 shrink-0" />
         <span>{okLabel}</span>
       </button>
-
-      {/* Reset button if not today */}
-      {(from !== todayIsoDateInVenue() || to !== todayIsoDateInVenue()) && (
-        <button
-          type="button"
-          onClick={resetToToday}
-          className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-stone-800 dark:hover:text-gray-200"
-          title="Reset to today"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-        </button>
-      )}
     </div>
   );
 }

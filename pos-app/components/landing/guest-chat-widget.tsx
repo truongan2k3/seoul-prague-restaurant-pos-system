@@ -693,13 +693,14 @@ export function GuestChatWidget({ page, liftAboveBookCta = false }: Props) {
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
                       rows={1}
+                      enterKeyHint="enter"
                       placeholder="Write a message…"
                       disabled={!canSend}
                       className="min-h-[42px] flex-1 resize-none rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-sm leading-snug text-white outline-none placeholder:text-white/35 focus:border-[#C9A88B]/60 disabled:opacity-50"
                       style={{ height: "42px" }}
                       onInput={resizeDraft}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
+                        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                           e.preventDefault();
                           void sendMessage();
                         }

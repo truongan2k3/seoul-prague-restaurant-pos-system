@@ -510,9 +510,9 @@ export function GuestChatView() {
                   disabled={busy || selected.status === "closed"}
                   placeholder={translate("guestChatReplyPlaceholder")}
                   rows={1}
-                  enterKeyHint="send"
+                  enterKeyHint="enter"
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                       e.preventDefault();
                       void sendReply();
                     }

@@ -3,7 +3,7 @@
 import { useEetCheckout } from "@/hooks/use-eet-checkout";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
-import { ArrowLeft, ArrowRight, Banknote, Calculator, Coins, CreditCard, Printer } from "lucide-react";
+import { ArrowLeft, ArrowRight, Banknote, Calculator, Coins, CreditCard, Printer, SlidersHorizontal } from "lucide-react";
 import { FloatingCalculator } from "@/components/floating-calculator";
 import {
   NumericInputField,
@@ -255,6 +255,7 @@ export function CheckoutPanel({
   const [localError, setLocalError] = useState<string | null>(null);
   const [printReceipt, setPrintReceipt] = useState(settings.autoPrintOnPayment);
   const [explicitTipMethod, setExplicitTipMethod] = useState<PaymentMethod | null>(null);
+  const [isAdjustingTipMethod, setIsAdjustingTipMethod] = useState(false);
   const splitSessionRef = useRef<{ active: boolean; mode: SplitMode; count: number }>({
     active: false,
     mode: "items",
@@ -273,6 +274,8 @@ export function CheckoutPanel({
     setDiscountValue(0);
     setDiscountPreset(null);
     setCustomTip(0);
+    setExplicitTipMethod(null);
+    setIsAdjustingTipMethod(false);
     setTipPreset(null);
     setTipMode("custom");
     setAdjustmentMode(null);
@@ -1462,40 +1465,64 @@ export function CheckoutPanel({
       )}
 
       {adjustmentMode === "tip" && totalTipWithKeep > 0 && (
-        <div className="rounded-xl border border-amber-200/80 bg-amber-50/50 p-3 text-xs dark:border-amber-900/50 dark:bg-amber-950/20">
+        <div className="rounded-xl border border-amber-200/80 bg-amber-50/50 p-2.5 text-xs dark:border-amber-900/50 dark:bg-amber-950/20">
           <div className="flex items-center justify-between">
             <span className="font-bold text-gray-700 dark:text-gray-200">
-              {translate("tipPaymentMethod")}:
+              {translate("tip")}: {displayPrice(totalTipWithKeep)}
             </span>
-            <span className="text-[11px] text-gray-500 dark:text-gray-400">
-              {translate("tipPaymentMethodHint")}
-            </span>
-          </div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setExplicitTipMethod("cash")}
-              className={`flex min-h-[40px] items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition-all ${
-                (explicitTipMethod ?? "card") === "cash"
-                  ? "bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-500/30"
-                  : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
-              }`}
-            >
-              <Banknote className="h-3.5 w-3.5 shrink-0" />
-              <span>Tip {translate("cash")}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setExplicitTipMethod("card")}
-              className={`flex min-h-[40px] items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition-all ${
-                (explicitTipMethod ?? "card") === "card"
-                  ? "bg-blue-600 text-white shadow-xs ring-2 ring-blue-500/30"
-                  : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
-              }`}
-            >
-              <CreditCard className="h-3.5 w-3.5 shrink-0" />
-              <span>Tip {translate("card")}</span>
-            </button>
+            {!isAdjustingTipMethod && explicitTipMethod === null ? (
+              <div className="flex items-center gap-2">
+                <span className="rounded-md bg-amber-100/80 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                  {translate("tipWithPayment")}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsAdjustingTipMethod(true)}
+                  className="flex items-center gap-1 rounded-lg border border-amber-300/80 bg-white px-2 py-1 text-xs font-semibold text-amber-900 shadow-2xs hover:bg-amber-50 dark:border-amber-700/80 dark:bg-stone-800 dark:text-amber-200 dark:hover:bg-stone-700 transition"
+                >
+                  <SlidersHorizontal className="h-3 w-3" />
+                  <span>{translate("adjustAction")}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setExplicitTipMethod("cash")}
+                  className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold transition-all ${
+                    explicitTipMethod === "cash"
+                      ? "bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-500/30"
+                      : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                  }`}
+                >
+                  <Banknote className="h-3 w-3 shrink-0" />
+                  <span>{translate("cash")}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExplicitTipMethod("card")}
+                  className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold transition-all ${
+                    explicitTipMethod === "card"
+                      ? "bg-blue-600 text-white shadow-xs ring-2 ring-blue-500/30"
+                      : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                  }`}
+                >
+                  <CreditCard className="h-3 w-3 shrink-0" />
+                  <span>{translate("card")}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExplicitTipMethod(null);
+                    setIsAdjustingTipMethod(false);
+                  }}
+                  className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
+                  title={translate("autoTipMethod")}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1645,28 +1672,6 @@ export function CheckoutPanel({
 
   const mainPaymentFooter = (
     <div className="shrink-0 space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700">
-      {applyVoucherCode && tableId ? (
-        <VoucherScanFab
-          variant="inline"
-          activeTableId={tableId}
-          tableLabel={tableLabel}
-          applyVoucherCode={applyVoucherCode}
-          onApplied={(code) => onVoucherApplied?.(code)}
-          onOpenVouchersTab={onOpenVouchersTab}
-        />
-      ) : null}
-      <button
-        type="button"
-        disabled={isSaving || submitting || referralLoading || Boolean(referralError) || orderSummary.length === 0}
-        onClick={handlePrintProvisionalBill}
-        className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm font-semibold text-gray-800 shadow-sm disabled:opacity-40 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:text-base"
-      >
-        <Printer className="h-4 w-4 shrink-0" />
-        {translate("printProvisionalBill")}
-      </button>
-      <p className="-mt-1 text-xs text-gray-500 dark:text-gray-400">
-        {translate("printProvisionalBillHint")}
-      </p>
       {/* Tip Payment Method quick toggle when tip > 0 */}
       {totalTipWithKeep > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200/80 bg-amber-50/60 p-2.5 dark:border-amber-900/50 dark:bg-amber-950/20">
@@ -1674,72 +1679,128 @@ export function CheckoutPanel({
             <Coins className="h-4 w-4 text-amber-600 dark:text-amber-400" />
             <span>{translate("tip")}: {displayPrice(totalTipWithKeep)}</span>
           </div>
-          <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-[11px] text-gray-500 dark:text-gray-400">{translate("tipPaymentMethod")}:</span>
-            <button
-              type="button"
-              onClick={() => setExplicitTipMethod("cash")}
-              className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
-                (explicitTipMethod ?? "cash") === "cash"
-                  ? "bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-500/30"
-                  : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-              }`}
-            >
-              <Banknote className="h-3.5 w-3.5 shrink-0" />
-              <span>{translate("cash")}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setExplicitTipMethod("card")}
-              className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
-                explicitTipMethod === "card"
-                  ? "bg-blue-600 text-white shadow-xs ring-2 ring-blue-500/30"
-                  : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-              }`}
-            >
-              <CreditCard className="h-3.5 w-3.5 shrink-0" />
-              <span>{translate("card")}</span>
-            </button>
-          </div>
+
+          {!isAdjustingTipMethod && explicitTipMethod === null ? (
+            <div className="flex items-center gap-2">
+              <span className="rounded-md bg-amber-100/80 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                {translate("tipWithPayment")}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsAdjustingTipMethod(true)}
+                className="flex items-center gap-1 rounded-lg border border-amber-300/80 bg-white px-2.5 py-1 text-xs font-semibold text-amber-900 shadow-2xs hover:bg-amber-50 dark:border-amber-700/80 dark:bg-stone-800 dark:text-amber-200 dark:hover:bg-stone-700 transition cursor-pointer"
+              >
+                <SlidersHorizontal className="h-3 w-3" />
+                <span>{translate("adjustAction")}</span>
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-[11px] text-gray-500 dark:text-gray-400">{translate("tipPaymentMethod")}:</span>
+              <button
+                type="button"
+                onClick={() => setExplicitTipMethod("cash")}
+                className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                  explicitTipMethod === "cash"
+                    ? "bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-500/30"
+                    : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                }`}
+              >
+                <Banknote className="h-3.5 w-3.5 shrink-0" />
+                <span>{translate("cash")}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setExplicitTipMethod("card")}
+                className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                  explicitTipMethod === "card"
+                    ? "bg-blue-600 text-white shadow-xs ring-2 ring-blue-500/30"
+                    : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                }`}
+              >
+                <CreditCard className="h-3.5 w-3.5 shrink-0" />
+                <span>{translate("card")}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setExplicitTipMethod(null);
+                  setIsAdjustingTipMethod(false);
+                }}
+                className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 cursor-pointer"
+                title={translate("autoTipMethod")}
+              >
+                ✕
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Modern styled Print receipt switch box */}
-      <button
-        type="button"
-        role="switch"
-        aria-checked={printReceipt}
-        onClick={() => setPrintReceipt((prev) => !prev)}
-        className={`flex w-full items-center justify-between rounded-xl border p-2.5 transition-all ${
-          printReceipt
-            ? "border-blue-500/40 bg-blue-50/70 text-blue-950 dark:border-blue-500/30 dark:bg-blue-950/30 dark:text-blue-100 shadow-xs"
-            : "border-gray-200 bg-gray-50/60 text-gray-600 hover:bg-gray-100/70 dark:border-gray-700 dark:bg-gray-800/40 dark:text-gray-400"
-        }`}
-      >
-        <span className="flex items-center gap-2.5 text-sm font-semibold">
-          <span
-            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
-              printReceipt
-                ? "bg-blue-600 text-white shadow-xs"
-                : "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
-            }`}
-          >
-            <Printer className="h-4 w-4" />
-          </span>
-          <span>{translate("checkoutPrintReceipt")}</span>
-        </span>
-        <div
-          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-            printReceipt ? "bg-blue-600" : "bg-gray-300 dark:bg-gray-600"
+      {/* Action buttons on the same row: Scan Voucher, Print provisional bill, and Print receipt (wider) */}
+      <div className="flex items-center gap-2">
+        {applyVoucherCode && tableId ? (
+          <div className="min-w-0 flex-1">
+            <VoucherScanFab
+              variant="inline"
+              activeTableId={tableId}
+              tableLabel={tableLabel}
+              applyVoucherCode={applyVoucherCode}
+              onApplied={(code) => onVoucherApplied?.(code)}
+              onOpenVouchersTab={onOpenVouchersTab}
+              className="!h-11 sm:!h-12 !min-h-[44px] !rounded-xl text-xs sm:text-sm font-semibold !w-full justify-center shadow-xs"
+            />
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          disabled={isSaving || submitting || referralLoading || Boolean(referralError) || orderSummary.length === 0}
+          onClick={handlePrintProvisionalBill}
+          title={translate("printProvisionalBillHint")}
+          className="flex h-11 min-h-[44px] sm:h-12 flex-1 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-gray-300 bg-white px-2 py-2 text-xs font-semibold text-gray-800 shadow-xs transition hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 sm:text-sm"
+        >
+          <Printer className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400" />
+          <span className="truncate">{translate("printProvisionalBill")}</span>
+        </button>
+
+        {/* Modern styled Print receipt switch box (wider as requested: "ưu tiên nút print receipt rộng hơn vì nút đó dùng nhiều hơn") */}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={printReceipt}
+          onClick={() => setPrintReceipt((prev) => !prev)}
+          className={`flex h-11 min-h-[44px] sm:h-12 flex-[1.4] sm:flex-[1.6] min-w-0 items-center justify-between gap-2 rounded-xl border px-2.5 sm:px-3 py-2 transition-all cursor-pointer ${
+            printReceipt
+              ? "border-blue-500/40 bg-blue-50/70 text-blue-950 dark:border-blue-500/30 dark:bg-blue-950/30 dark:text-blue-100 shadow-xs"
+              : "border-gray-200 bg-gray-50/60 text-gray-600 hover:bg-gray-100/70 dark:border-gray-700 dark:bg-gray-800/40 dark:text-gray-400"
           }`}
         >
-          <span
-            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
-              printReceipt ? "translate-x-5" : "translate-x-0"
+          <span className="flex min-w-0 items-center gap-1.5 sm:gap-2 text-xs font-semibold sm:text-sm">
+            <span
+              className={`flex h-6 w-6 sm:h-7 sm:w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                printReceipt
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+              }`}
+            >
+              <Printer className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+            <span className="truncate">{translate("checkoutPrintReceipt")}</span>
+          </span>
+          <div
+            className={`relative inline-flex h-5 w-9 sm:h-6 sm:w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+              printReceipt ? "bg-blue-600" : "bg-gray-300 dark:bg-gray-600"
             }`}
-          />
-        </div>
-      </button>
+          >
+            <span
+              className={`pointer-events-none inline-block h-4 w-4 sm:h-5 sm:w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                printReceipt ? "translate-x-4 sm:translate-x-5" : "translate-x-0"
+              }`}
+            />
+          </div>
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <button

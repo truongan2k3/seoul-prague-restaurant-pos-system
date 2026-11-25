@@ -423,6 +423,9 @@ export interface OrderLineModifiers {
   specialRequestIds?: string[];
   /** Staff table → kitchen message (KDS card until ack; not billed). */
   kitchenMessage?: boolean;
+  /** Partial split-bill settlement: item is paid, stays active on KDS while cooking */
+  paid?: boolean;
+  billSettled?: boolean;
 }
 
 /** Priced add-on chosen on an order line (stored in order_items.selected_addons). */

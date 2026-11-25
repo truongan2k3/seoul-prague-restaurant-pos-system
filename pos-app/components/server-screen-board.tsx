@@ -13,17 +13,13 @@ import {
 import {
   ArrowLeft,
   History,
-  LayoutGrid,
   RefreshCw,
   Volume2,
   VolumeX,
 } from "lucide-react";
 import { AnnouncementMarquee } from "@/components/announcement-marquee";
 import { ServerScreenOrderCards } from "@/components/server-screen-order-cards";
-import { ServerScreenDishLayout } from "@/components/server-screen-dish-layout";
-import { useDishPreparation } from "@/hooks/use-dish-preparation";
 import { useSharedGrillCompanions } from "@/hooks/use-shared-grill-companions";
-import { DISH_DONE_VISIBLE_MS, type DishEntry, type DishCompletion } from "@/lib/dish-preparation";
 import { ServerScreenPaymentOverlay } from "@/components/server-screen-payment-overlay";
 import { OverflowPanText } from "@/components/overflow-pan-text";
 import { ServerScreenReservationPanel } from "@/components/server-screen-reservation-panel";
@@ -81,7 +77,6 @@ import {
   preparationAgeMinutes,
   preparationHighlightTone,
   pruneGrillCompanionStore,
-  readServerScreenLayoutMode,
   SERVER_SCREEN_AUTO_DONE_MS,
   SERVER_SCREEN_DONE_LINGER_MS,
   SERVER_SCREEN_HISTORY_VISIBLE_MS,
@@ -89,10 +84,8 @@ import {
   serverScreenOrderWaveKey,
   shouldShowGrillCompanions,
   tableSessionHasGrill,
-  writeServerScreenLayoutMode,
   type GrillCompanionStore,
   type PrepHighlightTone,
-  type ServerScreenLayoutMode,
   type ServerScreenOrderCard,
   type ServerScreenOrderCardLine,
 } from "@/lib/server-screen";
@@ -292,24 +285,18 @@ function ServerScreenFooter({ language }: { language: LanguageCode }) {
 function FloatingToolbar({
   refreshing,
   onHistory,
-  onLayout,
   onRefresh,
   historyLabel,
-  layoutLabel,
   refreshLabel,
   historyBack = false,
-  layoutActive = false,
   inHeader = false,
 }: {
   refreshing: boolean;
   onHistory: () => void;
-  onLayout?: () => void;
   onRefresh: () => void;
   historyLabel: string;
-  layoutLabel?: string;
   refreshLabel: string;
   historyBack?: boolean;
-  layoutActive?: boolean;
   inHeader?: boolean;
 }) {
   const btnBase = inHeader
@@ -336,23 +323,6 @@ function FloatingToolbar({
           {historyBack ? <ArrowLeft className="h-4 w-4" /> : <History className="h-4 w-4" />}
           <span className={labelClass}>{historyLabel}</span>
         </button>
-        {onLayout ? (
-          <button
-            type="button"
-            onClick={onLayout}
-            aria-label={layoutLabel ?? "Layout"}
-            title={layoutLabel}
-            aria-pressed={layoutActive}
-            className={`${inHeader ? "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border transition" : "inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-medium transition sm:px-4 landscape:min-h-9 landscape:min-w-9 landscape:rounded-lg landscape:px-0 landscape:gap-0"} ${
-              layoutActive
-                ? "border-[#C9A88B]/45 bg-[#C9A88B]/15 text-[#F5EDE4]"
-                : "border-white/12 bg-white/[0.04] text-[#E8D5C4] hover:bg-white/[0.08]"
-            }`}
-          >
-            <LayoutGrid className="h-4 w-4" />
-            <span className={labelClass}>{layoutLabel ?? "Layout"}</span>
-          </button>
-        ) : null}
         <button
           type="button"
           disabled={refreshing}
@@ -397,7 +367,6 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [layoutMode, setLayoutMode] = useState<ServerScreenLayoutMode>("list");
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [animatingOut, setAnimatingOut] = useState<Set<string>>(new Set());
   const [audioUnlocked, setAudioUnlocked] = useState(false);
@@ -457,7 +426,6 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     setCompanionStore(store);
     writeCompanionStore(station, store);
     setHistoryCache(pruneHistoryRows(readHistoryCache(station)));
-    setLayoutMode(readServerScreenLayoutMode());
     setBootstrapped(false);
   }, [station]);
 
@@ -1033,15 +1001,11 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
 
   useEffect(() => {
     const valid = new Set<string>();
-    if (layoutMode === "cards") {
-      for (const card of orderCards) {
-        for (const line of card.lines) {
-          for (const id of line.remainingIds) valid.add(id);
-          if (line.companionKey && line.remainingIds.length > 0) valid.add(line.companionKey);
-        }
+    for (const card of orderCards) {
+      for (const line of card.lines) {
+        for (const id of line.remainingIds) valid.add(id);
+        if (line.companionKey && line.remainingIds.length > 0) valid.add(line.companionKey);
       }
-    } else {
-      for (const row of preparingRows) valid.add(row.key);
     }
     setSelectedKeys((prev) => {
       let changed = false;
@@ -1052,7 +1016,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
       }
       return changed ? next : prev;
     });
-  }, [preparingRows, orderCards, layoutMode]);
+  }, [orderCards]);
 
   useEffect(() => {
     setCompanionStore((prev) => {
@@ -1149,15 +1113,6 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
     });
   };
 
-  const toggleLayoutMode = () => {
-    unlockNotificationAudio();
-    setLayoutMode((prev) => {
-      const next: ServerScreenLayoutMode = prev === "cards" ? "list" : "cards";
-      writeServerScreenLayoutMode(next);
-      return next;
-    });
-  };
-
   const registerLingerAfterMark = useCallback(
     (keys: string[]) => {
       const keySet = new Set(keys);
@@ -1215,115 +1170,6 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
   );
 
   const sharedGrill = useSharedGrillCompanions(companionStore,setCompanionStore,station,bootstrapped);
-
-  const dishEntries = useMemo(() => {
-    const result = new Map<string,DishEntry>();
-    const add = (row:BoardRow,completedAt?:string) => {
-      const companion = row.kind === "companion";
-      const message = !companion && isKitchenMessageOrder(row.item);
-
-      let name: string;
-      let nameZh: string | null;
-
-      if (station === "kitchen" && Boolean(serverScreen.kitchenChinesePrimary)) {
-        if (companion) {
-          const comp = GRILL_FIRST_ORDER_COMPANIONS.find(entry => entry.id === row.companionId);
-          const zh = comp?.names.zh?.trim();
-          const en = comp?.names.en?.trim() || row.companionName || "";
-          name = zh || en;
-          nameZh = zh && en && en !== zh ? en : null;
-        } else if (message) {
-          const zh = row.item.notesTranslated?.trim();
-          const orig = row.item.notes?.trim() || row.item.name;
-          name = zh || orig;
-          nameZh = zh && orig && orig !== zh ? orig : null;
-        } else {
-          const names = kitchenOrderItemDisplayNames(row.item, menuItems);
-          name = names.primaryZh;
-          nameZh = names.secondaryEn;
-        }
-      } else {
-        name = companion ? row.companionName ?? "" : message
-          ? (language === "zh" ? row.item.notesTranslated?.trim() : row.item.notes?.trim()) || orderItemDisplayName(row.item,menuItems,language)
-          : orderItemDisplayName(row.item,menuItems,language);
-        nameZh = companion
-          ? language !== "zh" && serverScreen.showChineseForGrill ? GRILL_FIRST_ORDER_COMPANIONS.find(entry=>entry.id===row.companionId)?.names.zh ?? null : null
-          : isGrillGuestPrepOrder(row.item)
-            ? language !== "zh" && serverScreen.showChineseForGrill ? grillGuestPrepDisplayName(row.item,"zh") : null
-            : forcedChineseName(row.item,menuItems,language,serverScreen.forceChineseMenuItemIds,name,serverScreen.showChineseForGrill);
-      }
-
-      result.set(row.key,{
-        id:row.key,dishKey:companion?`companion:${row.companionId}`:message?`message:${row.key}`:`item:${row.item.menuItemId??row.item.name}`,
-        name,nameZh:nameZh===name?null:nameZh,tableId:row.item.tableId,tableLabel:row.tableLabel,
-        orderedAt:row.item.createdAt??"",quantity:companion?1:Math.max(1,Number(row.item.quantity)||1),
-        note:companion||message?null:itemNote(row.item,language),completedAt,companion,
-      });
-    };
-    preparingRows.forEach(row=>add(row));
-    for(const item of items){
-      const state=resolveKitchenStatus(item);
-      if(!item.id||item.hideOnKds||item.isCancelled||!item.readyAt||!["ready","served"].includes(state))continue;
-      if(nowMs-new Date(item.readyAt).getTime()>=DISH_DONE_VISIBLE_MS)continue;
-      add({key:item.id,kind:"item",item,tableLabel:tableLabelById.get(item.tableId)??"—"},item.readyAt);
-    }
-    for(const [key,completedAt] of Object.entries(companionStore.done)){
-      if(nowMs-new Date(completedAt).getTime()>=DISH_DONE_VISIBLE_MS)continue;
-      const [parentId,companionId]=key.split("::");
-      const companion=GRILL_FIRST_ORDER_COMPANIONS.find(entry=>entry.id===companionId);
-      const anchor=Object.values(companionStore.anchors).find(entry=>entry.parentId===parentId);
-      const parent=items.find(item=>item.id===parentId);
-      if(!companion||(!anchor&&!parent))continue;
-      const item=parent??{id:parentId,name:"Grill",quantity:1,price:0,tableId:anchor!.tableId,createdAt:anchor!.createdAt};
-      add({key,kind:"companion",item,companionId,parentId,companionName:companion.names[language]||companion.names.en,tableLabel:tableLabelById.get(item.tableId)??"—"},completedAt);
-    }
-    return Array.from(result.values());
-  },[preparingRows,items,companionStore,menuItems,language,serverScreen.showChineseForGrill,serverScreen.forceChineseMenuItemIds,tableLabelById,nowMs]);
-
-  const dishCompletionTimes = useMemo(() => {
-    const result=new Map<string,string>();
-    const pendingIds=new Set(dishEntries.filter(entry=>!entry.completedAt).map(entry=>entry.id));
-    for(const row of historyCache)if(!pendingIds.has(row.key)&&row.completedAt&&nowMs-new Date(row.completedAt).getTime()<DISH_DONE_VISIBLE_MS)result.set(row.key,row.completedAt);
-    for(const entry of dishEntries)if(entry.completedAt)result.set(entry.id,entry.completedAt);
-    return result;
-  },[dishEntries,historyCache,nowMs]);
-
-  const completeDishEntries = useCallback(async(ids:string[]):Promise<DishCompletion[]>=>{
-    const completed:DishCompletion[]=[];
-    const rows=new Map(preparingRowsRef.current.map(row=>[row.key,row]));
-    const realIds:string[]=[];
-    const tableIds=new Set<string>();
-    const companionKeys:string[]=[];
-    for(const id of new Set(ids)){
-      const row=rows.get(id);if(!row)continue;
-      if(row.kind==="companion")companionKeys.push(id);
-      else {realIds.push(id);tableIds.add(row.item.tableId);}
-    }
-    try {
-      if(realIds.length){
-        const result=await markItemsReady(realIds,actor,undefined,{onlyPreparing:true,tableIds:Array.from(tableIds)});
-        if(result.error)throw new Error(result.error.message);
-        const changed=("completedItems" in result ? result.completedItems??[] : []) as Array<{id:string;ready_at:string}>;
-        const ready=new Map(changed.map(row=>[row.id,row.ready_at]));
-        completed.push(...changed.map(row=>({id:row.id,completedAt:row.ready_at})));
-        if(changed.length){
-          registerLingerAfterMark(changed.map(row=>row.id));
-          setItems(previous=>previous.map(item=>item.id&&ready.has(item.id)?{...item,status:"served" as const,kitchenStatus:"served" as const,readyAt:ready.get(item.id)}:item));
-        }
-      }
-      if(companionKeys.length){
-        const sides=await sharedGrill.complete(companionKeys);
-        completed.push(...sides);registerLingerAfterMark(sides.map(row=>row.id));
-      }
-      return completed;
-    } catch(cause){
-      throw Object.assign(new Error(cause instanceof Error?cause.message:"Unable to complete these items."),{completed});
-    } finally {
-      void reloadStationItems();void reloadTables();
-    }
-  },[actor,sharedGrill.complete,registerLingerAfterMark,reloadStationItems,reloadTables]);
-
-  const dishPreparation = useDishPreparation({entries:dishEntries,completedTimes:dishCompletionTimes,nowMs,blocked:busy,externalSelected:selectedKeys,onComplete:completeDishEntries});
 
   const handleMarkDone = useCallback(
     async (keysOverride?: string[]) => {
@@ -1928,103 +1774,68 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             {translate("history")}
           </h1>
           <span className="text-sm tabular-nums text-white/40">
-            {layoutMode === "cards" ? historyCards.length : historyRows.length}
+            {historyCards.length}
           </span>
         </header>
         <div data-server-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          {layoutMode === "cards" ? (
-            historyCards.length === 0 ? (
-              <p className="px-4 py-12 text-center text-base text-white/35">{translate("noOrders")}</p>
-            ) : (
-              <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                {historyCards.map((card) => (
-                  <article
-                    key={card.key}
-                    className="overflow-hidden rounded-xl border border-white/10 bg-[#121214]"
-                  >
-                    <header className="flex items-start justify-between gap-2 border-b border-white/10 bg-[#1c1c1f] px-3 py-2.5">
-                      <div className="min-w-0">
-                        <p className="font-serif text-xl font-semibold text-[#F5EDE4]">
-                          {card.tableLabel}
-                        </p>
-                        <p className="mt-0.5 text-xs tabular-nums text-white/40">#{card.ticketId}</p>
-                      </div>
-                    </header>
-                    <ul className="divide-y divide-white/[0.06] px-1 py-1">
-                      {card.lines.map((line, index) => (
-                        <li key={`${line.name}-${index}`} className="px-2.5 py-1.5">
-                          <div className="flex min-w-0 items-baseline gap-2">
-                            <span className="min-w-0 flex-1 truncate text-[0.95rem] font-medium text-[#f5f2ef]">
-                              {line.name}
-                            </span>
-                            <span className="shrink-0 text-sm font-bold tabular-nums text-[#E8D5C4]">
-                              {line.qty}
-                            </span>
-                          </div>
-                          {line.note ? (
-                            <p className="mt-0.5 whitespace-pre-wrap break-words text-xs text-white/45">
-                              {line.note}
-                            </p>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                    <footer className="flex flex-wrap gap-x-4 gap-y-1 border-t border-white/[0.06] px-3 py-2 text-xs tabular-nums text-white/40">
-                      <span>
-                        {translate("serverScreenOrderTime")}:{" "}
-                        {formatOrderClock(card.orderedAt, language)}
-                      </span>
-                      <span>
-                        {translate("serverScreenReadyAt")}:{" "}
-                        {formatOrderClock(card.completedAt, language)}
-                      </span>
-                    </footer>
-                  </article>
-                ))}
-              </div>
-            )
-          ) : historyRows.length === 0 ? (
+          {historyCards.length === 0 ? (
             <p className="px-4 py-12 text-center text-base text-white/35">{translate("noOrders")}</p>
           ) : (
-            <ul className="divide-y divide-white/[0.06]">
-              {historyRows.map((row) => (
-                <li key={row.key} className="px-4 py-3">
-                  <div className="flex flex-nowrap items-center gap-3">
-                    <span className="min-w-0 flex-1 truncate text-[1.25rem] font-semibold leading-snug text-[#f5f2ef]">
-                      {row.name}
-                    </span>
-                    <span className="shrink-0 whitespace-nowrap text-right text-base font-bold tabular-nums text-[#E8D5C4] sm:text-lg">
-                      {row.tableLabel}
-                    </span>
-                  </div>
-                  {row.note ? (
-                    <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-white/55">
-                      {row.note}
-                    </p>
-                  ) : null}
-                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs tabular-nums text-white/40">
+            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3">
+              {historyCards.map((card) => (
+                <article
+                  key={card.key}
+                  className="overflow-hidden rounded-xl border border-white/10 bg-[#121214]"
+                >
+                  <header className="flex items-start justify-between gap-2 border-b border-white/10 bg-[#1c1c1f] px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="font-serif text-xl font-semibold text-[#F5EDE4]">
+                        {card.tableLabel}
+                      </p>
+                      <p className="mt-0.5 text-xs tabular-nums text-white/40">#{card.ticketId}</p>
+                    </div>
+                  </header>
+                  <ul className="divide-y divide-white/[0.06] px-1 py-1">
+                    {card.lines.map((line, index) => (
+                      <li key={`${line.name}-${index}`} className="px-2.5 py-1.5">
+                        <div className="flex min-w-0 items-baseline gap-2">
+                          <span className="min-w-0 flex-1 truncate text-[0.95rem] font-medium text-[#f5f2ef]">
+                            {line.name}
+                          </span>
+                          <span className="shrink-0 text-sm font-bold tabular-nums text-[#E8D5C4]">
+                            {line.qty}
+                          </span>
+                        </div>
+                        {line.note ? (
+                          <p className="mt-0.5 whitespace-pre-wrap break-words text-xs text-white/45">
+                            {line.note}
+                          </p>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                  <footer className="flex flex-wrap gap-x-4 gap-y-1 border-t border-white/[0.06] px-3 py-2 text-xs tabular-nums text-white/40">
                     <span>
-                      {translate("serverScreenOrderTime")}: {formatOrderClock(row.orderedAt, language)}
+                      {translate("serverScreenOrderTime")}:{" "}
+                      {formatOrderClock(card.orderedAt, language)}
                     </span>
                     <span>
-                      {translate("serverScreenReadyAt")}: {formatOrderClock(row.completedAt, language)}
+                      {translate("serverScreenReadyAt")}:{" "}
+                      {formatOrderClock(card.completedAt, language)}
                     </span>
-                  </div>
-                </li>
+                  </footer>
+                </article>
               ))}
-            </ul>
+            </div>
           )}
         </div>
         <FloatingToolbar
           refreshing={refreshing}
           onHistory={() => setHistoryOpen(false)}
-          onLayout={toggleLayoutMode}
           onRefresh={() => void handleRefresh()}
           historyLabel={translate("serverScreenHistoryBack")}
-          layoutLabel={translate("serverScreenLayout")}
           refreshLabel={translate("serverScreenRefresh")}
           historyBack
-          layoutActive={layoutMode === "cards"}
         />
         <ServerScreenFooter language={language} />
       </div>,
@@ -2033,7 +1844,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
 
   return withPaymentOverlay(
     <div
-      data-display-interaction={busy || selectedKeys.size > 0 || dishPreparation.hasPending ? "busy" : undefined}
+      data-display-interaction={busy || selectedKeys.size > 0 ? "busy" : undefined}
       className={shellClass}
       onPointerDown={onBackgroundPointerDown}
       onTouchStart={onTouchStart}
@@ -2070,9 +1881,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             <OverflowPanText text={translate("preparing")} respectReducedMotion={false} />
           </h1>
           <span className="shrink-0 text-sm tabular-nums text-white/40">
-            {layoutMode === "cards"
-              ? orderCards.length
-              : dishPreparation.entries.filter(entry=>!entry.completedAt).reduce((sum,entry)=>sum+entry.quantity,0)}
+            {orderCards.length}
           </span>
           </div>
           <button type="button" data-server-interactive aria-pressed={deviceSoundEnabled}
@@ -2084,55 +1893,29 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
             {deviceSoundEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
           </button>
           <FloatingToolbar
-        refreshing={refreshing}
-        onHistory={() => setHistoryOpen(true)}
-        onLayout={toggleLayoutMode}
-        onRefresh={() => void handleRefresh()}
-        historyLabel={translate("history")}
-        layoutLabel={translate("serverScreenLayout")}
-        refreshLabel={translate("serverScreenRefresh")}
-        inHeader
-        layoutActive={layoutMode === "cards"}
-      />
+            refreshing={refreshing}
+            onHistory={() => setHistoryOpen(true)}
+            onRefresh={() => void handleRefresh()}
+            historyLabel={translate("history")}
+            refreshLabel={translate("serverScreenRefresh")}
+            inHeader
+          />
         </header>
 
         <div className="relative min-h-0 flex-1">
           <div data-server-scroll className="absolute inset-0 overflow-y-auto overscroll-contain">
-            {layoutMode === "cards" ? (
-              <ServerScreenOrderCards
-                cards={orderCards}
-                nowMs={nowMs}
-                minLabel={minLabel}
-                selectedKeys={selectedKeys}
-                animatingOut={animatingOut}
-                emptyLabel={translate("noOrders")}
-                onToggleLine={line=>{if(!line.remainingIds.some(id=>dishPreparation.selections.has(id)))toggleCardLine(line);}}
-                onSetLineCount={(line,count)=>{if(!line.remainingIds.some(id=>dishPreparation.selections.has(id)))setCardLineSelectedCount(line,count);}}
-                onTableTagActivate={card=>{if(!remainingKeysForCard(card).some(id=>dishPreparation.selections.has(id)))handleTableTagActivate(card);}}
-                onUndoDoneLine={(line) => void handleUndoDoneLine(line)}
-              />
-            ) : (
-              <ServerScreenDishLayout entries={dishPreparation.entries} selections={dishPreparation.selections}
-                externalSelected={selectedKeys} nowMs={nowMs} language={language} minLabel={minLabel}
-                emptyLabel={translate("noOrders")} error={dishPreparation.error??sharedGrill.error} processing={busy}
-                onSetQuantity={(ids,count)=>{
-                  unlockNotificationAudio();
-                  dishPreparation.select(ids,count);
-                }}
-                onSelect={ids=>{
-                  unlockNotificationAudio();
-                  if(ids.some(id=>selectedKeys.has(id))){
-                    if(busy)return;
-                    setSelectedKeys(previous=>{
-                      const next=new Set(previous);ids.forEach(id=>next.delete(id));
-                      if(!next.size)clearAutoDoneTimer();
-                      return next;
-                    });
-                    return;
-                  }
-                  dishPreparation.select(ids);
-                }} />
-            )}
+            <ServerScreenOrderCards
+              cards={orderCards}
+              nowMs={nowMs}
+              minLabel={minLabel}
+              selectedKeys={selectedKeys}
+              animatingOut={animatingOut}
+              emptyLabel={translate("noOrders")}
+              onToggleLine={line => toggleCardLine(line)}
+              onSetLineCount={(line, count) => setCardLineSelectedCount(line, count)}
+              onTableTagActivate={card => handleTableTagActivate(card)}
+              onUndoDoneLine={(line) => void handleUndoDoneLine(line)}
+            />
           </div>
 
           <ServerScreenReservationPanel

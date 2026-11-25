@@ -285,8 +285,8 @@ function OrderCard({
           </p>
         </button>
         <span
-          className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold tabular-nums tracking-wide ${
-            queued ? "bg-zinc-950/15 text-zinc-950" : "bg-black/20"
+          className={`shrink-0 rounded-lg px-2.5 py-1 text-sm sm:text-base font-bold tabular-nums tracking-wide ${
+            queued ? "bg-zinc-950/15 text-zinc-950" : "bg-black/25"
           }`}
         >
           {lingering ? "✓" : prepLabel}

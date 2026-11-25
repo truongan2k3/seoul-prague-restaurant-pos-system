@@ -518,28 +518,15 @@ export function nextServerScreenLanguage(
   return list[(index + 1) % list.length]!;
 }
 
-/** Server Screen visual layout — list (default) or kitchen order cards. */
-export type ServerScreenLayoutMode = "list" | "cards";
-
-const LAYOUT_STORAGE_KEY = "pos-server-screen-layout-mode";
+/** Server Screen visual layout — kitchen order cards. */
+export type ServerScreenLayoutMode = "cards";
 
 export function readServerScreenLayoutMode(): ServerScreenLayoutMode {
-  if (typeof window === "undefined") return "list";
-  try {
-    const raw = localStorage.getItem(LAYOUT_STORAGE_KEY);
-    return raw === "cards" ? "cards" : "list";
-  } catch {
-    return "list";
-  }
+  return "cards";
 }
 
-export function writeServerScreenLayoutMode(mode: ServerScreenLayoutMode): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(LAYOUT_STORAGE_KEY, mode);
-  } catch {
-    /* ignore quota / private mode */
-  }
+export function writeServerScreenLayoutMode(_mode: string): void {
+  // Cards is now the sole display mode for KDS & Bar
 }
 
 /** One Send → one order card (unit rows from a single INSERT share created_at). */

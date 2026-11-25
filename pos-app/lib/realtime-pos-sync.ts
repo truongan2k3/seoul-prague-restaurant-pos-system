@@ -22,6 +22,7 @@ function toStationItem(row: SupabaseOrderItemRow): StationOrderItem {
 }
 
 function isActiveFloorItem(item: OrderItem): boolean {
+  if (item.modifiers?.paid || item.modifiers?.billSettled) return false;
   return item.kitchenStatus !== "archived";
 }
 

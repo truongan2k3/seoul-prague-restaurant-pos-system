@@ -90,7 +90,7 @@ export async function commitEetCheckoutAction(sale: Record<string, unknown>, ref
     if (!["cash", "card"].includes(String(sale.payment_method)) || !["total", "items", "equal"].includes(String(sale.split_mode))) throw new Error("Invalid payment type.");
     const { data: table, error } = await db.from("tables").select("label,occupied_at,status,eet_payment_revision,payment_status").eq("id", sale.table_id).single();
     if (error || !table || table.status === "empty" || table.payment_status === "paid" || table.occupied_at !== intent.expectedVisit || table.eet_payment_revision !== intent.expectedRevision) throw new Error("The active table/payment changed. Refresh checkout.");
-    const { data: live, error: liveError } = await db.from("order_items").select("id,name,price,quantity,kitchen_status,status,is_cancelled,is_printed_note")
+    const { data: live, error: liveError } = await db.from("order_items").select("id,name,price,quantity,kitchen_status,status,is_cancelled,is_printed_note,modifiers")
       .eq("table_id", sale.table_id);
     if (liveError || !live) throw new Error("Could not verify current orders.");
     const items = sale.items as OrderItem[];
@@ -99,12 +99,13 @@ export async function commitEetCheckoutAction(sale: Record<string, unknown>, ref
     if (!Number.isInteger(divisor) || divisor < 1 || divisor > 20) throw new Error("Invalid split payment.");
     const used = new Map<string, number>();
     let verifiedSubtotal = 0;
+    const isLiveUnpaid = (row: typeof live[number]) => !row.is_cancelled && !row.is_printed_note && !row.modifiers?.paid && !row.modifiers?.billSettled && !["cancelled", "archived"].includes(row.kitchen_status ?? row.status);
     for (const item of items) {
       if (!Number.isFinite(item.quantity) || item.quantity <= 0 || !Number.isFinite(item.price) || item.price < 0) throw new Error("Invalid payment lines.");
       let remaining = item.quantity;
       const ids = item.unitIds?.length ? item.unitIds : item.id ? [item.id] : [];
       for (const id of ids) {
-        const row = live.find(row => row.id === id && !row.is_cancelled && !["cancelled", "archived"].includes(row.kitchen_status ?? row.status));
+        const row = live.find(row => row.id === id && !row.is_cancelled && !row.modifiers?.paid && !row.modifiers?.billSettled && !["cancelled", "archived"].includes(row.kitchen_status ?? row.status));
         if (!row || Math.abs(Number((Number(row.price) / divisor).toFixed(2)) - item.price) > 0.001) throw new Error("Order changed. Refresh checkout.");
         const quantity = Math.min(remaining, Number(row.quantity) - (used.get(id) ?? 0));
         if (quantity > 0) { used.set(id, (used.get(id) ?? 0) + quantity); remaining -= quantity; }
@@ -113,21 +114,21 @@ export async function commitEetCheckoutAction(sale: Record<string, unknown>, ref
       verifiedSubtotal += item.price * item.quantity;
     }
     if (Math.abs(verifiedSubtotal - Number(sale.subtotal)) > 1) throw new Error("Payment subtotal changed.");
-    if (sale.split_mode !== "items" && live.some(row => !row.is_cancelled && !row.is_printed_note && !["cancelled", "archived"].includes(row.kitchen_status ?? row.status) && (used.get(row.id) ?? 0) !== Number(row.quantity))) throw new Error("The current order has unpaid lines. Refresh checkout.");
+    if (sale.split_mode !== "items" && live.some(row => isLiveUnpaid(row) && (used.get(row.id) ?? 0) !== Number(row.quantity))) throw new Error("The current order has unpaid lines. Refresh checkout.");
     if (sale.split_mode === "items") {
       const unpaid = new Map<string, number>();
       for (const line of settlement.remainingOrders ?? []) {
         if (!Number.isFinite(line.quantity) || line.quantity <= 0 || !Number.isFinite(line.price)) throw new Error("Invalid unpaid order quantities.");
         let remaining = line.quantity;
         for (const id of line.unitIds?.length ? line.unitIds : line.id ? [line.id] : []) {
-          const row = live.find(r => r.id === id && !r.is_cancelled && !["cancelled", "archived"].includes(r.kitchen_status ?? r.status));
+          const row = live.find(r => r.id === id && !r.is_cancelled && !r.modifiers?.paid && !r.modifiers?.billSettled && !["cancelled", "archived"].includes(r.kitchen_status ?? r.status));
           if (!row || Number(row.price) !== line.price) throw new Error("Unpaid order lines changed.");
           const quantity = Math.min(remaining, Number(row.quantity) - (used.get(id) ?? 0) - (unpaid.get(id) ?? 0));
           if (quantity > 0) { unpaid.set(id, (unpaid.get(id) ?? 0) + quantity); remaining -= quantity; }
         }
         if (remaining > 0.00001) throw new Error("Unpaid quantities changed.");
       }
-      if (live.some(row => !row.is_cancelled && !row.is_printed_note && !["cancelled", "archived"].includes(row.kitchen_status ?? row.status) &&
+      if (live.some(row => isLiveUnpaid(row) &&
         (used.get(row.id) ?? 0) + (unpaid.get(row.id) ?? 0) !== Number(row.quantity))) throw new Error("Unpaid order lines must be preserved.");
       if ((settlement.closeTable !== false) !== (unpaid.size === 0)) throw new Error("The bill cannot close while unpaid items remain.");
     } else if (settlement.remainingOrders !== undefined) throw new Error("Unexpected unpaid-item settlement.");

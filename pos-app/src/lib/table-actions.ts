@@ -335,8 +335,9 @@ function orderItemRowUpdate(unit: OrderItem) {
 }
 
 function isBillableOrderItem(
-  item: Pick<OrderItem, "kitchenStatus" | "status" | "isCancelled">,
+  item: Pick<OrderItem, "kitchenStatus" | "status" | "isCancelled" | "modifiers">,
 ): boolean {
+  if (item.modifiers?.paid || item.modifiers?.billSettled) return false;
   const kitchenStatus = resolveKitchenStatus(item);
   return kitchenStatus !== "cancelled" && kitchenStatus !== "archived" && !item.isCancelled;
 }
@@ -623,6 +624,7 @@ export async function updateTableOrders(
   if (activeOrders.length === 0) {
     const openIds = (existingRows ?? [])
       .filter((row) => {
+        if (row.modifiers?.paid || row.modifiers?.billSettled) return false;
         const status = resolveKitchenStatus({
           status: row.status,
           kitchenStatus: row.kitchen_status ?? undefined,
@@ -669,15 +671,42 @@ export async function updateTableOrders(
           })),
         });
       } else {
-        // Payment settle / system clear — archive quietly (no History cancel badge).
-        const { error: archiveError } = await supabase
-          .from("order_items")
-          .update({
-            kitchen_status: "archived",
-            updated_at: cancelledAt,
-          })
-          .in("id", openIds).eq("table_id", tableId);
-        if (archiveError) return { data: null, error: archiveError };
+        // Payment settle / system clear — keep cooking tickets on KDS, archive only non-cooking items.
+        const rows = cancelRows ?? [];
+        const rowsToKeepInKitchen = rows.filter((row) => {
+          if (row.hide_on_kds) return false;
+          const kitchenStatus = resolveKitchenStatus({
+            status: row.status,
+            kitchenStatus: row.kitchen_status ?? undefined,
+          });
+          return kitchenStatus === "pending";
+        });
+        const keepIds = new Set(rowsToKeepInKitchen.map((r) => r.id));
+        const archiveIds = openIds.filter((id) => !keepIds.has(id));
+
+        if (archiveIds.length > 0) {
+          const { error: archiveError } = await supabase
+            .from("order_items")
+            .update({
+              kitchen_status: "archived",
+              updated_at: cancelledAt,
+            })
+            .in("id", archiveIds).eq("table_id", tableId);
+          if (archiveError) return { data: null, error: archiveError };
+        }
+
+        if (rowsToKeepInKitchen.length > 0) {
+          for (const row of rowsToKeepInKitchen) {
+            const { error: keepError } = await supabase
+              .from("order_items")
+              .update({
+                modifiers: { ...(row.modifiers ?? {}), paid: true, billSettled: true },
+                updated_at: cancelledAt,
+              })
+              .eq("id", row.id);
+            if (keepError) return { data: null, error: keepError };
+          }
+        }
       }
     }
 
@@ -713,6 +742,7 @@ export async function updateTableOrders(
   const existingOpenIds = new Set(
     (existingRows ?? [])
       .filter((row) => {
+        if (row.modifiers?.paid || row.modifiers?.billSettled) return false;
         const status = resolveKitchenStatus({
           status: row.status,
           kitchenStatus: row.kitchen_status ?? undefined,
@@ -731,7 +761,7 @@ export async function updateTableOrders(
   if (idsToCancel.length > 0) {
     const { data: cancelRows } = await supabase
       .from("order_items")
-      .select("id, name, kitchen_status, status, quantity, price")
+      .select("id, name, kitchen_status, status, quantity, price, hide_on_kds, modifiers")
       .in("id", idsToCancel)
       .eq("is_cancelled", false)
       .neq("kitchen_status", "archived");
@@ -766,16 +796,45 @@ export async function updateTableOrders(
         rows: (cancelRows ?? []) as ActivityItemRow[],
       });
     } else {
-      const { error: archiveError } = await supabase
-        .from("order_items")
-        .update({
-          kitchen_status: "archived",
-          updated_at: cancelledAt,
-        })
-        .in("id", idsToCancel)
-        .eq("is_cancelled", false)
-        .neq("kitchen_status", "archived");
-      if (archiveError) return { data: null, error: archiveError };
+      // Payment settle / partial split bill settlement:
+      // Keep items still cooking on KDS; archive items already served or not on KDS.
+      const rows = cancelRows ?? [];
+      const rowsToKeepInKitchen = rows.filter((row) => {
+        if (row.hide_on_kds) return false;
+        const kitchenStatus = resolveKitchenStatus({
+          status: row.status,
+          kitchenStatus: row.kitchen_status ?? undefined,
+        });
+        return kitchenStatus === "pending";
+      });
+      const keepIds = new Set(rowsToKeepInKitchen.map((r) => r.id));
+      const archiveIds = idsToCancel.filter((id) => !keepIds.has(id));
+
+      if (archiveIds.length > 0) {
+        const { error: archiveError } = await supabase
+          .from("order_items")
+          .update({
+            kitchen_status: "archived",
+            updated_at: cancelledAt,
+          })
+          .in("id", archiveIds)
+          .eq("is_cancelled", false)
+          .neq("kitchen_status", "archived");
+        if (archiveError) return { data: null, error: archiveError };
+      }
+
+      if (rowsToKeepInKitchen.length > 0) {
+        for (const row of rowsToKeepInKitchen) {
+          const { error: keepError } = await supabase
+            .from("order_items")
+            .update({
+              modifiers: { ...(row.modifiers ?? {}), paid: true, billSettled: true },
+              updated_at: cancelledAt,
+            })
+            .eq("id", row.id);
+          if (keepError) return { data: null, error: keepError };
+        }
+      }
     }
   }
 

@@ -166,8 +166,10 @@ test("sendVoucherIssuedEmail attaches 2-sided PDF, inline front PNG, and online 
     const body = capturedBody as { html: string; attachments: Array<{ filename: string; content_type?: string }> };
     assert.match(body.html, /https:\/\/example\.com\/voucher\/view\?token=abc123/);
     assert.match(body.html, /cid:voucher-front-1/);
+    assert.match(body.html, /cid:voucher-back-1/);
     assert.ok(body.attachments.some((a) => a.content_type === "application/pdf" && a.filename.endsWith(".pdf")));
     assert.ok(body.attachments.some((a) => a.content_type === "image/png" && a.filename.includes("front")));
+    assert.ok(body.attachments.some((a) => a.content_type === "image/png" && a.filename.includes("back")));
   } finally {
     globalThis.fetch = prevFetch;
     if (prevKey === undefined) delete process.env.RESEND_API_KEY;

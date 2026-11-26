@@ -218,7 +218,7 @@ export function VoucherCardPreview({
             </div>
             <div className="flex items-baseline">
               <span
-                className="font-serif leading-none text-[#fbf8f3]"
+                className="font-serif font-semibold leading-none text-[#fbf8f3]"
                 style={{ fontSize: "8cqw" }}
               >
                 {amount.num}
@@ -347,7 +347,7 @@ export function VoucherCardPreview({
                 </p>
               ) : null}
             </div>
-            <p className="font-serif text-[#fbf8f3]" style={{ fontSize: "2.8cqw" }}>
+            <p className="font-serif font-semibold text-[#fbf8f3]" style={{ fontSize: "2.8cqw" }}>
               {formatVoucherAmount(denominationCzk)}
             </p>
           </div>

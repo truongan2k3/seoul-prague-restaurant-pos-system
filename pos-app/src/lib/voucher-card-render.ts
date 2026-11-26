@@ -17,7 +17,11 @@ export const VOUCHER_CARD_WIDTH = 1200;
 export const VOUCHER_CARD_HEIGHT = 760;
 
 type FontSet = {
-  geistRegular: Buffer;
+  playfairRegular: Buffer;
+  playfairSemiBold: Buffer;
+  playfairItalic: Buffer;
+  sansRegular: Buffer;
+  sansBold: Buffer;
 };
 
 let cachedFonts: FontSet | null = null;
@@ -36,11 +40,36 @@ async function readFirstExisting(candidates: string[]): Promise<Buffer> {
 async function loadFonts(): Promise<FontSet> {
   if (cachedFonts) return cachedFonts;
   const cwd = process.cwd();
-  const geistRegular = await readFirstExisting([
-    path.join(cwd, "node_modules/next/dist/compiled/@vercel/og/Geist-Regular.ttf"),
-    path.join(cwd, "pos-app/node_modules/next/dist/compiled/@vercel/og/Geist-Regular.ttf"),
-  ]);
-  cachedFonts = { geistRegular };
+  const [playfairRegular, playfairSemiBold, playfairItalic, sansRegular, sansBold] =
+    await Promise.all([
+      readFirstExisting([
+        path.join(cwd, "app/fonts/playfair-display/static/PlayfairDisplay-Regular.ttf"),
+        path.join(cwd, "pos-app/app/fonts/playfair-display/static/PlayfairDisplay-Regular.ttf"),
+      ]),
+      readFirstExisting([
+        path.join(cwd, "app/fonts/playfair-display/static/PlayfairDisplay-SemiBold.ttf"),
+        path.join(cwd, "pos-app/app/fonts/playfair-display/static/PlayfairDisplay-SemiBold.ttf"),
+      ]),
+      readFirstExisting([
+        path.join(cwd, "app/fonts/playfair-display/static/PlayfairDisplay-Italic.ttf"),
+        path.join(cwd, "pos-app/app/fonts/playfair-display/static/PlayfairDisplay-Italic.ttf"),
+      ]),
+      readFirstExisting([
+        path.join(cwd, "app/fonts/playfair-display/static/PlusJakartaSans-Regular.ttf"),
+        path.join(cwd, "pos-app/app/fonts/playfair-display/static/PlusJakartaSans-Regular.ttf"),
+      ]),
+      readFirstExisting([
+        path.join(cwd, "app/fonts/playfair-display/static/PlusJakartaSans-Bold.ttf"),
+        path.join(cwd, "pos-app/app/fonts/playfair-display/static/PlusJakartaSans-Bold.ttf"),
+      ]),
+    ]);
+  cachedFonts = {
+    playfairRegular,
+    playfairSemiBold,
+    playfairItalic,
+    sansRegular,
+    sansBold,
+  };
   return cachedFonts;
 }
 
@@ -192,7 +221,7 @@ export async function renderVoucherFrontPng(input: VoucherCardRenderInput): Prom
         overflow: "hidden",
         flexDirection: "column",
         justifyContent: "space-between",
-        fontFamily: "Geist",
+        fontFamily: "Plus Jakarta Sans",
       },
     },
     // Background photo or subtle radial luxury base
@@ -409,6 +438,7 @@ export async function renderVoucherFrontPng(input: VoucherCardRenderInput): Prom
               style: {
                 display: "flex",
                 fontFamily: "Playfair Display",
+                fontWeight: 600,
                 fontSize: 96,
                 lineHeight: 0.95,
                 color: "#fbf8f3",
@@ -489,8 +519,11 @@ export async function renderVoucherFrontPng(input: VoucherCardRenderInput): Prom
     width: VOUCHER_CARD_WIDTH,
     height: VOUCHER_CARD_HEIGHT,
     fonts: [
-      { name: "Geist", data: fonts.geistRegular, weight: 400, style: "normal" },
-      { name: "Geist", data: fonts.geistRegular, weight: 700, style: "normal" },
+      { name: "Playfair Display", data: fonts.playfairRegular, weight: 400, style: "normal" },
+      { name: "Playfair Display", data: fonts.playfairSemiBold, weight: 600, style: "normal" },
+      { name: "Playfair Display", data: fonts.playfairItalic, weight: 400, style: "italic" },
+      { name: "Plus Jakarta Sans", data: fonts.sansRegular, weight: 400, style: "normal" },
+      { name: "Plus Jakarta Sans", data: fonts.sansBold, weight: 700, style: "normal" },
     ],
   });
   return Buffer.from(await res.arrayBuffer());
@@ -525,7 +558,7 @@ export async function renderVoucherBackPng(input: VoucherCardRenderInput): Promi
         overflow: "hidden",
         flexDirection: "column",
         justifyContent: "space-between",
-        fontFamily: "Geist",
+        fontFamily: "Plus Jakarta Sans",
       },
     },
     bgDataUri
@@ -630,6 +663,7 @@ export async function renderVoucherBackPng(input: VoucherCardRenderInput): Promi
             style: {
               display: "flex",
               fontFamily: "Playfair Display",
+              fontWeight: 600,
               fontSize: 34,
               color: "#fbf8f3",
             },
@@ -830,8 +864,11 @@ export async function renderVoucherBackPng(input: VoucherCardRenderInput): Promi
     width: VOUCHER_CARD_WIDTH,
     height: VOUCHER_CARD_HEIGHT,
     fonts: [
-      { name: "Geist", data: fonts.geistRegular, weight: 400, style: "normal" },
-      { name: "Geist", data: fonts.geistRegular, weight: 700, style: "normal" },
+      { name: "Playfair Display", data: fonts.playfairRegular, weight: 400, style: "normal" },
+      { name: "Playfair Display", data: fonts.playfairSemiBold, weight: 600, style: "normal" },
+      { name: "Playfair Display", data: fonts.playfairItalic, weight: 400, style: "italic" },
+      { name: "Plus Jakarta Sans", data: fonts.sansRegular, weight: 400, style: "normal" },
+      { name: "Plus Jakarta Sans", data: fonts.sansBold, weight: 700, style: "normal" },
     ],
   });
   return Buffer.from(await res.arrayBuffer());

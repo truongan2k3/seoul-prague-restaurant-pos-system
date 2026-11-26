@@ -289,6 +289,7 @@ export async function sendVoucherIssuedEmail(input: {
     qrDataUrl: string;
     expiresAt?: string | null;
     frontPng?: Buffer | null;
+    backPng?: Buffer | null;
   }[];
   pdfBuffer?: Buffer | null;
   viewUrl?: string | null;
@@ -331,9 +332,27 @@ export async function sendVoucherIssuedEmail(input: {
           content_id: frontCid,
           content_type: "image/png",
         });
-        return `<div style="margin:20px 0;text-align:center">
-          <img src="cid:${frontCid}" alt="Gift Voucher ${escapeHtml(v.code)}" style="width:100%;max-width:484px;height:auto;display:block;margin:0 auto;border-radius:14px;border:1px solid #dfd3c3" />
-          <p style="margin:10px 0 0;font-size:13px;color:#57534e;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">
+
+        let backBlock = "";
+        if (v.backPng && v.backPng.length > 0) {
+          const backCid = `voucher-back-${index + 1}`;
+          attachments.push({
+            filename: `voucher-${v.code}-back.png`,
+            content: v.backPng.toString("base64"),
+            content_id: backCid,
+            content_type: "image/png",
+          });
+          backBlock = `<div style="margin-top:16px">
+            <p style="margin:0 0 8px;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:#8c7a65;font-weight:700">Back · Terms &amp; Details</p>
+            <img src="cid:${backCid}" alt="Gift Voucher ${escapeHtml(v.code)} Back" style="width:100%;max-width:500px;height:auto;display:block;margin:0 auto;border-radius:14px;border:1px solid #dfd3c3" />
+          </div>`;
+        }
+
+        return `<div style="margin:22px 0;padding:18px;background:#faf8f5;border:1px solid #e7e0d6;border-radius:16px;text-align:center">
+          <p style="margin:0 0 8px;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:#8c7a65;font-weight:700">Front · Value &amp; QR</p>
+          <img src="cid:${frontCid}" alt="Gift Voucher ${escapeHtml(v.code)} Front" style="width:100%;max-width:500px;height:auto;display:block;margin:0 auto;border-radius:14px;border:1px solid #dfd3c3" />
+          ${backBlock}
+          <p style="margin:12px 0 0;font-size:13px;color:#57534e;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">
             <strong>${escapeHtml(v.code)}</strong>${expiry ? ` · Valid until ${escapeHtml(expiry)}` : ""}
           </p>
         </div>`;

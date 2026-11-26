@@ -520,20 +520,93 @@ export async function verifyVoucherPayment(input: {
   return { order, error: null };
 }
 
+async function buildVoucherQrPayloads(
+  codes: VoucherCode[],
+): Promise<{ code: string; qrDataUrl: string; expiresAt?: string | null }[]> {
+  const qrPayloads: { code: string; qrDataUrl: string; expiresAt?: string | null }[] = [];
+  for (const code of codes) {
+    const qrDataUrl = await QRCode.toDataURL(code.code, {
+      type: "image/png",
+      width: 360,
+      margin: 2,
+      errorCorrectionLevel: "M",
+    });
+    qrPayloads.push({
+      code: code.code,
+      qrDataUrl,
+      expiresAt: code.expiresAt ?? null,
+    });
+  }
+  return qrPayloads;
+}
+
 async function emailIssuedVouchers(order: VoucherOrder, config: VoucherConfig) {
   if (order.codes?.length) {
-    const qrPayloads: { code: string; qrDataUrl: string }[] = [];
-    for (const code of order.codes) {
-      const qrDataUrl = await QRCode.toDataURL(code.code, {
-        type: "image/png",
-        width: 360,
-        margin: 2,
-        errorCorrectionLevel: "M",
-      });
-      qrPayloads.push({ code: code.code, qrDataUrl });
-    }
+    const qrPayloads = await buildVoucherQrPayloads(order.codes);
     void sendVoucherIssuedEmail({ order, config, vouchers: qrPayloads });
   }
+}
+
+/**
+ * Reissue / resend an already-issued voucher email without changing or creating voucher codes.
+ * Keeps the exact original code(s) intact and logs the resend in voucher_audit_logs.
+ */
+export async function reissueVoucherEmail(input: {
+  orderUuid: string;
+  recipientEmail?: string;
+  staffId?: string | null;
+  staffName?: string | null;
+}): Promise<{ sent: boolean; sentTo?: string; order: VoucherOrder | null; error: string | null }> {
+  const order = await getVoucherOrderById(input.orderUuid);
+  if (!order) {
+    return { sent: false, order: null, error: "Order not found." };
+  }
+  if (order.paymentStatus !== "paid" || order.orderStatus === "cancelled") {
+    return { sent: false, order, error: "Only paid, active voucher orders can be reissued." };
+  }
+
+  const activeCodes = (order.codes ?? []).filter(
+    (c) => c.status === "issued" || c.status === "applied",
+  );
+  if (activeCodes.length === 0) {
+    return { sent: false, order, error: "No active voucher codes left to reissue." };
+  }
+
+  const targetEmail = (input.recipientEmail?.trim() || order.buyerEmail).trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) {
+    return { sent: false, order, error: "Invalid email address." };
+  }
+
+  const config = await fetchVoucherConfigServer();
+  const qrPayloads = await buildVoucherQrPayloads(activeCodes);
+  const emailResult = await sendVoucherIssuedEmail({
+    order: { ...order, buyerEmail: targetEmail },
+    config,
+    vouchers: qrPayloads,
+    isReissue: true,
+  });
+
+  if (!emailResult.sent) {
+    return {
+      sent: false,
+      order,
+      error: emailResult.error || "Failed to send voucher email.",
+    };
+  }
+
+  await writeAudit({
+    orderUuid: order.id,
+    action: "reissued_email",
+    staffId: input.staffId,
+    staffName: input.staffName,
+    meta: {
+      to: targetEmail,
+      codeCount: activeCodes.length,
+      codes: activeCodes.map((c) => c.code),
+    },
+  });
+
+  return { sent: true, sentTo: targetEmail, order, error: null };
 }
 
 /** Atomic staff recovery: the database enforces the cancellation reason and deadline. */

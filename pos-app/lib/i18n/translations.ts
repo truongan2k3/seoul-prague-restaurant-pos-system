@@ -219,6 +219,11 @@ const en = {
   voucherConfirmPayment: "Confirm payment & issue codes",
   voucherVerifyConfirm:
     "Confirm that bank payment was received? This issues voucher codes and emails the guest.",
+  voucherReissueButton: "Reissue voucher email",
+  voucherReissueHint: "Resends the voucher email while keeping the exact same code(s).",
+  voucherReissueEmailLabel: "Recipient email",
+  voucherReissueConfirm: "Send voucher email",
+  voucherReissueSuccess: "Voucher email sent to {email}.",
   voucherCancel: "Cancel",
   voucherSettingsTitle: "Vouchers",
   voucherSettingsHint:
@@ -1813,6 +1818,11 @@ const cs: Record<TranslationKey, string> = {
   voucherConfirmPayment: "Potvrdit platbu a vydat kódy",
   voucherVerifyConfirm:
     "Potvrdit, že bankovní platba dorazila? Tím se vydají kódy a odešle e-mail hostovi.",
+  voucherReissueButton: "Znovu odeslat e-mail s voucherem",
+  voucherReissueHint: "Znovu odešle e-mail s voucherem se stejným kódem.",
+  voucherReissueEmailLabel: "E-mail příjemce",
+  voucherReissueConfirm: "Odeslat e-mail",
+  voucherReissueSuccess: "E-mail s voucherem odeslán na {email}.",
   voucherCancel: "Zrušit",
   voucherSettingsTitle: "Vouchery",
   voucherSettingsHint:

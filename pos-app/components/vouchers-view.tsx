@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Camera, CheckCircle2, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { Camera, CheckCircle2, ChevronLeft, ChevronRight, Mail, Search, X } from "lucide-react";
 import { HeaderClockWithStatus } from "@/components/connection-status-badge";
 import { Modal } from "@/components/modal";
 import { useApp } from "@/contexts/app-context";
@@ -66,6 +66,12 @@ export function VouchersView({
   const [selected, setSelected] = useState<VoucherOrder | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmVerify, setConfirmVerify] = useState(false);
+  const [confirmReissue, setConfirmReissue] = useState(false);
+  const [reissueEmail, setReissueEmail] = useState("");
+  const [reissueFeedback, setReissueFeedback] = useState<{
+    kind: "success" | "error";
+    message: string;
+  } | null>(null);
   const [recoveryNow, setRecoveryNow] = useState(Date.now);
   const recoveryDeadline = selected ? voucherRecoveryDeadline(selected) : null;
   const recoveryOpen = recoveryDeadline !== null && recoveryNow < recoveryDeadline;
@@ -115,6 +121,8 @@ export function VouchersView({
     if (match) {
       setSelected(match);
       setConfirmVerify(false);
+      setConfirmReissue(false);
+      setReissueFeedback(null);
       onFocusOrderConsumed?.();
     }
   }, [focusOrderId, orders, onFocusOrderConsumed]);
@@ -260,6 +268,51 @@ export function VouchersView({
     }
   };
 
+  const reissueVoucher = async () => {
+    if (!selected || busy) return;
+    setBusy(true);
+    setReissueFeedback(null);
+    try {
+      const response = await fetch("/api/vouchers/staff/reissue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderUuid: selected.id,
+          recipientEmail: reissueEmail.trim() || selected.buyerEmail,
+        }),
+      });
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        sentTo?: string;
+        order?: VoucherOrder;
+        error?: string;
+      };
+      if (!response.ok || !payload.ok) {
+        setReissueFeedback({
+          kind: "error",
+          message: payload.error || "Failed to send voucher email.",
+        });
+        return;
+      }
+      if (payload.order) setSelected(payload.order);
+      setConfirmReissue(false);
+      setReissueFeedback({
+        kind: "success",
+        message: translate("voucherReissueSuccess").replace(
+          "{email}",
+          payload.sentTo ?? (reissueEmail.trim() || selected.buyerEmail),
+        ),
+      });
+    } catch {
+      setReissueFeedback({
+        kind: "error",
+        message: "Failed to send voucher email.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col bg-background text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200/80 bg-background px-2.5 py-1.5 sm:px-4 sm:py-2.5 lg:px-6 lg:py-4 dark:border-gray-800 dark:bg-gray-900">
@@ -366,6 +419,8 @@ export function VouchersView({
                         onClick={() => {
                           setSelected(order);
                           setConfirmVerify(false);
+                          setConfirmReissue(false);
+                          setReissueFeedback(null);
                         }}
                       >
                         <td className="px-4 py-3 font-semibold tabular-nums">{order.orderId}</td>
@@ -454,6 +509,8 @@ export function VouchersView({
         onClose={() => {
           setSelected(null);
           setConfirmVerify(false);
+          setConfirmReissue(false);
+          setReissueFeedback(null);
         }}
         title={selected?.orderId ?? translate("vouchersTitle")}
         zIndexClass="z-[110]"
@@ -573,6 +630,75 @@ export function VouchersView({
                   {translate(recoveryDeadline !== null ? "voucherRecoveryIssue" : "voucherPaymentReceived")}
                 </button>
               )
+            ) : null}
+
+            {selected.paymentStatus === "paid" &&
+            selected.orderStatus !== "cancelled" &&
+            (selected.codes ?? []).some((c) => c.status === "issued" || c.status === "applied") ? (
+              <div className="space-y-2">
+                {reissueFeedback ? (
+                  <p
+                    className={`rounded-xl border px-3 py-2 text-xs font-medium ${
+                      reissueFeedback.kind === "success"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
+                        : "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200"
+                    }`}
+                  >
+                    {reissueFeedback.message}
+                  </p>
+                ) : null}
+
+                {confirmReissue ? (
+                  <div className="space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/60">
+                    <p className="text-xs text-gray-600 dark:text-gray-300">
+                      {translate("voucherReissueHint")}
+                    </p>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300">
+                        {translate("voucherReissueEmailLabel")}
+                      </label>
+                      <input
+                        type="email"
+                        value={reissueEmail}
+                        onChange={(e) => setReissueEmail(e.target.value)}
+                        placeholder={selected.buyerEmail}
+                        className="pos-input w-full text-sm"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void reissueVoucher()}
+                        className="flex-1 rounded-xl bg-gray-900 py-2.5 text-sm font-semibold text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
+                      >
+                        {translate("voucherReissueConfirm")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmReissue(false)}
+                        className="rounded-xl border border-gray-300 px-4 py-2.5 text-sm dark:border-gray-600"
+                      >
+                        {translate("voucherCancel")}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      setReissueEmail(selected.buyerEmail);
+                      setReissueFeedback(null);
+                      setConfirmReissue(true);
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white py-2.5 text-sm font-semibold text-gray-800 transition hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
+                  >
+                    <Mail className="h-4 w-4" />
+                    {translate("voucherReissueButton")}
+                  </button>
+                )}
+              </div>
             ) : null}
             <p className="text-xs text-gray-400">
               Staff: {currentStaffUser?.name ?? "—"}

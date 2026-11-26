@@ -6,15 +6,19 @@ import {
   createVoucherCode,
   createVoucherOrderId,
   DEFAULT_VOUCHER_CONFIG,
+  getResolvedVoucherDesign,
   parseVoucherConfig,
   variableSymbolFromOrderId,
   voucherConfigToDb,
   VOUCHER_PAYMENT_WINDOW_MINUTES,
+  type VoucherCardDesign,
   type VoucherCode,
   type VoucherConfig,
   type VoucherOrder,
   type VoucherPaymentMethod,
 } from "@/lib/voucher";
+import { getReservationAppBaseUrl } from "@/src/lib/reservation-email";
+import { renderVoucherOrderAssets } from "@/src/lib/voucher-card-render";
 import { broadcastVoucherOrderAlert } from "@/lib/voucher-order-alert";
 import { createSupabaseAdmin } from "@/src/lib/supabase-admin";
 import {
@@ -93,6 +97,7 @@ function mapOrder(row: OrderRow, codes?: VoucherCode[]): VoucherOrder {
     verifiedByStaffName: row.verified_by_staff_name,
     issuedAt: row.issued_at,
     cancelledAt: row.cancelled_at ?? null,
+    publicToken: row.public_token ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     codes,
@@ -520,30 +525,117 @@ export async function verifyVoucherPayment(input: {
   return { order, error: null };
 }
 
-async function buildVoucherQrPayloads(
-  codes: VoucherCode[],
-): Promise<{ code: string; qrDataUrl: string; expiresAt?: string | null }[]> {
-  const qrPayloads: { code: string; qrDataUrl: string; expiresAt?: string | null }[] = [];
-  for (const code of codes) {
-    const qrDataUrl = await QRCode.toDataURL(code.code, {
-      type: "image/png",
-      width: 360,
-      margin: 2,
-      errorCorrectionLevel: "M",
-    });
-    qrPayloads.push({
-      code: code.code,
-      qrDataUrl,
-      expiresAt: code.expiresAt ?? null,
-    });
+export async function resolveEffectiveVoucherDesign(
+  config: VoucherConfig,
+): Promise<VoucherCardDesign> {
+  const base = getResolvedVoucherDesign(config);
+  const needsVenueInfo =
+    !base.venueAddress || !base.venuePhone || !base.venueEmail || !base.venueWebsite || (base.showLogo && !base.logoUrl);
+  if (!needsVenueInfo) return base;
+
+  const admin = createSupabaseAdmin();
+  const [wsRes, bizRes] = await Promise.all([
+    admin.from("website_settings").select("address, phone, email").eq("id", 1).maybeSingle(),
+    admin.from("businesses").select("logo_url").limit(1).maybeSingle(),
+  ]);
+
+  const ws = (wsRes.data ?? null) as { address?: string; phone?: string; email?: string } | null;
+  const biz = (bizRes.data ?? null) as { logo_url?: string } | null;
+  const appUrl = getReservationAppBaseUrl().replace(/^https?:\/\//, "");
+
+  return {
+    ...base,
+    logoUrl: base.logoUrl || (biz?.logo_url ?? "").trim(),
+    venueAddress: base.venueAddress || (ws?.address ?? "").trim(),
+    venuePhone: base.venuePhone || (ws?.phone ?? "").trim(),
+    venueEmail: base.venueEmail || (ws?.email ?? "").trim(),
+    venueWebsite: base.venueWebsite || appUrl,
+  };
+}
+
+async function ensureOrderPublicToken(order: VoucherOrder): Promise<string> {
+  if (order.publicToken?.trim()) return order.publicToken.trim();
+  const token = createPublicToken();
+  const admin = createSupabaseAdmin();
+  await admin
+    .from("voucher_orders")
+    .update({ public_token: token })
+    .eq("id", order.id)
+    .is("public_token", null);
+  return token;
+}
+
+export async function getGuestVoucherViewByToken(token: string): Promise<{
+  order: VoucherOrder | null;
+  codes: VoucherCode[];
+  config: VoucherConfig;
+  design: VoucherCardDesign | null;
+  error: string | null;
+}> {
+  const trimmed = token.trim();
+  if (!trimmed) {
+    const config = await fetchVoucherConfigServer();
+    return { order: null, codes: [], config, design: null, error: "Missing voucher token." };
   }
-  return qrPayloads;
+  const admin = createSupabaseAdmin();
+  const { data } = await admin
+    .from("voucher_orders")
+    .select("*")
+    .eq("public_token", trimmed)
+    .maybeSingle();
+  if (!data) {
+    const config = await fetchVoucherConfigServer();
+    return { order: null, codes: [], config, design: null, error: "Voucher not found." };
+  }
+  const order = mapOrder(data as OrderRow);
+  const { data: codeRows } = await admin
+    .from("voucher_codes")
+    .select("*")
+    .eq("order_uuid", order.id)
+    .order("created_at", { ascending: true });
+  const codes = ((codeRows as CodeRow[] | null) ?? []).map(mapCode);
+  const config = await fetchVoucherConfigServer();
+  const design = await resolveEffectiveVoucherDesign(config);
+  return { order: { ...order, codes }, codes, config, design, error: null };
+}
+
+async function prepareIssuedVoucherPayload(
+  order: VoucherOrder,
+  codes: VoucherCode[],
+  config: VoucherConfig,
+) {
+  const [token, design] = await Promise.all([
+    ensureOrderPublicToken(order),
+    resolveEffectiveVoucherDesign(config),
+  ]);
+  const viewUrl = `${getReservationAppBaseUrl()}/voucher/view?token=${encodeURIComponent(token)}`;
+  const assets = await renderVoucherOrderAssets({
+    order,
+    codes,
+    config,
+    designOverride: design,
+  });
+  return {
+    viewUrl,
+    pdfBuffer: assets.pdfBuffer,
+    vouchers: assets.vouchers,
+    effectiveConfig: { ...config, design },
+  };
 }
 
 async function emailIssuedVouchers(order: VoucherOrder, config: VoucherConfig) {
-  if (order.codes?.length) {
-    const qrPayloads = await buildVoucherQrPayloads(order.codes);
-    void sendVoucherIssuedEmail({ order, config, vouchers: qrPayloads });
+  if (!order.codes?.length) return;
+  try {
+    const prepared = await prepareIssuedVoucherPayload(order, order.codes, config);
+    await sendVoucherIssuedEmail({
+      order,
+      config: prepared.effectiveConfig,
+      vouchers: prepared.vouchers,
+      pdfBuffer: prepared.pdfBuffer,
+      viewUrl: prepared.viewUrl,
+    });
+  } catch (err) {
+    console.error("[voucher-server] Failed to render/send voucher email:", err);
   }
 }
 
@@ -578,11 +670,13 @@ export async function reissueVoucherEmail(input: {
   }
 
   const config = await fetchVoucherConfigServer();
-  const qrPayloads = await buildVoucherQrPayloads(activeCodes);
+  const prepared = await prepareIssuedVoucherPayload(order, activeCodes, config);
   const emailResult = await sendVoucherIssuedEmail({
     order: { ...order, buyerEmail: targetEmail },
-    config,
-    vouchers: qrPayloads,
+    config: prepared.effectiveConfig,
+    vouchers: prepared.vouchers,
+    pdfBuffer: prepared.pdfBuffer,
+    viewUrl: prepared.viewUrl,
     isReissue: true,
   });
 

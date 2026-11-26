@@ -7,7 +7,7 @@ type InlineAttachment = {
   filename: string;
   /** Raw base64 (no data: prefix). */
   content: string;
-  content_id: string;
+  content_id?: string;
   content_type?: string;
 };
 
@@ -141,8 +141,12 @@ function validityTermLine(validityDays: number): string {
   return `Voucher is valid for ${validityDays} days from the issue date.`;
 }
 
-/** Same guest-facing T&C as /voucher (English — emails are EN). */
+/** Same guest-facing T&C as /voucher and card back (English — emails are EN). */
 function voucherTermsLines(config: VoucherConfig): string[] {
+  const custom = config.design?.termsLines?.filter((line) => line.trim().length > 0);
+  if (custom && custom.length > 0) {
+    return custom;
+  }
   return [
     validityTermLine(config.validityDays),
     "Vouchers are applied at the counter at payment. Please present the voucher code for staff to scan before paying your bill.",
@@ -280,10 +284,17 @@ export async function sendVoucherConfirmationEmail(input: {
 export async function sendVoucherIssuedEmail(input: {
   order: VoucherOrder;
   config: VoucherConfig;
-  vouchers: { code: string; qrDataUrl: string; expiresAt?: string | null }[];
+  vouchers: {
+    code: string;
+    qrDataUrl: string;
+    expiresAt?: string | null;
+    frontPng?: Buffer | null;
+  }[];
+  pdfBuffer?: Buffer | null;
+  viewUrl?: string | null;
   isReissue?: boolean;
 }): Promise<{ sent: boolean; error?: string }> {
-  const { order, config, vouchers, isReissue } = input;
+  const { order, config, vouchers, pdfBuffer, viewUrl, isReissue } = input;
   const baseSubject = config.issuedEmailSubject?.trim() || "Your Gift Voucher";
   const subject = isReissue
     ? `${baseSubject} (Resent) · ${order.orderId}`
@@ -300,8 +311,34 @@ export async function sendVoucherIssuedEmail(input: {
     : `Thank you for your purchase! Payment for order ${order.orderId} has been confirmed, and your gift voucher is ready to enjoy.`;
 
   const attachments: InlineAttachment[] = [];
+
+  if (pdfBuffer && pdfBuffer.length > 0) {
+    attachments.push({
+      filename: `Gift-Voucher-${order.orderId}.pdf`,
+      content: pdfBuffer.toString("base64"),
+      content_type: "application/pdf",
+    });
+  }
+
   const cards = vouchers
     .map((v, index) => {
+      const expiry = formatExpiryDate(v.expiresAt);
+      if (v.frontPng && v.frontPng.length > 0) {
+        const frontCid = `voucher-front-${index + 1}`;
+        attachments.push({
+          filename: `voucher-${v.code}-front.png`,
+          content: v.frontPng.toString("base64"),
+          content_id: frontCid,
+          content_type: "image/png",
+        });
+        return `<div style="margin:20px 0;text-align:center">
+          <img src="cid:${frontCid}" alt="Gift Voucher ${escapeHtml(v.code)}" style="width:100%;max-width:484px;height:auto;display:block;margin:0 auto;border-radius:14px;border:1px solid #dfd3c3" />
+          <p style="margin:10px 0 0;font-size:13px;color:#57534e;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">
+            <strong>${escapeHtml(v.code)}</strong>${expiry ? ` · Valid until ${escapeHtml(expiry)}` : ""}
+          </p>
+        </div>`;
+      }
+
       const contentId = `voucher-code-qr-${index + 1}`;
       const attachment = dataUrlToInlineAttachment(v.qrDataUrl, `${v.code}.png`, contentId);
       const img = attachment
@@ -312,7 +349,6 @@ export async function sendVoucherIssuedEmail(input: {
             </div>`;
           })()
         : "";
-      const expiry = formatExpiryDate(v.expiresAt);
       const expiryHtml = expiry
         ? `<p style="margin:12px 0 0;font-size:12px;color:#78716c">Valid until <strong>${escapeHtml(expiry)}</strong></p>`
         : "";
@@ -330,10 +366,21 @@ export async function sendVoucherIssuedEmail(input: {
     })
     .join("");
 
+  const viewCtaHtml = viewUrl
+    ? `<div style="margin:22px 0 4px;text-align:center">
+        <a href="${escapeHtml(viewUrl)}" style="display:inline-block;background:#1c1917;color:#f5efe6;padding:13px 26px;border-radius:12px;text-decoration:none;font-size:14px;font-weight:600;border:1px solid #c9a88b">
+          View Online &amp; Print Voucher (2-Sided)
+        </a>
+        ${pdfBuffer ? `<p style="margin:10px 0 0;font-size:12.5px;color:#78716c">A print-ready 2-sided PDF (front with QR &amp; value, back with terms &amp; expiry) is also attached below.</p>` : ""}
+      </div>`
+    : pdfBuffer
+      ? `<p style="margin:16px 0 0;text-align:center;font-size:13px;color:#78716c">A print-ready 2-sided PDF (front with QR &amp; value, back with terms &amp; expiry) is attached to this email.</p>`
+      : "";
+
   const html = `<!DOCTYPE html>
 <html>
 <body style="margin:0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:#f6f3ee;color:#1c1917;padding:28px 16px">
-  <div style="max-width:540px;margin:0 auto;background:#ffffff;border:1px solid #e7e0d6;border-radius:20px;overflow:hidden;box-shadow:0 6px 24px rgba(28,25,23,0.06)">
+  <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e7e0d6;border-radius:20px;overflow:hidden;box-shadow:0 6px 24px rgba(28,25,23,0.06)">
     <div style="height:5px;background:linear-gradient(90deg,#b88b58,#d4b084,#b88b58)"></div>
     <div style="padding:30px 28px">
       <p style="margin:0;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#8c7a65;font-weight:700">${BRAND_NAME}</p>
@@ -341,6 +388,7 @@ export async function sendVoucherIssuedEmail(input: {
       <p style="margin:0 0 8px;font-size:15px;line-height:1.6;color:#44403c">${escapeHtml(greeting)}</p>
       <p style="margin:0 0 18px;font-size:15px;line-height:1.6;color:#44403c">${introHtml}</p>
       ${cards}
+      ${viewCtaHtml}
       ${voucherTermsHtml(config)}
       <div style="margin-top:24px;padding-top:18px;border-top:1px solid #ede7de;text-align:center">
         <p style="margin:0;font-size:14px;color:#57534e">We look forward to welcoming you soon!</p>
@@ -361,11 +409,16 @@ export async function sendVoucherIssuedEmail(input: {
       const expiry = formatExpiryDate(v.expiresAt);
       return expiry ? `Code: ${v.code} (${unit} · Valid until ${expiry})` : `Code: ${v.code} (${unit})`;
     }),
+    viewUrl ? "" : "",
+    viewUrl ? `View online & print 2-sided PDF: ${viewUrl}` : "",
+    pdfBuffer ? "A print-ready 2-sided PDF is attached to this email." : "",
     "",
     ...voucherTermsText(config),
     "",
     "We look forward to welcoming you soon!",
-  ].join("\n");
+  ]
+    .filter((line, idx, arr) => line !== "" || (idx > 0 && arr[idx - 1] !== ""))
+    .join("\n");
 
   return sendResendEmail({
     to: order.buyerEmail,

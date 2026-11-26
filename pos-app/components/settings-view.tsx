@@ -1858,7 +1858,7 @@ export function SettingsView({
         )}
 
         {activeSettingsTab === "vouchers" && (
-        <div className="mx-auto grid max-w-3xl grid-cols-1 gap-6">
+        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6">
           <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">
               {translate("voucherSettingsTitle")}

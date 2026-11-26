@@ -14,6 +14,68 @@ export type VoucherOrderStatus =
 
 export type VoucherCodeStatus = "issued" | "applied" | "redeemed" | "cancelled" | "expired";
 
+export interface VoucherCardDesign {
+  /** Uploaded restaurant photo URL for card front background. */
+  frontBackgroundUrl: string;
+  /** Optional uploaded photo URL for card back background. */
+  backBackgroundUrl: string;
+  /** Optional uploaded restaurant logo URL shown on card front top-right. */
+  logoUrl: string;
+  /** Whether to show logo emblem on card front top-right. */
+  showLogo: boolean;
+  /** Top-left uppercase eyebrow title, e.g. "GIFT VOUCHER" / "DÁRKOVÝ POUKAZ". */
+  frontTitle: string;
+  /** Top-left brand & city line, e.g. "SEOUL PRAGUE · PRAHA". */
+  frontBrandLine: string;
+  /** Optional subtle subtitle line below brand line. */
+  frontSubtitle: string;
+  /** Accent color (borders, divider, gold headings). */
+  accentColor: string;
+  /** Deep card surface background color. */
+  surfaceColor: string;
+  /** Dark gradient overlay opacity on front photo (0–90). */
+  frontOverlayOpacity: number;
+  /** Render classic double-line luxury border frame. */
+  showBorderFrame: boolean;
+  /** Back card heading, e.g. "TERMS & CONDITIONS". */
+  backTitle: string;
+  /** Venue street address printed on back card. */
+  venueAddress: string;
+  /** Venue phone number printed on back card. */
+  venuePhone: string;
+  /** Venue contact email printed on back card. */
+  venueEmail: string;
+  /** Venue website printed on back card. */
+  venueWebsite: string;
+  /** English terms & conditions bullets on back card and email. */
+  termsLines: string[];
+}
+
+export const DEFAULT_VOUCHER_DESIGN: VoucherCardDesign = {
+  frontBackgroundUrl: "",
+  backBackgroundUrl: "",
+  logoUrl: "",
+  showLogo: true,
+  frontTitle: "GIFT VOUCHER",
+  frontBrandLine: "SEOUL PRAGUE · PRAHA",
+  frontSubtitle: "Korean BBQ & Culinary Experience",
+  accentColor: "#C9A88B",
+  surfaceColor: "#0b0a09",
+  frontOverlayOpacity: 60,
+  showBorderFrame: true,
+  backTitle: "TERMS & CONDITIONS",
+  venueAddress: "",
+  venuePhone: "",
+  venueEmail: "",
+  venueWebsite: "",
+  termsLines: [
+    "Valid until the expiration date stated on this voucher.",
+    "Present this voucher code or QR at the counter before paying your bill.",
+    "Vouchers are applied at payment and have no cash redemption value.",
+    "Reservations are recommended. Contact us for assistance anytime.",
+  ],
+};
+
 export interface VoucherConfig {
   enabled: boolean;
   denominationsCzk: number[];
@@ -28,6 +90,7 @@ export interface VoucherConfig {
   processingMessage: string;
   confirmationEmailSubject: string;
   issuedEmailSubject: string;
+  design?: VoucherCardDesign;
 }
 
 export const DEFAULT_VOUCHER_CONFIG: VoucherConfig = {
@@ -43,7 +106,8 @@ export const DEFAULT_VOUCHER_CONFIG: VoucherConfig = {
   processingMessage:
     "Thank you for ordering a voucher. Please complete payment within 15 minutes and tap “I’ve paid”. After we confirm your payment (within 24 hours), voucher codes will be sent to this email.",
   confirmationEmailSubject: "Voucher order received",
-  issuedEmailSubject: "Your Seoul Prague voucher",
+  issuedEmailSubject: "Your Gift Voucher",
+  design: { ...DEFAULT_VOUCHER_DESIGN },
 };
 
 export const VOUCHER_PAYMENT_WINDOW_MINUTES = 15;
@@ -79,6 +143,7 @@ export interface VoucherOrder {
   verifiedByStaffName?: string | null;
   issuedAt?: string | null;
   cancelledAt?: string | null;
+  publicToken?: string | null;
   createdAt: string;
   updatedAt: string;
   codes?: VoucherCode[];
@@ -101,8 +166,70 @@ export interface VoucherCode {
   createdAt: string;
 }
 
+function sanitizeHexColor(value: unknown, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+  const trimmed = value.trim();
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed : fallback;
+}
+
+export function parseVoucherDesign(raw: unknown): VoucherCardDesign {
+  if (!raw || typeof raw !== "object") return { ...DEFAULT_VOUCHER_DESIGN, termsLines: [...DEFAULT_VOUCHER_DESIGN.termsLines] };
+  const row = raw as Record<string, unknown>;
+  const overlay = Number(row.frontOverlayOpacity);
+  const terms = Array.isArray(row.termsLines)
+    ? row.termsLines.map((line) => String(line).trim()).filter(Boolean).slice(0, 10)
+    : [...DEFAULT_VOUCHER_DESIGN.termsLines];
+  return {
+    frontBackgroundUrl:
+      typeof row.frontBackgroundUrl === "string" ? row.frontBackgroundUrl.trim() : "",
+    backBackgroundUrl:
+      typeof row.backBackgroundUrl === "string" ? row.backBackgroundUrl.trim() : "",
+    logoUrl: typeof row.logoUrl === "string" ? row.logoUrl.trim() : "",
+    showLogo: typeof row.showLogo === "boolean" ? row.showLogo : DEFAULT_VOUCHER_DESIGN.showLogo,
+    frontTitle:
+      typeof row.frontTitle === "string" && row.frontTitle.trim()
+        ? row.frontTitle.trim()
+        : DEFAULT_VOUCHER_DESIGN.frontTitle,
+    frontBrandLine:
+      typeof row.frontBrandLine === "string"
+        ? row.frontBrandLine.trim()
+        : DEFAULT_VOUCHER_DESIGN.frontBrandLine,
+    frontSubtitle:
+      typeof row.frontSubtitle === "string"
+        ? row.frontSubtitle.trim()
+        : DEFAULT_VOUCHER_DESIGN.frontSubtitle,
+    accentColor: sanitizeHexColor(row.accentColor, DEFAULT_VOUCHER_DESIGN.accentColor),
+    surfaceColor: sanitizeHexColor(row.surfaceColor, DEFAULT_VOUCHER_DESIGN.surfaceColor),
+    frontOverlayOpacity: Number.isFinite(overlay)
+      ? Math.min(90, Math.max(0, Math.round(overlay)))
+      : DEFAULT_VOUCHER_DESIGN.frontOverlayOpacity,
+    showBorderFrame:
+      typeof row.showBorderFrame === "boolean"
+        ? row.showBorderFrame
+        : DEFAULT_VOUCHER_DESIGN.showBorderFrame,
+    backTitle:
+      typeof row.backTitle === "string" && row.backTitle.trim()
+        ? row.backTitle.trim()
+        : DEFAULT_VOUCHER_DESIGN.backTitle,
+    venueAddress: typeof row.venueAddress === "string" ? row.venueAddress.trim() : "",
+    venuePhone: typeof row.venuePhone === "string" ? row.venuePhone.trim() : "",
+    venueEmail: typeof row.venueEmail === "string" ? row.venueEmail.trim() : "",
+    venueWebsite: typeof row.venueWebsite === "string" ? row.venueWebsite.trim() : "",
+    termsLines: terms,
+  };
+}
+
+export function getResolvedVoucherDesign(config: VoucherConfig): VoucherCardDesign {
+  return parseVoucherDesign(config.design);
+}
+
 export function parseVoucherConfig(raw: unknown): VoucherConfig {
-  if (!raw || typeof raw !== "object") return { ...DEFAULT_VOUCHER_CONFIG };
+  if (!raw || typeof raw !== "object") {
+    return {
+      ...DEFAULT_VOUCHER_CONFIG,
+      design: { ...DEFAULT_VOUCHER_DESIGN, termsLines: [...DEFAULT_VOUCHER_DESIGN.termsLines] },
+    };
+  }
   const row = raw as Record<string, unknown>;
   const dens = Array.isArray(row.denominationsCzk)
     ? row.denominationsCzk
@@ -141,6 +268,7 @@ export function parseVoucherConfig(raw: unknown): VoucherConfig {
       typeof row.issuedEmailSubject === "string" && row.issuedEmailSubject.trim()
         ? row.issuedEmailSubject.trim()
         : DEFAULT_VOUCHER_CONFIG.issuedEmailSubject,
+    design: parseVoucherDesign(row.design),
   };
 }
 
@@ -158,6 +286,7 @@ export function voucherConfigToDb(config: VoucherConfig) {
     processingMessage: config.processingMessage,
     confirmationEmailSubject: config.confirmationEmailSubject,
     issuedEmailSubject: config.issuedEmailSubject,
+    design: parseVoucherDesign(config.design),
   };
 }
 

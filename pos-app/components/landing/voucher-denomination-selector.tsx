@@ -1,9 +1,13 @@
 "use client";
 
-import type { CSSProperties } from "react";
-import { Minus, Plus } from "lucide-react";
-import { formatVoucherAmount } from "@/lib/voucher";
-import { LandingImage } from "@/lib/website/landing-image";
+import { useState, type CSSProperties } from "react";
+import { Minus, Plus, RotateCw, Sparkles } from "lucide-react";
+import { VoucherCardFace } from "@/components/voucher-card-preview";
+import {
+  DEFAULT_VOUCHER_CONFIG,
+  formatVoucherAmount,
+  type VoucherConfig,
+} from "@/lib/voucher";
 
 /** Per-denomination visual identity — same system, distinct accents. */
 const CARD_THEMES: Record<
@@ -199,72 +203,193 @@ export function VoucherDenominationSelector({
 }
 
 type PreviewProps = {
-  brandName: string;
-  logoUrl?: string | null;
+  voucherConfig?: VoucherConfig;
   denomination: number;
   quantity: number;
   total: number;
   previewLabel?: string;
   previewNote?: string;
-  voucherLabel?: string;
-  valueLabel?: string;
+  frontSideLabel?: string;
+  backSideLabel?: string;
+  flipActionLabel?: string;
+  tapBadgeLabel?: string;
+  hintFront?: string;
+  hintBack?: string;
   totalLabel?: string;
 };
 
-/** A presentation card, not a usable voucher: real codes are issued after verification. */
+/** Interactive 2-sided voucher card preview synchronized with the restaurant's voucher design. */
 export function VoucherLivePreview({
-  brandName, logoUrl, denomination, quantity, total,
+  voucherConfig = DEFAULT_VOUCHER_CONFIG,
+  denomination,
+  quantity,
+  total,
   previewLabel = "Your gift, beautifully presented",
-  previewNote = "Illustrative preview. Voucher codes arrive by email after payment verification.",
-  voucherLabel = "Gift voucher", valueLabel = "Voucher value", totalLabel = "Total",
+  previewNote = "Illustrative 2-sided preview. Your unique voucher codes arrive by email after payment is verified.",
+  frontSideLabel = "Front · Value & QR",
+  backSideLabel = "Back · Terms & Info",
+  flipActionLabel = "Flip card",
+  tapBadgeLabel = "Tap card to flip",
+  hintFront = "Displays voucher value & scannable QR code — click card or Back to preview terms and expiry.",
+  hintBack = "Shows validity date, restaurant contact & usage terms — click card or Front to return.",
+  totalLabel = "Total",
 }: PreviewProps) {
-  const theme = themeFor(denomination);
+  const [flipped, setFlipped] = useState(false);
+  const [hasFlippedOnce, setHasFlippedOnce] = useState(false);
+
+  const flipTo = (nextFlipped: boolean) => {
+    setFlipped(nextFlipped);
+    setHasFlippedOnce(true);
+  };
+
+  const toggleFlip = () => {
+    setFlipped((prev) => !prev);
+    setHasFlippedOnce(true);
+  };
+
   return (
     <div className="min-w-0">
-      <p className="text-[11px] uppercase tracking-[0.23em] text-[#C9A88B]">{previewLabel}</p>
-      <div className="relative mt-7 pb-6">
-        <div aria-hidden className="pointer-events-none absolute inset-x-5 bottom-2 top-6 rotate-[-3deg] rounded-[24px] border border-[#C9A88B]/15 bg-[#191613] shadow-2xl" />
-        <div className={`relative isolate overflow-hidden rounded-[24px] border bg-gradient-to-br ${theme.wash} shadow-[0_24px_64px_-20px_rgba(0,0,0,0.8)]`} style={{ borderColor: theme.edge }}>
-          <div aria-hidden className={`pointer-events-none absolute inset-0 bg-gradient-to-tr ${theme.foil}`} />
-          <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.05] mix-blend-overlay" style={GRAIN_STYLE} />
-          <div aria-hidden className="pointer-events-none absolute inset-3 rounded-[16px] border" style={{ borderColor: `${theme.gem}24` }} />
-          <svg aria-hidden viewBox="0 0 440 360" preserveAspectRatio="xMidYMid slice" className="pointer-events-none absolute inset-0 h-full w-full" fill="none" stroke={theme.gem}>
-            {[110, 140, 170, 200, 230].map(radius => <circle key={radius} cx="430" cy="185" r={radius} strokeOpacity="0.10" strokeWidth="0.7" />)}
-            <path d="M300 0V360M307 0V360" strokeOpacity="0.09" strokeWidth="0.6" />
-          </svg>
-          <div className="relative flex min-h-[320px] flex-col justify-between p-7 sm:min-h-[360px] sm:p-9">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                {logoUrl ? <LandingImage src={logoUrl} alt={brandName} width={48} height={48} sizes="48px" className="mb-4 h-12 w-12 object-contain" />
-                  : <span className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-full border text-sm tracking-widest" style={{ borderColor: theme.edge, color: theme.gem }}>SP</span>}
-                <p className="landing-serif text-xl tracking-wide text-[#F5EDE4] sm:text-2xl">{brandName}</p>
-                <p className="mt-2 text-[8px] uppercase tracking-[0.28em] text-white/45 sm:text-[9px]">Korean BBQ &amp; Dining</p>
-              </div>
-              <span className="mt-1 shrink-0 text-[9px] uppercase tracking-[0.25em]" style={{ color: theme.gem }}>{theme.label}</span>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] uppercase tracking-[0.23em] text-[#C9A88B]">{previewLabel}</p>
+        <button
+          type="button"
+          onClick={toggleFlip}
+          className="inline-flex items-center gap-1.5 rounded-full border border-[#C9A88B]/35 bg-[#C9A88B]/10 px-3 py-1 text-[11px] font-medium text-[#E8D5C4] transition hover:border-[#C9A88B]/70 hover:bg-[#C9A88B]/20"
+        >
+          {!hasFlippedOnce ? (
+            <span className="relative flex h-2 w-2" aria-hidden>
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#C9A88B] opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#C9A88B]" />
+            </span>
+          ) : null}
+          <RotateCw
+            className={`h-3 w-3 text-[#C9A88B] transition-transform duration-500 ${
+              flipped ? "rotate-180" : "rotate-0"
+            }`}
+            aria-hidden
+          />
+          <span>{tapBadgeLabel}</span>
+        </button>
+      </div>
+
+      {/* 3D Flip Stage */}
+      <div className="relative mt-5 pb-4" style={{ perspective: "1400px" }}>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-6 bottom-1 top-5 rotate-[-2.5deg] rounded-2xl border border-[#C9A88B]/15 bg-[#191613]/80 shadow-2xl"
+        />
+        <button
+          type="button"
+          onClick={toggleFlip}
+          aria-pressed={flipped}
+          aria-label={`${flipActionLabel}: ${flipped ? backSideLabel : frontSideLabel}`}
+          className="group relative block w-full cursor-pointer rounded-xl text-left transition-transform duration-300 hover:scale-[1.01] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#C9A88B] motion-reduce:hover:transform-none"
+        >
+          <div
+            className="relative aspect-[1200/760] w-full transition-transform duration-700 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+            style={{
+              transformStyle: "preserve-3d",
+              transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+            }}
+          >
+            {/* Front Face */}
+            <div
+              className="absolute inset-0 rounded-xl"
+              style={{
+                backfaceVisibility: "hidden",
+                WebkitBackfaceVisibility: "hidden",
+                transform: "rotateY(0deg)",
+                pointerEvents: flipped ? "none" : "auto",
+                zIndex: flipped ? 0 : 1,
+              }}
+            >
+              <VoucherCardFace
+                config={voucherConfig}
+                denominationCzk={denomination}
+                side="front"
+              />
             </div>
-            <div className="mt-9 flex items-end justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[9px] uppercase tracking-[0.23em] text-white/50">{valueLabel}</p>
-                <p className="landing-serif mt-3 text-[clamp(2rem,7vw,3.5rem)] leading-none tracking-tight text-[#F5EDE4]" style={{ textShadow: `0 2px 30px ${theme.gem}20` }}>{formatVoucherAmount(denomination)}</p>
-              </div>
-              <svg aria-hidden viewBox="0 0 100 100" className="h-16 w-16 shrink-0 sm:h-20 sm:w-20" fill="none" stroke={theme.gem}>
-                <circle cx="50" cy="50" r="43" strokeOpacity="0.4" strokeWidth="0.6" />
-                <circle cx="50" cy="50" r="38" strokeOpacity="0.55" strokeWidth="0.6" />
-                <path d="M36 74C12 58 24 28 36 23M29 65L20 59M25 54L19 46M26 42L25 33M64 74C88 58 76 28 64 23M71 65L80 59M75 54L81 46M74 42L75 33" strokeOpacity="0.7" strokeWidth="1" />
-                <text x="50" y="56" textAnchor="middle" fill={theme.gem} stroke="none" fontFamily="Georgia,serif" fontSize="22">SP</text>
-              </svg>
-            </div>
-            <div className="mt-7 flex items-center justify-between gap-3 border-t pt-4 text-[9px] uppercase tracking-[0.22em]" style={{ borderColor: `${theme.gem}30`, color: theme.gem }}>
-              <span>{voucherLabel}</span><span>서울 프라하</span>
+
+            {/* Back Face */}
+            <div
+              className="absolute inset-0 rounded-xl"
+              style={{
+                backfaceVisibility: "hidden",
+                WebkitBackfaceVisibility: "hidden",
+                transform: "rotateY(180deg)",
+                pointerEvents: flipped ? "auto" : "none",
+                zIndex: flipped ? 1 : 0,
+              }}
+            >
+              <VoucherCardFace
+                config={voucherConfig}
+                denominationCzk={denomination}
+                side="back"
+              />
             </div>
           </div>
-        </div>
+        </button>
       </div>
-      <div className="flex items-center justify-between gap-3 px-1 text-sm text-white/60">
+
+      {/* Interactive Side Switcher & Flip Controls */}
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <div
+          className="inline-flex rounded-full border border-white/12 bg-white/[0.03] p-1"
+          role="group"
+          aria-label={previewLabel}
+        >
+          <button
+            type="button"
+            onClick={() => flipTo(false)}
+            aria-pressed={!flipped}
+            className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition ${
+              !flipped
+                ? "bg-[#C9A88B] text-[#0B0B0C] shadow-sm"
+                : "text-white/65 hover:text-white"
+            }`}
+          >
+            {frontSideLabel}
+          </button>
+          <button
+            type="button"
+            onClick={() => flipTo(true)}
+            aria-pressed={flipped}
+            className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition ${
+              flipped
+                ? "bg-[#C9A88B] text-[#0B0B0C] shadow-sm"
+                : "text-white/65 hover:text-white"
+            }`}
+          >
+            {backSideLabel}
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={toggleFlip}
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/30 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:border-[#C9A88B]/60 hover:text-[#F5EDE4]"
+        >
+          <RotateCw
+            className={`h-3.5 w-3.5 text-[#C9A88B] transition-transform duration-500 ${
+              flipped ? "rotate-180" : "rotate-0"
+            }`}
+            aria-hidden
+          />
+          {flipActionLabel}
+        </button>
+      </div>
+
+      {/* Contextual Guest Interaction Hint */}
+      <div className="mt-3 flex items-start gap-2 rounded-xl border border-[#C9A88B]/20 bg-[#C9A88B]/[0.05] px-3.5 py-2.5 text-xs leading-relaxed text-[#E8D5C4]/85">
+        <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#C9A88B]" aria-hidden />
+        <span>{flipped ? hintBack : hintFront}</span>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between gap-3 px-1 text-sm text-white/60">
         <span>{quantity} × {formatVoucherAmount(denomination)}</span>
         <span><span className="mr-2 text-xs text-white/40">{totalLabel}</span>{formatVoucherAmount(total)}</span>
       </div>
-      <p className="mt-4 px-1 text-xs leading-relaxed text-white/40">{previewNote}</p>
+      <p className="mt-3 px-1 text-xs leading-relaxed text-white/40">{previewNote}</p>
     </div>
   );
 }

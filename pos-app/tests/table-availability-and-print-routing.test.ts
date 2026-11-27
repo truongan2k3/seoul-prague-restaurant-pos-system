@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { selectTopLongestSeatedTables } from "../components/table-availability-summary";
 import { sendReservationEmail } from "../src/lib/reservation-email";
 import { silentPrintEscPosPerPrinter } from "../src/lib/print-bridge-client";
+import { guestReservationCopy } from "../lib/i18n/guest-reservation";
+import { guestVoucherCopy } from "../lib/i18n/guest-voucher";
 import type { LiveTableAvailability } from "../lib/table-availability";
 
 function makeTable(label: string, occupiedAt: string | null): LiveTableAvailability {
@@ -133,4 +135,20 @@ test("silentPrintEscPosPerPrinter prints working printer even when another print
   } finally {
     globalThis.fetch = prevFetch;
   }
+});
+
+test("guest voucher & reservation copy include flip hints and staff-confirm email notice", () => {
+  const voucherVi = guestVoucherCopy("vi");
+  const voucherEn = guestVoucherCopy("en");
+  assert.ok(voucherEn.previewTapBadge.length > 0);
+  assert.ok(voucherEn.previewHintFront.length > 0);
+  assert.ok(voucherEn.previewHintBack.length > 0);
+  assert.match(voucherVi.previewFlipAction, /lật|mặt/i);
+
+  const resVi = guestReservationCopy("vi");
+  const resEn = guestReservationCopy("en");
+  assert.match(resEn.emailAfterConfirmNote, /confirm.*as soon as possible/i);
+  assert.match(resEn.spamFolderReminder, /Spam/i);
+  assert.match(resVi.emailAfterConfirmNote, /xác nhận.*sớm nhất/i);
+  assert.match(resVi.spamFolderReminder, /Spam/i);
 });

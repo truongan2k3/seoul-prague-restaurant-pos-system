@@ -103,9 +103,9 @@ const en: GuestReservationCopy = {
   bookingCode: "Booking code",
   manageReservation: "Manage reservation",
   emailAfterConfirmNote:
-    "Confirmation email is sent after the restaurant confirms your reservation.",
+    "Our staff will confirm your reservation as soon as possible. Once confirmed, you will receive a confirmation email.",
   spamFolderReminder:
-    "Please also check your Spam / Junk folder — the confirmation email may appear there.",
+    "Please also check your Spam / Junk folder once confirmed — your confirmation email may appear there.",
   gdprRequired: "Please agree to data processing before submitting.",
   largePartyTitle: "Large party",
   largePartyMessage:
@@ -167,9 +167,9 @@ const cs: GuestReservationCopy = {
   bookingCode: "Kód rezervace",
   manageReservation: "Spravovat rezervaci",
   emailAfterConfirmNote:
-    "Potvrzovací e-mail odešleme až po potvrzení rezervace restaurací.",
+    "Náš personál vaši rezervaci potvrdí co nejdříve. Jakmile bude potvrzena, obdržíte potvrzovací e-mail o rezervaci.",
   spamFolderReminder:
-    "Zkontrolujte prosím také složku Spam / Nevyžádaná — potvrzovací e-mail se může objevit tam.",
+    "Po potvrzení prosím zkontrolujte také složku Spam / Nevyžádaná — potvrzovací e-mail se může objevit tam.",
   gdprRequired: "Před odesláním prosím souhlaste se zpracováním údajů.",
   largePartyTitle: "Větší skupina",
   largePartyMessage:
@@ -231,7 +231,7 @@ const vi: GuestReservationCopy = {
   bookingCode: "Mã đặt bàn",
   manageReservation: "Quản lý đặt bàn",
   emailAfterConfirmNote:
-    "Email xác nhận sẽ được gửi sau khi nhà hàng xác nhận đặt bàn của bạn.",
+    "Nhân viên sẽ xác nhận đặt bàn của bạn sớm nhất có thể. Khi đó bạn sẽ nhận được email xác nhận đã đặt bàn.",
   spamFolderReminder:
     "Vui lòng kiểm tra thêm thư mục Spam / Thư rác — email xác nhận có thể nằm ở đó.",
   gdprRequired: "Vui lòng đồng ý xử lý dữ liệu trước khi gửi.",
@@ -295,9 +295,9 @@ const de: GuestReservationCopy = {
   bookingCode: "Buchungscode",
   manageReservation: "Reservierung verwalten",
   emailAfterConfirmNote:
-    "Die Bestätigungs-E-Mail wird gesendet, nachdem das Restaurant Ihre Reservierung bestätigt hat.",
+    "Unser Team wird Ihre Reservierung so schnell wie möglich bestätigen. Sobald sie bestätigt ist, erhalten Sie eine Bestätigungs-E-Mail.",
   spamFolderReminder:
-    "Bitte prüfen Sie auch den Spam- / Junk-Ordner — die Bestätigungs-E-Mail kann dort landen.",
+    "Bitte prüfen Sie nach der Bestätigung auch den Spam- / Junk-Ordner — die Bestätigungs-E-Mail kann dort landen.",
   gdprRequired: "Bitte stimmen Sie der Datenverarbeitung zu, bevor Sie absenden.",
   largePartyTitle: "Große Gruppe",
   largePartyMessage:
@@ -359,9 +359,9 @@ const ko: GuestReservationCopy = {
   bookingCode: "예약 코드",
   manageReservation: "예약 관리",
   emailAfterConfirmNote:
-    "확인 메일은 레스토랑이 예약을 확인한 후에 발송됩니다.",
+    "직원이 가능한 한 빨리 예약을 확인해 드립니다. 예약이 확정되면 예약 확인 이메일이 발송됩니다.",
   spamFolderReminder:
-    "스팸/정크 메일함도 확인해 주세요 — 확인 메일이 그곳에 있을 수 있습니다.",
+    "예약이 확정된 후 스팸/정크 메일함도 함께 확인해 주세요 — 확인 메일이 그곳에 있을 수 있습니다.",
   gdprRequired: "제출 전에 데이터 처리에 동의해 주세요.",
   largePartyTitle: "단체 예약",
   largePartyMessage:

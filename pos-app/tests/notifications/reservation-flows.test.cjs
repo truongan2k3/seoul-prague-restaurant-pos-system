@@ -142,3 +142,22 @@ test('metadata writes to no-show reservations do not create new alerts', () => {
   const after = reservation({ status: 'no_show', updatedAt: new Date('2026-11-13T12:01:00Z') });
   assert.equal(load('lib/reservation-change-alert.ts').classifyReservationUpdate(before, after), null);
 });
+
+test('pending reservations never send email until staff confirms', async () => {
+  const h = routes();
+  const bookRes = await (async () => {
+    const p = h.load('app/api/reservations/book/route.ts').POST(request({ guestCount: 4 }, 'POST'));
+    await flush();
+    h.releaseHold();
+    return p;
+  })();
+  assert.equal(bookRes.status, 200);
+  assert.equal(h.emails.length, 0);
+
+  const editPending = await (() => {
+    const p = h.load('app/api/reservations/manage/route.ts').PATCH(request({ token: 'test', guestCount: 5 }));
+    return flush().then(() => { h.releaseBroadcast(); return p; });
+  })();
+  assert.equal(editPending.status, 200);
+  assert.equal(h.emails.length, 0);
+});

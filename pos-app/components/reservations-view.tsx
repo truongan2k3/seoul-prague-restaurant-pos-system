@@ -512,7 +512,7 @@ export function ReservationsView({ tables, onRefreshTables }: ReservationsViewPr
         tableId:formTableId||undefined,staffId:currentStaffUser?.id,staffName:currentStaffUser?.name,source:formSource,
       });
       if(createError)return createError.message;
-      if(draft.email&&created?.id){
+      if(draft.email&&created?.id&&created.status!=="pending"){
         void fetch("/api/reservations/notify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:created.id,type:"received"})}).catch(()=>undefined);
       }
       setShowNewModal(false);

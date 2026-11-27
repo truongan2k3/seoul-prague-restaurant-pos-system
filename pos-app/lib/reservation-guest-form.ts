@@ -154,11 +154,11 @@ export const DEFAULT_RESERVATION_GUEST_TEXTS: ReservationGuestTexts = {
     ko: "감사합니다! 예약 요청이 접수되었습니다. 곧 예약을 확인해 드리겠습니다.",
   },
   successEmailSent: {
-    en: "A confirmation email will be sent after the restaurant confirms your reservation. Please also check your Spam / Junk folder.",
-    cs: "Potvrzovací e-mail odešleme až po potvrzení rezervace restaurací. Zkontrolujte prosím také složku Spam / Nevyžádaná.",
-    vi: "Email xác nhận sẽ được gửi sau khi nhà hàng xác nhận đặt bàn. Vui lòng kiểm tra thêm thư mục Spam / Thư rác.",
-    de: "Die Bestätigungs-E-Mail wird gesendet, nachdem das Restaurant Ihre Reservierung bestätigt hat. Bitte prüfen Sie auch den Spam- / Junk-Ordner.",
-    ko: "확인 메일은 레스토랑이 예약을 확인한 후에 발송됩니다. 스팸/정크 메일함도 확인해 주세요.",
+    en: "Our staff will confirm your reservation as soon as possible. Once confirmed, you will receive a confirmation email (please also check your Spam / Junk folder).",
+    cs: "Náš personál vaši rezervaci potvrdí co nejdříve. Jakmile bude potvrzena, obdržíte potvrzovací e-mail (zkontrolujte prosím i složku Spam / Nevyžádaná).",
+    vi: "Nhân viên sẽ xác nhận đặt bàn của bạn sớm nhất có thể. Khi đó bạn sẽ nhận được email xác nhận đã đặt bàn (vui lòng kiểm tra thêm thư mục Spam / Thư rác).",
+    de: "Unser Team wird Ihre Reservierung so schnell wie möglich bestätigen. Sobald sie bestätigt ist, erhalten Sie eine Bestätigungs-E-Mail (bitte prüfen Sie auch Ihren Spam- / Junk-Ordner).",
+    ko: "직원이 가능한 한 빨리 예약을 확인해 드립니다. 예약이 확정되면 확인 메일이 발송됩니다 (스팸/정크 메일함도 확인해 주세요).",
   },
   successManageLink: {
     en: "Save this link to manage your booking:",

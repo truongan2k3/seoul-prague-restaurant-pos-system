@@ -74,6 +74,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, emailSent: false });
   }
 
+  // Only send reservation confirmation / update emails after staff confirms.
+  if (data.status === "pending" && (type === "received" || type === "updated")) {
+    return NextResponse.json({ ok: true, emailSent: false });
+  }
+
   const cancellationGuestMessage =
     type === "cancelled"
       ? guestMessageForCancelReason(

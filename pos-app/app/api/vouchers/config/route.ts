@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getResolvedVoucherDesign } from "@/lib/voucher";
 import { fetchVoucherConfigServer } from "@/src/lib/voucher-server";
 
 export async function GET() {
@@ -16,8 +17,9 @@ export async function GET() {
         bankPaymentNote: config.bankPaymentNote,
         processingMessage: config.processingMessage,
         validityDays: config.validityDays,
+        design: getResolvedVoucherDesign(config),
       },
     },
-    { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" } },
+    { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" } },
   );
 }

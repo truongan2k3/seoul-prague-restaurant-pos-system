@@ -111,7 +111,8 @@ export async function PATCH(request: Request) {
   }
 
   let emailSent = false;
-  if (data.guestEmail) {
+  // Reservation email is sent only once staff confirms the booking (status !== "pending").
+  if (data.guestEmail && data.status !== "pending") {
     const emailResult = await sendReservationEmail("updated", {
       guestName: data.guestName,
       guestEmail: data.guestEmail,

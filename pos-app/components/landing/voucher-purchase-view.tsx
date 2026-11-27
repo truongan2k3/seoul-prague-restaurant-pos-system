@@ -21,7 +21,15 @@ import {
   resolveInitialGuestReservationLang,
 } from "@/lib/i18n/guest-reservation";
 import { guestVoucherCopy } from "@/lib/i18n/guest-voucher";
-import { formatVoucherAmount, type VoucherPaymentMethod } from "@/lib/voucher";
+import {
+  DEFAULT_VOUCHER_CONFIG,
+  DEFAULT_VOUCHER_DESIGN,
+  formatVoucherAmount,
+  parseVoucherDesign,
+  type VoucherCardDesign,
+  type VoucherConfig,
+  type VoucherPaymentMethod,
+} from "@/lib/voucher";
 import type { WebsiteContent } from "@/lib/website/types";
 
 const GUEST_LANG_LABELS: Record<GuestReservationLang, string> = {
@@ -43,6 +51,7 @@ type PublicConfig = {
   bankPaymentNote: string;
   processingMessage: string;
   validityDays: number;
+  design?: VoucherCardDesign;
 };
 
 type PlacedOrder = {
@@ -159,6 +168,22 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
     if (!config) return false;
     return Boolean(config.accountHolder || config.accountNumber || config.iban);
   }, [config]);
+
+  const previewVoucherConfig = useMemo<VoucherConfig>(() => {
+    const resolvedDesign = parseVoucherDesign(config?.design);
+    return {
+      ...DEFAULT_VOUCHER_CONFIG,
+      validityDays: config?.validityDays ?? DEFAULT_VOUCHER_CONFIG.validityDays,
+      design: {
+        ...DEFAULT_VOUCHER_DESIGN,
+        ...resolvedDesign,
+        logoUrl: resolvedDesign.logoUrl || content.media.logo?.fileUrl || "",
+        venueAddress: resolvedDesign.venueAddress || content.settings.address || "",
+        venuePhone: resolvedDesign.venuePhone || content.settings.phone || "",
+        venueEmail: resolvedDesign.venueEmail || content.settings.email || "",
+      },
+    };
+  }, [config, content.media.logo?.fileUrl, content.settings.address, content.settings.email, content.settings.phone]);
 
   const tryPlaceOrder = () => {
     if (!config || busy) return;
@@ -533,15 +558,18 @@ export function VoucherPurchaseView({ content }: { content: WebsiteContent }) {
           <section className="grid items-start gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:gap-14">
             <aside className="min-w-0 space-y-7 lg:sticky lg:top-28">
             <VoucherLivePreview
-              brandName={content.settings.restaurantName || "Seoul Prague"}
-              logoUrl={content.media.logo?.fileUrl}
+              voucherConfig={previewVoucherConfig}
               denomination={denomination}
               quantity={quantity}
               total={total}
               previewLabel={copy.previewTitle}
               previewNote={copy.previewNote}
-              voucherLabel={copy.voucher}
-              valueLabel={copy.voucherValue}
+              frontSideLabel={copy.previewFrontSide}
+              backSideLabel={copy.previewBackSide}
+              flipActionLabel={copy.previewFlipAction}
+              tapBadgeLabel={copy.previewTapBadge}
+              hintFront={copy.previewHintFront}
+              hintBack={copy.previewHintBack}
               totalLabel={copy.total}
             />
               <div className="flex items-start gap-3 border-t border-[#C9A88B]/15 pt-6">

@@ -63,6 +63,12 @@ export type GuestVoucherCopy = {
   windowExpired: string;
   previewTitle: string;
   previewNote: string;
+  previewFrontSide: string;
+  previewBackSide: string;
+  previewFlipAction: string;
+  previewTapBadge: string;
+  previewHintFront: string;
+  previewHintBack: string;
   voucherValue: string;
   giftDelivery: string;
   spamReminder: string;
@@ -134,7 +140,13 @@ const en: GuestVoucherCopy = {
   cancelError: "Could not cancel order.",
   windowExpired: "Payment window expired.",
   previewTitle: "Your gift, beautifully presented",
-  previewNote: "Illustrative preview. Your unique voucher codes arrive by email after payment is verified.",
+  previewNote: "Illustrative 2-sided preview. Your unique voucher codes arrive by email after payment is verified.",
+  previewFrontSide: "Front · Value & QR",
+  previewBackSide: "Back · Terms & Info",
+  previewFlipAction: "Flip card",
+  previewTapBadge: "Tap card to flip",
+  previewHintFront: "Displays voucher value & scannable QR code — click card or Back to preview terms and expiry.",
+  previewHintBack: "Shows validity date, restaurant contact & usage terms — click card or Front to return.",
   voucherValue: "Voucher value",
   giftDelivery: "A memorable dining experience, delivered by email.",
   spamReminder: "Please also check your spam / junk folder for your order confirmation and voucher codes.",
@@ -204,7 +216,13 @@ const cs: GuestVoucherCopy = {
   cancelError: "Objednávku se nepodařilo zrušit.",
   windowExpired: "Platební okno vypršelo.",
   previewTitle: "Váš dárek v elegantním provedení",
-  previewNote: "Ilustrační náhled. Jedinečné kódy voucherů obdržíte e-mailem po ověření platby.",
+  previewNote: "Ilustrační oboustranný náhled. Jedinečné kódy voucherů obdržíte e-mailem po ověření platby.",
+  previewFrontSide: "Přední · Hodnota & QR",
+  previewBackSide: "Zadní · Podmínky & Info",
+  previewFlipAction: "Otočit kartu",
+  previewTapBadge: "Kliknutím otočíte",
+  previewHintFront: "Zobrazuje hodnotu a QR kód — klikněte na kartu nebo na Zadní stranu pro zobrazení podmínek.",
+  previewHintBack: "Zobrazuje platnost, kontakty na restauraci a podmínky — kliknutím se vrátíte na přední stranu.",
   voucherValue: "Hodnota voucheru",
   giftDelivery: "Nezapomenutelný gastronomický zážitek doručený e-mailem.",
   spamReminder: "Potvrzení objednávky a kódy voucherů prosím hledejte také ve složce spam / nevyžádaná pošta.",
@@ -274,7 +292,13 @@ const vi: GuestVoucherCopy = {
   cancelError: "Không hủy được đơn.",
   windowExpired: "Hết thời gian thanh toán.",
   previewTitle: "Món quà được chăm chút tinh tế",
-  previewNote: "Hình ảnh minh họa. Mã voucher riêng sẽ được gửi qua email sau khi xác minh thanh toán.",
+  previewNote: "Xem trước 2 mặt thẻ thực tế. Mã voucher riêng kèm ảnh 2 mặt sẽ được gửi qua email sau khi xác minh thanh toán.",
+  previewFrontSide: "Mặt trước · Giá trị & QR",
+  previewBackSide: "Mặt sau · Điều khoản",
+  previewFlipAction: "Lật xem mặt kia",
+  previewTapBadge: "Chạm để xoay lật thẻ",
+  previewHintFront: "Hiển thị mệnh giá và mã QR quét tại quầy — chạm vào thẻ hoặc chọn Mặt sau để xem điều khoản & hạn dùng.",
+  previewHintBack: "Hiển thị hạn sử dụng, thông tin nhà hàng và điều khoản — chạm vào thẻ để lật lại mặt trước.",
   voucherValue: "Giá trị voucher",
   giftDelivery: "Trao tặng trải nghiệm ẩm thực đáng nhớ qua email.",
   spamReminder: "Vui lòng kiểm tra cả thư mục spam / thư rác để tìm email xác nhận và mã voucher.",
@@ -344,7 +368,13 @@ const de: GuestVoucherCopy = {
   cancelError: "Bestellung konnte nicht storniert werden.",
   windowExpired: "Zahlungsfenster abgelaufen.",
   previewTitle: "Ihr Geschenk, stilvoll präsentiert",
-  previewNote: "Illustrative Vorschau. Ihre individuellen Gutscheincodes erhalten Sie nach Zahlungsprüfung per E-Mail.",
+  previewNote: "Zweiseitige Vorschau. Ihre individuellen Gutscheincodes erhalten Sie nach Zahlungsprüfung per E-Mail.",
+  previewFrontSide: "Vorderseite · Wert & QR",
+  previewBackSide: "Rückseite · AGB & Info",
+  previewFlipAction: "Karte wenden",
+  previewTapBadge: "Zum Wenden tippen",
+  previewHintFront: "Zeigt Gutscheinwert und scannbaren QR-Code — zum Prüfen von Gültigkeit und Bedingungen einfach wenden.",
+  previewHintBack: "Zeigt Gültigkeitsdatum, Restaurantdaten und Nutzungsbedingungen — erneut tippen für die Vorderseite.",
   voucherValue: "Gutscheinwert",
   giftDelivery: "Ein unvergessliches kulinarisches Erlebnis, per E-Mail übermittelt.",
   spamReminder: "Bitte prüfen Sie auch Ihren Spam-Ordner auf die Bestellbestätigung und Gutscheincodes.",
@@ -414,7 +444,13 @@ const ko: GuestVoucherCopy = {
   cancelError: "주문을 취소할 수 없습니다.",
   windowExpired: "결제 시간이 만료되었습니다.",
   previewTitle: "정성을 담아 우아하게 전하는 선물",
-  previewNote: "미리보기 이미지입니다. 결제 확인 후 고유 바우처 코드를 이메일로 보내드립니다.",
+  previewNote: "양면 미리보기입니다. 결제 확인 후 실제 바우처 이미지와 코드를 이메일로 보내드립니다.",
+  previewFrontSide: "앞면 · 금액 & QR",
+  previewBackSide: "뒷면 · 약관 & 안내",
+  previewFlipAction: "카드 뒤집기",
+  previewTapBadge: "눌러서 뒤집기",
+  previewHintFront: "금액과 스캔 가능한 QR 코드를 보여줍니다 — 카드를 눌러 뒷면의 유효기간과 이용 약관을 확인해 보세요.",
+  previewHintBack: "만료일, 매장 연락처 및 이용 약관을 보여줍니다 — 다시 누르면 앞면으로 돌아갑니다.",
   voucherValue: "바우처 금액",
   giftDelivery: "잊지 못할 다이닝 경험을 이메일로 선물하세요.",
   spamReminder: "주문 확인 메일과 바우처 코드가 스팸 메일함에 있을 수 있으니 함께 확인해 주세요.",

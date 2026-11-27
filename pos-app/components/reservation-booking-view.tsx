@@ -772,11 +772,11 @@ export function ReservationBookingView({
               {copy.bookingCode}: {successBookingCode}
             </p>
           ) : null}
-          <p className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400">
-            <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <div className="flex items-start gap-2.5 rounded-md border border-stone-200 bg-stone-50 px-3 py-2.5 text-xs leading-relaxed text-gray-700 dark:border-stone-700 dark:bg-stone-900/60 dark:text-gray-200">
+            <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#8B1E2D] dark:text-[#C9A88B]" />
             <span>{copy.emailAfterConfirmNote}</span>
-          </p>
-          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100">
+          </div>
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100">
             {copy.spamFolderReminder}
           </p>
           {successManageUrl ? (

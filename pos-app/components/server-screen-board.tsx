@@ -1911,6 +1911,7 @@ export function ServerScreenBoard({ station }: ServerScreenBoardProps) {
               selectedKeys={selectedKeys}
               animatingOut={animatingOut}
               emptyLabel={translate("noOrders")}
+              allDoneLabel={translate("serverScreenAllDone")}
               onToggleLine={line => toggleCardLine(line)}
               onSetLineCount={(line, count) => setCardLineSelectedCount(line, count)}
               onTableTagActivate={card => handleTableTagActivate(card)}

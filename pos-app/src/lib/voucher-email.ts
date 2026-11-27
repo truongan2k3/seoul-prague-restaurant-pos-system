@@ -1,7 +1,7 @@
 import { formatVoucherAmount, type VoucherConfig, type VoucherOrder } from "@/lib/voucher";
 import { getReservationAppBaseUrl } from "@/src/lib/reservation-email";
 
-const BRAND_NAME = "SEOUL PRAGUE";
+const BRAND_NAME = "Seoul Korean BBQ Prague";
 
 type InlineAttachment = {
   filename: string;
@@ -291,11 +291,10 @@ export async function sendVoucherIssuedEmail(input: {
     frontPng?: Buffer | null;
     backPng?: Buffer | null;
   }[];
-  pdfBuffer?: Buffer | null;
   viewUrl?: string | null;
   isReissue?: boolean;
 }): Promise<{ sent: boolean; error?: string }> {
-  const { order, config, vouchers, pdfBuffer, viewUrl, isReissue } = input;
+  const { order, config, vouchers, viewUrl, isReissue } = input;
   const baseSubject = config.issuedEmailSubject?.trim() || "Your Gift Voucher";
   const subject = isReissue
     ? `${baseSubject} (Resent) · ${order.orderId}`
@@ -304,30 +303,24 @@ export async function sendVoucherIssuedEmail(input: {
   const greeting = greetingLine(order.buyerName);
 
   const introHtml = isReissue
-    ? `As requested, we’re resending your gift voucher for order <strong>${escapeHtml(order.orderId)}</strong>. Your original voucher code remains unchanged and ready to use.`
-    : `Thank you for your purchase! Payment for order <strong>${escapeHtml(order.orderId)}</strong> has been confirmed, and your gift voucher is ready to enjoy.`;
+    ? `As requested, here is your gift voucher for order <strong>${escapeHtml(order.orderId)}</strong>. Your original code remains unchanged and ready to use.`
+    : `Thank you for your purchase! Payment for order <strong>${escapeHtml(order.orderId)}</strong> has been confirmed, and your gift voucher is ready to use.`;
 
   const introText = isReissue
-    ? `As requested, we're resending your gift voucher for order ${order.orderId}. Your original voucher code remains unchanged and ready to use.`
-    : `Thank you for your purchase! Payment for order ${order.orderId} has been confirmed, and your gift voucher is ready to enjoy.`;
+    ? `As requested, here is your gift voucher for order ${order.orderId}. Your original code remains unchanged and ready to use.`
+    : `Thank you for your purchase! Payment for order ${order.orderId} has been confirmed, and your gift voucher is ready to use.`;
 
   const attachments: InlineAttachment[] = [];
-
-  if (pdfBuffer && pdfBuffer.length > 0) {
-    attachments.push({
-      filename: `Gift-Voucher-${order.orderId}.pdf`,
-      content: pdfBuffer.toString("base64"),
-      content_type: "application/pdf",
-    });
-  }
+  let hasCardImages = false;
 
   const cards = vouchers
     .map((v, index) => {
       const expiry = formatExpiryDate(v.expiresAt);
       if (v.frontPng && v.frontPng.length > 0) {
+        hasCardImages = true;
         const frontCid = `voucher-front-${index + 1}`;
         attachments.push({
-          filename: `voucher-${v.code}-front.png`,
+          filename: `voucher-${v.code}-1.png`,
           content: v.frontPng.toString("base64"),
           content_id: frontCid,
           content_type: "image/png",
@@ -337,20 +330,16 @@ export async function sendVoucherIssuedEmail(input: {
         if (v.backPng && v.backPng.length > 0) {
           const backCid = `voucher-back-${index + 1}`;
           attachments.push({
-            filename: `voucher-${v.code}-back.png`,
+            filename: `voucher-${v.code}-2.png`,
             content: v.backPng.toString("base64"),
             content_id: backCid,
             content_type: "image/png",
           });
-          backBlock = `<div style="margin-top:16px">
-            <p style="margin:0 0 8px;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:#8c7a65;font-weight:700">Back · Terms &amp; Details</p>
-            <img src="cid:${backCid}" alt="Gift Voucher ${escapeHtml(v.code)} Back" style="width:100%;max-width:500px;height:auto;display:block;margin:0 auto;border-radius:14px;border:1px solid #dfd3c3" />
-          </div>`;
+          backBlock = `<img src="cid:${backCid}" alt="Gift Voucher ${escapeHtml(v.code)}" style="width:100%;max-width:500px;height:auto;display:block;margin:14px auto 0;border-radius:14px;border:1px solid #dfd3c3" />`;
         }
 
-        return `<div style="margin:22px 0;padding:18px;background:#faf8f5;border:1px solid #e7e0d6;border-radius:16px;text-align:center">
-          <p style="margin:0 0 8px;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:#8c7a65;font-weight:700">Front · Value &amp; QR</p>
-          <img src="cid:${frontCid}" alt="Gift Voucher ${escapeHtml(v.code)} Front" style="width:100%;max-width:500px;height:auto;display:block;margin:0 auto;border-radius:14px;border:1px solid #dfd3c3" />
+        return `<div style="margin:20px 0;text-align:center">
+          <img src="cid:${frontCid}" alt="Gift Voucher ${escapeHtml(v.code)}" style="width:100%;max-width:500px;height:auto;display:block;margin:0 auto;border-radius:14px;border:1px solid #dfd3c3" />
           ${backBlock}
           <p style="margin:12px 0 0;font-size:13px;color:#57534e;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">
             <strong>${escapeHtml(v.code)}</strong>${expiry ? ` · Valid until ${escapeHtml(expiry)}` : ""}
@@ -364,7 +353,7 @@ export async function sendVoucherIssuedEmail(input: {
         ? (() => {
             attachments.push(attachment);
             return `<div style="display:inline-block;padding:10px;background:#ffffff;border-radius:12px;border:1px solid #e7e0d6;margin-top:14px">
-              <img src="cid:${contentId}" alt="Voucher QR ${escapeHtml(v.code)}" width="176" height="176" style="display:block;margin:0 auto;border-radius:6px" />
+              <img src="cid:${contentId}" alt="Voucher QR ${escapeHtml(v.code)}" width="220" height="220" style="display:block;margin:0 auto;border-radius:6px" />
             </div>`;
           })()
         : "";
@@ -380,21 +369,17 @@ export async function sendVoucherIssuedEmail(input: {
         </div>
         <div>${img}</div>
         ${expiryHtml}
-        <p style="margin:10px 0 0;font-size:12px;color:#8c7a65">Present this code or QR at the counter</p>
       </div>`;
     })
     .join("");
 
   const viewCtaHtml = viewUrl
     ? `<div style="margin:22px 0 4px;text-align:center">
-        <a href="${escapeHtml(viewUrl)}" style="display:inline-block;background:#1c1917;color:#f5efe6;padding:13px 26px;border-radius:12px;text-decoration:none;font-size:14px;font-weight:600;border:1px solid #c9a88b">
-          View Online &amp; Print Voucher (2-Sided)
+        <a href="${escapeHtml(viewUrl)}" style="display:inline-block;background:#1c1917;color:#f5efe6;padding:12px 26px;border-radius:12px;text-decoration:none;font-size:14px;font-weight:600;border:1px solid #c9a88b">
+          View Online
         </a>
-        ${pdfBuffer ? `<p style="margin:10px 0 0;font-size:12.5px;color:#78716c">A print-ready 2-sided PDF (front with QR &amp; value, back with terms &amp; expiry) is also attached below.</p>` : ""}
       </div>`
-    : pdfBuffer
-      ? `<p style="margin:16px 0 0;text-align:center;font-size:13px;color:#78716c">A print-ready 2-sided PDF (front with QR &amp; value, back with terms &amp; expiry) is attached to this email.</p>`
-      : "";
+    : "";
 
   const html = `<!DOCTYPE html>
 <html>
@@ -408,7 +393,7 @@ export async function sendVoucherIssuedEmail(input: {
       <p style="margin:0 0 18px;font-size:15px;line-height:1.6;color:#44403c">${introHtml}</p>
       ${cards}
       ${viewCtaHtml}
-      ${voucherTermsHtml(config)}
+      ${hasCardImages ? "" : voucherTermsHtml(config)}
       <div style="margin-top:24px;padding-top:18px;border-top:1px solid #ede7de;text-align:center">
         <p style="margin:0;font-size:14px;color:#57534e">We look forward to welcoming you soon!</p>
       </div>
@@ -429,8 +414,7 @@ export async function sendVoucherIssuedEmail(input: {
       return expiry ? `Code: ${v.code} (${unit} · Valid until ${expiry})` : `Code: ${v.code} (${unit})`;
     }),
     viewUrl ? "" : "",
-    viewUrl ? `View online & print 2-sided PDF: ${viewUrl}` : "",
-    pdfBuffer ? "A print-ready 2-sided PDF is attached to this email." : "",
+    viewUrl ? `View online: ${viewUrl}` : "",
     "",
     ...voucherTermsText(config),
     "",

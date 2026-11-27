@@ -210,6 +210,7 @@ export function PrintStationProvider({ children }: { children: ReactNode }) {
               orders: job.orders ?? [],
               menuItems: menuRef.current,
               settings: cfg,
+              onlyPrinterIds: job.onlyPrinterIds,
             });
           } else {
             await printKitchenMessage({
@@ -229,9 +230,12 @@ export function PrintStationProvider({ children }: { children: ReactNode }) {
           const message = error instanceof Error ? error.message : "Print failed";
           const failedOrders =
             error instanceof StationPrintPartialError ? error.unprintedOrders : (job.orders ?? []);
+          const failedPrinterIds =
+            error instanceof StationPrintPartialError ? error.failedPrinterIds : job.onlyPrinterIds;
           const nextJob: PendingKitchenPrintJob = {
             ...job,
             orders: failedOrders,
+            onlyPrinterIds: failedPrinterIds,
             error: message,
             failedAt: new Date().toISOString(),
           };
@@ -327,12 +331,15 @@ export function PrintStationProvider({ children }: { children: ReactNode }) {
           const pendingId = `ticket-${tableId}-${Date.now()}`;
           const failedOrders =
             error instanceof StationPrintPartialError ? error.unprintedOrders : orders;
+          const failedPrinterIds =
+            error instanceof StationPrintPartialError ? error.failedPrinterIds : undefined;
           await rememberFailedJob({
             id: pendingId,
             kind: "ticket",
             tableId,
             tableLabel,
             orders: failedOrders,
+            onlyPrinterIds: failedPrinterIds,
             error: message,
             failedAt: new Date().toISOString(),
           });

@@ -31,6 +31,9 @@ export async function GET(request: Request) {
     config: view.config,
     designOverride: view.design,
   });
+  if (!pdfBuffer) {
+    return NextResponse.json({ error: "Could not render PDF." }, { status: 500 });
+  }
 
   const fileSlug =
     selectedCodes.length === 1 ? selectedCodes[0]!.code : view.order.orderId;

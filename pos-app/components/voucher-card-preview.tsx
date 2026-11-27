@@ -233,34 +233,28 @@ export function VoucherCardPreview({
           </div>
 
           <div
-            className="flex shrink-0 flex-col items-center rounded-[1.3cqw] bg-white p-[1.15cqw]"
-            style={{ border: `1.5px solid ${design.accentColor}cc` }}
+            className="flex shrink-0 flex-col items-center rounded-[1.6cqw] bg-white p-[1.5cqw]"
+            style={{ border: `1.5px solid ${design.accentColor}d9` }}
           >
             {qrUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={qrUrl}
                 alt="QR preview"
-                className="rounded-[0.4cqw]"
-                style={{ width: "12.2cqw", height: "12.2cqw" }}
+                className="rounded-[0.6cqw]"
+                style={{ width: "23.5cqw", height: "23.5cqw" }}
               />
             ) : (
               <div
                 className="rounded bg-stone-200"
-                style={{ width: "12.2cqw", height: "12.2cqw" }}
+                style={{ width: "23.5cqw", height: "23.5cqw" }}
               />
             )}
             <span
-              className="mt-[0.65cqw] font-mono font-bold tracking-wider text-stone-900"
-              style={{ fontSize: "1.1cqw" }}
+              className="mt-[0.8cqw] font-mono font-bold tracking-wider text-stone-900"
+              style={{ fontSize: "1.4cqw" }}
             >
               {sampleCode}
-            </span>
-            <span
-              className="mt-[0.2cqw] uppercase tracking-widest text-stone-500"
-              style={{ fontSize: "0.75cqw" }}
-            >
-              SCAN AT COUNTER
             </span>
           </div>
         </div>

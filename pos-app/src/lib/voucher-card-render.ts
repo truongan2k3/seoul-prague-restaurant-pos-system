@@ -274,14 +274,14 @@ export async function renderVoucherFrontPng(input: VoucherCardRenderInput): Prom
       },
     }),
     ...renderBorderFrames(design),
-    // Top Header Row
+    // Top Header Row (Left: Titles, Right: Compact Logo Emblem)
     createElement(
       "div",
       {
         style: {
           display: "flex",
           position: "relative",
-          padding: "56px 66px 0 66px",
+          padding: "52px 64px 0 64px",
           justifyContent: "space-between",
           alignItems: "flex-start",
           width: "100%",
@@ -289,7 +289,7 @@ export async function renderVoucherFrontPng(input: VoucherCardRenderInput): Prom
       },
       createElement(
         "div",
-        { style: { display: "flex", flexDirection: "column", maxWidth: 820 } },
+        { style: { display: "flex", flexDirection: "column", maxWidth: 740 } },
         createElement(
           "div",
           {
@@ -311,7 +311,7 @@ export async function renderVoucherFrontPng(input: VoucherCardRenderInput): Prom
                   display: "flex",
                   marginTop: 10,
                   fontSize: 22,
-                  letterSpacing: "0.2em",
+                  letterSpacing: "0.18em",
                   color: "#f5efe6",
                   textTransform: "uppercase",
                 },
@@ -341,8 +341,8 @@ export async function renderVoucherFrontPng(input: VoucherCardRenderInput): Prom
             {
               style: {
                 display: "flex",
-                width: 88,
-                height: 88,
+                width: 78,
+                height: 78,
                 borderRadius: 999,
                 border: `1.5px solid ${rgba(design.accentColor, 0.6)}`,
                 backgroundColor: rgba(design.surfaceColor, 0.65, [11, 10, 9]),
@@ -354,8 +354,8 @@ export async function renderVoucherFrontPng(input: VoucherCardRenderInput): Prom
             logoDataUri
               ? createElement("img", {
                   src: logoDataUri,
-                  width: 66,
-                  height: 66,
+                  width: 58,
+                  height: 58,
                   style: { objectFit: "contain" },
                 })
               : createElement(
@@ -364,7 +364,7 @@ export async function renderVoucherFrontPng(input: VoucherCardRenderInput): Prom
                     style: {
                       display: "flex",
                       fontFamily: "Playfair Display",
-                      fontSize: 28,
+                      fontSize: 26,
                       color: design.accentColor,
                       letterSpacing: "0.06em",
                     },
@@ -374,24 +374,23 @@ export async function renderVoucherFrontPng(input: VoucherCardRenderInput): Prom
           )
         : createElement("div", { style: { display: "flex" } }),
     ),
-    // Bottom Row: Left = Value + Gold Line, Right = QR Card + Code
+    // Bottom Row: Left = Value + Gold Line, Right = Large Scan-Friendly QR Card (nearly half card height)
     createElement(
       "div",
       {
         style: {
           display: "flex",
           position: "relative",
-          padding: "0 66px 56px 66px",
+          padding: "0 64px 52px 64px",
           justifyContent: "space-between",
           alignItems: "flex-end",
           width: "100%",
         },
       },
-      // Denomination block (matching reference image)
+      // Denomination block
       createElement(
         "div",
-        { style: { display: "flex", flexDirection: "column" } },
-        // Decorative line with small diamond
+        { style: { display: "flex", flexDirection: "column", maxWidth: 620 } },
         createElement(
           "div",
           {
@@ -439,7 +438,7 @@ export async function renderVoucherFrontPng(input: VoucherCardRenderInput): Prom
                 display: "flex",
                 fontFamily: "Playfair Display",
                 fontWeight: 600,
-                fontSize: 96,
+                fontSize: 94,
                 lineHeight: 0.95,
                 color: "#fbf8f3",
                 letterSpacing: "-0.01em",
@@ -463,7 +462,7 @@ export async function renderVoucherFrontPng(input: VoucherCardRenderInput): Prom
           ),
         ),
       ),
-      // Front QR Box
+      // Oversized Front QR Box (~285px QR = ~46% of card height, ultra-scannable)
       createElement(
         "div",
         {
@@ -472,44 +471,30 @@ export async function renderVoucherFrontPng(input: VoucherCardRenderInput): Prom
             flexDirection: "column",
             alignItems: "center",
             backgroundColor: "#ffffff",
-            borderRadius: 16,
-            padding: "14px 16px 12px 16px",
-            border: `2px solid ${rgba(design.accentColor, 0.85)}`,
+            borderRadius: 20,
+            padding: "18px 20px 14px 20px",
+            border: `2px solid ${rgba(design.accentColor, 0.9)}`,
           },
         },
         createElement("img", {
           src: qrDataUrl,
-          width: 146,
-          height: 146,
-          style: { display: "flex", borderRadius: 6 },
+          width: 285,
+          height: 285,
+          style: { display: "flex", borderRadius: 8 },
         }),
         createElement(
           "div",
           {
             style: {
               display: "flex",
-              marginTop: 8,
-              fontSize: 13,
+              marginTop: 10,
+              fontSize: 17,
               fontWeight: 700,
               letterSpacing: "0.08em",
               color: "#1c1917",
             },
           },
           input.code,
-        ),
-        createElement(
-          "div",
-          {
-            style: {
-              display: "flex",
-              marginTop: 2,
-              fontSize: 9,
-              letterSpacing: "0.16em",
-              color: "#78716c",
-              textTransform: "uppercase",
-            },
-          },
-          "SCAN AT COUNTER",
         ),
       ),
     ),
@@ -883,8 +868,9 @@ export async function renderVoucherOrderAssets(input: {
   codes: VoucherCode[];
   config: VoucherConfig;
   designOverride?: VoucherCardDesign;
+  skipPdf?: boolean;
 }): Promise<{
-  pdfBuffer: Buffer;
+  pdfBuffer: Buffer | null;
   vouchers: Array<{
     code: string;
     expiresAt?: string | null;
@@ -906,7 +892,7 @@ export async function renderVoucherOrderAssets(input: {
   for (const codeRow of input.codes) {
     const qrDataUrl = await QRCode.toDataURL(codeRow.code, {
       type: "image/png",
-      width: 360,
+      width: 440,
       margin: 1,
       errorCorrectionLevel: "M",
       color: { dark: "#111111", light: "#ffffff" },
@@ -933,11 +919,16 @@ export async function renderVoucherOrderAssets(input: {
       backPng,
       qrDataUrl,
     });
-    pdfPages.push(frontPng, backPng);
+    if (!input.skipPdf) {
+      pdfPages.push(frontPng, backPng);
+    }
   }
 
-  const bgRgb = hexToRgbTuple(design.surfaceColor, [11, 10, 9]);
-  const pdfBuffer = buildPdfFromPngPages(pdfPages, { bgRgb });
+  const pdfBuffer = input.skipPdf
+    ? null
+    : buildPdfFromPngPages(pdfPages, {
+        bgRgb: hexToRgbTuple(design.surfaceColor, [11, 10, 9]),
+      });
 
   return { pdfBuffer, vouchers: rendered };
 }

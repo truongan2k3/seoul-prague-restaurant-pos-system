@@ -1,7 +1,8 @@
 "use client";
 
 import { useLayoutEffect, useRef } from "react";
-import { Check, Minus, Plus } from "lucide-react";
+import { Check, Minus, Plus, Smile } from "lucide-react";
+import { OverflowPanText } from "@/components/overflow-pan-text";
 import {
   formatPreparationMinutes,
   preparationAgeMinutes,
@@ -129,30 +130,52 @@ function OrderCardLineRow({
         onClick={() => onToggle(line)}
         className="flex w-full min-w-0 items-baseline gap-2 px-2.5 py-1.5 text-left"
       >
-        <span className="min-w-0 flex-1">
-          <span
-            className={`block text-[1.1rem] font-bold leading-tight sm:text-[1.25rem] ${
-              nested ? "pl-2 font-medium truncate" : isMessage ? "whitespace-pre-wrap break-words" : "truncate"
-            } ${selected ? "text-zinc-950" : ""}`}
-            title={line.name}
-          >
-            {nested ? (
-              <span className={`mr-1 ${selected ? "opacity-60" : "opacity-45"}`}>↳</span>
-            ) : null}
-            {isMessage ? (
-              <span className={`mr-1.5 ${selected ? "opacity-70" : "opacity-80"}`}>✉</span>
-            ) : null}
-            {line.name}
-          </span>
-          {line.nameZh ? (
+        <span className="min-w-0 flex-1 overflow-hidden">
+          {isMessage ? (
             <span
-              className={`mt-0.5 block text-xs font-semibold sm:text-[0.82rem] tracking-tight ${
-                nested ? "pl-2 truncate" : isMessage ? "whitespace-pre-wrap break-words" : "truncate"
-              } ${selected ? "text-zinc-800" : "text-white/70"}`}
-              title={line.nameZh}
+              className={`block whitespace-pre-wrap break-words text-[1.1rem] font-bold leading-tight sm:text-[1.25rem] ${
+                selected ? "text-zinc-950" : ""
+              }`}
+              title={line.name}
             >
-              {line.nameZh}
+              <span className={`mr-1.5 ${selected ? "opacity-70" : "opacity-80"}`}>✉</span>
+              {line.name}
             </span>
+          ) : (
+            <span
+              className={`flex min-w-0 items-baseline text-[1.1rem] leading-tight sm:text-[1.25rem] ${
+                nested ? "pl-2 font-medium" : "font-bold"
+              } ${selected ? "text-zinc-950" : ""}`}
+              title={line.name}
+            >
+              {nested ? (
+                <span className={`mr-1 shrink-0 ${selected ? "opacity-60" : "opacity-45"}`}>↳</span>
+              ) : null}
+              <span className="min-w-0 flex-1 overflow-hidden">
+                <OverflowPanText text={line.name} respectReducedMotion={false} />
+              </span>
+            </span>
+          )}
+          {line.nameZh ? (
+            isMessage ? (
+              <span
+                className={`mt-0.5 block whitespace-pre-wrap break-words text-xs font-semibold tracking-tight sm:text-[0.82rem] ${
+                  selected ? "text-zinc-800" : "text-white/70"
+                }`}
+                title={line.nameZh}
+              >
+                {line.nameZh}
+              </span>
+            ) : (
+              <span
+                className={`mt-0.5 block min-w-0 overflow-hidden text-xs font-semibold tracking-tight sm:text-[0.82rem] ${
+                  nested ? "pl-2" : ""
+                } ${selected ? "text-zinc-800" : "text-white/70"}`}
+                title={line.nameZh}
+              >
+                <OverflowPanText text={line.nameZh} respectReducedMotion={false} />
+              </span>
+            )
           ) : null}
         </span>
         <span
@@ -316,6 +339,7 @@ export function ServerScreenOrderCards({
   selectedKeys,
   animatingOut,
   emptyLabel,
+  allDoneLabel,
   onToggleLine,
   onSetLineCount,
   onTableTagActivate,
@@ -327,6 +351,7 @@ export function ServerScreenOrderCards({
   selectedKeys: Set<string>;
   animatingOut: Set<string>;
   emptyLabel: string;
+  allDoneLabel?: string;
   onToggleLine: (line: ServerScreenOrderCardLine) => void;
   onSetLineCount: (line: ServerScreenOrderCardLine, count: number) => void;
   onTableTagActivate: (card: ServerScreenOrderCard) => void;
@@ -361,7 +386,21 @@ export function ServerScreenOrderCards({
   }, [cards]);
 
   if (cards.length === 0) {
-    return <p className="px-4 py-10 text-center text-base text-white/35">{emptyLabel}</p>;
+    return (
+      <div className="flex min-h-[42vh] flex-col items-center justify-center px-4 py-12 text-center">
+        <div className="relative flex h-20 w-20 items-center justify-center rounded-full border border-emerald-400/30 bg-emerald-500/10 text-emerald-300 shadow-[0_0_40px_rgba(16,185,129,0.18)]">
+          <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/15 [animation-duration:2.6s]" />
+          <Smile className="relative h-10 w-10 motion-safe:animate-bounce [animation-duration:2.4s]" />
+          <span className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border border-[#121214] bg-emerald-500 text-zinc-950 shadow">
+            <Check className="h-4 w-4 stroke-[3]" />
+          </span>
+        </div>
+        <p className="mt-5 font-serif text-xl font-semibold tracking-tight text-emerald-200 sm:text-2xl">
+          {allDoneLabel ?? "All orders completed!"}
+        </p>
+        <p className="mt-1.5 text-sm text-white/45">{emptyLabel}</p>
+      </div>
+    );
   }
 
   return (

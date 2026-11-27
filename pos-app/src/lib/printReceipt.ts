@@ -416,13 +416,43 @@ export async function printReceiptData(
           return bitmapBytes;
         },
       );
-      if (result.sent) return;
-      console.warn("[ReceiptPrint] Silent print incomplete:", result.error);
-      if (!fontSettings.browserPrintFallback) {
-        throw new Error(result.error || "Silent receipt print failed");
+      if (result.failedPrinters.length > 0) {
+        const detail = result.error || "Receipt printer connection failed";
+        try {
+          const { reportPrintFailed } = await import("@/lib/print-failed-alert");
+          reportPrintFailed({
+            tableLabel: data.tableLabel,
+            detail,
+            source: "direct",
+          });
+        } catch {
+          /* ignore in non-browser tests */
+        }
+        // If at least one other receipt printer succeeded, keep going without popping browser print.
+        if (result.sent) return;
+        if (!fontSettings.browserPrintFallback) {
+          throw new Error(detail);
+        }
+      } else if (result.sent) {
+        return;
+      } else {
+        console.warn("[ReceiptPrint] Silent print incomplete:", result.error);
+        if (!fontSettings.browserPrintFallback) {
+          throw new Error(result.error || "Silent receipt print failed");
+        }
       }
     } catch (error) {
       console.warn("[ReceiptPrint] Silent print failed:", error);
+      try {
+        const { reportPrintFailed } = await import("@/lib/print-failed-alert");
+        reportPrintFailed({
+          tableLabel: data.tableLabel,
+          detail: error instanceof Error ? error.message : "Silent receipt print failed",
+          source: "direct",
+        });
+      } catch {
+        /* ignore in non-browser tests */
+      }
       if (!fontSettings.browserPrintFallback) throw error;
     }
   }

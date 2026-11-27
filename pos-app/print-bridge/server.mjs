@@ -61,23 +61,74 @@ function readBody(req) {
 
 function tcpSend(host, port, data) {
   return new Promise((resolve, reject) => {
-    const socket = net.connect({ host, port, timeout: 8000 }, () => {
+    let settled = false;
+    const done = (err) => {
+      if (settled) return;
+      settled = true;
+      if (err) reject(err);
+      else resolve();
+    };
+    const socket = net.connect({ host, port, timeout: 4500 }, () => {
       socket.write(data, (err) => {
         if (err) {
           socket.destroy();
-          reject(err);
+          done(err);
           return;
         }
-        socket.end();
-        resolve();
+        socket.end(() => done());
       });
     });
     socket.on("timeout", () => {
       socket.destroy();
-      reject(new Error(`Timeout connecting to ${host}:${port}`));
+      done(new Error(`Timeout connecting to ${host}:${port} (printer offline or IP changed)`));
     });
-    socket.on("error", reject);
+    socket.on("error", (err) => {
+      socket.destroy();
+      done(new Error(`Cannot reach ${host}:${port}: ${err.message}`));
+    });
   });
+}
+
+function probePort(host, port, timeoutMs = 450) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const socket = new net.Socket();
+    let finished = false;
+    const finish = (ok) => {
+      if (finished) return;
+      finished = true;
+      socket.destroy();
+      resolve(ok ? { host, port, latencyMs: Date.now() - start } : null);
+    };
+    socket.setTimeout(timeoutMs);
+    socket.connect(port, host, () => finish(true));
+    socket.on("timeout", () => finish(false));
+    socket.on("error", () => finish(false));
+  });
+}
+
+async function scanLanPrinters(port = 9100) {
+  const prefixes = new Set();
+  for (const ip of lanIPv4Addresses()) {
+    const parts = ip.split(".");
+    if (parts.length === 4) prefixes.add(`${parts[0]}.${parts[1]}.${parts[2]}`);
+  }
+  const candidates = [];
+  for (const prefix of prefixes) {
+    for (let i = 1; i <= 254; i++) {
+      candidates.push(`${prefix}.${i}`);
+    }
+  }
+  const found = [];
+  const BATCH = 48;
+  for (let i = 0; i < candidates.length; i += BATCH) {
+    const batch = candidates.slice(i, i + BATCH);
+    const results = await Promise.all(batch.map((host) => probePort(host, port)));
+    for (const item of results) {
+      if (item) found.push(item);
+    }
+  }
+  return found;
 }
 
 const recentPrints = new Map();
@@ -152,6 +203,23 @@ const server = http.createServer(async (req, res) => {
       });
     } catch (e) {
       sendJson(res, 400, { ok: false, error: e.message });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/scan-printers") {
+    try {
+      const raw = await readBody(req).catch(() => Buffer.alloc(0));
+      let port = 9100;
+      if (raw.length > 0) {
+        const parsed = JSON.parse(raw.toString("utf8"));
+        if (Number(parsed?.port) > 0) port = Number(parsed.port);
+      }
+      const found = await scanLanPrinters(port);
+      console.log(`[print-bridge] LAN scan port ${port}: found ${found.length} printer(s)`);
+      sendJson(res, 200, { ok: true, port, found });
+    } catch (e) {
+      sendJson(res, 500, { ok: false, error: e.message, found: [] });
     }
     return;
   }

@@ -69,6 +69,9 @@ export async function POST(request: Request) {
     config,
     designOverride: design,
   });
+  if (!pdfBuffer) {
+    return NextResponse.json({ error: "Failed to build preview PDF." }, { status: 500 });
+  }
 
   return new Response(new Uint8Array(pdfBuffer), {
     status: 200,

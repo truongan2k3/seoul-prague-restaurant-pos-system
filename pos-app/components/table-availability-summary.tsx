@@ -8,28 +8,59 @@ const COPY = {
   en: {
     loading: "Updating table availability…", offline: "Live availability unavailable — ask staff.",
     all: "All tables are available.", available: "Available tables", until: "available until",
-    noBbq: "No table available for BBQ.", none: "No tables available now.", seated: "Time seated",
+    noBbq: "No table available for BBQ.", none: "No tables available now.", seated: "Longest seated (Top 3)",
     minutes: "min", hours: "h",
   },
   cs: {
     loading: "Aktualizuji dostupnost stolů…", offline: "Živá dostupnost není k dispozici — zeptejte se obsluhy.",
     all: "Všechny stoly jsou volné.", available: "Volné stoly", until: "volný do",
-    noBbq: "Žádný stůl pro BBQ není volný.", none: "Momentálně není žádný stůl volný.", seated: "Doba u stolu",
+    noBbq: "Žádný stůl pro BBQ není volný.", none: "Momentálně není žádný stůl volný.", seated: "Nejdéle obsazené (Top 3)",
     minutes: "min", hours: "h",
   },
   vi: {
     loading: "Đang cập nhật tình trạng bàn…", offline: "Chưa thể cập nhật tình trạng bàn — vui lòng hỏi nhân viên.",
     all: "Tất cả các bàn đều đang khả dụng.", available: "Đang có bàn", until: "khả dụng tới",
-    noBbq: "Hiện không có bàn BBQ khả dụng.", none: "Hiện không có bàn khả dụng.", seated: "Đã ngồi",
+    noBbq: "Hiện không có bàn BBQ khả dụng.", none: "Hiện không có bàn khả dụng.", seated: "Ngồi lâu nhất (Top 3)",
     minutes: "phút", hours: "h",
   },
   zh: {
     loading: "正在更新餐桌状态…", offline: "暂时无法获取实时餐桌状态，请询问工作人员。",
     all: "所有餐桌均可使用。", available: "可用餐桌", until: "可用至",
-    noBbq: "目前没有可用的烧烤桌。", none: "目前没有可用餐桌。", seated: "已入座",
+    noBbq: "目前没有可用的烧烤桌。", none: "目前没有可用餐桌。", seated: "入座最久 (前3桌)",
     minutes: "分钟", hours: "小时",
   },
 } as const;
+
+export function selectTopLongestSeatedTables(
+  tables: LiveTableAvailability[],
+  source: Pick<TableAvailabilitySource, "reservations">,
+  now: number,
+  limit = 3,
+): Array<{ label: string; since: number }> {
+  const occupied = tables
+    .filter((table) => table.occupied)
+    .flatMap((table) => {
+      let since = table.occupiedAt ? new Date(table.occupiedAt).getTime() : NaN;
+      if (!Number.isFinite(since) || since > now) {
+        const checkIns = source.reservations
+          .filter(
+            (booking) =>
+              booking.status === "checked_in" &&
+              [booking.tableLabel, booking.secondaryTableLabel, booking.tertiaryTableLabel].some(
+                (label) => label?.trim().toUpperCase() === table.label,
+              ),
+          )
+          .map((booking) => (booking.checkedInAt ? new Date(booking.checkedInAt).getTime() : NaN))
+          .filter((at) => Number.isFinite(at) && at <= now);
+        since = checkIns.length ? Math.min(...checkIns) : NaN;
+      }
+      return Number.isFinite(since) && since <= now ? [{ label: table.label, since }] : [];
+    })
+    .sort((a, b) => a.since - b.since || a.label.localeCompare(b.label, undefined, { numeric: true }));
+
+  if (occupied.length < limit) return [];
+  return occupied.slice(0, limit);
+}
 
 /** Read-only summary: estimates never turn an occupied table into an available one. */
 export function TableAvailabilitySummary({ source, tables, now, language, live, error }: {
@@ -81,22 +112,13 @@ export function TableAvailabilitySummary({ source, tables, now, language, live, 
     } else {
       text = copy.none;
     }
-    if (!available.length || noBbq) {
-      // When BBQ is unavailable, rank BBQ tables so their elapsed times are useful.
-      const occupied = tables.filter(table => table.occupied && (!noBbq || table.grill)).flatMap(table => {
-        let since = table.occupiedAt ? new Date(table.occupiedAt).getTime() : NaN;
-        if (!Number.isFinite(since) || since > now) {
-          const checkIns = source.reservations.filter(booking => booking.status === "checked_in"
-            && [booking.tableLabel, booking.secondaryTableLabel, booking.tertiaryTableLabel]
-              .some(label => label?.trim().toUpperCase() === table.label))
-            .map(booking => booking.checkedInAt ? new Date(booking.checkedInAt).getTime() : NaN)
-            .filter(at => Number.isFinite(at) && at <= now);
-          since = checkIns.length ? Math.min(...checkIns) : NaN;
-        }
-        return Number.isFinite(since) && since <= now ? [{ label: table.label, since }] : [];
-      }).sort((a, b) => a.since - b.since || a.label.localeCompare(b.label, undefined, { numeric: true })).slice(0, 3);
-      const seated = occupied.map(table => `${table.label} ${duration(Math.floor((now - table.since) / 60_000))}`).join("\n");
-      if (seated) text += `\n${copy.seated}:\n${seated}`;
+
+    const topLongest = selectTopLongestSeatedTables(tables, source, now, 3);
+    if (topLongest.length === 3) {
+      const seated = topLongest
+        .map(table => `${table.label} (${duration(Math.max(0, Math.floor((now - table.since) / 60_000)))})`)
+        .join(" · ");
+      text += `\n${copy.seated}: ${seated}`;
     }
   }
 

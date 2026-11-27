@@ -614,10 +614,10 @@ async function prepareIssuedVoucherPayload(
     codes,
     config,
     designOverride: design,
+    skipPdf: true,
   });
   return {
     viewUrl,
-    pdfBuffer: assets.pdfBuffer,
     vouchers: assets.vouchers,
     effectiveConfig: { ...config, design },
   };
@@ -631,7 +631,6 @@ async function emailIssuedVouchers(order: VoucherOrder, config: VoucherConfig) {
       order,
       config: prepared.effectiveConfig,
       vouchers: prepared.vouchers,
-      pdfBuffer: prepared.pdfBuffer,
       viewUrl: prepared.viewUrl,
     });
   } catch (err) {
@@ -675,7 +674,6 @@ export async function reissueVoucherEmail(input: {
     order: { ...order, buyerEmail: targetEmail },
     config: prepared.effectiveConfig,
     vouchers: prepared.vouchers,
-    pdfBuffer: prepared.pdfBuffer,
     viewUrl: prepared.viewUrl,
     isReissue: true,
   });

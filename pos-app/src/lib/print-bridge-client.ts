@@ -7,8 +7,22 @@ export type PrintDispatchSettings = Pick<
   "silentPrintEnabled" | "printBridgeUrl" | "browserPrintFallback" | "printers"
 >;
 
-/** Fail fast when bridge PC is off / URL wrong (browser default fetch hang is too long). */
-const BRIDGE_FETCH_TIMEOUT_MS = 8_000;
+/** Must exceed server.mjs TCP connect timeout (4.5s) so printer IP errors reach POS intact. */
+const BRIDGE_FETCH_TIMEOUT_MS = 12_000;
+
+export type PrinterSendFailure = {
+  id: string;
+  name: string;
+  host: string;
+  error: string;
+};
+
+export type SilentPrintResult = {
+  sent: boolean;
+  succeededPrinterIds: string[];
+  failedPrinters: PrinterSendFailure[];
+  error?: string;
+};
 
 const RAW_PRINTER_PORTS = new Set([9100, 9101, 9102, 9103]);
 
@@ -121,6 +135,42 @@ export async function pingPrinter(
   }
 }
 
+export async function scanLanPrinters(
+  bridgeUrl: string,
+  port = 9100,
+): Promise<{ ok: boolean; found: Array<{ host: string; port: number; latencyMs: number }>; error?: string }> {
+  const check = validatePrintBridgeUrl(bridgeUrl);
+  if (!check.ok) return { ok: false, found: [], error: check.message };
+
+  const base = bridgeUrl.replace(/\/$/, "");
+  try {
+    const response = await fetch(`${base}/scan-printers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(15_000),
+      body: JSON.stringify({ port }),
+    });
+    if (!response.ok) {
+      return { ok: false, found: [], error: `Bridge HTTP ${response.status}` };
+    }
+    const payload = (await response.json().catch(() => null)) as {
+      ok?: boolean;
+      found?: Array<{ host: string; port: number; latencyMs: number }>;
+      error?: string;
+    } | null;
+    if (!payload?.ok) {
+      return { ok: false, found: [], error: payload?.error || "Scan failed" };
+    }
+    return { ok: true, found: payload.found ?? [] };
+  } catch (error) {
+    return {
+      ok: false,
+      found: [],
+      error: error instanceof Error ? error.message : "Scan failed",
+    };
+  }
+}
+
 export async function pingPrintBridge(bridgeUrl: string): Promise<{ ok: boolean; message: string }> {
   const check = validatePrintBridgeUrl(bridgeUrl);
   if (!check.ok) return check;
@@ -202,14 +252,15 @@ async function sendRawToPrinter(
 
 /**
  * Send ESC/POS bytes to all enabled printers for a role via the local bridge.
- * Returns true if at least one printer succeeded.
+ * Runs all targets independently so a failure on one printer never blocks another.
  */
 export async function silentPrintEscPos(
   settings: PrintDispatchSettings,
   role: PrinterRole,
   data: Uint8Array,
-): Promise<{ sent: boolean; error?: string }> {
-  return silentPrintEscPosPerPrinter(settings, role, () => data);
+  options?: { onlyPrinterIds?: string[] },
+): Promise<SilentPrintResult> {
+  return silentPrintEscPosPerPrinter(settings, role, () => data, options);
 }
 
 type EscPosPayloadResolver = (
@@ -223,19 +274,29 @@ export async function silentPrintEscPosPerPrinter(
   settings: PrintDispatchSettings,
   role: PrinterRole,
   resolvePayload: EscPosPayloadResolver,
-): Promise<{ sent: boolean; error?: string }> {
+  options?: { onlyPrinterIds?: string[] },
+): Promise<SilentPrintResult> {
   if (!settings.silentPrintEnabled) {
-    return { sent: false };
+    return { sent: false, succeededPrinterIds: [], failedPrinters: [] };
   }
 
   const check = validatePrintBridgeUrl(settings.printBridgeUrl);
   if (!check.ok) {
-    return { sent: false, error: check.message };
+    return { sent: false, succeededPrinterIds: [], failedPrinters: [], error: check.message };
   }
 
-  const targets = printersForRoleFromSettings(settings, role);
+  let targets = printersForRoleFromSettings(settings, role);
+  if (options?.onlyPrinterIds && options.onlyPrinterIds.length > 0) {
+    const allowed = new Set(options.onlyPrinterIds);
+    targets = targets.filter((p) => allowed.has(p.id));
+  }
   if (targets.length === 0) {
-    return { sent: false, error: "No enabled printers for this role" };
+    return {
+      sent: false,
+      succeededPrinterIds: [],
+      failedPrinters: [],
+      error: "No enabled printers for this role",
+    };
   }
 
   // Deduplicate printers by host:port endpoint to prevent duplicate printing to the same physical printer
@@ -250,28 +311,46 @@ export async function silentPrintEscPosPerPrinter(
     uniqueTargets.push(printer);
   }
 
-  const errors: string[] = [];
-  let sent = false;
+  const succeededPrinterIds: string[] = [];
+  const failedPrinters: PrinterSendFailure[] = [];
 
   await Promise.all(
     uniqueTargets.map(async (printer) => {
       try {
         const payload = await resolvePayload(printer);
         if (!payload || payload.length === 0) {
-          errors.push(`${printer.name} (${printer.host}): no print payload`);
+          failedPrinters.push({
+            id: printer.id,
+            name: printer.name,
+            host: printer.host,
+            error: "No print payload",
+          });
           return;
         }
         await sendRawToPrinter(settings.printBridgeUrl, printer, payload);
-        sent = true;
+        succeededPrinterIds.push(printer.id);
       } catch (error) {
-        errors.push(
-          `${printer.name} (${printer.host}): ${error instanceof Error ? error.message : "print failed"}`,
-        );
+        failedPrinters.push({
+          id: printer.id,
+          name: printer.name,
+          host: printer.host,
+          error: error instanceof Error ? error.message : "Print failed",
+        });
       }
     }),
   );
 
-  return { sent, error: errors.length > 0 ? errors.join("; ") : undefined };
+  const error =
+    failedPrinters.length > 0
+      ? failedPrinters.map((f) => `${f.name} (${f.host}): ${f.error}`).join("; ")
+      : undefined;
+
+  return {
+    sent: succeededPrinterIds.length > 0,
+    succeededPrinterIds,
+    failedPrinters,
+    error,
+  };
 }
 
 export { printerUsesLegacyBitmap };

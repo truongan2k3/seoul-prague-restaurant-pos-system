@@ -10,6 +10,8 @@ export type PendingKitchenPrintJob = {
   orders?: OrderItem[];
   message?: string;
   messageZh?: string;
+  /** When set, reprint only sends to these failed printer IDs (skips printers that succeeded). */
+  onlyPrinterIds?: string[];
   error: string;
   failedAt: string;
 };

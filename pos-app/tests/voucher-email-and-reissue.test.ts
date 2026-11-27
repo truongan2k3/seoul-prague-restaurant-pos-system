@@ -74,10 +74,10 @@ test("sendVoucherIssuedEmail (reissue) keeps exact code, formats friendly email,
     assert.match(html, /SPV-KEEP-9999/);
     assert.match(text, /SPV-KEEP-9999/);
     assert.match(html, /Hi Anna Novak,/);
-    assert.match(html, /original voucher code remains unchanged/i);
+    assert.match(html, /original code remains unchanged/i);
     assert.match(html, /26 Nov 2027/);
 
-    const brandMatches = html.match(/seoul prague/gi) ?? [];
+    const brandMatches = html.match(/seoul korean bbq prague|seoul prague/gi) ?? [];
     assert.ok(
       brandMatches.length <= 1,
       `Expected at most 1 brand mention in HTML, got ${brandMatches.length}`,

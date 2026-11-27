@@ -59,7 +59,7 @@ import {
 } from "@/src/lib/business-auth-actions";
 import { canManageStaff } from "@/lib/staff-roles";
 import { Activity, Monitor, Plus, Printer, Save, Tablet, Trash2, Tv } from "lucide-react";
-import { pingPrintBridge, pingPrinter } from "@/src/lib/print-bridge-client";
+import { pingPrintBridge, pingPrinter, scanLanPrinters } from "@/src/lib/print-bridge-client";
 
 const RECEIPT_FONT_LABEL_KEYS: Record<ReceiptFontFamily, TranslationKey> = {
   consolas: "settingsReceiptFontConsolas",
@@ -123,6 +123,9 @@ export function SettingsView({
   draftRef.current = draft;
   const [bridgeTestMessage, setBridgeTestMessage] = useState<string | null>(null);
   const [bridgeTesting, setBridgeTesting] = useState(false);
+  const [lanScanning, setLanScanning] = useState(false);
+  const [lanScanError, setLanScanError] = useState<string | null>(null);
+  const [lanPrinters, setLanPrinters] = useState<Array<{ host: string; port: number; latencyMs: number }>>([]);
   const [logoUploading, setLogoUploading] = useState(false);
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTabId>(initialEet ? "eet" : "branding");
 
@@ -342,6 +345,26 @@ export function SettingsView({
     const result = await pingPrintBridge(draft.printBridgeUrl);
     setBridgeTesting(false);
     setBridgeTestMessage(result.message);
+  };
+
+  const handlePingAllPrinters = async () => {
+    await Promise.all(draft.printers.map((p) => handlePingPrinter(p)));
+  };
+
+  const handleScanLanPrinters = async () => {
+    setLanScanning(true);
+    setLanScanError(null);
+    const result = await scanLanPrinters(draft.printBridgeUrl, 9100);
+    setLanScanning(false);
+    if (!result.ok) {
+      setLanScanError(result.error || "Scan failed");
+      setLanPrinters([]);
+      return;
+    }
+    setLanPrinters(result.found);
+    if (result.found.length === 0) {
+      setLanScanError("No port-9100 printers responded on local Wi-Fi/LAN.");
+    }
   };
 
   const updatePrinter = (id: string, patch: Partial<NetworkPrinter>) => {
@@ -605,22 +628,93 @@ export function SettingsView({
               </div>
             )}
 
-            <div className="mt-5 flex items-center justify-between gap-3">
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                 {translate("settingsPrinters")}
               </h3>
-              <button
-                type="button"
-                onClick={addPrinter}
-                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold dark:border-gray-600"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                {translate("settingsPrinterAdd")}
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                {draft.silentPrintEnabled && draft.printers.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => void handlePingAllPrinters()}
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-semibold hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700"
+                  >
+                    <Activity className="h-3.5 w-3.5" />
+                    Check All
+                  </button>
+                )}
+                {draft.silentPrintEnabled && (
+                  <button
+                    type="button"
+                    disabled={lanScanning}
+                    onClick={() => void handleScanLanPrinters()}
+                    className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                  >
+                    <Activity className={`h-3.5 w-3.5 ${lanScanning ? "animate-spin" : ""}`} />
+                    {lanScanning ? "Scanning LAN…" : "Scan LAN (9100)"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={addPrinter}
+                  className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold dark:border-gray-600"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {translate("settingsPrinterAdd")}
+                </button>
+              </div>
             </div>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {translate("settingsPrintersHint")}
             </p>
+            {(lanScanError || lanPrinters.length > 0) && (
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs dark:border-amber-900 dark:bg-amber-950/30">
+                {lanScanError ? (
+                  <p className="font-medium text-rose-700 dark:text-rose-300">{lanScanError}</p>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="font-semibold text-amber-900 dark:text-amber-200">
+                      Live LAN printers on port 9100 ({lanPrinters.length}):
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {lanPrinters.map((found) => (
+                        <div
+                          key={found.host}
+                          className="flex items-center gap-2 rounded-lg border border-amber-300/70 bg-white px-2.5 py-1.5 dark:border-amber-800 dark:bg-gray-900"
+                        >
+                          <span className="font-mono font-semibold text-gray-900 dark:text-gray-100">
+                            {found.host}
+                          </span>
+                          <span className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                            {found.latencyMs}ms
+                          </span>
+                          {draft.printers.length > 0 && (
+                            <select
+                              aria-label={`Apply IP ${found.host} to printer`}
+                              defaultValue=""
+                              onChange={(e) => {
+                                const id = e.target.value;
+                                if (!id) return;
+                                updatePrinter(id, { host: found.host, port: String(found.port) });
+                                e.target.value = "";
+                              }}
+                              className="rounded border border-gray-300 bg-transparent px-1.5 py-0.5 text-[11px] dark:border-gray-600"
+                            >
+                              <option value="">Apply to printer…</option>
+                              {draft.printers.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name} ({p.host || "no IP"})
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="mt-3 space-y-3">
               {draft.printers.map((printer) => (

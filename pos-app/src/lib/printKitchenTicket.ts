@@ -535,11 +535,21 @@ export async function buildKitchenMessageHtml(input: {
   return { html, pngs };
 }
 
+class PrinterDispatchFailure extends Error {
+  failedPrinterIds: string[];
+  constructor(message: string, failedPrinterIds: string[]) {
+    super(message);
+    this.name = "PrinterDispatchFailure";
+    this.failedPrinterIds = failedPrinterIds;
+  }
+}
+
 async function dispatchKitchenPrint(
   settings: KitchenPrintSettings,
   html: string,
   pngs: string[],
   role: "kitchen" | "kitchen-message" | "bar" = "kitchen",
+  onlyPrinterIds?: string[],
 ): Promise<void> {
   const fontSettings = {
     receiptFontSize: settings.receiptFontSize,
@@ -559,14 +569,22 @@ async function dispatchKitchenPrint(
         bottomBlankRasterDots: bottomDots > 0 ? bottomDots : undefined,
         bottomFeedLines: 1,
       });
-      let result = await silentPrintEscPos(settings, role, bytes);
+      const opts = onlyPrinterIds?.length ? { onlyPrinterIds } : undefined;
+      let result = await silentPrintEscPos(settings, role, bytes, opts);
       // Messages: if no printer has kitchen-message role, fall back to kitchen printers.
       if (
         !result.sent &&
+        result.failedPrinters.length === 0 &&
         role === "kitchen-message" &&
         result.error === "No enabled printers for this role"
       ) {
-        result = await silentPrintEscPos(settings, "kitchen", bytes);
+        result = await silentPrintEscPos(settings, "kitchen", bytes, opts);
+      }
+      if (result.failedPrinters.length > 0) {
+        throw new PrinterDispatchFailure(
+          result.error || "Printer unreachable or IP changed",
+          result.failedPrinters.map((p) => p.id),
+        );
       }
       if (result.sent) return;
       // No bar printer configured → skip (do not print bar tickets on kitchen).
@@ -575,7 +593,6 @@ async function dispatchKitchenPrint(
         return;
       }
       // Bridge/silent failed — always surface (POS alert / Print Station reprint queue).
-      // Do not swallow via browser fallback: Send would look successful while kitchen got nothing.
       throw new Error(result.error || "Silent kitchen print failed");
     } catch (error) {
       console.warn("[KitchenPrint] Silent print failed:", error);
@@ -593,6 +610,7 @@ async function printStationTicket(input: {
   settings: KitchenPrintSettings;
   role: "kitchen" | "bar";
   stationLabel?: string;
+  onlyPrinterIds?: string[];
 }): Promise<void> {
   if (input.orders.length === 0) return;
 
@@ -611,15 +629,17 @@ async function printStationTicket(input: {
     itemGapPx: input.settings.kitchenPrintItemGapPx,
   });
 
-  await dispatchKitchenPrint(input.settings, html, pngs, input.role);
+  await dispatchKitchenPrint(input.settings, html, pngs, input.role, input.onlyPrinterIds);
 }
 
 export class StationPrintPartialError extends Error {
   unprintedOrders: OrderItem[];
-  constructor(message: string, unprintedOrders: OrderItem[]) {
+  failedPrinterIds?: string[];
+  constructor(message: string, unprintedOrders: OrderItem[], failedPrinterIds?: string[]) {
     super(message);
     this.name = "StationPrintPartialError";
     this.unprintedOrders = unprintedOrders;
+    this.failedPrinterIds = failedPrinterIds;
   }
 }
 
@@ -629,6 +649,7 @@ export async function printKitchenTicket(input: {
   menuItems: MenuItem[];
   settings: KitchenPrintSettings;
   stationLabel?: string;
+  onlyPrinterIds?: string[];
 }): Promise<void> {
   if (!shouldPrintKitchenOnSend(input.settings) || input.orders.length === 0) return;
 
@@ -691,14 +712,24 @@ export async function printKitchenTicket(input: {
     }
   }
 
-  // If one station succeeds and the other fails, only unprinted orders should be queued for retry
-  // to avoid printing the already-successful station a second time.
+  // If one station succeeds and the other fails (or 1 of N printers in a station fails),
+  // keep working printers unblocked and raise exact failure details for alerting & targeted retry.
+  const failedPrinterIds = [
+    ...(kitchenError instanceof PrinterDispatchFailure ? kitchenError.failedPrinterIds : []),
+    ...(barError instanceof PrinterDispatchFailure ? barError.failedPrinterIds : []),
+  ];
+  const printerIdsArg = failedPrinterIds.length > 0 ? failedPrinterIds : undefined;
+
   if (kitchenError && barError) {
-    throw new StationPrintPartialError(kitchenError.message, [...kitchenOrders, ...barOrders]);
+    throw new StationPrintPartialError(
+      `${kitchenError.message}; ${barError.message}`,
+      [...kitchenOrders, ...barOrders],
+      printerIdsArg,
+    );
   } else if (kitchenError) {
-    throw new StationPrintPartialError(kitchenError.message, kitchenOrders);
+    throw new StationPrintPartialError(kitchenError.message, kitchenOrders, printerIdsArg);
   } else if (barError) {
-    throw new StationPrintPartialError(barError.message, barOrders);
+    throw new StationPrintPartialError(barError.message, barOrders, printerIdsArg);
   }
 }
 

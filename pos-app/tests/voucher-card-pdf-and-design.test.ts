@@ -85,6 +85,7 @@ test("renderVoucherOrderAssets renders 2-sided PNGs and valid 2-page PDF readabl
   assert.equal(result.vouchers.length, 1);
   assert.ok(result.vouchers[0]!.frontPng.length > 5000, "Front PNG should be non-trivial");
   assert.ok(result.vouchers[0]!.backPng.length > 5000, "Back PNG should be non-trivial");
+  assert.ok(result.pdfBuffer, "PDF buffer should be created when skipPdf is omitted");
   assert.equal(result.pdfBuffer.subarray(0, 5).toString("ascii"), "%PDF-");
 
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -98,7 +99,7 @@ test("renderVoucherOrderAssets renders 2-sided PNGs and valid 2-page PDF readabl
   await doc.cleanup();
 });
 
-test("sendVoucherIssuedEmail attaches 2-sided PDF, inline front PNG, and online link", async () => {
+test("sendVoucherIssuedEmail embeds both Front & Back PNGs cleanly without PDF or Front/Back labels", async () => {
   const prevKey = process.env.RESEND_API_KEY;
   const prevFetch = globalThis.fetch;
   let capturedBody: Record<string, unknown> | null = null;
@@ -106,7 +107,7 @@ test("sendVoucherIssuedEmail attaches 2-sided PDF, inline front PNG, and online 
   process.env.RESEND_API_KEY = "test-key";
   globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
     capturedBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-    return new Response(JSON.stringify({ id: "email-pdf-1" }), { status: 200 });
+    return new Response(JSON.stringify({ id: "email-png-1" }), { status: 200 });
   }) as typeof fetch;
 
   try {
@@ -138,7 +139,10 @@ test("sendVoucherIssuedEmail attaches 2-sided PDF, inline front PNG, and online 
         },
       ],
       config,
+      skipPdf: true,
     });
+
+    assert.equal(assets.pdfBuffer, null);
 
     const sent = await sendVoucherIssuedEmail({
       order: {
@@ -157,7 +161,6 @@ test("sendVoucherIssuedEmail attaches 2-sided PDF, inline front PNG, and online 
       },
       config,
       vouchers: assets.vouchers,
-      pdfBuffer: assets.pdfBuffer,
       viewUrl: "https://example.com/voucher/view?token=abc123",
     });
 
@@ -167,9 +170,10 @@ test("sendVoucherIssuedEmail attaches 2-sided PDF, inline front PNG, and online 
     assert.match(body.html, /https:\/\/example\.com\/voucher\/view\?token=abc123/);
     assert.match(body.html, /cid:voucher-front-1/);
     assert.match(body.html, /cid:voucher-back-1/);
-    assert.ok(body.attachments.some((a) => a.content_type === "application/pdf" && a.filename.endsWith(".pdf")));
-    assert.ok(body.attachments.some((a) => a.content_type === "image/png" && a.filename.includes("front")));
-    assert.ok(body.attachments.some((a) => a.content_type === "image/png" && a.filename.includes("back")));
+    assert.doesNotMatch(body.html, /Front\s*·/i);
+    assert.doesNotMatch(body.html, /Back\s*·/i);
+    assert.equal(body.attachments.some((a) => a.content_type === "application/pdf"), false);
+    assert.equal(body.attachments.filter((a) => a.content_type === "image/png").length, 2);
   } finally {
     globalThis.fetch = prevFetch;
     if (prevKey === undefined) delete process.env.RESEND_API_KEY;
